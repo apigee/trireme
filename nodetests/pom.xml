@@ -9,22 +9,14 @@
     <version>1.0.0-SNAPSHOT</version>
   </parent>
 
-  <name>noderunner-core</name>
-  <artifactId>noderunner-core</artifactId>
+  <name>noderunner-tests</name>
+  <artifactId>noderunner-tests</artifactId>
 
   <dependencies>
     <dependency>
-      <groupId>org.slf4j</groupId>
-      <artifactId>slf4j-api</artifactId>
-    </dependency>
-    <dependency>
-      <groupId>org.mozilla</groupId>
-      <artifactId>rhino</artifactId>
-    </dependency>
-
-    <dependency>
-      <groupId>junit</groupId>
-      <artifactId>junit</artifactId>
+      <groupId>com.apigee.noderunner</groupId>
+      <artifactId>noderunner-core</artifactId>
+      <version>${project.version}</version>
       <scope>test</scope>
     </dependency>
     <dependency>

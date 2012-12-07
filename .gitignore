@@ -1,3 +1,4 @@
 *~
+*.pyc
 target/
 idea_project/

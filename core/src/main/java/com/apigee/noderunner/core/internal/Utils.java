@@ -1,5 +1,7 @@
 package com.apigee.noderunner.core.internal;
 
+import org.mozilla.javascript.Context;
+
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;

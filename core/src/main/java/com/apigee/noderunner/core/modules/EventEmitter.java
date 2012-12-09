@@ -1,11 +1,15 @@
 package com.apigee.noderunner.core.modules;
 
 import com.apigee.noderunner.core.NodeModule;
+import com.apigee.noderunner.core.internal.ScriptRunner;
+import com.apigee.noderunner.core.internal.Utils;
 import org.mozilla.javascript.Context;
 import org.mozilla.javascript.Function;
+import org.mozilla.javascript.FunctionObject;
 import org.mozilla.javascript.Scriptable;
 import org.mozilla.javascript.ScriptableObject;
 import org.mozilla.javascript.annotations.JSFunction;
+import org.mozilla.javascript.annotations.JSStaticFunction;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -21,6 +25,8 @@ import java.util.List;
 public class EventEmitter
     implements NodeModule
 {
+    public static final String CLASS_NAME = "EventEmitter";
+
     private static final Logger log = LoggerFactory.getLogger(EventEmitter.class);
     private static final int DEFAULT_LIST_LEN = 4;
 
@@ -33,12 +39,21 @@ public class EventEmitter
     }
 
     @Override
-    public Object register(Context cx, Scriptable scope)
+    public Object registerExports(Context cx, Scriptable scope, ScriptRunner runner)
         throws InvocationTargetException, IllegalAccessException, InstantiationException
     {
         ScriptableObject.defineClass(scope, EventEmitterImpl.class);
-        // TODO don't think this is right -- we should return the prototype maybe?
-        return null;
+        Scriptable exports = cx.newObject(scope);
+        exports.put("EventEmitter", exports,
+                    new FunctionObject("EventEmitter",
+                                       Utils.findMethod(EventEmitter.class, "newEventEmitter"),
+                                       exports));
+        return exports;
+    }
+
+    public static Object newEventEmitter(Context ctx, Object[] args, Function caller, boolean inNew)
+    {
+        return ctx.newObject(caller, CLASS_NAME, args);
     }
 
     public static class EventEmitterImpl
@@ -49,9 +64,8 @@ public class EventEmitter
         private int maxListeners = DEFAULT_MAX_LISTENERS;
 
         @Override
-        public String getClassName()
-        {
-            return "EventEmitter";
+        public String getClassName() {
+            return CLASS_NAME;
         }
 
         @JSFunction

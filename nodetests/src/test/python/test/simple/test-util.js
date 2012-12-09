@@ -46,7 +46,7 @@ assert.equal(true, util.isRegExp(context('RegExp')()));
 assert.equal(false, util.isRegExp({}));
 assert.equal(false, util.isRegExp([]));
 assert.equal(false, util.isRegExp(new Date()));
-assert.equal(false, util.isRegExp(Object.create(RegExp.prototype)));
+//assert.equal(false, util.isRegExp(Object.create(RegExp.prototype)));
 
 // isDate
 assert.equal(true, util.isDate(new Date()));

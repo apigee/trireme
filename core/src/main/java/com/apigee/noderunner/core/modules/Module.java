@@ -48,38 +48,19 @@ public class Module
     }
 
     @Override
-    public Object register(Context cx, Scriptable scope)
+    public Object registerExports(Context cx, Scriptable scope, ScriptRunner runner)
         throws InvocationTargetException, IllegalAccessException, InstantiationException
     {
         ScriptableObject.defineClass(scope, ModuleImpl.class);
-        return registerObject(cx, scope);
+        ModuleImpl exports = (ModuleImpl)cx.newObject(scope, CLASS_NAME);
+        exports.bindVariables(cx, scope, exports);
+        return exports;
     }
 
     public static Object globalRequire(Context cx, Scriptable thisObj, Object[] args, Function func)
     {
         Scriptable module = (Scriptable)ScriptableObject.getProperty(thisObj, OBJECT_NAME);
         return ((ModuleImpl)module).require(cx, module, args, func);
-    }
-
-    /**
-     * Call this in every scope where a module is loaded.
-     */
-    protected static Object registerObject(Context cx, Scriptable scope)
-    {
-        // Create a new object of the "module" class
-        Scriptable ret = cx.newObject(scope, CLASS_NAME);
-        scope.put("module", scope, ret);
-
-        // Bind the global "require" method to the static method above
-        Method require = Utils.findMethod(Module.class, "globalRequire");
-        scope.put("require", scope,
-                  new FunctionObject("require", require, scope));
-
-        // Create an "exports" object and bind to both the new object and the global scope
-        Scriptable exports = cx.newObject(scope);
-        scope.put("exports", ret, exports);
-        scope.put("exports", scope, exports);
-        return ret;
     }
 
     public static class ModuleImpl
@@ -116,6 +97,22 @@ public class Module
             this.fileName = n;
         }
 
+        public void bindVariables(Context cx, Scriptable scope, Scriptable target)
+        {
+            // Create a new object of the "module" class
+            scope.put("module", scope, target);
+
+            // Bind the global "require" method to the static method above
+            Method require = Utils.findMethod(Module.class, "globalRequire");
+            scope.put("require", scope,
+                      new FunctionObject("require", require, scope));
+
+            // Create an "exports" object and bind to both the new object and the global scope
+            Scriptable exportsObj = cx.newObject(scope);
+            scope.put("exports", target, exportsObj);
+            scope.put("exports", scope, exportsObj);
+        }
+
         @JSFunction
         public static Object require(Context cx, Scriptable thisObj, Object[] args, Function func)
         {
@@ -145,9 +142,7 @@ public class Module
                 try {
                     log.debug("Registering {} from class {}",
                               name, nativeMod.getClass().getName());
-                    Object ret = nativeMod.register(cx, mod.parentScope);
-                    mod.runner.getModuleCache().put(name, ret);
-                    return ret;
+                    return mod.runner.registerModule(name, cx, mod.parentScope);
 
                 } catch (InvocationTargetException e) {
                     throw new WrappedException(e);
@@ -164,11 +159,12 @@ public class Module
             newScope.setParentScope(null);
 
             // Register a new "module" object in the new scope for running the script
-            ModuleImpl newMod = (ModuleImpl)registerObject(cx, newScope);
+            ModuleImpl newMod = (ModuleImpl)cx.newObject(newScope, CLASS_NAME);
             newMod.setRunner(mod.runner);
             newMod.setParent(mod);
             newMod.setId(name);
             newMod.setParentScope(mod.parentScope);
+            newMod.bindVariables(cx, newScope, newMod);
 
             File modFile = null;
             String resourceMod = mod.runner.getEnvironment().getRegistry().getResource(name);

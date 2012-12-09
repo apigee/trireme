@@ -4,6 +4,7 @@ import com.apigee.noderunner.core.NodeEnvironment;
 import com.apigee.noderunner.core.NodeException;
 import com.apigee.noderunner.core.NodeModule;
 import com.apigee.noderunner.core.ScriptException;
+import com.apigee.noderunner.core.modules.Console;
 import com.apigee.noderunner.core.modules.Module;
 import com.apigee.noderunner.core.modules.Process;
 import com.apigee.noderunner.core.modules.Timers;
@@ -11,6 +12,7 @@ import com.sun.servicetag.SystemEnvironment;
 import org.mozilla.javascript.Context;
 import org.mozilla.javascript.Function;
 import org.mozilla.javascript.FunctionObject;
+import org.mozilla.javascript.JavaScriptException;
 import org.mozilla.javascript.RhinoException;
 import org.mozilla.javascript.Scriptable;
 import org.mozilla.javascript.ScriptableObject;
@@ -27,6 +29,7 @@ import java.io.Reader;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.util.ArrayDeque;
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.PriorityQueue;
@@ -38,6 +41,8 @@ public class ScriptRunner
 {
     private static final Logger log = LoggerFactory.getLogger(ScriptRunner.class);
 
+    public static final String ATTACHMENT = "_scriptrunner";
+
     private final NodeEnvironment env;
     private File scriptFile;
     private String script;
@@ -47,9 +52,14 @@ public class ScriptRunner
 
     private final ArrayDeque<Function> tickFunctions = new ArrayDeque<Function>();
     private final PriorityQueue<Timed> timerQueue = new PriorityQueue<Timed>();
-    private final HashMap<Integer, Timed> timers = new HashMap<Integer, Timed>();
+    private final HashMap<Integer, Timed> timersMap = new HashMap<Integer, Timed>();
     private int timerSequence;
+
+    // Globals that are set up for the process
+    private Timers.TimersImpl timers;
     private Process.ProcessImpl process;
+    private Console.ConsoleImpl console;
+    private Object globals;
 
     private Scriptable scope;
 
@@ -96,14 +106,14 @@ public class ScriptRunner
         } else {
             t = new Timed(seq, timeout, func, false, 0, args);
         }
-        timers.put(seq, t);
+        timersMap.put(seq, t);
         timerQueue.add(t);
         return seq;
     }
 
     public void clearTimer(int id)
     {
-        Timed t = timers.get(id);
+        Timed t = timersMap.get(id);
         if (t != null) {
             t.cancelled = true;
         }
@@ -118,10 +128,14 @@ public class ScriptRunner
         Context cx = Context.enter();
         try {
             // Re-use the global scope from before, but make it top-level so that there are no shared variables
+            // TODO set some of these every time we create a new context to run the script.
             scope = cx.newObject(env.getScope());
+            cx.putThreadLocal(ATTACHMENT, this);
             scope.setPrototype(env.getScope());
             scope.setParentScope(null);
-
+            if (log.isTraceEnabled()) {
+                cx.setDebugger(new DebugTracer(), null);
+            }
             initGlobals(cx);
 
             try {
@@ -143,7 +157,7 @@ public class ScriptRunner
                 throw ne;
             } catch (RhinoException re) {
                 boolean handled =
-                    process.fireEvent("uncaughtException", re.getScriptStackTrace());
+                    process.fireEvent("uncaughtException", re);
                 log.debug("Exception in script: {} handled = {}",
                           re.toString(), handled);
                 if (!handled) {
@@ -169,7 +183,7 @@ public class ScriptRunner
                         log.debug("Executing one timed-out task");
                         timerQueue.poll();
                         if (timed.cancelled) {
-                            timers.remove(timed.id);
+                            timersMap.remove(timed.id);
                         } else {
                             timed.function.call(cx, scope, null, timed.args);
                             if (timed.repeating && !timed.cancelled) {
@@ -177,7 +191,7 @@ public class ScriptRunner
                                 timed.timeout = System.currentTimeMillis() + timed.interval;
                                 timerQueue.add(timed);
                             } else {
-                                timers.remove(timed.id);
+                                timersMap.remove(timed.id);
                             }
                         }
                         timed = timerQueue.peek();
@@ -200,8 +214,9 @@ public class ScriptRunner
                 } catch (NodeExitException ne) {
                     throw ne;
                 } catch (RhinoException re) {
+                    log.debug("Exception in script: {}, {}", re.toString(), re.getMessage());
                     boolean handled =
-                        process.fireEvent("uncaughtException", re.getScriptStackTrace());
+                        process.fireEvent("uncaughtException", re);
                     log.debug("Exception in script: {} handled = {}",
                               re.toString(), handled);
                     if (!handled) {
@@ -227,13 +242,16 @@ public class ScriptRunner
         }
     }
 
+    /**
+     * One-time initialization of the built-in modules and objects.
+     */
     private void initGlobals(Context cx)
         throws NodeException
     {
         Module moduleModule = new Module();
         try {
             // Need a little special handling for the "module" module, which does module loading
-            Module.ModuleImpl mod = (Module.ModuleImpl)moduleModule.register(cx, scope);
+            Module.ModuleImpl mod = (Module.ModuleImpl)moduleModule.registerExports(cx, scope, this);
             mod.setRunner(this);
             mod.setId(scriptName);
             if (scriptFile == null) {
@@ -243,21 +261,20 @@ public class ScriptRunner
             }
             mod.setParentScope(scope);
             mod.setLoaded(true);
+            mod.bindVariables(cx, scope, mod);
 
-            // Also need a little help with timers
-            Timers.TimersImpl t =
-                (Timers.TimersImpl)registerModule("timers", "timers", cx, scope);
-            t.setRunner(this);
-
-
+            timers =  (Timers.TimersImpl)registerModule("timers", cx, scope);
+            timers.setRunner(this);
 
             // Other modules
             process  =
-                (Process.ProcessImpl)registerModule("process", "process", cx, scope);
+                (Process.ProcessImpl)registerModule("process", cx, scope);
             process.setRunner(this);
-            registerModule("console", "console", cx, scope);
+            console =
+                (Console.ConsoleImpl)registerModule("console", cx, scope);
+            registerModule("buffer", cx, scope);
 
-            // Miscellaneous globals
+            // Globals not covered in any module
             if (scriptFile == null) {
                 scope.put("__filename", scope, scriptName);
                 scope.put("__dirname", scope, ".");
@@ -265,6 +282,7 @@ public class ScriptRunner
                 scope.put("__filename", scope, scriptFile.getAbsolutePath());
                 scope.put("__dirname", scope, scriptFile.getParent());
             }
+            // All modules share one "global" object that has, well, global stuff
             scope.put("global", scope, scope);
 
         } catch (InvocationTargetException e) {
@@ -276,12 +294,22 @@ public class ScriptRunner
         }
     }
 
-    private Object registerModule(String modName, String varName, Context cx, Scriptable scope)
+    public Object registerModule(String modName, Context cx, Scriptable scope)
         throws InvocationTargetException, InstantiationException, IllegalAccessException
     {
         NodeModule mod = env.getRegistry().get(modName);
-        Object obj = mod.register(cx, scope);
-        return obj;
+        if (mod == null) {
+            throw new AssertionError("Module " + modName + " not found");
+        }
+        Object exp = mod.registerExports(cx, scope, this);
+        if (exp == null) {
+            throw new AssertionError("Module " + modName + " returned a null export");
+        }
+        if (log.isDebugEnabled()) {
+            log.debug("Registered module {} export = {}", modName, exp);
+        }
+        moduleCache.put(modName, exp);
+        return exp;
     }
 
     private static final class Timed

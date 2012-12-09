@@ -10,6 +10,8 @@ import org.mozilla.javascript.Scriptable;
 import org.mozilla.javascript.ScriptableObject;
 import org.mozilla.javascript.annotations.JSFunction;
 
+import static com.apigee.noderunner.core.internal.ArgUtils.*;
+
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 
@@ -28,12 +30,13 @@ public class Timers
     }
 
     @Override
-    public Object register(Context cx, Scriptable scope)
+    public Object registerExports(Context cx, Scriptable scope, ScriptRunner runner)
         throws InvocationTargetException, IllegalAccessException, InstantiationException
     {
         ScriptableObject.defineClass(scope, TimersImpl.class);
-        Object obj = cx.newObject(scope, CLASS_NAME);
-        scope.put(OBJ_NAME, scope, obj);
+        Scriptable exports = cx.newObject(scope, CLASS_NAME);
+
+        scope.put(OBJ_NAME, scope, exports);
 
         Method m = Utils.findMethod(Timers.class, "setTimeout");
         scope.put("setTimeout", scope,
@@ -58,7 +61,8 @@ public class Timers
         m = Utils.findMethod(Timers.class, "clearImmediate");
         scope.put("clearImmediate", scope,
                   new FunctionObject("clearImmediate", m, scope));
-        return obj;
+
+        return exports;
     }
 
     // Global functions
@@ -148,10 +152,8 @@ public class Timers
 
         public static int setImmediate(Context cx, Scriptable thisObj, Object[] args, Function func)
         {
-            if (args.length < 1) {
-                return -1;
-            }
             TimersImpl impl = (TimersImpl)thisObj;
+            ensureArg(args, 0);
             Function cb = (Function)Context.jsToJava(args[0], Function.class);
             Object[] funcArgs = new Object[args.length - 1];
             System.arraycopy(args, 1, funcArgs, 0, args.length - 1);
@@ -167,11 +169,9 @@ public class Timers
 
         private int setTimeoutInternal(Object[] args, boolean repeating)
         {
-            if (args.length < 2) {
-                return -1;
-            }
+            ensureArg(args, 0);
             Function func = (Function)Context.jsToJava(args[0], Function.class);
-            long delay = (Long)Context.jsToJava(args[1], Long.class);
+            int delay = intArg(args, 1);
             Object[] funcArgs = new Object[args.length - 2];
             System.arraycopy(args, 2, funcArgs, 0, args.length - 2);
             return runner.createTimer(delay, repeating, func, funcArgs);
@@ -179,10 +179,7 @@ public class Timers
 
         private void clearTimeoutInternal(Object[] args)
         {
-            if (args.length != 1) {
-                return;
-            }
-            int id = (Integer)Context.jsToJava(args[0], Integer.class);
+            int id = intArg(args, 0);
             runner.clearTimer(id);
         }
     }

@@ -42,22 +42,21 @@ public class Process
     }
 
     @Override
-    public Object register(Context cx, Scriptable scope)
+    public Object registerExports(Context cx, Scriptable scope, ScriptRunner runner)
         throws InvocationTargetException, IllegalAccessException, InstantiationException
     {
         ScriptableObject.defineClass(scope, ProcessImpl.class, false, true);
-        ProcessImpl ret = (ProcessImpl)cx.newObject(scope, CLASS_NAME);
-        scope.put(OBJECT_NAME, scope, ret);
+        ProcessImpl exports = (ProcessImpl)cx.newObject(scope, CLASS_NAME);
 
         ScriptableObject.defineClass(scope, SimpleOutputStreamImpl.class);
         SimpleOutputStreamImpl stdout = (SimpleOutputStreamImpl)cx.newObject(scope, SimpleOutputStreamImpl.CLASS_NAME);
         stdout.setOutput(System.out);
-        ret.setStdout(stdout);
+        exports.setStdout(stdout);
         SimpleOutputStreamImpl stderr = (SimpleOutputStreamImpl)cx.newObject(scope, SimpleOutputStreamImpl.CLASS_NAME);
         stderr.setOutput(System.err);
-        ret.setStderr(stderr);
-
-        return ret;
+        exports.setStderr(stderr);
+        scope.put(OBJECT_NAME, scope, exports);
+        return exports;
     }
 
     public static class ProcessImpl

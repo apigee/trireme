@@ -1,6 +1,7 @@
 package com.apigee.noderunner.core.modules;
 
 import com.apigee.noderunner.core.NodeModule;
+import com.apigee.noderunner.core.internal.ScriptRunner;
 import org.mozilla.javascript.Context;
 import org.mozilla.javascript.Function;
 import org.mozilla.javascript.Scriptable;
@@ -19,7 +20,7 @@ public class Console
     implements NodeModule
 {
     protected static final String CLASS_NAME  = "_consoleClass";
-    protected static final String OBJECT_NAME = "console";
+    public static final String OBJECT_NAME = "console";
     protected static final Logger log         = LoggerFactory.getLogger(Console.class);
 
     @Override
@@ -29,13 +30,13 @@ public class Console
     }
 
     @Override
-    public Object register(Context cx, Scriptable scope)
+    public Object registerExports(Context cx, Scriptable scope, ScriptRunner runner)
         throws InvocationTargetException, IllegalAccessException, InstantiationException
     {
         ScriptableObject.defineClass(scope, ConsoleImpl.class);
-        Scriptable cons = cx.newObject(scope, CLASS_NAME);
-        scope.put(OBJECT_NAME, scope, cons);
-        return cons;
+        Scriptable exports = cx.newObject(scope, CLASS_NAME);
+        scope.put(OBJECT_NAME, scope, exports);
+        return exports;
     }
 
     public static class ConsoleImpl

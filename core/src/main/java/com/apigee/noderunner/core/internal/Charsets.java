@@ -14,6 +14,7 @@ public class Charsets
     private Charsets()
     {
         encodings.put("utf8", Charset.forName("UTF-8"));
+        encodings.put("utf-8", Charset.forName("UTF-8"));
         encodings.put("utf16le", Charset.forName("UTF-16LE"));
         encodings.put("utf-16le", Charset.forName("UTF-16LE"));
         encodings.put("ucs2", Charset.forName("UTF-16LE"));
@@ -22,6 +23,7 @@ public class Charsets
         // These are implemented in NodeCharsetEncoder
         encodings.put("binary", Charset.forName("Node-Binary"));
         encodings.put("hex", Charset.forName("Node-Hex"));
+        encodings.put("base64", Charset.forName("Node-Base64"));
     }
 
     public static final Charsets get()

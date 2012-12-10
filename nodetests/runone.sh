@@ -9,4 +9,6 @@ CLASSPATH=./target/classes:./target/test-classes:`cat ${CP}`
 export CLASSPATH
 rm ${CP}
 
-exec java com.apigee.noderunner.core.NodeRunner $*
+#ARGS="-Xdebug -Xrunjdwp:server=y,suspend=y,transport=dt_socket,address=localhost:14000"
+
+exec java ${ARGS} com.apigee.noderunner.core.NodeRunner $*

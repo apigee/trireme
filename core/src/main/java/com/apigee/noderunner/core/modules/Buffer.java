@@ -25,6 +25,8 @@ import java.nio.charset.Charset;
 import java.nio.charset.CharsetDecoder;
 import java.nio.charset.CharsetEncoder;
 import java.nio.charset.CoderResult;
+import java.nio.charset.CodingErrorAction;
+import java.util.Arrays;
 
 /**
  * Native implementation of Buffer from Node 0.8.17.
@@ -146,30 +148,53 @@ public class Buffer
                 return ret;
             }
             if (args[0] instanceof String) {
+                // If a string, encode and create -- this is in the docs
                 Charset encoding = resolveEncoding(args, 1);
                 ret.buf = ((String)args[0]).getBytes(encoding);
             } else if (args[0] instanceof Number) {
-                int len = intArg(args, 0);
+                // If a non-negative integer, use that, otherwise 0 -- from the tests and docs
+                int len = parseUnsignedIntForgiveably(args[0]);
                 ret.buf = new byte[len];
             } else if (args[0] instanceof Scriptable) {
                 Scriptable s = (Scriptable)args[0];
-                Object[] ids = s.getIds();
-                ret.buf = new byte[ids.length];
-                int pos = 0;
-                for (Object id : ids) {
-                    Object e;
-                    if (id instanceof Number) {
-                        e = s.get(((Number)id).intValue(), s);
-                    } else if (id instanceof String) {
-                        e = s.get(((String)id), s);
-                    } else {
-                        throw new EvaluatorException("Invalid argument type in array");
+                if (s.getPrototype() == ScriptableObject.getArrayPrototype(ctorObj)) {
+                    // An array of integers -- use that, from the tests
+                    Object[] ids = s.getIds();
+                    ret.buf = new byte[ids.length];
+                    int pos = 0;
+                    for (Object id : ids) {
+                        Object e;
+                        if (id instanceof Number) {
+                            e = s.get(((Number)id).intValue(), s);
+                        } else if (id instanceof String) {
+                            e = s.get(((String)id), s);
+                        } else {
+                            throw new EvaluatorException("Invalid argument type in array");
+                        }
+                        if (isIntArg(e)) {
+                            ret.buf[pos++] =
+                                (byte)((Integer)Context.jsToJava(e, Integer.class) & 0xff);
+                        } else {
+                            throw new EvaluatorException("Invalid argument type in array");
+                        }
                     }
-                    if (isIntArg(e)) {
-                        ret.buf[pos++] =
-                            (byte)((Integer)Context.jsToJava(e, Integer.class) & 0xff);
+                } else {
+                    // An object with the field "length" -- use that, from the tests
+                    if (s.has("length", s)) {
+                        int len = parseUnsignedIntForgiveably(s.get("length", s));
+                        ret.buf = new byte[len];
+                        for (Object id : s.getIds()) {
+                            if (id instanceof Number) {
+                                int iid = ((Number)id).intValue();
+                                Object v = s.get(iid, s);
+                                if (iid < len) {
+                                    int val = (Integer)Context.jsToJava(v, Integer.class);
+                                    ret.buf[iid] = (byte)(val & 0xff);
+                                }
+                            }
+                        }
                     } else {
-                        throw new EvaluatorException("Invalid argument type in array");
+                        ret.buf = new byte[0];
                     }
                 }
             } else {
@@ -289,7 +314,8 @@ public class Buffer
                 return "";
             }
             int length = end - start;
-            ByteBuffer readBuf = ByteBuffer.wrap(b.buf, start + b.bufOffset, length);
+            int realLength = Math.min(length, b.bufLength - start);
+            ByteBuffer readBuf = ByteBuffer.wrap(b.buf, start + b.bufOffset, realLength);
             int bufLen = (int)(readBuf.limit() * decoder.averageCharsPerByte());
             CharBuffer cBuf = CharBuffer.allocate(bufLen);
             CoderResult result;
@@ -297,8 +323,9 @@ public class Buffer
                 result = decoder.decode(readBuf, cBuf, true);
                 if (result == CoderResult.OVERFLOW) {
                     bufLen *= 2;
-                    cBuf = CharBuffer.allocate(bufLen);
-                    readBuf.clear();
+                    CharBuffer newBuf = CharBuffer.allocate(bufLen);
+                    newBuf.put(cBuf);
+                    cBuf = newBuf;
                 }
             } while (result == CoderResult.OVERFLOW);
 
@@ -349,6 +376,7 @@ public class Buffer
             String data = stringArg(args, 0);
             Charset charset = resolveEncoding(args, 1);
             CharsetEncoder encoder = charset.newEncoder();
+            encoder.onUnmappableCharacter(CodingErrorAction.REPLACE);
 
             // Encode into a small temporary buffer to make counting easiest.
             // I don't know of a better way.
@@ -470,10 +498,36 @@ public class Buffer
         }
 
         @JSFunction
-        public static BufferImpl fill(Context cx, Scriptable thisObj, Object[] args, Function func)
+        public static void fill(Context cx, Scriptable thisObj, Object[] args, Function func)
         {
-            // TODO what type will "value" be? Then what do we do?
-            throw new EvaluatorException("Not implemented.");
+            BufferImpl b = (BufferImpl)thisObj;
+            ensureArg(args, 0);
+            int offset = intArg(args, 1, 0);
+            int end = intArg(args, 2, b.bufLength);
+
+            if ((offset < 0) || (offset >= b.bufLength)) {
+                throw new EvaluatorException("offset out of bounds");
+            }
+            if (end < 0) {
+                throw new EvaluatorException("end out of bounds");
+            }
+            if (offset == end) {
+                return;
+            }
+
+            int realEnd = Math.min(end, b.bufLength);
+            if (args[0] instanceof Number) {
+                Arrays.fill(b.buf, b.bufOffset + offset, b.bufOffset + realEnd,
+                            (byte)(((Number)args[0]).intValue()));
+            } else if (args[0] instanceof Boolean) {
+                Arrays.fill(b.buf, b.bufOffset + offset, b.bufOffset + realEnd,
+                            ((Boolean)args[0]).booleanValue() ? (byte)1 : (byte)0);
+            } else if (args[0] instanceof String) {
+                Arrays.fill(b.buf, b.bufOffset + offset, b.bufOffset + realEnd,
+                            (byte)(((String)args[0]).charAt(0)));
+            } else {
+                throw new EvaluatorException("Invalid value argument");
+            }
         }
 
         @JSFunction

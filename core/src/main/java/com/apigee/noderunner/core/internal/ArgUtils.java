@@ -98,4 +98,38 @@ public class ArgUtils
         }
         return false;
     }
+
+    /**
+     * Some Node code expects us to be very forgiving with integers. From the buffer tests,
+     * for instance, we deduce that this code must:
+     *   If an integer, return either a positive integer or zero.
+     *   If a double, return either a positive integer rounded up, or zero
+     *   If a string, parse to an integer or double and re-do the last two steps.
+     */
+    public static int parseUnsignedIntForgiveably(Object o)
+    {
+        Object val = o;
+        if (val instanceof String) {
+            try {
+                val = Double.parseDouble((String)val);
+            } catch (NumberFormatException nfe) {
+                return 0;
+            }
+        }
+        if (val instanceof Double) {
+            Double dVal = (Double)val;
+            if ((dVal < 0) || dVal.isNaN()) {
+                return 0;
+            }
+            return (int)Math.ceil(dVal);
+        }
+        if (val instanceof Number) {
+            int iVal = ((Number)val).intValue();
+            if (iVal < 0) {
+                return 0;
+            }
+            return iVal;
+        }
+        return 0;
+    }
 }

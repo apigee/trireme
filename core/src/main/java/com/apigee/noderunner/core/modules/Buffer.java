@@ -34,8 +34,8 @@ import java.util.Arrays;
 public class Buffer
     implements NodeModule
 {
-    public static final String BUFFER_CLASS_NAME = "Buffer";
-    public static final String SLOW_CLASS_NAME = "SlowBuffer";
+    public static final String BUFFER_CLASS_NAME = "_bufferClass";
+    public static final String SLOW_CLASS_NAME = "_slowBufferClass";
     protected static final String EXPORT_CLASS_NAME = "_bufferModule";
     public static final String EXPORT_NAME = "buffer";
 
@@ -56,6 +56,16 @@ public class Buffer
         Scriptable export = cx.newObject(scope, EXPORT_CLASS_NAME);
         scope.put(EXPORT_NAME, scope, export);
         return export;
+    }
+
+    protected static Charset resolveEncoding(Object[] args, int pos)
+    {
+        String encArg = stringArg(args, pos, DEFAULT_ENCODING);
+        Charset charset = Charsets.get().getCharset(encArg);
+        if (charset == null) {
+            throw new EvaluatorException("Unknown encoding: " + encArg);
+        }
+        return charset;
     }
 
     /**
@@ -84,6 +94,95 @@ public class Buffer
             return cx.newObject(thisObj, SLOW_CLASS_NAME, args);
         }
 
+        @JSFunction
+        public boolean isEncoding(String enc)
+        {
+            return (Charsets.get().getCharset(enc) != null);
+        }
+
+        @JSFunction
+        public static boolean isBuffer(Context cx, Scriptable thisObj, Object[] args, Function func)
+        {
+            return ((args.length > 0) && (args[0] instanceof BufferImpl));
+        }
+
+        @JSFunction
+        public static int byteLength(Context cx, Scriptable thisObj, Object[] args, Function func)
+        {
+            String data = stringArg(args, 0);
+            Charset charset = resolveEncoding(args, 1);
+            CharsetEncoder encoder = charset.newEncoder();
+            encoder.onUnmappableCharacter(CodingErrorAction.REPLACE);
+
+            // Encode into a small temporary buffer to make counting easiest.
+            // I don't know of a better way.
+            CharBuffer chars = CharBuffer.wrap(data);
+            ByteBuffer tmp = ByteBuffer.allocate(256);
+            int total = 0;
+            CoderResult result;
+            do {
+                tmp.clear();
+                result = encoder.encode(chars, tmp, true);
+                total += tmp.position();
+            } while (result == CoderResult.OVERFLOW);
+            return total;
+        }
+
+        @JSFunction
+        public static Object concat(Context cx, Scriptable thisObj, Object[] args, Function func)
+        {
+            ensureArg(args, 0);
+            if (!(args[0] instanceof Scriptable)) {
+                throw new EvaluatorException("Invalid argument 0");
+            }
+
+            Scriptable bufs = (Scriptable)args[0];
+            Object[] ids = bufs.getIds();
+            if (ids.length == 0) {
+                return cx.newObject(thisObj, BUFFER_CLASS_NAME,
+                                    new Object[] { Integer.valueOf(0) });
+            }
+            if (ids.length == 1) {
+                return bufs.get(0, bufs);
+            }
+            int totalLen = intArg(args, 1, -1);
+            if (totalLen < 0) {
+                for (Object id : ids) {
+                    totalLen += getArrayElement(bufs, id).bufLength;
+                }
+            }
+
+            int pos = 0;
+            BufferImpl ret =
+                (BufferImpl)cx.newObject(thisObj, BUFFER_CLASS_NAME,
+                                         new Object[] { Integer.valueOf(totalLen) });
+            for (Object id : ids) {
+                byte[] from = getArrayElement(bufs, id).buf;
+                int len = Math.min((ret.bufLength - pos), from.length);
+                System.arraycopy(from, 0, ret.buf, pos + ret.bufOffset, len);
+                pos += len;
+            }
+            return ret;
+        }
+
+        private static BufferImpl getArrayElement(Scriptable bufs, Object id)
+        {
+            Object o;
+            if (id instanceof Number) {
+                int idInt = (Integer)Context.jsToJava(id, Integer.class);
+                o = bufs.get(idInt, bufs);
+            } else if (id instanceof String) {
+                o = bufs.get((String)id, bufs);
+            } else {
+                throw new EvaluatorException("Invalid array of buffers");
+            }
+            try {
+                return (BufferImpl)o;
+            } catch (ClassCastException e) {
+                throw new EvaluatorException("Array of buffers does not contain Buffer objects");
+            }
+        }
+
         @JSGetter("INSPECT_MAX_BYTES")
         public int getInspectMaxBytes() {
             return inspectMaxBytes;
@@ -105,6 +204,29 @@ public class Buffer
         private int bufOffset;
         private int bufLength;
         private int charsWritten;
+
+        public BufferImpl()
+        {
+        }
+
+        public void initialize(ByteBuffer bb)
+        {
+            buf = new byte[bb.remaining()];
+            bb.put(buf);
+            bufOffset = 0;
+            bufLength = buf.length;
+        }
+
+        public ByteBuffer getBuffer()
+        {
+            return ByteBuffer.wrap(buf, bufOffset, bufLength);
+        }
+
+        public String getString(String encoding)
+        {
+            Charset cs = Charsets.get().getCharset(encoding);
+            return toStringInternal(cs, 0, bufLength);
+        }
 
         @Override
         public String getClassName() {
@@ -211,12 +333,6 @@ public class Buffer
             return charsWritten;
         }
 
-        @JSStaticFunction
-        public static boolean isEncoding(String enc)
-        {
-            return (Charsets.get().getCharset(enc) != null);
-        }
-
         @JSFunction
         public static int write(Context cx, Scriptable thisObj, Object[] args, Function func)
         {
@@ -297,7 +413,6 @@ public class Buffer
         {
             Charset charset = resolveEncoding(args, 0);
             int start = intArg(args, 1, 0);
-            CharsetDecoder decoder = charset.newDecoder();
             BufferImpl b = (BufferImpl)thisObj;
 
             int end;
@@ -315,7 +430,13 @@ public class Buffer
             }
             int length = end - start;
             int realLength = Math.min(length, b.bufLength - start);
-            ByteBuffer readBuf = ByteBuffer.wrap(b.buf, start + b.bufOffset, realLength);
+            return b.toStringInternal(charset, start, realLength);
+        }
+
+        private String toStringInternal(Charset cs, int start, int length)
+        {
+            CharsetDecoder decoder = cs.newDecoder();
+            ByteBuffer readBuf = ByteBuffer.wrap(buf, start + bufOffset, length);
             int bufLen = (int)(readBuf.limit() * decoder.averageCharsPerByte());
             CharBuffer cBuf = CharBuffer.allocate(bufLen);
             CoderResult result;
@@ -364,93 +485,12 @@ public class Buffer
 
         // TODO toJSON -- not 100 percent sure what it's supposed to do...
 
-        @JSStaticFunction
-        public static boolean isBuffer(Context cx, Scriptable thisObj, Object[] args, Function func)
-        {
-            return ((args.length > 0) && (args[0] instanceof BufferImpl));
-        }
 
-        @JSStaticFunction
-        public static int byteLength(Context cx, Scriptable thisObj, Object[] args, Function func)
-        {
-            String data = stringArg(args, 0);
-            Charset charset = resolveEncoding(args, 1);
-            CharsetEncoder encoder = charset.newEncoder();
-            encoder.onUnmappableCharacter(CodingErrorAction.REPLACE);
-
-            // Encode into a small temporary buffer to make counting easiest.
-            // I don't know of a better way.
-            CharBuffer chars = CharBuffer.wrap(data);
-            ByteBuffer tmp = ByteBuffer.allocate(256);
-            int total = 0;
-            CoderResult result;
-            do {
-                tmp.clear();
-                result = encoder.encode(chars, tmp, true);
-                total += tmp.position();
-            } while (result == CoderResult.OVERFLOW);
-            return total;
-        }
 
         @JSGetter("length")
         public int getLength()
         {
             return bufLength;
-        }
-
-        @JSStaticFunction
-        public static Object concat(Context cx, Scriptable thisObj, Object[] args, Function func)
-        {
-            ensureArg(args, 0);
-            if (!(args[0] instanceof Scriptable)) {
-                throw new EvaluatorException("Invalid argument 0");
-            }
-
-            Scriptable bufs = (Scriptable)args[0];
-            Object[] ids = bufs.getIds();
-            if (ids.length == 0) {
-                return cx.newObject(thisObj, BUFFER_CLASS_NAME,
-                                    new Object[] { Integer.valueOf(0) });
-            }
-            if (ids.length == 1) {
-                return bufs.get(0, bufs);
-            }
-            int totalLen = intArg(args, 1, -1);
-            if (totalLen < 0) {
-                for (Object id : ids) {
-                    totalLen += getArrayElement(bufs, id).bufLength;
-                }
-            }
-
-            int pos = 0;
-            BufferImpl ret =
-                (BufferImpl)cx.newObject(thisObj, BUFFER_CLASS_NAME,
-                                         new Object[] { Integer.valueOf(totalLen) });
-            for (Object id : ids) {
-                byte[] from = getArrayElement(bufs, id).buf;
-                int len = Math.min((ret.bufLength - pos), from.length);
-                System.arraycopy(from, 0, ret.buf, pos + ret.bufOffset, len);
-                pos += len;
-            }
-            return ret;
-        }
-
-        private static BufferImpl getArrayElement(Scriptable bufs, Object id)
-        {
-            Object o;
-            if (id instanceof Number) {
-                int idInt = (Integer)Context.jsToJava(id, Integer.class);
-                o = bufs.get(idInt, bufs);
-            } else if (id instanceof String) {
-                o = bufs.get((String)id, bufs);
-            } else {
-                throw new EvaluatorException("Invalid array of buffers");
-            }
-            try {
-                return (BufferImpl)o;
-            } catch (ClassCastException e) {
-                throw new EvaluatorException("Array of buffers does not contain Buffer objects");
-            }
         }
 
         @JSFunction
@@ -833,14 +873,10 @@ public class Buffer
             return true;
         }
 
-        private static Charset resolveEncoding(Object[] args, int pos)
+        public String toString()
         {
-            String encArg = stringArg(args, pos, DEFAULT_ENCODING);
-            Charset charset = Charsets.get().getCharset(encArg);
-            if (charset == null) {
-                throw new EvaluatorException("Unknown encoding: " + encArg);
-            }
-            return charset;
+            return "Buffer[length=" + buf.length + ", offset=" + bufOffset +
+                    ", bufLength=" + bufLength + ']';
         }
     }
 
@@ -852,4 +888,5 @@ public class Buffer
             return SLOW_CLASS_NAME;
         }
     }
+
 }

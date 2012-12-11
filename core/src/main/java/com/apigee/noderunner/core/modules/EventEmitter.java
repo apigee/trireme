@@ -77,16 +77,16 @@ public class EventEmitter
         @JSFunction
         public void on(String event, Function listener)
         {
-            onInternal(event, listener, false);
+            register(event, listener, false);
         }
 
         @JSFunction
         public void once(String event, Function listener)
         {
-            onInternal(event, listener, true);
+            register(event, listener, true);
         }
 
-        private void onInternal(String event, Function listener, boolean once)
+        public void register(String event, Function listener, boolean once)
         {
             List<Lsnr> ls = listeners.get(event);
             if (ls == null) {
@@ -95,6 +95,9 @@ public class EventEmitter
             }
             ls.add(new Lsnr(listener, once));
 
+            if (log.isDebugEnabled()) {
+                log.debug("Now {} listeners registered for {}", ls.size(), event);
+            }
             if (ls.size() > maxListeners) {
                 log.warn("{} listeners assigned for event type {}", ls.size(), event);
             }
@@ -168,6 +171,9 @@ public class EventEmitter
                 Iterator<Lsnr> i = ls.iterator();
                 while (i.hasNext()) {
                     Lsnr l = i.next();
+                    if (log.isDebugEnabled()) {
+                        log.debug("Sending {} to {}", event, l.function);
+                    }
                     l.function.call(c, l.function.getParentScope(),
                                     l.function.getParentScope(),
                                     args);
@@ -176,6 +182,9 @@ public class EventEmitter
                         i.remove();
                     }
                 }
+            }
+            if (log.isDebugEnabled()) {
+                log.debug("Event {} fired. handled = {}", event, handled);
             }
             return handled;
         }

@@ -16,6 +16,8 @@ import org.mozilla.javascript.annotations.JSFunction;
 import org.mozilla.javascript.annotations.JSGetter;
 import org.mozilla.javascript.annotations.JSSetter;
 
+import static com.apigee.noderunner.core.internal.ArgUtils.*;
+
 import javax.swing.plaf.basic.BasicInternalFrameTitlePane;
 import java.io.IOException;
 import java.io.OutputStream;
@@ -197,9 +199,11 @@ public class Process
         }
 
         @JSFunction
-        public void nextTick(Function f)
+        public static void nextTick(Context cx, Scriptable thisObj, Object[] args, Function func)
         {
-            runner.addTickFunction(f);
+            ensureArg(args, 0);
+            ProcessImpl proc = (ProcessImpl)thisObj;
+            proc.runner.enqueueCallback((Function)args[0], thisObj, null);
         }
 
         @JSFunction

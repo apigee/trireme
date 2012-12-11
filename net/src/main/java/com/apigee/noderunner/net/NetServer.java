@@ -132,7 +132,6 @@ public class NetServer
             svr.register("close", callback, false);
         }
         svr.runner.enqueueEvent(svr, "close", null);
-        svr.fireEvent("close");
     }
 
     @JSFunction
@@ -178,6 +177,7 @@ public class NetServer
     private class Handler
         extends SimpleChannelUpstreamHandler
     {
+        @Override
         public void channelConnected(final ChannelHandlerContext ctx, final ChannelStateEvent e)
         {
             log.debug("Channel connected: {}", e);
@@ -203,6 +203,7 @@ public class NetServer
             });
         }
 
+        @Override
         public void channelDisconnected(final ChannelHandlerContext ctx, final ChannelStateEvent e)
         {
             log.debug("Channel disconnected: {}", e);
@@ -228,6 +229,7 @@ public class NetServer
             });
         }
 
+        @Override
         public void messageReceived(final ChannelHandlerContext ctx, final MessageEvent e)
         {
             log.debug("Message event: {}", e);

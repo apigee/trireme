@@ -1,1 +1,2 @@
 com.apigee.noderunner.net.NetModule
+com.apigee.noderunner.net.HttpModule

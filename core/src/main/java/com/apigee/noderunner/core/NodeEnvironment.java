@@ -15,6 +15,7 @@ import java.io.File;
 public class NodeEnvironment
 {
     private boolean initialized;
+    private boolean noExit;
     private ScriptableObject rootScope;
     private ModuleRegistry registry;
 
@@ -42,6 +43,14 @@ public class NodeEnvironment
 
     public ModuleRegistry getRegistry() {
         return registry;
+    }
+
+    public void setNoExit(boolean noExit) {
+        this.noExit = noExit;
+    }
+
+    public boolean isNoExit() {
+        return noExit;
     }
 
     private synchronized void initialize()

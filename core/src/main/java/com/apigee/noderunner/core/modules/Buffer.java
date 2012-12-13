@@ -3,9 +3,11 @@ package com.apigee.noderunner.core.modules;
 import com.apigee.noderunner.core.NodeModule;
 import com.apigee.noderunner.core.internal.Charsets;
 import com.apigee.noderunner.core.internal.ScriptRunner;
+import com.apigee.noderunner.core.internal.Utils;
 import org.mozilla.javascript.Context;
 import org.mozilla.javascript.EvaluatorException;
 import org.mozilla.javascript.Function;
+import org.mozilla.javascript.FunctionObject;
 import org.mozilla.javascript.JavaScriptException;
 import org.mozilla.javascript.Scriptable;
 import org.mozilla.javascript.ScriptableObject;
@@ -35,9 +37,9 @@ public class Buffer
     implements NodeModule
 {
     public static final String BUFFER_CLASS_NAME = "_bufferClass";
-    public static final String SLOW_CLASS_NAME = "_slowBufferClass";
+    public static final String SLOW_CLASS_NAME = "_SlowBufferClass";
     protected static final String EXPORT_CLASS_NAME = "_bufferModule";
-    public static final String EXPORT_NAME = "buffer";
+    public static final String EXPORT_NAME = "Buffer";
 
     private static final String DEFAULT_ENCODING = "utf8";
 
@@ -53,8 +55,8 @@ public class Buffer
         ScriptableObject.defineClass(scope, BufferImpl.class, false, true);
         ScriptableObject.defineClass(scope, SlowBufferImpl.class, false, true);
         ScriptableObject.defineClass(scope, BufferModuleImpl.class, false, true);
-        Scriptable export = cx.newObject(scope, EXPORT_CLASS_NAME);
-        scope.put(EXPORT_NAME, scope, export);
+        BufferModuleImpl export = (BufferModuleImpl)cx.newObject(scope, EXPORT_CLASS_NAME);
+        export.bindFunctions(cx, scope, export);
         return export;
     }
 
@@ -76,37 +78,71 @@ public class Buffer
         extends ScriptableObject
     {
         private int inspectMaxBytes = 50;
+        private int charsWritten;
 
         @Override
         public String getClassName() {
             return EXPORT_CLASS_NAME;
         }
 
-        @JSFunction
+        public void bindFunctions(Context cx, Scriptable globalScope, Scriptable export)
+        {
+            FunctionObject buffer = new FunctionObject("Buffer",
+                                                       Utils.findMethod(BufferModuleImpl.class, "Buffer"),
+                                                       export);
+            export.put("Buffer", export, buffer);
+            globalScope.put("Buffer", globalScope, buffer);
+            buffer.associateValue("_module", this);
+
+            FunctionObject slowBuffer = new FunctionObject("SlowBuffer",
+                                                       Utils.findMethod(BufferModuleImpl.class, "SlowBuffer"),
+                                                       export);
+            export.put("SlowBuffer", export, slowBuffer);
+            buffer.associateValue("_module", this);
+
+            buffer.defineProperty("_charsWritten", this,
+                                  Utils.findMethod(BufferModuleImpl.class, "getCharsWritten"),
+                                  Utils.findMethod(BufferModuleImpl.class, "setCharsWritten"), 0);
+
+            putFunction(buffer, "isEncoding", BufferModuleImpl.class);
+            putFunction(buffer, "isBuffer", BufferModuleImpl.class);
+            putFunction(buffer, "byteLength", BufferModuleImpl.class);
+            putFunction(buffer, "concat", BufferModuleImpl.class);
+        }
+
+        private void putFunction(Scriptable scope, String name, Class<?> klass)
+        {
+            FunctionObject func = new FunctionObject(name,
+                                                     Utils.findMethod(klass, name),
+                                                     scope);
+            scope.put(name, scope, func);
+        }
+
         public static Scriptable Buffer(Context cx, Scriptable thisObj, Object[] args, Function func)
         {
-            return cx.newObject(thisObj, BUFFER_CLASS_NAME, args);
+            BufferImpl buf = (BufferImpl)cx.newObject(thisObj, BUFFER_CLASS_NAME, args);
+            buf.setParentModule((BufferModuleImpl)(((ScriptableObject)func).getAssociatedValue("_module")));
+            return buf;
         }
 
-        @JSFunction
         public static Scriptable SlowBuffer(Context cx, Scriptable thisObj, Object[] args, Function func)
         {
-            return cx.newObject(thisObj, SLOW_CLASS_NAME, args);
+            BufferImpl buf = (BufferImpl)cx.newObject(thisObj, SLOW_CLASS_NAME, args);
+            buf.setParentModule((BufferModuleImpl)(((ScriptableObject)func).getAssociatedValue("_module")));
+            return buf;
         }
 
-        @JSFunction
-        public boolean isEncoding(String enc)
+        public static boolean isEncoding(Context cx, Scriptable thisObj, Object[] args, Function func)
         {
+            String enc = stringArg(args, 0);
             return (Charsets.get().getCharset(enc) != null);
         }
 
-        @JSFunction
         public static boolean isBuffer(Context cx, Scriptable thisObj, Object[] args, Function func)
         {
             return ((args.length > 0) && (args[0] instanceof BufferImpl));
         }
 
-        @JSFunction
         public static int byteLength(Context cx, Scriptable thisObj, Object[] args, Function func)
         {
             String data = stringArg(args, 0);
@@ -128,7 +164,6 @@ public class Buffer
             return total;
         }
 
-        @JSFunction
         public static Object concat(Context cx, Scriptable thisObj, Object[] args, Function func)
         {
             ensureArg(args, 0);
@@ -183,12 +218,18 @@ public class Buffer
             }
         }
 
-        @JSGetter("INSPECT_MAX_BYTES")
+        public int getCharsWritten(Scriptable obj) {
+            return charsWritten;
+        }
+
+        public void setCharsWritten(Scriptable obj, int cw) {
+            charsWritten = cw;
+        }
+
         public int getInspectMaxBytes() {
             return inspectMaxBytes;
         }
 
-        @JSSetter("INSPECT_MAX_BYTES")
         public void setInspectMaxBytes(int i) {
             this.inspectMaxBytes = i;
         }
@@ -203,10 +244,15 @@ public class Buffer
         private byte[] buf;
         private int bufOffset;
         private int bufLength;
-        private int charsWritten;
+        private BufferModuleImpl parentModule;
 
         public BufferImpl()
         {
+        }
+
+        public void setParentModule(BufferModuleImpl mod)
+        {
+            this.parentModule = mod;
         }
 
         public void initialize(ByteBuffer bb)
@@ -253,13 +299,20 @@ public class Buffer
         {
             if (index < bufLength) {
                 int val = (Integer)Context.jsToJava(value, Integer.class);
-                if (val < 0) {
-                    val = 0xff + val + 1;
-                }
-                buf[index + bufOffset] = (byte)val;
+                putByte(index + bufOffset, val);
+
             } else {
                 throw new EvaluatorException("Array index out of bounds");
             }
+        }
+
+        private void putByte(int pos, int v)
+        {
+            int val = v;
+            if (val < 0) {
+                val = 0xff + val + 1;
+            }
+            buf[pos] = (byte)(val & 0xff);
         }
 
         @JSConstructor
@@ -272,11 +325,15 @@ public class Buffer
             if (args[0] instanceof String) {
                 // If a string, encode and create -- this is in the docs
                 Charset encoding = resolveEncoding(args, 1);
-                ret.buf = ((String)args[0]).getBytes(encoding);
+                ret.fromStringInternal(((String)args[0]), encoding);
+
             } else if (args[0] instanceof Number) {
                 // If a non-negative integer, use that, otherwise 0 -- from the tests and docs
                 int len = parseUnsignedIntForgiveably(args[0]);
                 ret.buf = new byte[len];
+                ret.bufOffset = 0;
+                ret.bufLength = len;
+
             } else if (args[0] instanceof Scriptable) {
                 Scriptable s = (Scriptable)args[0];
                 if (s.getPrototype() == ScriptableObject.getArrayPrototype(ctorObj)) {
@@ -294,8 +351,7 @@ public class Buffer
                             throw new EvaluatorException("Invalid argument type in array");
                         }
                         if (isIntArg(e)) {
-                            ret.buf[pos++] =
-                                (byte)((Integer)Context.jsToJava(e, Integer.class) & 0xff);
+                            ret.putByte(pos++, (Integer)Context.jsToJava(e, Integer.class));
                         } else {
                             throw new EvaluatorException("Invalid argument type in array");
                         }
@@ -319,18 +375,13 @@ public class Buffer
                         ret.buf = new byte[0];
                     }
                 }
+                ret.bufOffset = 0;
+                ret.bufLength = ret.buf.length;
             } else {
                 throw new EvaluatorException("Invalid argument type");
             }
-            ret.bufOffset = 0;
-            ret.bufLength = ret.buf.length;
-            return ret;
-        }
 
-        // TODO this is supposed to be a class method!
-        @JSGetter("_charsWritten")
-        public int getCharsWritten() {
-            return charsWritten;
+            return ret;
         }
 
         @JSFunction
@@ -404,7 +455,9 @@ public class Buffer
             // Encode as much as we can and move the buffer's positions forward
             CharBuffer chars = CharBuffer.wrap(data);
             encoder.encode(chars, writeBuf, true);
-            b.charsWritten = chars.position();
+            if (b.parentModule != null) {
+                b.parentModule.setCharsWritten(b, chars.position());
+            }
             return writeBuf.position() - offset - b.bufOffset;
         }
 
@@ -445,6 +498,7 @@ public class Buffer
                 if (result == CoderResult.OVERFLOW) {
                     bufLen *= 2;
                     CharBuffer newBuf = CharBuffer.allocate(bufLen);
+                    cBuf.flip();
                     newBuf.put(cBuf);
                     cBuf = newBuf;
                 }
@@ -452,6 +506,33 @@ public class Buffer
 
             cBuf.flip();
             return cBuf.toString();
+        }
+
+        private void fromStringInternal(String s, Charset cs)
+        {
+            CharsetEncoder enc = cs.newEncoder();
+            CharBuffer chars = CharBuffer.wrap(s);
+            int bufLen = (int)(chars.remaining() * enc.averageBytesPerChar());
+            ByteBuffer writeBuf =  ByteBuffer.allocate(bufLen);
+            enc.onUnmappableCharacter(CodingErrorAction.REPLACE);
+
+            CoderResult result;
+            do {
+                result = enc.encode(chars, writeBuf, true);
+                if (result == CoderResult.OVERFLOW) {
+                    bufLen *= 2;
+                    ByteBuffer newBuf = ByteBuffer.allocate(bufLen);
+                    writeBuf.flip();
+                    newBuf.put(writeBuf);
+                    writeBuf = newBuf;
+                }
+            } while (result == CoderResult.OVERFLOW);
+
+            writeBuf.flip();
+            assert(!writeBuf.isDirect());
+            buf = writeBuf.array();
+            bufOffset = writeBuf.arrayOffset();
+            bufLength = writeBuf.remaining();
         }
 
         @JSFunction

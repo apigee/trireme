@@ -1,5 +1,6 @@
 package com.apigee.noderunner.core;
 
+import com.apigee.noderunner.core.internal.NodeExitException;
 import com.apigee.noderunner.core.internal.Utils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -41,6 +42,8 @@ public class NodeRunner
             NodeEnvironment env = new NodeEnvironment();
             NodeScript ns = env.createScript(scriptName, script, args);
             ns.execute();
+        } catch (NodeExitException nee) {
+            // Handled elsewhere
         } catch (NodeException ne) {
             ne.printStackTrace(System.err);
             System.exit(5);

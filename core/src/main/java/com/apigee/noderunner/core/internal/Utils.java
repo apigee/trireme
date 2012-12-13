@@ -2,6 +2,8 @@ package com.apigee.noderunner.core.internal;
 
 import org.mozilla.javascript.Context;
 
+import java.io.File;
+import java.io.FileInputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
@@ -30,6 +32,17 @@ public class Utils
             }
         } while (r > 0);
         return str.toString();
+    }
+
+    public static String readFile(File f)
+        throws IOException
+    {
+        FileInputStream in = new FileInputStream(f);
+        try {
+            return readStream(in);
+        } finally {
+            in.close();
+        }
     }
 
     public static Reader getResource(String name)

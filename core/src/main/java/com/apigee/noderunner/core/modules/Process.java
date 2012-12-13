@@ -37,6 +37,9 @@ public class Process
 
     protected final static String CLASS_NAME = "_processClass";
     protected final static String OBJECT_NAME = "process";
+    protected static final String ENV_GETTER_CLASS_NAME = "_processEnvGetter";
+
+    private static final long NANO = 1000000000L;
 
     @Override
     public String getModuleName() {
@@ -48,6 +51,7 @@ public class Process
         throws InvocationTargetException, IllegalAccessException, InstantiationException
     {
         ScriptableObject.defineClass(scope, ProcessImpl.class, false, true);
+        ScriptableObject.defineClass(scope, EnvGetter.class);
         ProcessImpl exports = (ProcessImpl)cx.newObject(scope, CLASS_NAME);
 
         ScriptableObject.defineClass(scope, SimpleOutputStreamImpl.class);
@@ -150,16 +154,10 @@ public class Process
         // TODO getuid
         // TODO setuid
 
-        @JSFunction
-        public static Object getenv(Context cx, Scriptable thisObj, Object[] args, Function func)
+        @JSGetter("env")
+        public static Scriptable getEnv(Scriptable scope)
         {
-            Map<String, String> envMap = System.getenv();
-            Scriptable env = cx.newObject(thisObj);
-
-            for (Map.Entry<String, String> e : envMap.entrySet()) {
-                env.put(e.getKey(), thisObj, e.getValue());
-            }
-            return env;
+            return Context.getCurrentContext().newObject(scope, ENV_GETTER_CLASS_NAME);
         }
 
         @JSGetter("version")
@@ -214,9 +212,20 @@ public class Process
         }
 
         @JSFunction
-        public long hrtime()
+        public static Object hrtime(Context cx, Scriptable thisObj, Object[] args, Function func)
         {
-            return System.nanoTime();
+            long nanos = System.nanoTime();
+            if (args.length >= 2) {
+                int startSecs = intArg(args, 0);
+                int startNs = intArg(args, 1);
+                long startNanos = (startSecs * NANO) + startNs;
+                nanos -= startNanos;
+            }
+
+            Object[] ret = new Object[2];
+            ret[0] = (int)(nanos / NANO);
+            ret[1] = (int)(nanos % NANO);
+            return cx.newArray(thisObj, ret);
         }
     }
 
@@ -266,6 +275,22 @@ public class Process
         @JSGetter("writable")
         public boolean isWriteable() {
             return true;
+        }
+    }
+
+    public static class EnvGetter
+        extends ScriptableObject
+    {
+
+        @Override
+        public String getClassName() {
+            return ENV_GETTER_CLASS_NAME;
+        }
+
+        @Override
+        public Object get(String index, Scriptable scope)
+        {
+            return System.getenv(index);
         }
     }
 }

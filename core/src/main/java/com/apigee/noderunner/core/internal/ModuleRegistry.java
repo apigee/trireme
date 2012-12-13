@@ -24,6 +24,7 @@ public class ModuleRegistry
         scriptModules.put("assert", "/noderunner/lib/assert.js");
         scriptModules.put("util", "/noderunner/lib/util.js");
         scriptModules.put("_linklist", "/noderunner/lib/_linklist.js");
+        scriptModules.put("console", "/noderunner/lib/console.js");
     }
 
     public NodeModule get(String name)

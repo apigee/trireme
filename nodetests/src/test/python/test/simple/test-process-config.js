@@ -25,10 +25,10 @@ var fs = require('fs');
 var path = require('path');
 
 // check for existence
-assert.assert(process.hasOwnProperty('config'));
+assert(process.hasOwnProperty('config'));
 
 // ensure that `process.config` is an Object
-assert.assert(Object(process.config) === process.config);
+assert(Object(process.config) === process.config);
 
 var configPath = path.resolve(__dirname, '..', '..', 'config.gypi');
 var config = fs.readFileSync(configPath, 'utf8');

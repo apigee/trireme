@@ -61,8 +61,15 @@ f.setMaxListeners(0);
 
 
 process.on('exit', function() {
+  console.log('on exit');
+  console.log('0 = ' + events_new_listener_emited[0]);
+  console.log('1 = ' + events_new_listener_emited[1]);
+  console.log('2 = ' + events_new_listener_emited[2]);
   assert.deepEqual(['hello', 'foo'], events_new_listener_emited);
+  console.log('names ok');
   assert.deepEqual([hello, foo], listeners_new_listener_emited);
+  console.log('listeners ok');
+  console.log('hello emitted = ' + times_hello_emited);
   assert.equal(1, times_hello_emited);
 });
 

@@ -1,5 +1,4 @@
 com.apigee.noderunner.core.modules.Buffer
-com.apigee.noderunner.core.modules.Console
 com.apigee.noderunner.core.modules.EventEmitter
 com.apigee.noderunner.core.modules.Filesystem
 com.apigee.noderunner.core.modules.Module

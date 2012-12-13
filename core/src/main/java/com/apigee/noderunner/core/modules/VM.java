@@ -18,7 +18,7 @@ public class VM
     implements NodeModule
 {
     protected static final String CLASS_NAME = "_vmClass";
-    protected static final String SCRIPT_CLASS_NAME = "Script";
+    protected static final String SCRIPT_CLASS_NAME = "_scriptClass";
 
     @Override
     public String getModuleName() {
@@ -158,6 +158,12 @@ public class VM
         }
 
         @JSFunction
+        public static Object runInContext(Context cx, Scriptable thisObj, Object[] args, Function func)
+        {
+            return runInThisContext(cx, thisObj, args, func);
+        }
+
+        @JSFunction
         public static Object runInThisContext(Context cx, Scriptable thisObj, Object[] args, Function func)
         {
             ScriptImpl s = (ScriptImpl)thisObj;
@@ -169,7 +175,7 @@ public class VM
         {
             Scriptable sandbox = null;
             if (args.length > 0) {
-                sandbox = (Scriptable)Context.jsToJava(args[1], Scriptable.class);
+                sandbox = (Scriptable)Context.jsToJava(args[0], Scriptable.class);
             }
 
             ScriptImpl s = (ScriptImpl)thisObj;
@@ -178,6 +184,13 @@ public class VM
             }
             return cx.evaluateString(sandbox, s.code, s.fileName, 1, null);
         }
+
+        @JSFunction
+        public static Object createContext(Context cx, Scriptable thisObj, Object[] args, Function func)
+        {
+            return VMImpl.createContext(cx, thisObj, args, func);
+        }
+
 
         static Scriptable createSandbox(Context cx, Scriptable scope)
         {

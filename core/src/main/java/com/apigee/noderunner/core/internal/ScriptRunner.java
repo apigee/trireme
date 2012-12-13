@@ -5,7 +5,6 @@ import com.apigee.noderunner.core.NodeException;
 import com.apigee.noderunner.core.NodeModule;
 import com.apigee.noderunner.core.ScriptException;
 import com.apigee.noderunner.core.ScriptTask;
-import com.apigee.noderunner.core.modules.Console;
 import com.apigee.noderunner.core.modules.EventEmitter;
 import com.apigee.noderunner.core.modules.Module;
 import com.apigee.noderunner.core.modules.Process;
@@ -65,7 +64,6 @@ public class ScriptRunner
     // Globals that are set up for the process
     private Timers.TimersImpl timers;
     private Process.ProcessImpl process;
-    private Console.ConsoleImpl console;
     private Object globals;
 
     private Scriptable scope;
@@ -267,7 +265,7 @@ public class ScriptRunner
 
         } catch (NodeExitException ne) {
             log.debug("Normal script exit.");
-            process.fireEvent("exit");
+            process.fireEvent("exit", ne.getCode());
             if (ne.isFatal()) {
                 System.err.println(ne.getScriptStackTrace());
             }
@@ -314,17 +312,19 @@ public class ScriptRunner
             process  =
                 (Process.ProcessImpl)registerModule("process", cx, scope);
             process.setRunner(this);
-            console =
-                (Console.ConsoleImpl)registerModule("console", cx, scope);
             registerModule("buffer", cx, scope);
+
+            // Some are scripts
+            Object console = mod.callMethod(scope, "require", new Object[] { "console" });
+            scope.put("console", scope, console);
 
             // Globals not covered in any module
             if (scriptFile == null) {
                 scope.put("__filename", scope, scriptName);
-                scope.put("__dirname", scope, ".");
+                scope.put("__dirname", scope, new File(".").getAbsolutePath());
             } else {
                 scope.put("__filename", scope, scriptFile.getAbsolutePath());
-                scope.put("__dirname", scope, scriptFile.getParent());
+                scope.put("__dirname", scope, scriptFile.getParentFile().getAbsolutePath());
             }
             // All modules share one "global" object that has, well, global stuff
             scope.put("global", scope, scope);

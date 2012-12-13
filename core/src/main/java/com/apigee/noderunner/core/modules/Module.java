@@ -18,6 +18,7 @@ import org.mozilla.javascript.annotations.JSFunction;
 import org.mozilla.javascript.annotations.JSGetter;
 import org.mozilla.javascript.annotations.JSSetter;
 import org.mozilla.javascript.annotations.JSStaticFunction;
+import org.mozilla.javascript.json.JsonParser;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -97,7 +98,7 @@ public class Module
             this.fileName = n;
         }
 
-        public void bindVariables(Context cx, Scriptable scope, Scriptable target)
+        public Scriptable bindVariables(Context cx, Scriptable scope, Scriptable target)
         {
             // Create a new object of the "module" class
             scope.put("module", scope, target);
@@ -111,6 +112,7 @@ public class Module
             Scriptable exportsObj = cx.newObject(scope);
             scope.put("exports", target, exportsObj);
             scope.put("exports", scope, exportsObj);
+            return exportsObj;
         }
 
         @JSFunction
@@ -164,20 +166,45 @@ public class Module
             newMod.setParent(mod);
             newMod.setId(name);
             newMod.setParentScope(mod.parentScope);
-            newMod.bindVariables(cx, newScope, newMod);
+            Scriptable firstExports = newMod.bindVariables(cx, newScope, newMod);
 
             File modFile = null;
             String resourceMod = mod.runner.getEnvironment().getRegistry().getResource(name);
+            String cacheKey = resourceMod;
             if (resourceMod == null) {
                 // Else, search for the file
-                // TODO package.json
                 // TODO node_modules
-                File search = (mod.file == null) ? new File(".") : mod.file.getParentFile();
-                modFile = locateFile(name, search);
-                if (modFile == null) {
-                    throw new EvaluatorException("Cannot load module \"" + name + '\"');
+                try {
+                    File search = (mod.file == null) ? new File(".") : mod.file.getParentFile();
+                    modFile = locateFile(name, search, cx, mod.parentScope, false);
+                    if (modFile == null) {
+                        File searchLevel = search;
+                        while ((modFile == null) && (searchLevel != null)) {
+                            File modSearch = new File(searchLevel, "node_modules");
+                            modFile = locateFile(name, modSearch, cx, mod.parentScope, true);
+                            searchLevel = searchLevel.getParentFile();
+                        }
+                        if (modFile == null) {
+                            throw new EvaluatorException("Cannot load module \"" + name + '\"');
+                        }
+                    }
+                    cacheKey = modFile.getCanonicalPath();
+                } catch (IOException ioe) {
+                    throw new EvaluatorException("Unable to read module file: " + ioe);
                 }
             }
+
+            // One more check of the cache based on resolved file name
+            cached = mod.runner.getModuleCache().get(cacheKey);
+            if (cached != null) {
+                if (log.isDebugEnabled()) {
+                    log.debug("Returning cached {}", System.identityHashCode(cached));
+                }
+                return cached;
+            }
+
+            // Register exports temporarily to prevent cycles
+            mod.runner.getModuleCache().put(cacheKey, firstExports);
 
             if (log.isDebugEnabled()) {
                 log.debug("Executing in scope {} with exports {}",
@@ -200,8 +227,8 @@ public class Module
                           System.identityHashCode(newScope),
                           System.identityHashCode(newScope.get("exports", newScope)));
             }
-            Object exports = newScope.get("exports", newScope);
-            mod.runner.getModuleCache().put(name, exports);
+            Object exports = ScriptableObject.getProperty(newMod, "exports");
+            mod.runner.getModuleCache().put(cacheKey, exports);
             return exports;
         }
 
@@ -237,12 +264,14 @@ public class Module
             }
         }
 
-        private static File locateFile(String name, File dir)
+        private static File locateFile(String name, File dir, Context cx, Scriptable scope,
+                                       boolean allowAbsolute)
+            throws IOException
         {
             File f;
             if (name.startsWith("/")) {
                 f = new File(name);
-            } else if (name.startsWith("./") || name.startsWith("../")) {
+            } else if (allowAbsolute || name.startsWith("./") || name.startsWith("../")) {
                 f = new File(dir, name);
             } else {
                 return null;
@@ -252,12 +281,46 @@ public class Module
             if (f.exists() && f.isFile()) {
                 return f;
             }
-            f = new File(f.getPath() + ".js");
-            log.debug("Looking for {} in {}", name, f);
-            if (f.exists() && f.isFile()) {
-                return f;
+            File fjs = new File(f.getPath() + ".js");
+            log.debug("Looking for {} in {}", name, fjs);
+            if (fjs.exists() && fjs.isFile()) {
+                return fjs;
             }
+
+            File packagejson = new File(f, "package.json");
+            log.debug("Looking for {}", packagejson);
+            if (packagejson.exists() && packagejson.isFile()) {
+                File packageFile = locatePackageJson(packagejson, cx, scope);
+                if (packageFile != null) {
+                    return packageFile;
+                }
+            }
+
+            File indexjs = new File(f, "index.js");
+            log.debug("Looking for {}", indexjs);
+            if (indexjs.exists() && indexjs.isFile()) {
+                return indexjs;
+            }
+
             return null;
+        }
+
+        private static File locatePackageJson(File jsonFile, Context cx, Scriptable scope)
+            throws IOException
+        {
+            String json = Utils.readFile(jsonFile);
+            JsonParser p = new JsonParser(cx, scope);
+            try {
+                Scriptable parse = (Scriptable)p.parseValue(json);
+                String main = (String)Context.jsToJava(parse.get("main", parse), String.class);
+                if (main == null) {
+                    throw new EvaluatorException("main property is not set in package.json");
+                }
+                log.debug("Looking for {} from package.json", main);
+                return locateFile(main, jsonFile.getParentFile(), cx, scope, true);
+            } catch (JsonParser.ParseException e) {
+                throw new EvaluatorException("package.json is not valid json: " + e);
+            }
         }
 
         @JSGetter("filename")

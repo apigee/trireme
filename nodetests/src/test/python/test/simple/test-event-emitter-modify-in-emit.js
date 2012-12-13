@@ -45,6 +45,7 @@ function callback3() {
 }
 
 e.on('foo', callback1);
+console.log('listener 0 ' + e.listeners('foo')[0]);
 assert.equal(1, e.listeners('foo').length);
 
 e.emit('foo');

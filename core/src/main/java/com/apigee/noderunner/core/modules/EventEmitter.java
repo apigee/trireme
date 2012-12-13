@@ -13,6 +13,8 @@ import org.mozilla.javascript.annotations.JSStaticFunction;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import static com.apigee.noderunner.core.internal.ArgUtils.*;
+
 import java.lang.reflect.InvocationTargetException;
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -88,6 +90,8 @@ public class EventEmitter
 
         public void register(String event, Function listener, boolean once)
         {
+            fireEvent(EVENT_NEW_LISTENER, event, listener);
+
             List<Lsnr> ls = listeners.get(event);
             if (ls == null) {
                 ls = new ArrayList<Lsnr>(DEFAULT_LIST_LEN);
@@ -101,8 +105,6 @@ public class EventEmitter
             if (ls.size() > maxListeners) {
                 log.warn("{} listeners assigned for event type {}", ls.size(), event);
             }
-
-            fireEvent(EVENT_NEW_LISTENER, event, listener);
         }
 
         @JSFunction
@@ -133,20 +135,21 @@ public class EventEmitter
         }
 
         @JSFunction
-        public Function[] listeners(String event)
+        public static Scriptable listeners(Context ctx, Scriptable thisObj, Object[] args, Function caller)
         {
-            List<Lsnr> ls = listeners.get(event);
+            String event = stringArg(args, 0);
+            List<Lsnr> ls = ((EventEmitterImpl)thisObj).listeners.get(event);
+            ArrayList<Function> ret = new ArrayList<Function>();
             if (ls == null) {
-                return null;
+                return ctx.newArray(thisObj, 0);
             }
 
-            Function[] ret = new Function[ls.size()];
+            Object[] funcs = new Object[ls.size()];
             int i = 0;
             for (Lsnr l : ls) {
-                ret[i] = l.function;
-                i++;
+                funcs[i++] = l.function;
             }
-            return ret;
+            return ctx.newArray(thisObj, funcs);
         }
 
         @JSFunction
@@ -167,20 +170,27 @@ public class EventEmitter
             boolean handled = false;
             List<Lsnr> ls = listeners.get(event);
             if (ls != null) {
+                // Make a copy of the list because listeners may try to
+                // modify the list while we're executing it.
+                ArrayList<Lsnr> toFire = new ArrayList<Lsnr>(ls);
                 Context c = Context.getCurrentContext();
+
+                // Now clean up listeners that should only fire once.
                 Iterator<Lsnr> i = ls.iterator();
                 while (i.hasNext()) {
                     Lsnr l = i.next();
-                    if (log.isDebugEnabled()) {
-                        log.debug("Sending {} to {}", event, l.function);
-                    }
-                    l.function.call(c, l.function.getParentScope(),
-                                    l.function.getParentScope(),
-                                    args);
-                    handled = true;
                     if (l.once) {
                         i.remove();
                     }
+                }
+
+                // Now actually fire. If we fail here we still have cleaned up.
+                for (Lsnr l : toFire) {
+                    if (log.isDebugEnabled()) {
+                        log.debug("Sending {} to {}", event, l.function);
+                    }
+                    l.function.call(c, l.function, l.function, args);
+                    handled = true;
                 }
             }
             if (log.isDebugEnabled()) {

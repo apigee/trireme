@@ -37,10 +37,10 @@ assert.throws(function() {
 });
 
 function validateTuple(tuple) {
-  assert.assert(Array.isArray(tuple));
+  assert(Array.isArray(tuple));
   assert.equal(2, tuple.length);
   tuple.forEach(function (v) {
     assert.equal('number', typeof v);
-    assert.assert(isFinite(v));
+    assert(isFinite(v));
   });
 }

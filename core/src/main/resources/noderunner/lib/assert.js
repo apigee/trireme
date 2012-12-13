@@ -30,10 +30,7 @@ var pSlice = Array.prototype.slice;
 // AssertionError's when particular conditions are not met. The
 // assert module must conform to the following interface.
 
-// TODO GREG why does this not work in Rhino?
-// This is a bug in that we can't have "assert" just work. How do we fix it?
-//var assert = module.exports = ok;
-var assert = module.exports;
+var assert = module.exports = ok;
 
 // 2. The AssertionError is defined in assert.
 // new assert.AssertionError({ message: message,

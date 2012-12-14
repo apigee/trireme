@@ -1,0 +1,44 @@
+Test failures: Get a more reasonable subset working.
+
+crypto: 
+  Need it for express
+zlib:
+  Need it for express
+fs: 
+  Need it for express -- complete it
+querystring:
+  Use the JS.
+https:
+  Need it
+url:
+  Use the JS.
+child_process:
+  Can we do it using a thread and an in-memory queue for "I/O"?
+cluster:
+  Same -- let's do it inside a JVM.
+os:
+  Complete it.
+stream:
+  Need to finish support for the Stream class itself although not sure why.
+stringdecoder:
+  Use the JS
+punycode:
+  Use the JS unless someone actually uses it.
+readline:
+  Use the JS
+domain:
+  Can we use the JS code directly?
+
+
+tls:
+  Probably won't be used directly.
+repl:
+  Use the JS?
+dns:
+  Probably won't be used directly.
+dgram:
+  Not gonna be relevant in the cloud -- low priority.
+debugger:
+  Perhaps we can use the hooks in Rhino
+tty:
+  Probably won't be used directly

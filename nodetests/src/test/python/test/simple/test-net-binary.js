@@ -55,7 +55,6 @@ echoServer.listen(common.PORT);
 var recv = '';
 
 echoServer.on('listening', function() {
-  console.log('listening event');
   var j = 0;
   var c = net.createConnection(common.PORT);
 
@@ -72,12 +71,10 @@ echoServer.on('listening', function() {
   });
 
   c.on('connect', function() {
-    console.log('connect event');
     c.write(binaryString, 'binary');
   });
 
   c.on('close', function() {
-    console.log('close event');
     console.dir(recv);
     echoServer.close();
   });

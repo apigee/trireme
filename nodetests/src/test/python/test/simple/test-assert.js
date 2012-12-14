@@ -32,8 +32,6 @@ function makeBlock(f) {
 
 assert.ok(common.indirectInstanceOf(a.AssertionError.prototype, Error),
           'a.AssertionError instanceof Error');
-assert(common.indirectInstanceOf(a.AssertionError.prototype, Error),
-          'a.AssertionError instanceof Error');
 
 assert.throws(makeBlock(a, false), a.AssertionError, 'ok(false)');
 

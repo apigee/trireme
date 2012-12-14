@@ -33,7 +33,7 @@ var server = net.createServer(function(socket) {
     server.close();
   }
 });
-server.listen(tcpPort, 'localhost', 10, function() {
+server.listen(tcpPort, 'localhost', function() {
   function cb() {
     ++clientConnected;
   }

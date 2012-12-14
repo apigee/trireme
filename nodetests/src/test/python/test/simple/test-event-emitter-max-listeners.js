@@ -26,7 +26,7 @@ var events = require('events');
 var gotEvent = false;
 
 process.on('exit', function() {
-  assert.ok(gotEvent);
+  assert(gotEvent);
 });
 
 var e = new events.EventEmitter();

@@ -255,21 +255,15 @@ assert.equal(d.length, 3);
 assert.equal(d[0], 23);
 assert.equal(d[1], 42);
 assert.equal(d[2], 255);
-// TODO GREG copy constructor?
-// assert.deepEqual(d, new Buffer(d));
+assert.deepEqual(d, new Buffer(d));
 
 var e = new Buffer('über');
 console.error('uber: \'%s\'', e.toString());
-// TODO GREG this works!
-//assert.deepEqual(e, new Buffer([195, 188, 98, 101, 114]));
+assert.deepEqual(e, new Buffer([195, 188, 98, 101, 114]));
 
 var f = new Buffer('über', 'ascii');
 console.error('f.length: %d     (should be 4)', f.length);
-console.log('Is ' + f.toString('ascii'));
-var farray = new Buffer([252, 98, 101, 114]);
-console.log('Should be ' + farray.toString('ascii'));
-console.log('Should be ' + farray.toString());
-//assert.deepEqual(f, farray);
+assert.deepEqual(f, new Buffer([252, 98, 101, 114]));
 
 ['ucs2', 'ucs-2', 'utf16le', 'utf-16le'].forEach(function(encoding) {
   var f = new Buffer('über', encoding);
@@ -313,8 +307,7 @@ assert.equal('TWFu', (new Buffer('Man')).toString('base64'));
 // test that regular and URL-safe base64 both work
 var expected = [0xff, 0xff, 0xbe, 0xff, 0xef, 0xbf, 0xfb, 0xef, 0xff];
 assert.deepEqual(Buffer('//++/++/++//', 'base64'), Buffer(expected));
-// TODO GREG
-// assert.deepEqual(Buffer('__--_--_--__', 'base64'), Buffer(expected));
+assert.deepEqual(Buffer('__--_--_--__', 'base64'), Buffer(expected));
 
 // big example
 var quote = 'Man is distinguished, not only by his reason, but by this ' +
@@ -333,9 +326,8 @@ assert.equal(expected, (new Buffer(quote)).toString('base64'));
 
 b = new Buffer(1024);
 var bytesWritten = b.write(expected, 0, 'base64');
-console.log(b.toString('ascii', 0, quote.length));
-assert.equal(quote, b.toString('ascii', 0, quote.length));
 assert.equal(quote.length, bytesWritten);
+assert.equal(quote, b.toString('ascii', 0, quote.length));
 
 // check that the base64 decoder ignores whitespace
 var expectedWhite = expected.slice(0, 60) + ' \n' +
@@ -445,9 +437,7 @@ assert.equal(dot[0], 0xff);
 assert.equal(dot[1], 0xfe);
 assert.equal(dot[2], 0x2e);
 assert.equal(dot[3], 0x00);
-console.log(dot.toString('base64'));
-// TODO GREG dunno
-///assert.equal(dot.toString('base64'), '//4uAA==');
+assert.equal(dot.toString('base64'), '//4uAA==');
 
 // Writing base64 at a position > 0 should not mangle the result.
 //
@@ -478,6 +468,7 @@ var sb = b.toString();
 assert.equal(sb.length, s.length);
 assert.equal(sb, s);
 
+
 // Single argument slice
 b = new Buffer('abcde');
 assert.equal('bcde', b.slice(1).toString());
@@ -492,8 +483,7 @@ assert.equal(12, Buffer.byteLength('Il était tué', 'ascii'));
 assert.equal(12, Buffer.byteLength('Il était tué', 'binary'));
 
 // slice(0,0).length === 0
-// TOO made this new...
-assert.equal(0, new Buffer('hello').slice(0, 0).length);
+assert.equal(0, Buffer('hello').slice(0, 0).length);
 
 // test hex toString
 console.log('Create hex string from buffer');
@@ -502,7 +492,6 @@ for (var i = 0; i < 256; i++) {
   hexb[i] = i;
 }
 var hexStr = hexb.toString('hex');
-console.log(hexStr);
 assert.equal(hexStr,
              '000102030405060708090a0b0c0d0e0f' +
              '101112131415161718191a1b1c1d1e1f' +
@@ -537,7 +526,6 @@ assert.equal(b2, b3);
 assert.equal(b2, b4);
 
 
-/* NOT TODO GREG SlowBuffer doesn't work the same way.
 // Test slice on SlowBuffer GH-843
 var SlowBuffer = process.binding('buffer').SlowBuffer;
 
@@ -596,9 +584,8 @@ console.log(z.length);
 assert.equal(2, z.length);
 assert.equal(0x66, z[0]);
 assert.equal(0x6f, z[1]);
-*/
 
-assert.equal(0, new Buffer('hello').slice(0, 0).length);
+assert.equal(0, Buffer('hello').slice(0, 0).length);
 
 b = new Buffer(50);
 b.fill('h');
@@ -613,21 +600,17 @@ for (var i = 0; i < b.length; i++) {
 
 b.fill(1, 16, 32);
 for (var i = 0; i < 16; i++) assert.equal(0, b[i]);
-for (; i < 32; i++) {
-  assert.equal(1, b[i]);
-}
+for (; i < 32; i++) assert.equal(1, b[i]);
 for (; i < b.length; i++) assert.equal(0, b[i]);
 
-/* NOT TODO no SlowBuffer
 ['ucs2', 'ucs-2', 'utf16le', 'utf-16le'].forEach(function(encoding) {
   var b = new SlowBuffer(10);
   b.write('あいうえお', encoding);
   assert.equal(b.toString(encoding), 'あいうえお');
 });
-*/
 
 // Binary encoding should write only one byte per character.
-var b = new Buffer([0xde, 0xad, 0xbe, 0xef]);
+var b = Buffer([0xde, 0xad, 0xbe, 0xef]);
 var s = String.fromCharCode(0xffff);
 b.write(s, 0, 'binary');
 assert.equal(0xff, b[0]);
@@ -760,37 +743,36 @@ assert.equal(Buffer._charsWritten, 9);
 buf.write('0123456789', 'binary');
 assert.equal(Buffer._charsWritten, 9);
 buf.write('123456', 'base64');
-// TODO GREG this can't be right, since we wrote the string...
-//assert.equal(Buffer._charsWritten, 4);
+assert.equal(Buffer._charsWritten, 4);
 buf.write('00010203040506070809', 'hex');
 assert.equal(Buffer._charsWritten, 18);
 
 // Check for fractional length args, junk length args, etc.
 // https://github.com/joyent/node/issues/1758
-new Buffer(3.3).toString(); // throws bad argument error in commit 43cb4ec
-assert.equal(new Buffer(-1).length, 0);
-assert.equal(new Buffer(NaN).length, 0);
-assert.equal(new Buffer(3.3).length, 4);
-assert.equal(new Buffer({length: 3.3}).length, 4);
-assert.equal(new Buffer({length: 'BAM'}).length, 0);
+Buffer(3.3).toString(); // throws bad argument error in commit 43cb4ec
+assert.equal(Buffer(-1).length, 0);
+assert.equal(Buffer(NaN).length, 0);
+assert.equal(Buffer(3.3).length, 4);
+assert.equal(Buffer({length: 3.3}).length, 4);
+assert.equal(Buffer({length: 'BAM'}).length, 0);
 
 // Make sure that strings are not coerced to numbers.
-assert.equal(new Buffer('99').length, 2);
-assert.equal(new Buffer('13.37').length, 5);
+assert.equal(Buffer('99').length, 2);
+assert.equal(Buffer('13.37').length, 5);
 
 // Ensure that the length argument is respected.
 'ascii utf8 hex base64 binary'.split(' ').forEach(function(enc) {
-  assert.equal(new Buffer(1).write('aaaaaa', 0, 1, enc), 1);
+  assert.equal(Buffer(1).write('aaaaaa', 0, 1, enc), 1);
 });
 
 // Regression test, guard against buffer overrun in the base64 decoder.
-var a = new Buffer(3);
-var b = new Buffer('xxx');
+var a = Buffer(3);
+var b = Buffer('xxx');
 a.write('aaaaaaaa', 'base64');
 assert.equal(b.toString(), 'xxx');
 
 // issue GH-3416
-new Buffer(new Buffer(0), 0, 0);
+Buffer(Buffer(0), 0, 0);
 
 
 [ 'hex',
@@ -815,5 +797,4 @@ new Buffer(new Buffer(0), 0, 0);
 
 
 // GH-3905
-// TODO GREG not sure where JSON fits in
-//assert.equal(JSON.stringify(Buffer('test')), '[116,101,115,116]');
+assert.equal(JSON.stringify(Buffer('test')), '[116,101,115,116]');

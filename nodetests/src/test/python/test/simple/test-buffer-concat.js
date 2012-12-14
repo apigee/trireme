@@ -32,11 +32,10 @@ var flatOne = Buffer.concat(one);
 var flatLong = Buffer.concat(long);
 var flatLongLen = Buffer.concat(long, 40);
 
-assert.ok(flatZero.length === 0);
-assert.ok(flatOne.toString() === 'asdf');
-assert.ok(flatOne === one[0]);
-// TODO GREG
-//assert.ok(flatLong.toString() === (new Array(10+1).join('asdf')));
-//assert.ok(flatLongLen.toString() === (new Array(10+1).join('asdf')));
+assert(flatZero.length === 0);
+assert(flatOne.toString() === 'asdf');
+assert(flatOne === one[0]);
+assert(flatLong.toString() === (new Array(10+1).join('asdf')));
+assert(flatLongLen.toString() === (new Array(10+1).join('asdf')));
 
 console.log("ok");

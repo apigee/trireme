@@ -21,48 +21,22 @@
 
 var common = require('../common');
 var assert = require('assert');
-var events = require('events');
 
-var e = new events.EventEmitter();
+common.globalCheck = false;
 
-var events_new_listener_emited = [];
-var listeners_new_listener_emited = [];
-var times_hello_emited = 0;
+// INVALID? I added this because of the check on line 39,
+// which doesn't make sense to me.
+foo='foo';
+baseFoo = 'foo';
+global.baseBar = 'bar';
 
-// sanity check
-assert.equal(e.addListener, e.on);
+assert.equal('foo', global.baseFoo, 'x -> global.x in base level not working');
 
-e.on('newListener', function(event, listener) {
-  console.log('newListener: ' + event);
-  events_new_listener_emited.push(event);
-  listeners_new_listener_emited.push(listener);
-});
+assert.equal('bar', baseBar, 'global.x -> x in base level not working');
 
-function hello(a, b) {
-  console.log('hello');
-  times_hello_emited += 1;
-  assert.equal('a', a);
-  assert.equal('b', b);
-}
-e.on('hello', hello);
+var module = require('../fixtures/global/plain'),
+    fooBar = module.fooBar;
 
-var foo = function() {};
-e.once('foo', foo);
+assert.equal('foo', fooBar.foo, 'x -> global.x in sub level not working');
 
-console.log('start');
-
-e.emit('hello', 'a', 'b');
-
-
-// just make sure that this doesn't throw:
-var f = new events.EventEmitter();
-f.setMaxListeners(0);
-
-
-process.on('exit', function() {
-  assert.deepEqual(['hello', 'foo'], events_new_listener_emited);
-  assert.deepEqual([hello, foo], listeners_new_listener_emited);
-  assert.equal(1, times_hello_emited);
-});
-
-
+assert.equal('bar', fooBar.bar, 'global.x -> x in sub level not working');

@@ -22,7 +22,7 @@
 /*
  * A battery of tests to help us read a series of uints
  */
-var SlowBuffer = process.binding('buffer').SlowBuffer;
+var SlowBuffer = require('buffer').SlowBuffer;
 var common = require('../common');
 var ASSERT = require('assert');
 

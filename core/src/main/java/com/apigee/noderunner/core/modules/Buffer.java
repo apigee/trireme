@@ -37,7 +37,6 @@ public class Buffer
     implements NodeModule
 {
     public static final String BUFFER_CLASS_NAME = "_bufferClass";
-    public static final String SLOW_CLASS_NAME = "_SlowBufferClass";
     protected static final String EXPORT_CLASS_NAME = "_bufferModule";
     public static final String EXPORT_NAME = "Buffer";
 
@@ -53,7 +52,6 @@ public class Buffer
         throws InvocationTargetException, IllegalAccessException, InstantiationException
     {
         ScriptableObject.defineClass(scope, BufferImpl.class, false, true);
-        ScriptableObject.defineClass(scope, SlowBufferImpl.class, false, true);
         ScriptableObject.defineClass(scope, BufferModuleImpl.class, false, true);
         BufferModuleImpl export = (BufferModuleImpl)cx.newObject(scope, EXPORT_CLASS_NAME);
         export.bindFunctions(cx, scope, export);
@@ -127,9 +125,7 @@ public class Buffer
 
         public static Scriptable SlowBuffer(Context cx, Scriptable thisObj, Object[] args, Function func)
         {
-            BufferImpl buf = (BufferImpl)cx.newObject(thisObj, SLOW_CLASS_NAME, args);
-            buf.setParentModule((BufferModuleImpl)(((ScriptableObject)func).getAssociatedValue("_module")));
-            return buf;
+            return Buffer(cx, thisObj, args, func);
         }
 
         public static boolean isEncoding(Context cx, Scriptable thisObj, Object[] args, Function func)
@@ -182,6 +178,7 @@ public class Buffer
             }
             int totalLen = intArg(args, 1, -1);
             if (totalLen < 0) {
+                totalLen = 0;
                 for (Object id : ids) {
                     totalLen += getArrayElement(bufs, id).bufLength;
                 }
@@ -665,18 +662,36 @@ public class Buffer
         }
 
         @JSFunction
-        public static int readInt16LE(Context cx, Scriptable thisObj, Object[] args, Function func)
+        public static int readUInt8(Context cx, Scriptable thisObj, Object[] args, Function func)
+        {
+            return readInt8(cx, thisObj, args, func) & 0xff;
+        }
+
+        @JSFunction
+        public static short readInt16LE(Context cx, Scriptable thisObj, Object[] args, Function func)
         {
             return readInt16(cx, thisObj, args, func, ByteOrder.LITTLE_ENDIAN);
         }
 
         @JSFunction
-        public static int readInt16BE(Context cx, Scriptable thisObj, Object[] args, Function func)
+        public static short readInt16BE(Context cx, Scriptable thisObj, Object[] args, Function func)
         {
             return readInt16(cx, thisObj, args, func, ByteOrder.BIG_ENDIAN);
         }
 
-        private static int readInt16(Context cx, Scriptable thisObj, Object[] args, Function func, ByteOrder order)
+        @JSFunction
+        public static int readUInt16LE(Context cx, Scriptable thisObj, Object[] args, Function func)
+        {
+            return readInt16(cx, thisObj, args, func, ByteOrder.LITTLE_ENDIAN) & 0xffff;
+        }
+
+        @JSFunction
+        public static int readUInt16BE(Context cx, Scriptable thisObj, Object[] args, Function func)
+        {
+            return readInt16(cx, thisObj, args, func, ByteOrder.BIG_ENDIAN) & 0xffff;
+        }
+
+        private static short readInt16(Context cx, Scriptable thisObj, Object[] args, Function func, ByteOrder order)
         {
             int offset = intArg(args, 0);
             boolean noAssert = booleanArg(args, 1, false);
@@ -684,11 +699,11 @@ public class Buffer
             BufferImpl b = (BufferImpl)thisObj;
             if (b.inBounds(offset + 1, noAssert)) {
                 if (order == ByteOrder.BIG_ENDIAN) {
-                    return (((int)b.buf[b.bufOffset +offset]) << 8) |
-                           ((int)b.buf[b.bufOffset +offset + 1]);
+                    return (short)((((int)b.buf[b.bufOffset +offset] & 0xff) << 8) |
+                            ((int)b.buf[b.bufOffset +offset + 1] & 0xff));
                 } else {
-                    return ((int)b.buf[b.bufOffset +offset]) |
-                           ((int)b.buf[b.bufOffset +offset + 1] << 8);
+                    return (short)(((int)b.buf[b.bufOffset +offset] & 0xff) |
+                           ((((int)b.buf[b.bufOffset +offset + 1]) & 0xff) << 8));
                 }
             }
             return 0;
@@ -706,6 +721,18 @@ public class Buffer
             return readInt32(cx, thisObj, args, func, ByteOrder.BIG_ENDIAN);
         }
 
+        @JSFunction
+        public static long readUInt32LE(Context cx, Scriptable thisObj, Object[] args, Function func)
+        {
+            return readInt32(cx, thisObj, args, func, ByteOrder.LITTLE_ENDIAN) & 0xffffffffL;
+        }
+
+        @JSFunction
+        public static long readUInt32BE(Context cx, Scriptable thisObj, Object[] args, Function func)
+        {
+            return readInt32(cx, thisObj, args, func, ByteOrder.BIG_ENDIAN) & 0xffffffffL;
+        }
+
         private static int readInt32(Context cx, Scriptable thisObj, Object[] args, Function func, ByteOrder order)
         {
             int offset = intArg(args, 0);
@@ -714,15 +741,15 @@ public class Buffer
             BufferImpl b = (BufferImpl)thisObj;
             if (b.inBounds(offset + 3, noAssert)) {
                 if (order == ByteOrder.BIG_ENDIAN) {
-                    return (((int)b.buf[b.bufOffset +offset]) << 24) |
-                           (((int)b.buf[b.bufOffset +offset + 1]) << 16) |
-                           (((int)b.buf[b.bufOffset +offset + 2]) << 8) |
-                           ((int)b.buf[b.bufOffset +offset + 3]);
+                    return (((int)b.buf[b.bufOffset +offset] & 0xff) << 24) |
+                           (((int)b.buf[b.bufOffset +offset + 1] & 0xff) << 16) |
+                           (((int)b.buf[b.bufOffset +offset + 2] & 0xff) << 8) |
+                           ((int)b.buf[b.bufOffset +offset + 3] & 0xff);
                 } else {
-                     return ((int)b.buf[b.bufOffset +offset]) |
-                           (((int)b.buf[b.bufOffset +offset + 1]) << 8) |
-                           (((int)b.buf[b.bufOffset +offset + 2]) << 16) |
-                           (((int)b.buf[b.bufOffset +offset + 3]) << 24);
+                     return ((int)b.buf[b.bufOffset +offset] & 0xff) |
+                           (((int)b.buf[b.bufOffset +offset + 1] & 0xff) << 8) |
+                           (((int)b.buf[b.bufOffset +offset + 2] & 0xff) << 16) |
+                           (((int)b.buf[b.bufOffset +offset + 3] & 0xff) << 24);
                 }
             }
             return 0;
@@ -736,86 +763,115 @@ public class Buffer
             BufferImpl b = (BufferImpl)thisObj;
             if (b.inBounds(offset + 7, noAssert)) {
                 if (order == ByteOrder.BIG_ENDIAN) {
-                    return (((long)b.buf[b.bufOffset +offset]) << 56L) |
-                           (((long)b.buf[b.bufOffset +offset + 1]) << 48L) |
-                           (((long)b.buf[b.bufOffset +offset + 2]) << 40L) |
-                           (((long)b.buf[b.bufOffset +offset + 3]) << 32L) |
-                           (((long)b.buf[b.bufOffset +offset + 4]) << 24L) |
-                           (((long)b.buf[b.bufOffset +offset + 5]) << 16L) |
-                           (((long)b.buf[b.bufOffset +offset + 6]) << 8L) |
-                           ((long)b.buf[b.bufOffset +offset + 7]);
+                    return (((long)b.buf[b.bufOffset +offset] & 0xffL) << 56L) |
+                           (((long)b.buf[b.bufOffset +offset + 1] & 0xffL) << 48L) |
+                           (((long)b.buf[b.bufOffset +offset + 2] & 0xffL) << 40L) |
+                           (((long)b.buf[b.bufOffset +offset + 3] & 0xffL) << 32L) |
+                           (((long)b.buf[b.bufOffset +offset + 4] & 0xffL) << 24L) |
+                           (((long)b.buf[b.bufOffset +offset + 5] & 0xffL) << 16L) |
+                           (((long)b.buf[b.bufOffset +offset + 6] & 0xffL) << 8L) |
+                           ((long)b.buf[b.bufOffset +offset + 7] & 0xffL);
                 } else {
-                    return ((long)b.buf[b.bufOffset +offset])|
-                           (((long)b.buf[b.bufOffset +offset + 1]) << 8L) |
-                           (((long)b.buf[b.bufOffset +offset + 2]) << 16L) |
-                           (((long)b.buf[b.bufOffset +offset + 3]) << 24L) |
-                           (((long)b.buf[b.bufOffset +offset + 4]) << 32L) |
-                           (((long)b.buf[b.bufOffset +offset + 5]) << 40L) |
-                           (((long)b.buf[b.bufOffset +offset + 6]) << 48L) |
-                           (((long)b.buf[b.bufOffset +offset + 7]) << 56L);
+                    return ((long)b.buf[b.bufOffset +offset] & 0xffL)|
+                           (((long)b.buf[b.bufOffset +offset + 1] & 0xffL) << 8L) |
+                           (((long)b.buf[b.bufOffset +offset + 2] & 0xffL) << 16L) |
+                           (((long)b.buf[b.bufOffset +offset + 3] & 0xffL) << 24L) |
+                           (((long)b.buf[b.bufOffset +offset + 4] & 0xffL) << 32L) |
+                           (((long)b.buf[b.bufOffset +offset + 5] & 0xffL) << 40L) |
+                           (((long)b.buf[b.bufOffset +offset + 6] & 0xffL) << 48L) |
+                           (((long)b.buf[b.bufOffset +offset + 7] & 0xffL) << 56L);
                 }
             }
             return 0;
         }
 
         @JSFunction
-        public static float readFloatLE(Context cx, Scriptable thisObj, Object[] args, Function func)
+        public static Object readFloatLE(Context cx, Scriptable thisObj, Object[] args, Function func)
         {
             int intVal = readInt32LE(cx, thisObj, args, func);
-            return Float.intBitsToFloat(intVal);
+            return Context.javaToJS(Float.intBitsToFloat(intVal), thisObj);
         }
 
         @JSFunction
-        public static float readFloatBE(Context cx, Scriptable thisObj, Object[] args, Function func)
+        public static Object readFloatBE(Context cx, Scriptable thisObj, Object[] args, Function func)
         {
             int intVal = readInt32BE(cx, thisObj, args, func);
-            return Float.intBitsToFloat(intVal);
+            return Context.javaToJS(Float.intBitsToFloat(intVal), thisObj);
         }
 
         @JSFunction
-        public static double readDoubleLE(Context cx, Scriptable thisObj, Object[] args, Function func)
+        public static Object readDoubleLE(Context cx, Scriptable thisObj, Object[] args, Function func)
         {
             long lVal = readInt64(cx, thisObj, args, func, ByteOrder.LITTLE_ENDIAN);
-            return Double.longBitsToDouble(lVal);
+            return Context.javaToJS(Double.longBitsToDouble(lVal), thisObj);
         }
 
         @JSFunction
-        public static double readDoubleBE(Context cx, Scriptable thisObj, Object[] args, Function func)
+        public static Object readDoubleBE(Context cx, Scriptable thisObj, Object[] args, Function func)
         {
             long lVal = readInt64(cx, thisObj, args, func, ByteOrder.BIG_ENDIAN);
-            return Double.longBitsToDouble(lVal);
+            return Context.javaToJS(Double.longBitsToDouble(lVal), thisObj);
         }
 
         @JSFunction
         public static void writeInt8(Context cx, Scriptable thisObj, Object[] args, Function func)
         {
+            BufferImpl b = (BufferImpl)thisObj;
             int value = intArg(args, 0);
+            b.writeInt8Internal(args, value);
+        }
+
+        @JSFunction
+        public static void writeUInt8(Context cx, Scriptable thisObj, Object[] args, Function func)
+        {
+            BufferImpl b = (BufferImpl)thisObj;
+            int value = intArg(args, 0) & 0xff;
+            b.writeInt8Internal(args, value);
+        }
+
+        private void writeInt8Internal(Object[] args, int value)
+        {
             int offset = intArg(args, 1);
             boolean noAssert = booleanArg(args, 2, false);
 
-            BufferImpl b = (BufferImpl)thisObj;
-            if (b.inBounds(offset, noAssert)) {
-                b.buf[b.bufOffset +offset] = (byte)value;
+            if (inBounds(offset, noAssert)) {
+                buf[bufOffset +offset] = (byte)value;
             }
         }
 
         @JSFunction
         public static void writeInt16LE(Context cx, Scriptable thisObj, Object[] args, Function func)
         {
-            writeInt16(cx, thisObj, args, func, ByteOrder.LITTLE_ENDIAN);
+            int value = intArg(args, 0);
+            writeInt16(cx, thisObj, args, func, ByteOrder.LITTLE_ENDIAN, value);
         }
 
         @JSFunction
         public static void writeInt16BE(Context cx, Scriptable thisObj, Object[] args, Function func)
         {
-            writeInt16(cx, thisObj, args, func, ByteOrder.BIG_ENDIAN);
+            int value = intArg(args, 0);
+            writeInt16(cx, thisObj, args, func, ByteOrder.BIG_ENDIAN, value);
         }
 
-        private static void writeInt16(Context cx, Scriptable thisObj, Object[] args, Function func, ByteOrder order)
+        @JSFunction
+        public static void writeUInt16LE(Context cx, Scriptable thisObj, Object[] args, Function func)
         {
             int value = intArg(args, 0);
+            writeInt16(cx, thisObj, args, func, ByteOrder.LITTLE_ENDIAN, value & 0xffff);
+        }
+
+        @JSFunction
+        public static void writeUInt16BE(Context cx, Scriptable thisObj, Object[] args, Function func)
+        {
+            int value = intArg(args, 0);
+            writeInt16(cx, thisObj, args, func, ByteOrder.BIG_ENDIAN, value & 0xffff);
+        }
+
+        private static void writeInt16(Context cx, Scriptable thisObj, Object[] args, Function func,
+                                       ByteOrder order, int value)
+        {
             int offset = intArg(args, 1);
-            boolean noAssert = booleanArg(args, 1, false);
+            boolean noAssert = booleanArg(args, 2, false);
 
             BufferImpl b = (BufferImpl)thisObj;
             if (b.inBounds(offset + 1, noAssert)) {
@@ -832,38 +888,54 @@ public class Buffer
         @JSFunction
         public static void writeInt32LE(Context cx, Scriptable thisObj, Object[] args, Function func)
         {
-            writeInt32(cx, thisObj, args, func, ByteOrder.LITTLE_ENDIAN);
+            int value = intArg(args, 0);
+            writeInt32(cx, thisObj, args, func, ByteOrder.LITTLE_ENDIAN, value);
         }
 
         @JSFunction
         public static void writeInt32BE(Context cx, Scriptable thisObj, Object[] args, Function func)
         {
-            writeInt32(cx, thisObj, args, func, ByteOrder.BIG_ENDIAN);
+            int value = intArg(args, 0);
+            writeInt32(cx, thisObj, args, func, ByteOrder.BIG_ENDIAN, value);
         }
 
-        private static void writeInt32(Context cx, Scriptable thisObj, Object[] args, Function func, ByteOrder order)
+        @JSFunction
+        public static void writeUInt32LE(Context cx, Scriptable thisObj, Object[] args, Function func)
         {
-            int value = intArg(args, 0);
+            long value = longArg(args, 0);
+            writeInt32(cx, thisObj, args, func, ByteOrder.LITTLE_ENDIAN, value & 0xffffffffL);
+        }
+
+        @JSFunction
+        public static void writeUInt32BE(Context cx, Scriptable thisObj, Object[] args, Function func)
+        {
+            long value = longArg(args, 0);
+            writeInt32(cx, thisObj, args, func, ByteOrder.BIG_ENDIAN, value & 0xffffffffL);
+        }
+
+        private static void writeInt32(Context cx, Scriptable thisObj, Object[] args, Function func,
+                                       ByteOrder order, long value)
+        {
             int offset = intArg(args, 1);
-            boolean noAssert = booleanArg(args, 1, false);
+            boolean noAssert = booleanArg(args, 2, false);
 
             BufferImpl b = (BufferImpl)thisObj;
             b.writeInt32(offset, value, noAssert, order);
         }
 
-        private void writeInt32(int offset, int value, boolean noAssert, ByteOrder order)
+        private void writeInt32(int offset, long value, boolean noAssert, ByteOrder order)
         {
             if (inBounds(offset + 3, noAssert)) {
                 if (order == ByteOrder.BIG_ENDIAN) {
-                    buf[bufOffset +offset] = (byte)((value >>> 24) & 0xff);
-                    buf[bufOffset +offset + 1] = (byte)((value >>> 16) & 0xff);
-                    buf[bufOffset +offset + 2] = (byte)((value >>> 8) & 0xff);
-                    buf[bufOffset +offset + 4] = (byte)(value & 0xff);
+                    buf[bufOffset +offset] = (byte)((value >>> 24L) & 0xffL);
+                    buf[bufOffset +offset + 1] = (byte)((value >>> 16L) & 0xffL);
+                    buf[bufOffset +offset + 2] = (byte)((value >>> 8L) & 0xffL);
+                    buf[bufOffset +offset + 3] = (byte)(value & 0xffL);
                 } else {
-                    buf[bufOffset +offset] = (byte)(value & 0xff);
-                    buf[bufOffset +offset + 1] = (byte)((value >>> 8) & 0xff);
-                    buf[bufOffset +offset + 2] = (byte)((value >>> 16) & 0xff);
-                    buf[bufOffset +offset + 3] = (byte)((value >>> 24) & 0xff);
+                    buf[bufOffset +offset] = (byte)(value & 0xffL);
+                    buf[bufOffset +offset + 1] = (byte)((value >>> 8L) & 0xffL);
+                    buf[bufOffset +offset + 2] = (byte)((value >>> 16L) & 0xffL);
+                    buf[bufOffset +offset + 3] = (byte)((value >>> 24L) & 0xffL);
                 }
             }
         }
@@ -898,7 +970,7 @@ public class Buffer
         {
             float value = floatArg(args, 0);
             int offset = intArg(args, 1);
-            boolean noAssert = booleanArg(args, 1, false);
+            boolean noAssert = booleanArg(args, 2, false);
 
             BufferImpl b = (BufferImpl)thisObj;
             int iVal = Float.floatToRawIntBits(value);
@@ -908,9 +980,9 @@ public class Buffer
         @JSFunction
         public static void writeFloatBE(Context cx, Scriptable thisObj, Object[] args, Function func)
         {
-              float value = floatArg(args, 0);
+            float value = floatArg(args, 0);
             int offset = intArg(args, 1);
-            boolean noAssert = booleanArg(args, 1, false);
+            boolean noAssert = booleanArg(args, 2, false);
 
             BufferImpl b = (BufferImpl)thisObj;
             int iVal = Float.floatToRawIntBits(value);
@@ -922,7 +994,7 @@ public class Buffer
         {
             double value = doubleArg(args, 0);
             int offset = intArg(args, 1);
-            boolean noAssert = booleanArg(args, 1, false);
+            boolean noAssert = booleanArg(args, 2, false);
 
             BufferImpl b = (BufferImpl)thisObj;
             long lVal = Double.doubleToRawLongBits(value);
@@ -934,7 +1006,7 @@ public class Buffer
         {
             double value = doubleArg(args, 0);
             int offset = intArg(args, 1);
-            boolean noAssert = booleanArg(args, 1, false);
+            boolean noAssert = booleanArg(args, 2, false);
 
             BufferImpl b = (BufferImpl)thisObj;
             long lVal = Double.doubleToRawLongBits(value);
@@ -960,14 +1032,4 @@ public class Buffer
                     ", bufLength=" + bufLength + ']';
         }
     }
-
-    public static class SlowBufferImpl
-        extends BufferImpl
-    {
-        @Override
-        public String getClassName() {
-            return SLOW_CLASS_NAME;
-        }
-    }
-
 }

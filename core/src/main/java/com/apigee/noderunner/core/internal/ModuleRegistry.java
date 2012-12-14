@@ -25,6 +25,11 @@ public class ModuleRegistry
         scriptModules.put("util", "/noderunner/lib/util.js");
         scriptModules.put("_linklist", "/noderunner/lib/_linklist.js");
         scriptModules.put("console", "/noderunner/lib/console.js");
+        scriptModules.put("querystring", "/noderunner/lib/querystring.js");
+        scriptModules.put("punycode", "/noderunner/lib/punycode.js");
+        scriptModules.put("url", "/noderunner/lib/url.js");
+        scriptModules.put("string_decoder", "/noderunner/lib/string_decoder.js");
+        scriptModules.put("domain", "/noderunner/lib/domain.js");
     }
 
     public NodeModule get(String name)

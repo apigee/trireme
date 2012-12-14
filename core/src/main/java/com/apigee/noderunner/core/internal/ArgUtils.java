@@ -41,6 +41,20 @@ public class ArgUtils
         return def;
     }
 
+    public static long longArg(Object[] args, int pos)
+    {
+        ensureArg(args, pos);
+        return longArg(args, pos, 0);
+    }
+
+    public static long longArg(Object[] args, int pos, int def)
+    {
+        if (pos < args.length) {
+            return ((Long)Context.jsToJava(args[pos], Long.class)).longValue();
+        }
+        return def;
+    }
+
     public static boolean booleanArg(Object[] args, int pos)
     {
         ensureArg(args, pos);

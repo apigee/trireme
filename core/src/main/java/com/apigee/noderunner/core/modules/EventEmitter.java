@@ -27,7 +27,7 @@ import java.util.List;
 public class EventEmitter
     implements NodeModule
 {
-    public static final String CLASS_NAME = "EventEmitter";
+    public static final String CLASS_NAME = "_eventEmitterClass";
 
     private static final Logger log = LoggerFactory.getLogger(EventEmitter.class);
     private static final int DEFAULT_LIST_LEN = 4;

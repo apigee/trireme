@@ -198,7 +198,7 @@ public class Module
             cached = mod.runner.getModuleCache().get(cacheKey);
             if (cached != null) {
                 if (log.isDebugEnabled()) {
-                    log.debug("Returning cached {}", System.identityHashCode(cached));
+                    log.debug("Returning cached {} for {}", System.identityHashCode(cached), cacheKey);
                 }
                 return cached;
             }
@@ -223,8 +223,9 @@ public class Module
             newMod.setLoaded(true);
 
             if (log.isDebugEnabled()) {
-                log.debug("Done executing in scope {} with exports {}",
+                log.debug("Done executing in scope {} with module exports {} and exports {}",
                           System.identityHashCode(newScope),
+                          System.identityHashCode(newMod.get("exports", newMod)),
                           System.identityHashCode(newScope.get("exports", newScope)));
             }
             Object exports = ScriptableObject.getProperty(newMod, "exports");

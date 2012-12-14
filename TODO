@@ -6,12 +6,8 @@ zlib:
   Need it for express
 fs: 
   Need it for express -- complete it
-querystring:
-  Use the JS.
 https:
   Need it
-url:
-  Use the JS.
 child_process:
   Can we do it using a thread and an in-memory queue for "I/O"?
 cluster:
@@ -19,15 +15,13 @@ cluster:
 os:
   Complete it.
 stream:
-  Need to finish support for the Stream class itself although not sure why.
-stringdecoder:
-  Use the JS
-punycode:
-  Use the JS unless someone actually uses it.
+  Need to finish support for the Stream class itself.
+  It should inhert from EventEmitter and many things should
+  inherit from it. Needed for zlib.
 readline:
   Use the JS
 domain:
-  Can we use the JS code directly?
+  May need more module support.
 
 
 tls:

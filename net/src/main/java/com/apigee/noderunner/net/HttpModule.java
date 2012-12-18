@@ -9,6 +9,8 @@ import org.mozilla.javascript.Scriptable;
 import org.mozilla.javascript.ScriptableObject;
 import org.mozilla.javascript.annotations.JSFunction;
 
+import static com.apigee.noderunner.core.internal.ArgUtils.*;
+
 import java.lang.reflect.InvocationTargetException;
 
 /**
@@ -36,8 +38,16 @@ public class HttpModule
         ScriptableObject.defineClass(scope, HttpServer.class, false, true);
         ScriptableObject.defineClass(scope, HttpServerRequest.class, false, true);
         ScriptableObject.defineClass(scope, HttpServerResponse.class, false, true);
+        ScriptableObject.defineClass(scope, HttpClientRequest.class, false, true);
+        ScriptableObject.defineClass(scope, HttpClientResponse.class, false, true);
+        ScriptableObject.defineClass(scope, HttpAgent.class, false, true);
 
         HttpImpl http = (HttpImpl)cx.newObject(scope, CLASS_NAME);
+        http.defineFunctionProperties(new String[] { "createServer", "Server",
+                                                     "createClient", "Client", "request",
+                                                     "Agent", "get"
+                                                    },
+                                      HttpImpl.class, 0);
         http.initialize(runner);
         return http;
     }
@@ -59,7 +69,11 @@ public class HttpModule
 
         // TODO STATUS_CODES
 
-        @JSFunction
+        public static Object Server(Context cx, Scriptable thisObj, Object[] args, Function func)
+        {
+            return createServer(cx, thisObj, args,func);
+        }
+
         public static Object createServer(Context cx, Scriptable thisObj, Object[] args, Function func)
         {
             HttpImpl h = (HttpImpl)thisObj;
@@ -72,10 +86,56 @@ public class HttpModule
             return svr;
         }
 
-        @JSFunction
+        public static Object Client(Context cx, Scriptable thisObj, Object[] args, Function func)
+        {
+            return createClient(cx, thisObj, args, func);
+        }
+
         public static Object createClient(Context cx, Scriptable thisObj, Object[] args, Function func)
         {
-            throw new EvaluatorException("Not implemented");
+            HttpImpl mod = (HttpImpl)thisObj;
+            String host = stringArg(args, 0, null);
+            int port = intArg(args, 1, -1);
+            HttpClientRequest req =
+                (HttpClientRequest)cx.newObject(thisObj, HttpClientRequest.CLASS_NAME);
+            req.initialize(host, port, mod.runner, false);
+            return req;
+        }
+
+        public static Object request(Context cx, Scriptable thisObj, Object[] args, Function func)
+        {
+            return requestInternal(cx, thisObj, args, false);
+        }
+
+        public static Object get(Context cx, Scriptable thisObj, Object[] args, Function func)
+        {
+            return requestInternal(cx, thisObj, args, true);
+        }
+
+        private static Object requestInternal(Context cx, Scriptable thisObj, Object[] args,
+                                              boolean isGet)
+        {
+            HttpImpl mod = (HttpImpl)thisObj;
+            ensureArg(args, 0);
+            Function callback = functionArg(args, 1, false);
+            HttpClientRequest req =
+                (HttpClientRequest)cx.newObject(thisObj, HttpClientRequest.CLASS_NAME);
+
+            if (args[0] instanceof String) {
+                req.initialize((String)args[0], callback, mod.runner, isGet);
+            } else if (args[0] instanceof Scriptable) {
+                req.initialize((Scriptable)args[0], callback, mod.runner, isGet);
+            } else {
+                throw new EvaluatorException("Invalid options");
+            }
+            return req;
+        }
+
+        public static Object Agent(Context cx, Scriptable thisObj, Object[] args, Function func)
+        {
+            HttpAgent agent =
+                (HttpAgent)cx.newObject(thisObj, HttpAgent.CLASS_NAME);
+            return agent;
         }
     }
 }

@@ -2,14 +2,12 @@ package com.apigee.noderunner.net;
 
 import com.apigee.noderunner.core.NodeModule;
 import com.apigee.noderunner.core.internal.ScriptRunner;
-import com.apigee.noderunner.net.netty.NetSocket;
 import org.mozilla.javascript.Context;
 import org.mozilla.javascript.EvaluatorException;
 import org.mozilla.javascript.Function;
 import org.mozilla.javascript.Scriptable;
 import org.mozilla.javascript.ScriptableObject;
 import org.mozilla.javascript.annotations.JSFunction;
-import org.mozilla.javascript.annotations.JSStaticFunction;
 
 import static com.apigee.noderunner.core.internal.ArgUtils.*;
 
@@ -39,6 +37,10 @@ public class NetModule
     public Object registerExports(Context cx, Scriptable scope, ScriptRunner runner)
         throws InvocationTargetException, IllegalAccessException, InstantiationException
     {
+        if (!runner.getModuleCache().containsKey("stream")) {
+            runner.registerModule("stream", cx, scope);
+        }
+
         ScriptableObject.defineClass(scope, NetImpl.class);
         ScriptableObject.defineClass(scope, NetServer.class, false, true);
         ScriptableObject.defineClass(scope, NetSocket.class, false, true);

@@ -255,7 +255,7 @@ public class Buffer
         public void initialize(ByteBuffer bb)
         {
             buf = new byte[bb.remaining()];
-            bb.put(buf);
+            bb.get(buf);
             bufOffset = 0;
             bufLength = buf.length;
         }
@@ -268,7 +268,7 @@ public class Buffer
         public String getString(String encoding)
         {
             Charset cs = Charsets.get().getCharset(encoding);
-            return toStringInternal(cs, 0, bufLength);
+            return Utils.bufferToString(ByteBuffer.wrap(buf, 0, bufLength), cs);
         }
 
         @Override
@@ -480,52 +480,13 @@ public class Buffer
             }
             int length = end - start;
             int realLength = Math.min(length, b.bufLength - start);
-            return b.toStringInternal(charset, start, realLength);
-        }
-
-        private String toStringInternal(Charset cs, int start, int length)
-        {
-            CharsetDecoder decoder = cs.newDecoder();
-            ByteBuffer readBuf = ByteBuffer.wrap(buf, start + bufOffset, length);
-            int bufLen = (int)(readBuf.limit() * decoder.averageCharsPerByte());
-            CharBuffer cBuf = CharBuffer.allocate(bufLen);
-            CoderResult result;
-            do {
-                result = decoder.decode(readBuf, cBuf, true);
-                if (result == CoderResult.OVERFLOW) {
-                    bufLen *= 2;
-                    CharBuffer newBuf = CharBuffer.allocate(bufLen);
-                    cBuf.flip();
-                    newBuf.put(cBuf);
-                    cBuf = newBuf;
-                }
-            } while (result == CoderResult.OVERFLOW);
-
-            cBuf.flip();
-            return cBuf.toString();
+            return Utils.bufferToString(ByteBuffer.wrap(b.buf, start, realLength), charset);
         }
 
         private void fromStringInternal(String s, Charset cs)
         {
-            CharsetEncoder enc = cs.newEncoder();
-            CharBuffer chars = CharBuffer.wrap(s);
-            int bufLen = (int)(chars.remaining() * enc.averageBytesPerChar());
-            ByteBuffer writeBuf =  ByteBuffer.allocate(bufLen);
-            enc.onUnmappableCharacter(CodingErrorAction.REPLACE);
-
-            CoderResult result;
-            do {
-                result = enc.encode(chars, writeBuf, true);
-                if (result == CoderResult.OVERFLOW) {
-                    bufLen *= 2;
-                    ByteBuffer newBuf = ByteBuffer.allocate(bufLen);
-                    writeBuf.flip();
-                    newBuf.put(writeBuf);
-                    writeBuf = newBuf;
-                }
-            } while (result == CoderResult.OVERFLOW);
-
-            writeBuf.flip();
+            ByteBuffer writeBuf =
+                Utils.stringToBuffer(s, cs);
             assert(!writeBuf.isDirect());
             buf = writeBuf.array();
             bufOffset = writeBuf.arrayOffset();

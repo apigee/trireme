@@ -5,7 +5,11 @@ import java.util.HashMap;
 
 public class Charsets
 {
+    public static final String DEFAULT_ENCODING = "utf8";
+
     public static final Charset DEFAULT = Charset.forName("UTF8");
+    public static final Charset BASE64 = Charset.forName("Node-Base64");
+    public static final Charset ASCII = Charset.forName("ascii");
 
     private static final Charsets charsets = new Charsets();
 

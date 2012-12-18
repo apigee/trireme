@@ -1,25 +1,30 @@
 package com.apigee.noderunner.net;
 
+import com.apigee.noderunner.core.ScriptTask;
 import com.apigee.noderunner.core.internal.Charsets;
 import com.apigee.noderunner.core.internal.ScriptRunner;
 import com.apigee.noderunner.core.modules.Buffer;
 import com.apigee.noderunner.core.modules.EventEmitter;
-import com.apigee.noderunner.net.netty.NetSocket;
+import com.apigee.noderunner.core.modules.Stream;
 import org.jboss.netty.buffer.ChannelBuffer;
 import org.jboss.netty.buffer.ChannelBuffers;
 import org.jboss.netty.channel.Channel;
 import org.jboss.netty.handler.codec.http.HttpChunk;
 import org.jboss.netty.handler.codec.http.HttpChunkTrailer;
+import org.jboss.netty.handler.codec.http.HttpMessage;
 import org.jboss.netty.handler.codec.http.HttpRequest;
+import org.jboss.netty.handler.codec.http.HttpVersion;
 import org.mozilla.javascript.Context;
 import org.mozilla.javascript.Function;
 import org.mozilla.javascript.Scriptable;
-import org.mozilla.javascript.ScriptableObject;
 import org.mozilla.javascript.annotations.JSFunction;
 import org.mozilla.javascript.annotations.JSGetter;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.net.MalformedURLException;
+import java.net.URL;
+import java.nio.ByteBuffer;
 import java.nio.charset.Charset;
 import java.util.List;
 import java.util.Map;
@@ -27,10 +32,11 @@ import java.util.Map;
 import static com.apigee.noderunner.core.internal.ArgUtils.*;
 
 public class HttpServerRequest
-    extends EventEmitter.EventEmitterImpl
+    extends Stream.ReadableStream
 {
 
-    protected static final Logger log = LoggerFactory.getLogger(NetServer.class);
+    protected static final Logger log = LoggerFactory.getLogger(HttpServerRequest.class);
+
     public static final String CLASS_NAME = "http.ServerRequest";
 
     private NetSocket socket;
@@ -44,54 +50,73 @@ public class HttpServerRequest
         return CLASS_NAME;
     }
 
-    public HttpServerResponse initialize(HttpServer svr, HttpRequest req,
+    public HttpServerResponse initialize(HttpServer svr, final HttpRequest req,
                                          Channel channel,
                                          NetSocket sock, ScriptRunner runner,
                                          Context cx, Scriptable scope)
     {
-        log.debug("Got HTTP request {}", req);
+        log.debug("Got HTTP request {} with data {}", req, req.getContent());
         this.request = req;
         this.socket = sock;
         this.runner = runner;
+        this.readable = true;
 
         HttpServerResponse resp =
             (HttpServerResponse)cx.newObject(scope, HttpServerResponse.CLASS_NAME);
-        resp.initialize(channel, runner, req.getProtocolVersion());
+        resp.initialize(channel, runner, req.getProtocolVersion(), calculateKeepAlive());
 
         runner.enqueueEvent(svr, "request", new Object[]{this, resp});
         if (req.getContent() != ChannelBuffers.EMPTY_BUFFER) {
-            sendData(req.getContent(), cx, scope);
+            enqueueData(req.getContent().toByteBuffer(), cx, scope);
         }
         if (!req.isChunked()) {
-            runner.enqueueEvent(this, "end", null);
+            enqueueEnd();
         }
         return resp;
     }
 
-    public void sendData(HttpChunk chunk, Context cx, Scriptable scope)
+    private boolean calculateKeepAlive()
     {
-        log.debug("Got HTTP chunk {} isLast = {}", chunk, chunk.isLast());
-        if (chunk instanceof HttpChunkTrailer) {
-            trailers = (HttpChunkTrailer)chunk;
+        if (log.isDebugEnabled()) {
+            log.debug("HTTP {}, Connection : {}", request.getProtocolVersion(),
+                      request.getHeader("Connection"));
         }
-        sendData(chunk.getContent(), cx, scope);
-        if (chunk.isLast()) {
-            runner.enqueueEvent(this, "end", null);
+
+        boolean keepAlive;
+        if (request.getProtocolVersion().equals(HttpVersion.HTTP_1_0)) {
+            if (request.containsHeader("Connection") &&
+                request.getHeader("Connection").equals("keep-alive")) {
+                keepAlive = true;
+            } else {
+                keepAlive = false;
+            }
+        } else {
+            if (request.containsHeader("Connection") &&
+                request.getHeader("Connection").equals("close")) {
+                keepAlive = false;
+            } else {
+                keepAlive = true;
+            }
         }
+        log.debug("keep alive = {}", keepAlive);
+        return keepAlive;
     }
 
-    private void sendData(ChannelBuffer buf, Context cx, Scriptable scope)
+    void enqueueData(final ByteBuffer data, final Context cx, final Scriptable scope)
     {
-        if (encoding == null) {
-            Buffer.BufferImpl jsBuf =
-                (Buffer.BufferImpl)cx.newObject(scope, Buffer.BUFFER_CLASS_NAME);
-            jsBuf.initialize(buf.toByteBuffer());
-            runner.enqueueEvent(this, "data", new Object[] { jsBuf });
+        runner.enqueueTask(new ScriptTask()
+        {
+            @Override
+            public void execute(Context cx, Scriptable scope)
+            {
+                sendDataEvent(data, cx, scope);
+            }
+        });
+    }
 
-        } else {
-            Charset cs = Charsets.get().getCharset(encoding);
-            runner.enqueueEvent(this, "data", new Object[] { buf.toString(cs) });
-        }
+    void enqueueEnd()
+    {
+        runner.enqueueEvent(this, "end", null);
     }
 
     @JSGetter("method")
@@ -100,14 +125,28 @@ public class HttpServerRequest
     }
 
     @JSGetter("url")
-    public String getUrl() {
+    public String getUrl()
+    {
+        if (request.getUri().startsWith("http")) {
+            URL url;
+            try {
+                url = new URL(request.getUri());
+            } catch (MalformedURLException e) {
+                return null;
+            }
+            if (url.getQuery() == null) {
+                return url.getPath();
+            } else {
+                return url.getPath() + '?' + url.getQuery();
+            }
+        }
         return request.getUri();
     }
 
     @JSGetter("headers")
     public Object getHeaders()
     {
-        return makeHeaders(request.getHeaders(), Context.getCurrentContext(), this);
+        return Utils.getHttpHeaders(request.getHeaders(), Context.getCurrentContext(), this);
     }
 
     @JSGetter("trailers")
@@ -116,17 +155,7 @@ public class HttpServerRequest
         if (trailers == null) {
             return null;
         }
-        return makeHeaders(trailers.getHeaders(), Context.getCurrentContext(), this);
-    }
-
-    private static Object makeHeaders(List<Map.Entry<String, String>> headers,
-                               Context cx, Scriptable thisObj)
-    {
-        Scriptable h = cx.newObject(thisObj);
-        for (Map.Entry<String, String> hdr : headers) {
-            h.put(hdr.getKey(), thisObj, hdr.getValue());
-        }
-        return h;
+        return Utils.getHttpHeaders(trailers.getHeaders(), Context.getCurrentContext(), this);
     }
 
     @JSGetter("httpVersion")
@@ -142,19 +171,19 @@ public class HttpServerRequest
         req.encoding = encoding;
     }
 
-    @JSFunction
+    @Override
     public void pause()
     {
         // TODO
     }
 
-    @JSFunction
+    @Override
     public void resume()
     {
         // TODO
     }
 
-    @JSGetter("connection")
+   @JSGetter("connection")
     public Object getConnection() {
         return socket;
     }

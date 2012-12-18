@@ -48,6 +48,7 @@ tcp.listen(common.PORT, function() {
     console.log('tcp client connection #' + count);
 
     socket.write('foo', function() {
+      console.log('Write complete');
       socket.end('bar');
     });
   });
@@ -61,14 +62,17 @@ tcp.listen(common.PORT, function() {
     console.log('Bytes read: ' + bytesRead);
     console.log('Bytes written: ' + bytesWritten);
     if (count < 2) {
+      console.log('Connecting to ' + tcpPort);
       socket.connect(tcpPort);
     } else {
+      console.log('Closing TCP');
       tcp.close();
     }
   });
 });
 
 process.on('exit', function() {
+  console.log('on exit');
   assert.equal(bytesRead, 12);
   assert.equal(bytesWritten, 12);
 });

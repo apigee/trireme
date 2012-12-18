@@ -164,9 +164,11 @@ public class ScriptRunner
             cx.putThreadLocal(ATTACHMENT, this);
             scope.setPrototype(env.getScope());
             scope.setParentScope(null);
+            /*
             if (log.isTraceEnabled()) {
                 cx.setDebugger(new DebugTracer(), null);
             }
+            */
             initGlobals(cx);
 
             try {
@@ -269,10 +271,11 @@ public class ScriptRunner
             if (ne.isFatal()) {
                 System.err.println(ne.getScriptStackTrace());
             }
-            // TODO not when we go multi-threaded!
+            /* TODO confirm and remove
             if (!env.isNoExit()) {
                 System.exit(ne.getCode());
             }
+            */
         } catch (RhinoException re) {
             throw new ScriptException(re);
         } catch (IOException ioe) {

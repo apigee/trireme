@@ -3,10 +3,10 @@ package com.apigee.noderunner.net;
 import com.apigee.noderunner.core.ScriptTask;
 import com.apigee.noderunner.core.internal.ScriptRunner;
 import com.apigee.noderunner.core.modules.EventEmitter;
-import com.apigee.noderunner.net.netty.NetSocket;
 import com.apigee.noderunner.net.netty.NettyFactory;
 import com.apigee.noderunner.net.netty.NettyServer;
-import org.jboss.netty.buffer.ChannelBuffer;
+import org.jboss.netty.channel.ChannelEvent;
+import org.jboss.netty.channel.ChannelException;
 import org.jboss.netty.channel.ChannelHandlerContext;
 import org.jboss.netty.channel.ChannelPipeline;
 import org.jboss.netty.channel.ChannelPipelineFactory;
@@ -19,12 +19,15 @@ import org.jboss.netty.handler.codec.http.HttpChunk;
 import org.jboss.netty.handler.codec.http.HttpRequest;
 import org.jboss.netty.handler.codec.http.HttpRequestDecoder;
 import org.jboss.netty.handler.codec.http.HttpResponseEncoder;
-import org.jboss.netty.handler.stream.ChunkedNioFile;
+import org.jboss.netty.handler.logging.LoggingHandler;
+import org.jboss.netty.handler.timeout.IdleStateAwareChannelUpstreamHandler;
+import org.jboss.netty.handler.timeout.IdleStateEvent;
+import org.jboss.netty.handler.timeout.IdleStateHandler;
+import org.jboss.netty.logging.InternalLogLevel;
 import org.mozilla.javascript.Context;
 import org.mozilla.javascript.EvaluatorException;
 import org.mozilla.javascript.Function;
 import org.mozilla.javascript.Scriptable;
-import org.mozilla.javascript.ScriptableObject;
 import org.mozilla.javascript.annotations.JSFunction;
 import org.mozilla.javascript.annotations.JSGetter;
 import org.mozilla.javascript.annotations.JSSetter;
@@ -36,12 +39,18 @@ import static com.apigee.noderunner.core.internal.ArgUtils.*;
 public class HttpServer
     extends EventEmitter.EventEmitterImpl
 {
-    protected static final Logger log = LoggerFactory.getLogger(NetServer.class);
+    public static final int IDLE_CONNECTION_SECONDS = 60;
 
-    public static final String CLASS_NAME = "http.Server";
+    protected static final Logger log = LoggerFactory.getLogger(HttpServer.class);
+
+    public static final String CLASS_NAME = "_httpServer";
 
     private NettyServer server;
     private ScriptRunner runner;
+    private int connectionCount;
+    private boolean closed;
+
+    private IdleStateHandler idleHandler;
 
     @Override
     public String getClassName() {
@@ -54,6 +63,9 @@ public class HttpServer
         if (listen != null) {
             register("request", listen, false);
         }
+        idleHandler = new IdleStateHandler(NettyFactory.get().getTimer(),
+                                           IDLE_CONNECTION_SECONDS, IDLE_CONNECTION_SECONDS,
+                                           IDLE_CONNECTION_SECONDS);
     }
 
     @JSFunction
@@ -85,12 +97,18 @@ public class HttpServer
         }
 
         HttpServer h = (HttpServer)thisObj;
-        h.server = NettyFactory.get().createServer(port, hostName, backlog, h.makePipeline());
+        try {
+            h.server = NettyFactory.get().createServer(port, hostName, backlog, h.makePipeline());
+        } catch (ChannelException ce) {
+            h.runner.enqueueEvent(h, "error",
+                                  new Object[] { NetServer.makeError(ce, "EADDRINUSE", cx, thisObj) });
+            h.runner.enqueueEvent(h, "closed", null);
+            return;
+        }
         h.runner.pin();
         if (listening != null) {
-            h.register("listening", listening, false);
+            h.register("listening", listening, true);
         }
-        // TODO should this only happen after Netty gave us a callback?
         h.runner.enqueueEvent(h, "listening", null);
     }
 
@@ -101,9 +119,16 @@ public class HttpServer
             @Override
             public ChannelPipeline getPipeline() throws Exception
             {
-                return Channels.pipeline(new HttpRequestDecoder(),
+                ChannelPipeline pipe =
+                    Channels.pipeline(
+                                         idleHandler,
+                                         new HttpRequestDecoder(),
                                          new Handler(),
                                          new HttpResponseEncoder());
+                if (log.isTraceEnabled()) {
+                    pipe.addFirst("logging", new LoggingHandler(InternalLogLevel.INFO));
+                }
+                return pipe;
             }
         };
     }
@@ -117,11 +142,19 @@ public class HttpServer
         }
 
         HttpServer h = (HttpServer)thisObj;
-        h.runner.unPin();
         if (callback != null) {
             h.register("close", callback, false);
         }
-        h.runner.enqueueEvent(h, "close", null);
+        h.closed = true;
+        if (h.connectionCount <= 0) {
+            h.doClose();
+        }
+    }
+
+    protected void doClose()
+    {
+        runner.unPin();
+        runner.enqueueEvent(this, "close", null);
     }
 
     @JSSetter("maxHeadersCount")
@@ -140,24 +173,33 @@ public class HttpServer
     }
 
     // TODO destroy?
-    // TODO pipe?
 
     private final class Handler
-        extends SimpleChannelUpstreamHandler
+        extends IdleStateAwareChannelUpstreamHandler
     {
+        NetSocket socket;
+        HttpServerRequest serverRequest;
+        HttpServerResponse serverResponse;
+
         @Override
         public void channelConnected(final ChannelHandlerContext ctx, final ChannelStateEvent e)
         {
-            log.debug("Channel connected: {}", e);
+            if (closed) {
+                log.debug("Closing connection because server is closed");
+                e.getChannel().close();
+                return;
+            }
+
+            connectionCount++;
+            log.debug("Channel connected: {} new count = {}", e, connectionCount);
             runner.enqueueTask(new ScriptTask()
             {
                 @Override
                 public void execute(Context cx, Scriptable scope)
                 {
-                    NetSocket sock = (NetSocket)cx.newObject(scope, NetSocket.CLASS_NAME);
-                    sock.initialize((SocketChannel)ctx.getChannel(), runner);
-                    ctx.getChannel().setAttachment(new ConnectionState(sock, null));
-                    HttpServer.this.fireEvent("connection", sock);
+                    socket = (NetSocket)cx.newObject(scope, NetSocket.CLASS_NAME);
+                    socket.initialize((SocketChannel) ctx.getChannel(), runner);
+                    HttpServer.this.fireEvent("connection", socket);
                 }
             });
         }
@@ -165,23 +207,33 @@ public class HttpServer
         @Override
         public void channelDisconnected(final ChannelHandlerContext ctx, final ChannelStateEvent e)
         {
-            log.debug("Channel disconnected: {}", e);
+            connectionCount--;
+            log.debug("Channel disconnected: {} new count = {}", e, connectionCount);
             ctx.getChannel().close();
             runner.enqueueTask(new ScriptTask()
             {
                 @Override
                 public void execute(Context cx, Scriptable scope)
                 {
-                    ConnectionState state = (ConnectionState)ctx.getChannel().getAttachment();
-                    if (state == null) {
+                    if (socket == null) {
                         log.debug("Rejecting callback that arrived before attachment was set");
                         return;
                     }
-                    state.socket.setReadable(false);
-                    state.socket.setWritable(false);
-                    state.socket.fireEvent("end");
+                    socket.setReadable(false);
+                    socket.setWritable(false);
+                    socket.fireEvent("end");
                 }
             });
+            if (closed && (connectionCount == 0)) {
+                doClose();
+            }
+        }
+
+        @Override
+        public void channelIdle(ChannelHandlerContext ctx, IdleStateEvent e)
+        {
+            log.debug("Channel is idle: {}", e);
+            ctx.getChannel().close();
         }
 
         @Override
@@ -193,48 +245,33 @@ public class HttpServer
                 @Override
                 public void execute(Context cx, Scriptable scope)
                 {
-                    ConnectionState state = (ConnectionState)ctx.getChannel().getAttachment();
-                    if (state == null) {
-                        log.debug("Rejecting callback that arrived before attachment was set");
-                        return;
-                    }
-
                     if (e.getMessage() instanceof HttpRequest) {
                         HttpServerRequest req =
                             (HttpServerRequest)cx.newObject(scope, HttpServerRequest.CLASS_NAME);
-                        state.serverRequest = req;
+                        serverRequest = req;
                         HttpServerResponse resp =
                             req.initialize(HttpServer.this, (HttpRequest)e.getMessage(),
                                            ctx.getChannel(),
-                                           state.socket, runner, cx, scope);
-                        state.serverResponse = resp;
+                                           socket, runner, cx, scope);
+                        serverResponse = resp;
 
                     } else if (e.getMessage() instanceof HttpChunk) {
-                        if (state.serverRequest == null) {
+                        if (serverRequest == null) {
                             log.debug("Rejecting callback with no request object");
                             return;
                         }
                         HttpChunk chunk = (HttpChunk)e.getMessage();
-                        state.serverRequest.sendData(chunk, cx, scope);
+                        serverRequest.enqueueData(chunk.getContent().toByteBuffer(),
+                                                  cx, scope);
+                        if (chunk.isLast()) {
+                            serverRequest.enqueueEnd();
+                        }
 
                     } else {
                         throw new AssertionError("Invalid message: " + e.getMessage());
                     }
                 }
             });
-        }
-    }
-
-    private static final class ConnectionState
-    {
-        NetSocket socket;
-        HttpServerRequest serverRequest;
-        HttpServerResponse serverResponse;
-
-        ConnectionState(NetSocket s, HttpServerRequest r)
-        {
-            this.socket = s;
-            this.serverRequest = r;
         }
     }
 }

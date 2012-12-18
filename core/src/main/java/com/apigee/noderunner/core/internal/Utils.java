@@ -9,7 +9,13 @@ import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.io.Reader;
 import java.lang.reflect.Method;
+import java.nio.ByteBuffer;
+import java.nio.CharBuffer;
 import java.nio.charset.Charset;
+import java.nio.charset.CharsetDecoder;
+import java.nio.charset.CharsetEncoder;
+import java.nio.charset.CoderResult;
+import java.nio.charset.CodingErrorAction;
 
 /**
  * A few utility functions.
@@ -62,5 +68,50 @@ public class Utils
             }
         }
         return null;
+    }
+
+    public static String bufferToString(ByteBuffer buf, Charset cs)
+    {
+        CharsetDecoder decoder = cs.newDecoder();
+        int bufLen = (int)(buf.limit() * decoder.averageCharsPerByte());
+        CharBuffer cBuf = CharBuffer.allocate(bufLen);
+        CoderResult result;
+        do {
+            result = decoder.decode(buf, cBuf, true);
+            if (result == CoderResult.OVERFLOW) {
+                bufLen *= 2;
+                CharBuffer newBuf = CharBuffer.allocate(bufLen);
+                cBuf.flip();
+                newBuf.put(cBuf);
+                cBuf = newBuf;
+            }
+        } while (result == CoderResult.OVERFLOW);
+
+        cBuf.flip();
+        return cBuf.toString();
+    }
+
+    public static ByteBuffer stringToBuffer(String str, Charset cs)
+    {
+        CharsetEncoder enc = cs.newEncoder();
+        CharBuffer chars = CharBuffer.wrap(str);
+        int bufLen = (int)(chars.remaining() * enc.averageBytesPerChar());
+        ByteBuffer writeBuf =  ByteBuffer.allocate(bufLen);
+        enc.onUnmappableCharacter(CodingErrorAction.REPLACE);
+
+        CoderResult result;
+        do {
+            result = enc.encode(chars, writeBuf, true);
+            if (result == CoderResult.OVERFLOW) {
+                bufLen *= 2;
+                ByteBuffer newBuf = ByteBuffer.allocate(bufLen);
+                writeBuf.flip();
+                newBuf.put(writeBuf);
+                writeBuf = newBuf;
+            }
+        } while (result == CoderResult.OVERFLOW);
+
+        writeBuf.flip();
+        return writeBuf;
     }
 }

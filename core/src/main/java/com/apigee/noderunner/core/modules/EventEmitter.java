@@ -100,7 +100,7 @@ public class EventEmitter
             ls.add(new Lsnr(listener, once));
 
             if (log.isDebugEnabled()) {
-                log.debug("Now {} listeners registered for {}", ls.size(), event);
+                log.debug("Now {} listeners registered on {} for {}", new Object[] { ls.size(), this, event });
             }
             if (ls.size() > maxListeners) {
                 log.warn("{} listeners assigned for event type {}", ls.size(), event);
@@ -169,7 +169,15 @@ public class EventEmitter
         {
             boolean handled = false;
             List<Lsnr> ls = listeners.get(event);
-            if (ls != null) {
+            if (ls == null) {
+                if (log.isDebugEnabled()) {
+                    log.debug("Fired event \"{}\" on {} -- no listeners", event, this);
+                }
+            } else {
+                if (log.isDebugEnabled()) {
+                    log.debug("Firing event \"{}\" on {} to {} listeners",
+                              new Object[] { event, this, ls.size() });
+                }
                 // Make a copy of the list because listeners may try to
                 // modify the list while we're executing it.
                 ArrayList<Lsnr> toFire = new ArrayList<Lsnr>(ls);
@@ -189,7 +197,7 @@ public class EventEmitter
                     if (log.isDebugEnabled()) {
                         log.debug("Sending {} to {}", event, l.function);
                     }
-                    l.function.call(c, l.function, l.function, args);
+                    l.function.call(c, l.function, this, args);
                     handled = true;
                 }
             }

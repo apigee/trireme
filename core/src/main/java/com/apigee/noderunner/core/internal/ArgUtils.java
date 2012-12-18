@@ -2,6 +2,8 @@ package com.apigee.noderunner.core.internal;
 
 import org.mozilla.javascript.Context;
 import org.mozilla.javascript.EvaluatorException;
+import org.mozilla.javascript.Function;
+import sun.rmi.transport.ObjectTable;
 
 public class ArgUtils
 {
@@ -95,6 +97,26 @@ public class ArgUtils
             return ((Double)Context.jsToJava(args[pos], Double.class)).doubleValue();
         }
         return def;
+    }
+
+    public static Function functionArg(Object[] args, int pos, boolean required)
+    {
+        if (required) {
+            ensureArg(args, pos);
+        }
+        if (pos < args.length) {
+            if (args[pos] instanceof Function) {
+                return (Function)args[pos];
+            } else {
+                if (required) {
+                    throw new EvaluatorException("Function expected");
+                } else {
+                    return null;
+                }
+            }
+        } else {
+            return null;
+        }
     }
 
     public static boolean isIntArg(Object o)

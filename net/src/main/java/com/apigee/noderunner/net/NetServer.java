@@ -1,15 +1,13 @@
 package com.apigee.noderunner.net;
 
 import com.apigee.noderunner.core.ScriptTask;
-import com.apigee.noderunner.core.internal.Charsets;
 import com.apigee.noderunner.core.internal.ScriptRunner;
-import com.apigee.noderunner.core.modules.Buffer;
 import com.apigee.noderunner.core.modules.EventEmitter;
-import com.apigee.noderunner.net.netty.NetSocket;
 import com.apigee.noderunner.net.netty.NettyFactory;
 import com.apigee.noderunner.net.netty.NettyServer;
-import com.apigee.noderunner.net.netty.Utils;
+import com.apigee.noderunner.net.Utils;
 import org.jboss.netty.buffer.ChannelBuffer;
+import org.jboss.netty.channel.ChannelException;
 import org.jboss.netty.channel.ChannelHandlerContext;
 import org.jboss.netty.channel.ChannelPipeline;
 import org.jboss.netty.channel.ChannelPipelineFactory;
@@ -21,16 +19,11 @@ import org.jboss.netty.channel.socket.SocketChannel;
 import org.mozilla.javascript.Context;
 import org.mozilla.javascript.Function;
 import org.mozilla.javascript.Scriptable;
-import org.mozilla.javascript.annotations.JSConstructor;
 import org.mozilla.javascript.annotations.JSFunction;
 import org.mozilla.javascript.annotations.JSGetter;
 import org.mozilla.javascript.annotations.JSSetter;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-
-import java.net.Inet6Address;
-import java.net.InetSocketAddress;
-import java.nio.charset.Charset;
 
 import static com.apigee.noderunner.core.internal.ArgUtils.*;
 
@@ -71,6 +64,14 @@ public class NetServer
         }
     }
 
+    public static Scriptable makeError(Throwable ce, String code, Context cx, Scriptable scope)
+    {
+        Scriptable err = cx.newObject(scope);
+        err.put("code", err, code);
+        err.put("exception", err, ce.getMessage());
+        return err;
+    }
+
     @JSFunction
     public static void listen(Context cx, Scriptable thisObj, Object[] args, Function func)
     {
@@ -84,19 +85,31 @@ public class NetServer
                 callback = (Function)args[1];
             } else {
                 host = stringArg(args, 1);
-                backlog = intArg(args, 2, DEFAULT_BACKLOG);
-                 if (args.length >= 4) {
+                if (args.length >= 3) {
+                    if (args[2] instanceof Function) {
+                        callback = (Function)args[2];
+                    } else {
+                        backlog = intArg(args, 2, DEFAULT_BACKLOG);
+                    }
+                }
+                if (args.length >= 4) {
                     callback = (Function)args[3];
                 }
             }
         }
 
-        NetServer svr = (NetServer)thisObj;
-        svr.server = NettyFactory.get().createServer(port, host, backlog, svr.makePipeline());
+        NetServer svr = (NetServer) thisObj;
+        try {
+            svr.server = NettyFactory.get().createServer(port, host, backlog, svr.makePipeline());
+        } catch (ChannelException ce) {
+            svr.runner.enqueueEvent(svr, "error",
+                                    new Object[] { makeError(ce, "EADDRINUSE", cx, thisObj) });
+            svr.runner.enqueueEvent(svr, "close", null);
+            return;
+        }
 
         svr.runner.pin();
         svr.referenced = true;
-
         if (callback != null) {
             svr.register("listening", callback, false);
         }

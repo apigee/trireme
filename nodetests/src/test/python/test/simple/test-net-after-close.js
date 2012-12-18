@@ -21,35 +21,33 @@
 
 var common = require('../common');
 var assert = require('assert');
-var http = require('http');
-var url = require('url');
+var net = require('net');
+var closed = false;
 
-var testURL = url.parse('http://localhost:' + common.PORT);
-
-// make sure the basics work
-function check(request) {
-  // default method should still be get
-  assert.strictEqual(request.method, 'GET');
-  // there are no URL params, so you should not see any
-  assert.strictEqual(request.url, '/');
-  // the host header should use the url.parse.hostname
-  assert.strictEqual(request.headers.host,
-                     testURL.hostname + ':' + testURL.port);
-}
-
-var server = http.createServer(function(request, response) {
-  // run the check function
-  check.call(this, request, response);
-  response.writeHead(200, {});
-  response.end('ok');
-  server.close();
+var server = net.createServer(function(s) {
+  s.end();
 });
 
 server.listen(common.PORT, function() {
-  // make the request
-  var clientRequest = http.request(testURL);
-  // since there is a little magic with the agent
-  // make sure that an http request uses the http.Agent
-  assert.ok(clientRequest.agent instanceof http.Agent);
-  clientRequest.end();
+  var c = net.createConnection(common.PORT);
+  c.on('close', function() {
+    // INVALID internal stuff
+    //assert.strictEqual(c._handle, null);
+    closed = true;
+    assert.doesNotThrow(function() {
+      c.setNoDelay();
+      c.setKeepAlive();
+      c.bufferSize;
+      c.pause();
+      c.resume();
+      c.address();
+      c.remoteAddress;
+      c.remotePort;
+    });
+    server.close();
+  });
+});
+
+process.on('exit', function() {
+  assert(closed);
 });

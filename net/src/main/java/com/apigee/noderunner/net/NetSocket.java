@@ -1,14 +1,15 @@
-package com.apigee.noderunner.net.netty;
+package com.apigee.noderunner.net;
 
 import com.apigee.noderunner.core.ScriptTask;
 import com.apigee.noderunner.core.internal.Charsets;
 import com.apigee.noderunner.core.internal.ScriptRunner;
 import com.apigee.noderunner.core.modules.Buffer;
 import com.apigee.noderunner.core.modules.EventEmitter;
-import org.jboss.netty.buffer.ByteBufferBackedChannelBuffer;
+import com.apigee.noderunner.core.modules.Stream;
+import com.apigee.noderunner.net.netty.NettyFactory;
+import com.apigee.noderunner.net.Utils;
 import org.jboss.netty.buffer.ChannelBuffer;
 import org.jboss.netty.buffer.ChannelBuffers;
-import org.jboss.netty.channel.Channel;
 import org.jboss.netty.channel.ChannelFuture;
 import org.jboss.netty.channel.ChannelFutureListener;
 import org.jboss.netty.channel.ChannelHandlerContext;
@@ -16,6 +17,7 @@ import org.jboss.netty.channel.ChannelPipeline;
 import org.jboss.netty.channel.ChannelPipelineFactory;
 import org.jboss.netty.channel.ChannelStateEvent;
 import org.jboss.netty.channel.Channels;
+import org.jboss.netty.channel.ExceptionEvent;
 import org.jboss.netty.channel.MessageEvent;
 import org.jboss.netty.channel.SimpleChannelUpstreamHandler;
 import org.jboss.netty.channel.socket.SocketChannel;
@@ -29,6 +31,7 @@ import org.mozilla.javascript.annotations.JSGetter;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.nio.ByteBuffer;
 import java.nio.charset.Charset;
 
 import static com.apigee.noderunner.core.internal.ArgUtils.*;
@@ -38,19 +41,17 @@ import static com.apigee.noderunner.core.internal.ArgUtils.*;
  * "stream" classes.
  */
 public class NetSocket
-    extends EventEmitter.EventEmitterImpl
+    extends Stream.BidirectionalStream
 {
     protected static final Logger log = LoggerFactory.getLogger(NetSocket.class);
 
     public static final String CLASS_NAME = "net.Socket";
 
-    private String encoding;
     private SocketChannel channel;
     private boolean allowHalfOpen = true;
+    private String localAddress;
     private ScriptRunner runner;
     private boolean referenced;
-    private boolean readable;
-    private boolean writable;
     private long bytesRead;
     private long bytesWritten;
 
@@ -71,8 +72,14 @@ public class NetSocket
                            ScriptRunner runner)
     {
         this.allowHalfOpen = allowHalfOpen;
+        this.localAddress = localAddress;
         this.runner = runner;
+        initializeInternal(host, port, listener);
+    }
 
+    private void initializeInternal(String host, int port, Function listener)
+    {
+        bytesRead = bytesWritten = 0;
         if (listener != null) {
             register("connect", listener, false);
         }
@@ -89,9 +96,16 @@ public class NetSocket
             @Override
             public void operationComplete(ChannelFuture f)
             {
-                channel = (SocketChannel)f.getChannel();
-                initChannel();
-                NetSocket.this.runner.enqueueEvent(NetSocket.this, "connect", null);
+                if (f.isSuccess()) {
+                    channel = (SocketChannel)f.getChannel();
+                    initChannel();
+                    NetSocket.this.runner.enqueueEvent(NetSocket.this, "connect", null);
+                } else {
+                    NetSocket.this.runner.enqueueEvent(NetSocket.this, "error",
+                                                       new Object[] { NetServer.makeError(f.getCause(), "connect error",
+                                                                           Context.getCurrentContext(),
+                                                                           NetSocket.this) });
+                }
             }
         });
     }
@@ -117,7 +131,7 @@ public class NetSocket
     {
         int port = intArg(args, 0);
         String host = "localhost";
-        Function callback;
+        Function callback = null;
 
         if (args.length >= 2) {
             if (args[1] instanceof String) {
@@ -131,6 +145,8 @@ public class NetSocket
         if (args.length >= 3) {
             callback = (Function)args[2];
         }
+
+        ((NetSocket)thisObj).initializeInternal(host, port, callback);
     }
 
     @JSGetter("buffersize")
@@ -140,46 +156,14 @@ public class NetSocket
         return 0;
     }
 
-    @JSFunction
-    public void setEncoding(String enc)
+    @Override
+    protected boolean write(Context cx, Object[] args)
     {
-        if (Charsets.get().getCharset(enc) == null) {
-            throw new EvaluatorException("Invalid charset");
-        }
-        this.encoding = enc;
-    }
-
-    public String getEncoding()
-    {
-        return encoding;
-    }
-
-    @JSFunction
-    public static boolean write(Context cx, final Scriptable thisObj, Object[] args, Function func)
-    {
-        final NetSocket sock = (NetSocket)thisObj;
         ensureArg(args, 0);
         ChannelBuffer buf;
         Function callback = null;
 
-        if (args[0] instanceof String) {
-            String encoding = "utf8";
-            if ((args.length >= 2) && (args[1] instanceof String)) {
-                encoding = (String)args[1];
-            }
-            Charset cs = Charsets.get().getCharset(encoding);
-            if (cs == null) {
-                throw new EvaluatorException("Invalid charset");
-            }
-
-            byte[] encoded = ((String)args[0]).getBytes(cs);
-            buf = ChannelBuffers.wrappedBuffer(encoded);
-
-        } else if (args[0] instanceof Buffer.BufferImpl) {
-            buf = ChannelBuffers.wrappedBuffer(((Buffer.BufferImpl)args[0]).getBuffer());
-        } else {
-            throw new EvaluatorException("Invalid parameters");
-        }
+        ByteBuffer writeBBuf = getWriteData(args);
 
         if ((args.length >= 2) && (args[1] instanceof Function)) {
             callback = (Function)args[1];
@@ -187,8 +171,8 @@ public class NetSocket
             callback = (Function)args[2];
         }
 
-        sock.bytesWritten += buf.readableBytes();
-        ChannelFuture future = sock.channel.write(buf);
+        bytesWritten += writeBBuf.remaining();
+        ChannelFuture future = channel.write(ChannelBuffers.wrappedBuffer(writeBBuf));
 
         if (callback != null) {
             final Function cb = callback;
@@ -197,7 +181,7 @@ public class NetSocket
                 public void operationComplete(ChannelFuture channelFuture)
                 {
                     if (cb != null) {
-                        sock.runner.enqueueCallback(cb, thisObj, null);
+                        runner.enqueueCallback(cb, NetSocket.this, null);
                     }
                 }
             });
@@ -208,33 +192,26 @@ public class NetSocket
 
     public void sendData(ChannelBuffer data, Context cx, Scriptable scope)
     {
-        log.debug("Got {}", data);
         bytesRead += data.readableBytes();
-        if (encoding == null) {
-            Buffer.BufferImpl jsBuf =
-                (Buffer.BufferImpl)cx.newObject(scope, Buffer.BUFFER_CLASS_NAME);
-            jsBuf.initialize(data.toByteBuffer());
-            fireEvent("data", jsBuf);
-
-        } else {
-            Charset cs = Charsets.get().getCharset(encoding);
-            fireEvent("data", data.toString(cs));
-        }
+        sendDataEvent(data.toByteBuffer(), cx, scope);
     }
 
-    @JSFunction
-    public static void end(Context cx, Scriptable thisObj, Object[] args, Function func)
+    @Override
+    protected void doEnd(Context cx)
     {
-        if (args.length > 0) {
-            write(cx, thisObj, args, func);
-        }
-        // TODO really not sure about this
-        NetSocket sock = (NetSocket)thisObj;
-        sock.channel.disconnect();
-        sock.setWritable(false);
+        ChannelFuture disconnect = channel.disconnect();
+        disconnect.addListener(new ChannelFutureListener()
+        {
+            @Override
+            public void operationComplete(ChannelFuture channelFuture)
+            {
+                channel.close();
+                setWritable(false);
+            }
+        });
     }
 
-    @JSFunction
+    @Override
     public void destroy()
     {
         channel.close();
@@ -242,13 +219,13 @@ public class NetSocket
         setWritable(false);
     }
 
-    @JSFunction
+    @Override
     public void pause()
     {
         channel.setReadable(false);
     }
 
-    @JSFunction
+    @Override
     public void resume()
     {
         channel.setReadable(true);
@@ -314,50 +291,18 @@ public class NetSocket
     }
 
     @JSGetter("bytesRead")
-    public Number getBytesRead()
+    public Object getBytesRead()
     {
-        if (bytesRead < Integer.MAX_VALUE) {
-            return Integer.valueOf((int)bytesRead);
-        }
-        return Double.valueOf(bytesRead);
+        return Context.javaToJS(Long.valueOf(bytesRead), this);
     }
 
     @JSGetter("bytesWritten")
-    public Number getBytesWritten()
+    public Object getBytesWritten()
     {
-        if (bytesWritten < Integer.MAX_VALUE) {
-            return Integer.valueOf((int)bytesWritten);
-        }
-        return Double.valueOf(bytesWritten);
-    }
-
-    // Readable stream
-
-    @JSGetter("readable")
-    public boolean isReadable() {
-        return readable;
-    }
-
-    public void setReadable(boolean r) {
-        this.readable = r;
-    }
-
-    @JSFunction
-    public static void pipe(Context cx, Scriptable thisObj, Object[] args, Function func)
-    {
-        throw new EvaluatorException("Not implemented");
+        return Context.javaToJS(Long.valueOf(bytesWritten), this);
     }
 
     // Writeable stream
-
-    @JSGetter("writable")
-    public boolean isWritable() {
-        return writable;
-    }
-
-    public void setWritable(boolean w) {
-        writable = w;
-    }
 
     @JSFunction
     public void destroySoon()
@@ -428,6 +373,27 @@ public class NetSocket
 
                     ChannelBuffer data = (ChannelBuffer)e.getMessage();
                     sock.sendData(data, cx, scope);
+                }
+            });
+        }
+
+        @Override
+        public void exceptionCaught(final ChannelHandlerContext ctx, final ExceptionEvent ee)
+        {
+            log.debug("Exception event: {}", ee);
+            runner.enqueueTask(new ScriptTask()
+            {
+                @Override
+                public void execute(Context cx, Scriptable scope)
+                {
+                    NetSocket sock = (NetSocket)ctx.getChannel().getAttachment();
+                    if (sock == null) {
+                        log.debug("Rejecting callback that arrived before attachment was set");
+                        return;
+                    }
+                    runner.enqueueEvent(sock, "error",
+                                        new Object[] {  NetServer.makeError(ee.getCause(), "error",
+                                                        cx, scope) });
                 }
             });
         }

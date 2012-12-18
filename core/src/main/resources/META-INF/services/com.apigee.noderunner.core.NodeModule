@@ -4,5 +4,6 @@ com.apigee.noderunner.core.modules.Filesystem
 com.apigee.noderunner.core.modules.Module
 com.apigee.noderunner.core.modules.Path
 com.apigee.noderunner.core.modules.Process
+com.apigee.noderunner.core.modules.Stream
 com.apigee.noderunner.core.modules.Timers
 com.apigee.noderunner.core.modules.VM

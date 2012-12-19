@@ -140,7 +140,16 @@ public class NetModule
 
             Function listener = null;
             if (args.length >= 2) {
-                listener = (Function)args[1];
+                if (args[1] instanceof Function) {
+                    listener = (Function)args[1];
+                } else if (args[1] instanceof String) {
+                    host = (String)args[1];
+                }
+            }
+            if (args.length >= 3) {
+                if (args[2] instanceof Function) {
+                    listener = (Function)args[2];
+                }
             }
 
             NetSocket sock = (NetSocket)cx.newObject(thisObj, NetSocket.CLASS_NAME);
@@ -151,6 +160,8 @@ public class NetModule
         @JSFunction
         public int isIP(String addrStr)
         {
+            // TODO this actually resolves the host name
+            // We need to replace this with a regex. The actual regex for IPV6 is very complicated -- see Google.
             try {
                 InetAddress addr = InetAddress.getByName(addrStr);
                 if (addr instanceof Inet4Address) {

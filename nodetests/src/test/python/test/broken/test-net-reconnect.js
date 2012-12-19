@@ -48,7 +48,9 @@ server.listen(common.PORT, function() {
   console.log('listening');
   var client = net.createConnection(common.PORT);
 
-  client.setEncoding('UTF8');
+  // TODO GREG Invalid isn't this an invalid charset according to other tests?
+  //client.setEncoding('UTF8');
+  client.setEncoding('utf8');
 
   client.on('connect', function() {
     console.log('client connected.');

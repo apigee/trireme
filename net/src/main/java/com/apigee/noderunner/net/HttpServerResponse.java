@@ -1,23 +1,22 @@
 package com.apigee.noderunner.net;
 
-import com.apigee.noderunner.core.internal.Charsets;
 import com.apigee.noderunner.core.internal.ScriptRunner;
-import com.apigee.noderunner.core.modules.Buffer;
-import com.apigee.noderunner.core.modules.EventEmitter;
 import com.apigee.noderunner.core.modules.Stream;
-import org.jboss.netty.buffer.ChannelBuffer;
-import org.jboss.netty.buffer.ChannelBuffers;
-import org.jboss.netty.channel.Channel;
-import org.jboss.netty.handler.codec.http.DefaultHttpChunk;
-import org.jboss.netty.handler.codec.http.DefaultHttpChunkTrailer;
-import org.jboss.netty.handler.codec.http.DefaultHttpResponse;
-import org.jboss.netty.handler.codec.http.HttpChunk;
-import org.jboss.netty.handler.codec.http.HttpChunkTrailer;
-import org.jboss.netty.handler.codec.http.HttpResponse;
-import org.jboss.netty.handler.codec.http.HttpResponseStatus;
-import org.jboss.netty.handler.codec.http.HttpVersion;
+import io.netty.buffer.ByteBuf;
+import io.netty.buffer.Unpooled;
+import io.netty.channel.Channel;
+import io.netty.channel.ChannelFuture;
+import io.netty.channel.socket.SocketChannel;
+import io.netty.handler.codec.http.DefaultHttpChunk;
+import io.netty.handler.codec.http.DefaultHttpChunkTrailer;
+import io.netty.handler.codec.http.DefaultHttpResponse;
+import io.netty.handler.codec.http.HttpChunk;
+import io.netty.handler.codec.http.HttpChunkTrailer;
+import io.netty.handler.codec.http.HttpResponse;
+import io.netty.handler.codec.http.HttpResponseStatus;
+import io.netty.handler.codec.http.HttpTransferEncoding;
+import io.netty.handler.codec.http.HttpVersion;
 import org.mozilla.javascript.Context;
-import org.mozilla.javascript.EvaluatorException;
 import org.mozilla.javascript.Function;
 import org.mozilla.javascript.Scriptable;
 import org.mozilla.javascript.annotations.JSFunction;
@@ -26,14 +25,11 @@ import org.mozilla.javascript.annotations.JSSetter;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.nio.ByteBuffer;
-import java.nio.charset.Charset;
 import java.text.DateFormat;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Calendar;
 import java.util.Collections;
-import java.util.Date;
 import java.util.List;
 import java.util.TimeZone;
 
@@ -48,24 +44,25 @@ public class HttpServerResponse
 
     private static final DateFormat dateFormatter =
         new SimpleDateFormat("EEE, dd MMM yyyy HH:mm:ss zzz");
-    private static final TimeZone GMT = TimeZone.getTimeZone("GMT");
+    private static final TimeZone   GMT           = TimeZone.getTimeZone("GMT");
 
-    private Channel channel;
-    private ScriptRunner runner;
-    private HttpResponse response;
-    private boolean headersSent;
+    private SocketChannel channel;
+    private ScriptRunner  runner;
+    private HttpResponse  response;
+    private boolean       headersSent;
     private boolean sendDate = true;
     private boolean keepAlive;
 
     @Override
-    public String getClassName() {
+    public String getClassName()
+    {
         return CLASS_NAME;
     }
 
     public void initialize(Channel channel, ScriptRunner runner,
                            HttpVersion version, boolean keepAlive)
     {
-        this.channel = channel;
+        this.channel = (SocketChannel)channel;
         this.runner = runner;
         this.readable = true;
         this.keepAlive = keepAlive;
@@ -75,19 +72,21 @@ public class HttpServerResponse
     // TODO writeContinue
 
     @JSGetter("statusCode")
-    public int getStatusCode() {
+    public int getStatusCode()
+    {
         return response.getStatus().getCode();
     }
 
     @JSSetter("statusCode")
-    public void setStatusCode(int code) {
+    public void setStatusCode(int code)
+    {
         response.setStatus(HttpResponseStatus.valueOf(code));
     }
 
     @JSFunction
     public static void setHeader(Context cx, Scriptable thisObj, Object[] args, Function func)
     {
-        HttpServerResponse r = (HttpServerResponse)thisObj;
+        HttpServerResponse r = (HttpServerResponse) thisObj;
         String name = stringArg(args, 0);
         ensureArg(args, 1);
 
@@ -182,7 +181,7 @@ public class HttpServerResponse
         if (log.isDebugEnabled()) {
             log.debug("Sending HTTP headers with status code {}", statusCode);
         }
-        r.prepareResponse(true, -1);
+        r.prepareResponse(-1);
         r.channel.write(r.response);
         r.headersSent = true;
     }
@@ -206,13 +205,13 @@ public class HttpServerResponse
     @Override
     protected boolean write(Context cx, Object[] args)
     {
-        ChannelBuffer buf = ChannelBuffers.wrappedBuffer(getWriteData(args));
+        ByteBuf buf = Unpooled.wrappedBuffer(getWriteData(args));
         if (!headersSent) {
             // Send headers first. But we have to send chunked data regardless.
             if (log.isDebugEnabled()) {
                 log.debug("Sending HTTP response with code {} and data {}", response.getStatus(), buf);
             }
-            prepareResponse(true, -1);
+            prepareResponse(-1);
             channel.write(response);
             headersSent = true;
         }
@@ -222,19 +221,17 @@ public class HttpServerResponse
             log.debug("Sending HTTP chunk from {}", buf);
         }
         HttpChunk chunk = new DefaultHttpChunk(buf);
-        channel.write(chunk);
-
-        // TODO use the future, luke.
-        return true;
+        ChannelFuture future = channel.write(chunk);
+        return (future.isDone());
     }
 
     @Override
     public void end(Context cx, Object[] args)
     {
-        ChannelBuffer buf = null;
+        ByteBuf buf = null;
 
         if (args.length > 0) {
-            buf = ChannelBuffers.wrappedBuffer(getWriteData(args));
+            buf = Unpooled.wrappedBuffer(getWriteData(args));
         }
 
         if (headersSent) {
@@ -254,24 +251,35 @@ public class HttpServerResponse
             if (log.isDebugEnabled()) {
                 log.debug("Sending HTTP response with code {} and data{}", response.getStatus(), buf);
             }
-            prepareResponse(false, buf == null ? 0 : buf.readableBytes());
+            prepareResponse(buf == null ? 0 : buf.readableBytes());
             response.setContent(buf);
             channel.write(response);
             headersSent = true;
         }
 
-        /*
-         * TODO if "keepAlive" is set, we should half-close the connection. Can't do this in Netty 3.
-         */
+        if (!keepAlive) {
+            channel.shutdownOutput();
+        }
     }
 
-    private void prepareResponse(boolean chunked, int contentLength)
+    private void prepareResponse(int contentLength)
     {
-        response.setChunked(chunked);
-        if ((response.getHeader("Content-Length") == null) &&
-            (contentLength >= 0)) {
-            response.setHeader("Content-Length", String.valueOf(contentLength));
+        if (contentLength >= 0) {
+            // We know the content length and will send everything in one message
+            if (response.getHeader("Content-Length") == null) {
+                response.setHeader("Content-Length", String.valueOf(contentLength));
+                response.setTransferEncoding(HttpTransferEncoding.SINGLE);
+            }
+        } else {
+            if (response.getHeader("Content-Length") == null) {
+                // We will send in multiple chunks, but the caller knows the content length
+                response.setTransferEncoding(HttpTransferEncoding.CHUNKED);
+            } else {
+                // We will send in multiple chunks and don't know the content length
+                response.setTransferEncoding(HttpTransferEncoding.STREAMED);
+            }
         }
+
         if (sendDate && (response.getHeader("Date") == null)) {
             Calendar cal = Calendar.getInstance(GMT);
             String hdr = dateFormatter.format(cal.getTime());

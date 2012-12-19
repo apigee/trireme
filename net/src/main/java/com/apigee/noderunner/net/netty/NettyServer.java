@@ -1,39 +1,49 @@
 package com.apigee.noderunner.net.netty;
 
-import org.jboss.netty.bootstrap.ServerBootstrap;
-import org.jboss.netty.channel.ChannelPipeline;
-import org.jboss.netty.channel.ChannelPipelineFactory;
-import org.jboss.netty.channel.ServerChannelFactory;
+import io.netty.bootstrap.ServerBootstrap;
+import io.netty.channel.Channel;
+import io.netty.channel.ChannelInitializer;
+import io.netty.channel.ChannelOption;
+import io.netty.channel.socket.SocketChannel;
+import io.netty.channel.socket.nio.NioServerSocketChannel;
 
 import java.net.InetSocketAddress;
-import java.net.SocketAddress;
 
 public class NettyServer
 {
-    private final ServerChannelFactory channelFactory;
-    private final ServerBootstrap bootstrap;
+    private final ServerBootstrap   bootstrap;
     private final InetSocketAddress address;
+    private final Channel           serverChannel;
 
-    NettyServer(ServerChannelFactory channelFactory,
-                int port, String host, int backlog,
-                ChannelPipelineFactory pipelineFactory)
+    NettyServer(int port, String host, int backlog,
+                ChannelInitializer<SocketChannel> pipelineFactory)
     {
-        this.channelFactory = channelFactory;
-
-        bootstrap = new ServerBootstrap(channelFactory);
         if (host == null) {
             address = new InetSocketAddress(port);
         } else {
             address = new InetSocketAddress(host, port);
         }
-        bootstrap.setPipelineFactory(pipelineFactory);
-        bootstrap.setOption("reuseAddress", true);
-        bootstrap.bind(address);
+        bootstrap = new ServerBootstrap();
+        bootstrap.group(NettyFactory.get().getAcceptorThreads(), NettyFactory.get().getIOThreads())
+                 .channel(NioServerSocketChannel.class)
+                 .option(ChannelOption.SO_REUSEADDR, true)
+                 .childHandler(pipelineFactory)
+                 .localAddress(address);
+
+        serverChannel =
+            bootstrap.bind().syncUninterruptibly().channel();
+    }
+
+    public void suspend()
+    {
+        // Current way we do this from the Netty blog --
+        // we basically set the pipeline to not have any more space in the buffer
+        serverChannel.pipeline().firstContext().readable(false);
     }
 
     public void close()
     {
-        bootstrap.releaseExternalResources();
+        serverChannel.close();
     }
 
     public InetSocketAddress getAddress() {

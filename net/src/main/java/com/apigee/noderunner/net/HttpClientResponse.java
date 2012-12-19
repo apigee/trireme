@@ -1,10 +1,8 @@
 package com.apigee.noderunner.net;
 
 import com.apigee.noderunner.core.modules.Stream;
-import org.jboss.netty.channel.Channel;
-import org.jboss.netty.handler.codec.http.HttpChunk;
-import org.jboss.netty.handler.codec.http.HttpChunkTrailer;
-import org.jboss.netty.handler.codec.http.HttpResponse;
+import io.netty.handler.codec.http.HttpChunkTrailer;
+import io.netty.handler.codec.http.HttpResponse;
 import org.mozilla.javascript.Context;
 import org.mozilla.javascript.annotations.JSGetter;
 
@@ -14,12 +12,13 @@ public class HttpClientResponse
     public static final String CLASS_NAME = "http.ClientResponse";
 
     private HttpClientRequest request;
-    private HttpResponse response;
-    private HttpChunkTrailer trailer;
-    private boolean keepAlive;
+    private HttpResponse      response;
+    private HttpChunkTrailer  trailer;
+    private boolean           keepAlive;
 
     @Override
-    public String getClassName() {
+    public String getClassName()
+    {
         return CLASS_NAME;
     }
 

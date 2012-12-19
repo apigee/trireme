@@ -5,49 +5,42 @@ import com.apigee.noderunner.core.internal.Charsets;
 import com.apigee.noderunner.core.internal.ScriptRunner;
 import com.apigee.noderunner.core.modules.Stream;
 import com.apigee.noderunner.net.netty.NettyFactory;
-import org.jboss.netty.buffer.ChannelBuffer;
-import org.jboss.netty.buffer.ChannelBuffers;
-import org.jboss.netty.channel.Channel;
-import org.jboss.netty.channel.ChannelFuture;
-import org.jboss.netty.channel.ChannelFutureListener;
-import org.jboss.netty.channel.ChannelHandlerContext;
-import org.jboss.netty.channel.ChannelPipeline;
-import org.jboss.netty.channel.ChannelPipelineFactory;
-import org.jboss.netty.channel.Channels;
-import org.jboss.netty.channel.MessageEvent;
-import org.jboss.netty.channel.SimpleChannelUpstreamHandler;
-import org.jboss.netty.channel.socket.SocketChannel;
-import org.jboss.netty.handler.codec.http.DefaultHttpChunk;
-import org.jboss.netty.handler.codec.http.DefaultHttpChunkTrailer;
-import org.jboss.netty.handler.codec.http.DefaultHttpRequest;
-import org.jboss.netty.handler.codec.http.HttpChunk;
-import org.jboss.netty.handler.codec.http.HttpChunkTrailer;
-import org.jboss.netty.handler.codec.http.HttpMessage;
-import org.jboss.netty.handler.codec.http.HttpMethod;
-import org.jboss.netty.handler.codec.http.HttpRequest;
-import org.jboss.netty.handler.codec.http.HttpRequestDecoder;
-import org.jboss.netty.handler.codec.http.HttpRequestEncoder;
-import org.jboss.netty.handler.codec.http.HttpResponse;
-import org.jboss.netty.handler.codec.http.HttpResponseDecoder;
-import org.jboss.netty.handler.codec.http.HttpVersion;
-import org.jboss.netty.handler.logging.LoggingHandler;
-import org.jboss.netty.logging.InternalLogLevel;
+import io.netty.buffer.Unpooled;
+import io.netty.channel.Channel;
+import io.netty.channel.ChannelFuture;
+import io.netty.channel.ChannelFutureListener;
+import io.netty.channel.ChannelHandlerContext;
+import io.netty.channel.ChannelInboundMessageHandlerAdapter;
+import io.netty.channel.ChannelInitializer;
+import io.netty.channel.socket.SocketChannel;
+import io.netty.handler.codec.http.DefaultHttpChunk;
+import io.netty.handler.codec.http.DefaultHttpChunkTrailer;
+import io.netty.handler.codec.http.DefaultHttpRequest;
+import io.netty.handler.codec.http.HttpChunk;
+import io.netty.handler.codec.http.HttpChunkTrailer;
+import io.netty.handler.codec.http.HttpMessage;
+import io.netty.handler.codec.http.HttpMethod;
+import io.netty.handler.codec.http.HttpObject;
+import io.netty.handler.codec.http.HttpRequest;
+import io.netty.handler.codec.http.HttpRequestEncoder;
+import io.netty.handler.codec.http.HttpResponse;
+import io.netty.handler.codec.http.HttpResponseDecoder;
+import io.netty.handler.codec.http.HttpTransferEncoding;
+import io.netty.handler.codec.http.HttpVersion;
+import io.netty.handler.logging.LogLevel;
+import io.netty.handler.logging.LoggingHandler;
 import org.mozilla.javascript.Context;
 import org.mozilla.javascript.EvaluatorException;
 import org.mozilla.javascript.Function;
 import org.mozilla.javascript.Scriptable;
 import org.mozilla.javascript.ScriptableObject;
-import org.mozilla.javascript.ast.ObjectProperty;
-import org.mozilla.javascript.tools.shell.ConsoleTextArea;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.w3c.dom.events.EventException;
 
 import java.net.MalformedURLException;
 import java.net.URL;
 import java.nio.ByteBuffer;
 import java.util.ArrayDeque;
-import java.util.ArrayList;
 
 import static com.apigee.noderunner.core.internal.ArgUtils.*;
 
@@ -59,25 +52,25 @@ public class HttpClientRequest
     public static final String CLASS_NAME = "http.ClientRequest";
 
     public static final String DEFAULT_HOSTNAME = "localhost";
-    public static final int DEFAULT_PORT = 80;
-    public static final String DEFAULT_METHOD = "GET";
-    public static final String DEFAULT_PATH = "/";
+    public static final int    DEFAULT_PORT     = 80;
+    public static final String DEFAULT_METHOD   = "GET";
+    public static final String DEFAULT_PATH     = "/";
 
-    private boolean getRequest;
+    private boolean      getRequest;
     private ScriptRunner runner;
     private String hostName = DEFAULT_HOSTNAME;
-    private int port = DEFAULT_PORT;
+    private int    port     = DEFAULT_PORT;
     private String localAddress;
     private String method = DEFAULT_METHOD;
-    private String path = DEFAULT_PATH;
+    private String path   = DEFAULT_PATH;
     private Scriptable headers;
-    private byte[] auth;
-    private String agent;
+    private byte[]     auth;
+    private String     agent;
 
-    private Channel channel;
+    private Channel   channel;
     private NetSocket socket;
-    private boolean headersSent;
-    private boolean connected;
+    private boolean   headersSent;
+    private boolean   connected;
 
     // These variables are used if the user calls various methods before the socket is connected
     private boolean endCalled;
@@ -198,19 +191,17 @@ public class HttpClientRequest
         ChannelFuture future =
             NettyFactory.get().connect(
                 port, hostName, localAddress,
-                new ChannelPipelineFactory()
+                new ChannelInitializer<SocketChannel>()
                 {
                     @Override
-                    public ChannelPipeline getPipeline()
+                    public void initChannel(SocketChannel c)
                     {
-                        ChannelPipeline pipe =  Channels.pipeline(
-                                                 new HttpResponseDecoder(),
-                                                 new Handler(),
-                                                 new HttpRequestEncoder());
                         if (log.isTraceEnabled()) {
-                            pipe.addFirst("logging", new LoggingHandler(InternalLogLevel.INFO));
+                            c.pipeline().addLast(new LoggingHandler(LogLevel.INFO));
                         }
-                        return pipe;
+                        c.pipeline().addLast(new HttpResponseDecoder())
+                                    .addLast(new Handler())
+                                    .addLast(new HttpRequestEncoder());
                     }
                 });
         future.addListener(new ChannelFutureListener()
@@ -224,15 +215,15 @@ public class HttpClientRequest
                         @Override
                         public void execute(Context cx, Scriptable scope)
                         {
-                            onConnect(future.getChannel());
+                            onConnect(future.channel());
                         }
                     });
 
                 } else {
-                    log.debug("Connect failed: {}", future.getCause());
+                    log.debug("Connect failed: {}", future.cause());
                     runner.enqueueEvent(
                         HttpClientRequest.this, "error",
-                        new Object[]{NetServer.makeError(future.getCause(),
+                        new Object[]{NetServer.makeError(future.cause(),
                                                          "connection failed", Context.getCurrentContext(),
                                                          HttpClientRequest.this)
                         });
@@ -254,12 +245,12 @@ public class HttpClientRequest
             // We called "write" or "end" (or both) before the connection was done, so
             // now we have to send headers, chunks, and possibly even the whole thing
             if ((getRequest || endCalled) && ((outgoing == null) || (outgoing.size() == 0))) {
-                sendHeader(null, false, 0);
+                sendHeader(null, 0);
             } else if ((getRequest || endCalled) && (outgoing.size() == 1)) {
                 ByteBuffer buf = outgoing.poll();
-                sendHeader(buf, false, buf.remaining());
+                sendHeader(buf, buf.remaining());
             } else {
-                sendHeader(null, true, -1);
+                sendHeader(null, -1);
                 ByteBuffer buf;
                 while ((buf = outgoing.poll()) != null) {
                     sendData(buf, (getRequest || endCalled) && outgoing.isEmpty());
@@ -274,16 +265,30 @@ public class HttpClientRequest
     // keep alive
     // abort
 
-    private HttpRequest buildRequest(boolean chunked, int contentLength)
+    private HttpRequest buildRequest(int contentLength)
     {
         HttpRequest req = new DefaultHttpRequest(
             HttpVersion.HTTP_1_1, HttpMethod.valueOf(method),
             "http://" + hostName + ':' + port + path);
         req.setHeader("Host", hostName + ':' + port);
+
         if (contentLength >= 0) {
-            req.setHeader("Content-Length", String.valueOf(contentLength));
+            // We know the content length and will send in one chunk.
+            // User can override content length later
+            req.setHeader("Content-Length", contentLength);
+            req.setTransferEncoding(HttpTransferEncoding.SINGLE);
+        } else {
+            if ((headers != null) &&
+                (headers.has("content-length", headers) ||
+                 headers.has("Content-Length", headers))) {
+                // The caller knows the content length but we will send in chunks
+                req.setTransferEncoding(HttpTransferEncoding.STREAMED);
+            } else {
+                req.setTransferEncoding(HttpTransferEncoding.CHUNKED);
+            }
         }
-        req.setChunked(chunked);
+
+        // TODO!
         if (auth != null) {
             String encoded = new String(auth, Charsets.BASE64);
             req.setHeader("Authorization", "Basic " + encoded);
@@ -322,11 +327,10 @@ public class HttpClientRequest
 
         if (!headersSent) {
             // Netty won't let us put data in the orig message if it is also chunked
-            sendHeader(null, true, -1);
+            sendHeader(null, -1);
         }
-        sendData(buf, false);
-        // TODO use the future to determine this.
-        return true;
+        ChannelFuture future = sendData(buf, false);
+        return future.isDone();
     }
 
     @Override
@@ -347,38 +351,40 @@ public class HttpClientRequest
         if (headersSent) {
             sendData(buf, true);
         } else {
-            // One-shot send of headers and data without chunking
-            sendHeader(buf, false, buf == null ? 0 : buf.remaining());
+            // One-shot send of headers and data without chunking or streaming
+            sendHeader(buf, buf == null ? 0 : buf.remaining());
             headersSent = true;
         }
     }
 
-    private void sendHeader(ByteBuffer buf, boolean chunked, int contentLength)
+    private void sendHeader(ByteBuffer buf, int contentLength)
     {
         if (log.isDebugEnabled()) {
-            log.debug("Writing new HTTP message with content-length {} chunked = {} and data {}",
-                      new Object[] { contentLength, chunked, buf });
+            log.debug("Writing new HTTP message with content-length {} and data {}",
+                      new Object[] { contentLength, buf });
         }
-        HttpRequest req = buildRequest(chunked, contentLength);
+        HttpRequest req = buildRequest(contentLength);
         if (buf != null) {
-            req.setContent(ChannelBuffers.wrappedBuffer(buf));
+            req.setContent(Unpooled.wrappedBuffer(buf));
         }
         channel.write(req);
     }
 
-    private void sendData(ByteBuffer data, boolean last)
+    private ChannelFuture sendData(ByteBuffer data, boolean last)
     {
+        ChannelFuture future = null;
         if (log.isDebugEnabled()) {
             log.debug("Writing last HTTP chunk last = {} with data {}", last, data);
         }
         if (data != null) {
-            HttpChunk chunk = new DefaultHttpChunk(ChannelBuffers.wrappedBuffer(data));
-            channel.write(chunk);
+            HttpChunk chunk = new DefaultHttpChunk(Unpooled.wrappedBuffer(data));
+            future = channel.write(chunk);
         }
         if (last) {
             HttpChunkTrailer trailer = new DefaultHttpChunkTrailer();
-            channel.write(trailer);
+            future = channel.write(trailer);
         }
+        return future;
     }
 
     private void queueData(ByteBuffer buf)
@@ -390,39 +396,40 @@ public class HttpClientRequest
     }
 
     private final class Handler
-        extends SimpleChannelUpstreamHandler
+        extends ChannelInboundMessageHandlerAdapter<HttpObject>
     {
         private HttpClientResponse response;
 
         @Override
-        public void messageReceived(final ChannelHandlerContext ctx, final MessageEvent e)
+        public void messageReceived(final ChannelHandlerContext ctx, final HttpObject msg)
         {
-            log.debug("Message event: {}", e);
+            log.debug("Message event: {}", msg);
+
             runner.enqueueTask(new ScriptTask()
             {
                 @Override
                 public void execute(Context cx, Scriptable scope)
                 {
-                    if (e.getMessage() instanceof HttpResponse) {
-                        final HttpResponse msg = (HttpResponse)e.getMessage();
+                    if (msg instanceof HttpResponse) {
+                        final HttpResponse respMsg = (HttpResponse)msg;
                         response =
                             (HttpClientResponse)cx.newObject(HttpClientRequest.this,
                                                              HttpClientResponse.CLASS_NAME);
-                        response.initialize(msg, HttpClientRequest.this);
+                        response.initialize(respMsg, HttpClientRequest.this);
                         runner.enqueueEvent(HttpClientRequest.this, "response", new Object[]{response});
-                        if (msg.getContent() != ChannelBuffers.EMPTY_BUFFER) {
+                        if (respMsg.getContent() != Unpooled.EMPTY_BUFFER) {
                             runner.enqueueTask(new ScriptTask()
                             {
                                 @Override
                                 public void execute(Context cx, Scriptable scope)
                                 {
-                                    response.sendDataEvent(msg.getContent().toByteBuffer(),
+                                    response.sendDataEvent(respMsg.getContent(), false,
                                                            Context.getCurrentContext(),
                                                            response);
                                 }
                             });
                         }
-                        if (!msg.isChunked()) {
+                        if (respMsg.getTransferEncoding() == HttpTransferEncoding.SINGLE) {
                             runner.enqueueTask(new ScriptTask()
                             {
                                 @Override
@@ -433,27 +440,27 @@ public class HttpClientRequest
                             });
                         }
 
-                    } else if (e.getMessage() instanceof HttpChunk) {
-                        final HttpChunk chunk = (HttpChunk)e.getMessage();
+                    } else if (msg instanceof HttpChunk) {
+                        final HttpChunk chunk = (HttpChunk)msg;
                         if (response == null) {
                             log.debug("Ignoring chunk for unknown message");
                             return;
                         }
-                        if (chunk.getContent() != ChannelBuffers.EMPTY_BUFFER) {
+                        if (chunk.getContent() != Unpooled.EMPTY_BUFFER) {
                             runner.enqueueTask(new ScriptTask()
                             {
                                 @Override
                                 public void execute(Context cx, Scriptable scope)
                                 {
-                                    response.sendDataEvent(chunk.getContent().toByteBuffer(),
+                                    response.sendDataEvent(chunk.getContent(), false,
                                                            Context.getCurrentContext(),
                                                            response);
                                 }
                             });
                         }
                         if (chunk.isLast()) {
-                            if (e.getMessage() instanceof HttpChunkTrailer) {
-                                response.setTrailer((HttpChunkTrailer)e.getMessage());
+                            if (msg instanceof HttpChunkTrailer) {
+                                response.setTrailer((HttpChunkTrailer)msg);
                             }
                             runner.enqueueTask(new ScriptTask()
                             {

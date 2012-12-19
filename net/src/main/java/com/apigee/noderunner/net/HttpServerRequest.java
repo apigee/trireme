@@ -1,19 +1,15 @@
 package com.apigee.noderunner.net;
 
 import com.apigee.noderunner.core.ScriptTask;
-import com.apigee.noderunner.core.internal.Charsets;
 import com.apigee.noderunner.core.internal.ScriptRunner;
-import com.apigee.noderunner.core.modules.Buffer;
-import com.apigee.noderunner.core.modules.EventEmitter;
 import com.apigee.noderunner.core.modules.Stream;
-import org.jboss.netty.buffer.ChannelBuffer;
-import org.jboss.netty.buffer.ChannelBuffers;
-import org.jboss.netty.channel.Channel;
-import org.jboss.netty.handler.codec.http.HttpChunk;
-import org.jboss.netty.handler.codec.http.HttpChunkTrailer;
-import org.jboss.netty.handler.codec.http.HttpMessage;
-import org.jboss.netty.handler.codec.http.HttpRequest;
-import org.jboss.netty.handler.codec.http.HttpVersion;
+import io.netty.buffer.ByteBuf;
+import io.netty.buffer.Unpooled;
+import io.netty.channel.Channel;
+import io.netty.handler.codec.http.HttpChunkTrailer;
+import io.netty.handler.codec.http.HttpRequest;
+import io.netty.handler.codec.http.HttpTransferEncoding;
+import io.netty.handler.codec.http.HttpVersion;
 import org.mozilla.javascript.Context;
 import org.mozilla.javascript.Function;
 import org.mozilla.javascript.Scriptable;
@@ -24,10 +20,6 @@ import org.slf4j.LoggerFactory;
 
 import java.net.MalformedURLException;
 import java.net.URL;
-import java.nio.ByteBuffer;
-import java.nio.charset.Charset;
-import java.util.List;
-import java.util.Map;
 
 import static com.apigee.noderunner.core.internal.ArgUtils.*;
 
@@ -39,14 +31,15 @@ public class HttpServerRequest
 
     public static final String CLASS_NAME = "http.ServerRequest";
 
-    private NetSocket socket;
-    private ScriptRunner runner;
-    private HttpRequest request;
+    private NetSocket        socket;
+    private ScriptRunner     runner;
+    private HttpRequest      request;
     private HttpChunkTrailer trailers;
-    private String encoding;
+    private String           encoding;
 
     @Override
-    public String getClassName() {
+    public String getClassName()
+    {
         return CLASS_NAME;
     }
 
@@ -62,14 +55,14 @@ public class HttpServerRequest
         this.readable = true;
 
         HttpServerResponse resp =
-            (HttpServerResponse)cx.newObject(scope, HttpServerResponse.CLASS_NAME);
+            (HttpServerResponse) cx.newObject(scope, HttpServerResponse.CLASS_NAME);
         resp.initialize(channel, runner, req.getProtocolVersion(), calculateKeepAlive());
 
         runner.enqueueEvent(svr, "request", new Object[]{this, resp});
-        if (req.getContent() != ChannelBuffers.EMPTY_BUFFER) {
-            enqueueData(req.getContent().toByteBuffer(), cx, scope);
+        if (req.getContent() != Unpooled.EMPTY_BUFFER) {
+            enqueueData(req.getContent(), cx, scope);
         }
-        if (!req.isChunked()) {
+        if (req.getTransferEncoding() == HttpTransferEncoding.SINGLE) {
             enqueueEnd();
         }
         return resp;
@@ -102,14 +95,14 @@ public class HttpServerRequest
         return keepAlive;
     }
 
-    void enqueueData(final ByteBuffer data, final Context cx, final Scriptable scope)
+    void enqueueData(final ByteBuf data, final Context cx, final Scriptable scope)
     {
         runner.enqueueTask(new ScriptTask()
         {
             @Override
             public void execute(Context cx, Scriptable scope)
             {
-                sendDataEvent(data, cx, scope);
+                sendDataEvent(data, false, cx, scope);
             }
         });
     }

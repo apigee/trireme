@@ -4,6 +4,7 @@ import com.apigee.noderunner.core.NodeModule;
 import com.apigee.noderunner.core.internal.Charsets;
 import com.apigee.noderunner.core.internal.ScriptRunner;
 import com.apigee.noderunner.core.internal.Utils;
+import io.netty.buffer.ByteBuf;
 import org.mozilla.javascript.Context;
 import org.mozilla.javascript.EvaluatorException;
 import org.mozilla.javascript.Function;
@@ -252,12 +253,39 @@ public class Buffer
             this.parentModule = mod;
         }
 
-        public void initialize(ByteBuffer bb)
+        /**
+         * Read the bytes from the corresponding buffer into this one. If "copy" is true then
+         * make a new copy.
+         */
+        public void initialize(ByteBuffer bb, boolean copy)
         {
-            buf = new byte[bb.remaining()];
-            bb.get(buf);
-            bufOffset = 0;
-            bufLength = buf.length;
+            if (bb.hasArray() && !copy) {
+                buf = bb.array();
+                bufOffset = bb.arrayOffset() + bb.position();
+                bufLength = bb.remaining();
+            } else {
+                buf = new byte[bb.remaining()];
+                bb.get(buf);
+                bufOffset = 0;
+                bufLength = buf.length;
+            }
+        }
+
+        /**
+         * Copy the bytes from the corresponding buffer into this one. Netty kind of expects this.
+         */
+        public void initialize(ByteBuf bb, boolean copy)
+        {
+            if (bb.hasArray() && !copy) {
+                buf = bb.array();
+                bufOffset = bb.arrayOffset() + bb.readerIndex();
+                bufLength = bb.readableBytes();
+            } else {
+                buf = new byte[bb.readableBytes()];
+                bb.readBytes(buf);
+                bufOffset = 0;
+                bufLength = buf.length;
+            }
         }
 
         public ByteBuffer getBuffer()

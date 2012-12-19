@@ -32,6 +32,7 @@ var server = http.createServer(function(req, res) {
   assert.equal('POST', req.method);
 
   req.on('data', function(chunk) {
+    console.log('Got ' + chunk.length);
     bytesRecieved += chunk.length;
   });
 
@@ -68,6 +69,7 @@ server.on('listening', function() {
 });
 
 process.on('exit', function() {
+  console.log('n == ' + N + ' bytesReceived = ' + bytesRecieved);
   assert.equal(N, bytesRecieved);
   assert.equal(true, server_req_complete);
   assert.equal(true, client_res_complete);

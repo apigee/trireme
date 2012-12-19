@@ -1,26 +1,17 @@
 package com.apigee.noderunner.net;
 
 import com.apigee.noderunner.core.ScriptTask;
-import com.apigee.noderunner.core.internal.Charsets;
 import com.apigee.noderunner.core.internal.ScriptRunner;
-import com.apigee.noderunner.core.modules.Buffer;
-import com.apigee.noderunner.core.modules.EventEmitter;
 import com.apigee.noderunner.core.modules.Stream;
 import com.apigee.noderunner.net.netty.NettyFactory;
-import com.apigee.noderunner.net.Utils;
-import org.jboss.netty.buffer.ChannelBuffer;
-import org.jboss.netty.buffer.ChannelBuffers;
-import org.jboss.netty.channel.ChannelFuture;
-import org.jboss.netty.channel.ChannelFutureListener;
-import org.jboss.netty.channel.ChannelHandlerContext;
-import org.jboss.netty.channel.ChannelPipeline;
-import org.jboss.netty.channel.ChannelPipelineFactory;
-import org.jboss.netty.channel.ChannelStateEvent;
-import org.jboss.netty.channel.Channels;
-import org.jboss.netty.channel.ExceptionEvent;
-import org.jboss.netty.channel.MessageEvent;
-import org.jboss.netty.channel.SimpleChannelUpstreamHandler;
-import org.jboss.netty.channel.socket.SocketChannel;
+import io.netty.buffer.ByteBuf;
+import io.netty.buffer.Unpooled;
+import io.netty.channel.ChannelFuture;
+import io.netty.channel.ChannelFutureListener;
+import io.netty.channel.ChannelHandlerContext;
+import io.netty.channel.ChannelInboundByteHandlerAdapter;
+import io.netty.channel.ChannelInitializer;
+import io.netty.channel.socket.SocketChannel;
 import org.mozilla.javascript.Context;
 import org.mozilla.javascript.EvaluatorException;
 import org.mozilla.javascript.Function;
@@ -32,7 +23,6 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.nio.ByteBuffer;
-import java.nio.charset.Charset;
 
 import static com.apigee.noderunner.core.internal.ArgUtils.*;
 
@@ -49,14 +39,15 @@ public class NetSocket
 
     private SocketChannel channel;
     private boolean allowHalfOpen = true;
-    private String localAddress;
+    private String       localAddress;
     private ScriptRunner runner;
-    private boolean referenced;
-    private long bytesRead;
-    private long bytesWritten;
+    private boolean      referenced;
+    private long         bytesRead;
+    private long         bytesWritten;
 
     @Override
-    public String getClassName() {
+    public String getClassName()
+    {
         return CLASS_NAME;
     }
 
@@ -84,11 +75,12 @@ public class NetSocket
             register("connect", listener, false);
         }
         ChannelFuture future =
-            NettyFactory.get().connect(port, host, localAddress, new ChannelPipelineFactory()
+            NettyFactory.get().connect(port, host, localAddress, new ChannelInitializer<SocketChannel>()
             {
                 @Override
-                public ChannelPipeline getPipeline() {
-                    return Channels.pipeline(new Handler());
+                public void initChannel(SocketChannel c)
+                {
+                    c.pipeline().addLast(new Handler(NetSocket.this));
                 }
             });
         future.addListener(new ChannelFutureListener()
@@ -97,12 +89,12 @@ public class NetSocket
             public void operationComplete(ChannelFuture f)
             {
                 if (f.isSuccess()) {
-                    channel = (SocketChannel)f.getChannel();
+                    channel = (SocketChannel)f.channel();
                     initChannel();
                     NetSocket.this.runner.enqueueEvent(NetSocket.this, "connect", null);
                 } else {
                     NetSocket.this.runner.enqueueEvent(NetSocket.this, "error",
-                                                       new Object[] { NetServer.makeError(f.getCause(), "connect error",
+                                                       new Object[] { NetServer.makeError(f.cause(), "connect error",
                                                                            Context.getCurrentContext(),
                                                                            NetSocket.this) });
                 }
@@ -112,18 +104,33 @@ public class NetSocket
 
     private void initChannel()
     {
-        channel.setAttachment(this);
         // This is the default according to the docs
-        channel.getConfig().setTcpNoDelay(true);
+        channel.config().setTcpNoDelay(true);
     }
 
     @JSConstructor
     public static Object newSocket(Context cx, Object[] args, Function func, boolean isNew)
     {
+        boolean allowHalfOpen = true;
         if (args.length > 0) {
-            throw new EvaluatorException("Not supported");
+            Scriptable opts = (Scriptable)args[0];
+            if (opts.has("fd", opts) && (opts.get("fd", opts) != null)) {
+                throw new EvaluatorException("Unsupported parameter: \"fd\"");
+            }
+            if (opts.has("type", opts)) {
+                String type = (String)opts.get("type", opts);
+                if (!"tcp4".equals(type) && !"tcp6".equals(type)) {
+                    throw new EvaluatorException("Unsupported socket type \"" + type + '\"');
+                }
+            }
+            if (opts.has("allowHalfOpen", opts)) {
+                Object aho = opts.get("allowHalfOpen", opts);
+                allowHalfOpen = (Boolean)Context.jsToJava(aho, Boolean.class);
+            }
         }
-        return new NetSocket();
+        NetSocket ret = new NetSocket();
+        ret.allowHalfOpen = allowHalfOpen;
+        return ret;
     }
 
     @JSFunction
@@ -160,7 +167,6 @@ public class NetSocket
     protected boolean write(Context cx, Object[] args)
     {
         ensureArg(args, 0);
-        ChannelBuffer buf;
         Function callback = null;
 
         ByteBuffer writeBBuf = getWriteData(args);
@@ -172,7 +178,7 @@ public class NetSocket
         }
 
         bytesWritten += writeBBuf.remaining();
-        ChannelFuture future = channel.write(ChannelBuffers.wrappedBuffer(writeBBuf));
+        ChannelFuture future = channel.write(Unpooled.wrappedBuffer(writeBBuf));
 
         if (callback != null) {
             final Function cb = callback;
@@ -186,29 +192,20 @@ public class NetSocket
                 }
             });
         }
-        // TODO In Netty, do we know whether it happened "now"?
-        return true;
+        return future.isDone();
     }
 
-    public void sendData(ChannelBuffer data, Context cx, Scriptable scope)
+    public void sendData(ByteBuffer data, Context cx, Scriptable scope)
     {
-        bytesRead += data.readableBytes();
-        sendDataEvent(data.toByteBuffer(), cx, scope);
+        bytesRead += data.remaining();
+        sendDataEvent(data, false, cx, scope);
     }
 
     @Override
     protected void doEnd(Context cx)
     {
-        ChannelFuture disconnect = channel.disconnect();
-        disconnect.addListener(new ChannelFutureListener()
-        {
-            @Override
-            public void operationComplete(ChannelFuture channelFuture)
-            {
-                channel.close();
-                setWritable(false);
-            }
-        });
+        channel.shutdownOutput();
+        setWritable(false);
     }
 
     @Override
@@ -222,13 +219,13 @@ public class NetSocket
     @Override
     public void pause()
     {
-        channel.setReadable(false);
+        // TODO
     }
 
     @Override
     public void resume()
     {
-        channel.setReadable(true);
+        // TODO
     }
 
     @JSFunction
@@ -242,7 +239,7 @@ public class NetSocket
     {
         boolean noDelay = booleanArg(args, 0, true);
         NetSocket sock = (NetSocket)thisObj;
-        sock.channel.getConfig().setTcpNoDelay(noDelay);
+        sock.channel.config().setTcpNoDelay(noDelay);
     }
 
     @JSFunction
@@ -250,14 +247,14 @@ public class NetSocket
     {
         boolean keepAlive = booleanArg(args, 0, false);
         NetSocket sock = (NetSocket)thisObj;
-        sock.channel.getConfig().setKeepAlive(keepAlive);
+        sock.channel.config().setKeepAlive(keepAlive);
     }
 
     @JSFunction
     public static Object address(Context cx, Scriptable thisObj, Object[] args, Function func)
     {
         NetSocket sock = (NetSocket)thisObj;
-        return Utils.formatAddress(sock.channel.getLocalAddress(), cx, thisObj);
+        return Utils.formatAddress(sock.channel.localAddress(), cx, thisObj);
     }
 
     @JSFunction
@@ -281,13 +278,13 @@ public class NetSocket
     @JSGetter("remoteaddress")
     public String getRemoteAddress()
     {
-        return channel.getRemoteAddress().getAddress().getHostAddress();
+        return channel.remoteAddress().getAddress().getHostAddress();
     }
 
     @JSGetter("remotePort")
     public int getRemotePort()
     {
-        return channel.getRemoteAddress().getPort();
+        return channel.remoteAddress().getPort();
     }
 
     @JSGetter("bytesRead")
@@ -305,95 +302,76 @@ public class NetSocket
     // Writeable stream
 
     @JSFunction
+    @Override
     public void destroySoon()
     {
         throw new EvaluatorException("Not implemented");
     }
 
     private final class Handler
-        extends SimpleChannelUpstreamHandler
+        extends ChannelInboundByteHandlerAdapter
     {
-        @Override
-        public void channelDisconnected(final ChannelHandlerContext ctx, final ChannelStateEvent e)
+        private NetSocket socket;
+
+        Handler(NetSocket sock)
         {
-            log.debug("Socket disconnected: {}", e);
-            if (!allowHalfOpen) {
-                ctx.getChannel().close();
-            }
+            this.socket = sock;
+        }
+
+        @Override
+        public void channelUnregistered(final ChannelHandlerContext ctx)
+        {
+            log.debug("Socket disconnected: {}", ctx);
+
             runner.enqueueTask(new ScriptTask()
             {
                 @Override
                 public void execute(Context cx, Scriptable scope)
                 {
-                    NetSocket sock = (NetSocket)ctx.getChannel().getAttachment();
-                    if (sock == null) {
-                        log.debug("Rejecting callback that arrived before attachment was set");
-                        return;
-                    }
-                    sock.setReadable(false);
-                    sock.setWritable(false);
-                    sock.fireEvent("end");
+                    socket.setReadable(false);
+                    socket.setWritable(false);
+                    socket.fireEvent("end");
+                    // TODO do we handle "end" and "close" separately?
+                    socket.fireEvent("close");
                 }
             });
         }
 
         @Override
-        public void channelClosed(final ChannelHandlerContext ctx, final ChannelStateEvent e)
+        public void inboundBufferUpdated(final ChannelHandlerContext ctx, final ByteBuf buf)
         {
-            log.debug("Channel closed: {}", e);
-                        runner.enqueueTask(new ScriptTask()
-            {
-                @Override
-                public void execute(Context cx, Scriptable scope)
-                {
-                    NetSocket sock = (NetSocket)ctx.getChannel().getAttachment();
-                    if (sock == null) {
-                        log.debug("Rejecting callback that arrived before attachment was set");
-                        return;
-                    }
-                    sock.fireEvent("close", false);
-                }
-            });
-        }
+            log.debug("Buffer update: {}", buf);
+            // In Netty 4, we need to make a copy in this thread, then pass it on.
+            // It'd be great to do the string conversion right here if necessary,
+            // but the JS code runs in another thread and may set "encoding" at any time so we can't.
 
-        @Override
-        public void messageReceived(final ChannelHandlerContext ctx, final MessageEvent e)
-        {
-            log.debug("Message event: {}", e);
+            final ByteBuffer bufCopy = ByteBuffer.allocate(buf.readableBytes());
+            buf.readBytes(bufCopy);
+            bufCopy.flip();
+
             runner.enqueueTask(new ScriptTask()
             {
                 @Override
                 public void execute(Context cx, Scriptable scope)
                 {
-                    NetSocket sock = (NetSocket)ctx.getChannel().getAttachment();
-                    if (sock == null) {
-                        log.debug("Rejecting callback that arrived before attachment was set");
-                        return;
-                    }
-
-                    ChannelBuffer data = (ChannelBuffer)e.getMessage();
-                    sock.sendData(data, cx, scope);
+                    socket.sendData(bufCopy, cx, scope);
                 }
             });
         }
 
         @Override
-        public void exceptionCaught(final ChannelHandlerContext ctx, final ExceptionEvent ee)
+        public void exceptionCaught(final ChannelHandlerContext ctx, final Throwable t)
         {
-            log.debug("Exception event: {}", ee);
+            log.debug("Exception event: {}", t);
+
             runner.enqueueTask(new ScriptTask()
             {
                 @Override
                 public void execute(Context cx, Scriptable scope)
                 {
-                    NetSocket sock = (NetSocket)ctx.getChannel().getAttachment();
-                    if (sock == null) {
-                        log.debug("Rejecting callback that arrived before attachment was set");
-                        return;
-                    }
-                    runner.enqueueEvent(sock, "error",
-                                        new Object[] {  NetServer.makeError(ee.getCause(), "error",
-                                                        cx, scope) });
+                    socket.fireEvent("error",
+                                     new Object[]{NetServer.makeError(t, "error",
+                                                                      cx, scope)});
                 }
             });
         }

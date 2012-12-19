@@ -1,9 +1,8 @@
 package com.apigee.noderunner.net;
 
-import org.jboss.netty.handler.codec.http.HttpMessage;
+import io.netty.handler.codec.http.HttpMessage;
 import org.mozilla.javascript.Context;
 import org.mozilla.javascript.Scriptable;
-import sun.org.mozilla.javascript.internal.ScriptableObject;
 
 import java.net.Inet6Address;
 import java.net.InetSocketAddress;

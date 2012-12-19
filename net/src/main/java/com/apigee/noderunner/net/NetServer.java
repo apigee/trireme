@@ -5,17 +5,12 @@ import com.apigee.noderunner.core.internal.ScriptRunner;
 import com.apigee.noderunner.core.modules.EventEmitter;
 import com.apigee.noderunner.net.netty.NettyFactory;
 import com.apigee.noderunner.net.netty.NettyServer;
-import com.apigee.noderunner.net.Utils;
-import org.jboss.netty.buffer.ChannelBuffer;
-import org.jboss.netty.channel.ChannelException;
-import org.jboss.netty.channel.ChannelHandlerContext;
-import org.jboss.netty.channel.ChannelPipeline;
-import org.jboss.netty.channel.ChannelPipelineFactory;
-import org.jboss.netty.channel.ChannelStateEvent;
-import org.jboss.netty.channel.Channels;
-import org.jboss.netty.channel.MessageEvent;
-import org.jboss.netty.channel.SimpleChannelUpstreamHandler;
-import org.jboss.netty.channel.socket.SocketChannel;
+import io.netty.buffer.ByteBuf;
+import io.netty.channel.ChannelException;
+import io.netty.channel.ChannelHandlerContext;
+import io.netty.channel.ChannelInboundByteHandlerAdapter;
+import io.netty.channel.ChannelInitializer;
+import io.netty.channel.socket.SocketChannel;
 import org.mozilla.javascript.Context;
 import org.mozilla.javascript.Function;
 import org.mozilla.javascript.Scriptable;
@@ -24,6 +19,8 @@ import org.mozilla.javascript.annotations.JSGetter;
 import org.mozilla.javascript.annotations.JSSetter;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
+import java.nio.ByteBuffer;
 
 import static com.apigee.noderunner.core.internal.ArgUtils.*;
 
@@ -44,6 +41,8 @@ public class NetServer
     private ScriptRunner runner;
     private NettyServer server;
     private boolean referenced;
+    private boolean closed;
+    private boolean destroyed;
 
     private int connections;
     private int maxConnections = -1;
@@ -116,14 +115,14 @@ public class NetServer
         svr.runner.enqueueEvent(svr, "listening", null);
     }
 
-    private ChannelPipelineFactory makePipeline()
+    private ChannelInitializer<SocketChannel> makePipeline()
     {
-        return new ChannelPipelineFactory()
+        return new ChannelInitializer<SocketChannel>()
         {
             @Override
-            public ChannelPipeline getPipeline()
+            public void initChannel(SocketChannel c)
             {
-                return Channels.pipeline(new Handler());
+                c.pipeline().addLast(new Handler());
             }
         };
     }
@@ -137,14 +136,25 @@ public class NetServer
         }
 
         NetServer svr = (NetServer)thisObj;
-        svr.unref();
-        if (svr.server != null) {
-            svr.server.close();
-        }
         if (callback != null) {
             svr.register("close", callback, false);
         }
-        svr.runner.enqueueEvent(svr, "close", null);
+
+        log.debug("Suspending incoming server connections");
+        svr.closed = true;
+        svr.server.suspend();
+        if (svr.connections <= 0) {
+            svr.completeClose();
+        }
+    }
+
+    protected void completeClose()
+    {
+        log.debug("Server closing completely");
+        server.close();
+        runner.enqueueEvent(this, "close", null);
+        unref();
+        destroyed = true;
     }
 
     @JSFunction
@@ -188,77 +198,73 @@ public class NetServer
     }
 
     private class Handler
-        extends SimpleChannelUpstreamHandler
+        extends ChannelInboundByteHandlerAdapter
     {
-        @Override
-        public void channelConnected(final ChannelHandlerContext ctx, final ChannelStateEvent e)
-        {
-            log.debug("Channel connected: {}", e);
+        private NetSocket socket;
+        private boolean rejected;
 
+        @Override
+        public void channelRegistered(final ChannelHandlerContext ctx)
+        {
+            log.debug("Channel registered: {}", ctx);
 
             runner.enqueueTask(new ScriptTask()
             {
                 @Override
                 public void execute(Context cx, Scriptable scope)
                 {
-                    NetSocket sock = (NetSocket)cx.newObject(scope, NetSocket.CLASS_NAME);
-
                     if ((maxConnections >= 0) && (connections >= maxConnections)) {
                         log.debug("Rejecting connection count beyond the max");
-                        ctx.getChannel().close();
+                        rejected = true;
+                        ctx.channel().close();
                         return;
                     }
                     connections++;
-
-                    sock.initialize((SocketChannel)ctx.getChannel(), runner);
-                    NetServer.this.fireEvent("connection", sock);
+                    socket = (NetSocket) cx.newObject(scope, NetSocket.CLASS_NAME);
+                    socket.initialize((SocketChannel) ctx.channel(), runner);
+                    NetServer.this.fireEvent("connection", socket);
                 }
             });
         }
 
         @Override
-        public void channelDisconnected(final ChannelHandlerContext ctx, final ChannelStateEvent e)
+        public void channelUnregistered(final ChannelHandlerContext ctx)
         {
-            log.debug("Channel disconnected: {}", e);
-            if (!allowHalfOpen) {
-                ctx.getChannel().close();
-            }
+            log.debug("Channel unregistered: {}", ctx);
+
             runner.enqueueTask(new ScriptTask()
             {
                 @Override
                 public void execute(Context cx, Scriptable scope)
                 {
-                    NetSocket sock = (NetSocket)ctx.getChannel().getAttachment();
-                    if (sock == null) {
-                        log.debug("Rejecting callback that arrived before attachment was set");
-                        return;
+                    if (!rejected) {
+                        connections--;
+                        socket.setReadable(false);
+                        socket.setWritable(false);
+                        socket.fireEvent("end");
                     }
-
-                    connections--;
-                    sock.setReadable(false);
-                    sock.setWritable(false);
-                    sock.fireEvent("end");
+                    if (closed && !destroyed && (connections <= 0)) {
+                        log.debug("Last socket closed -- completing shutdown");
+                        completeClose();
+                    }
                 }
             });
         }
 
         @Override
-        public void messageReceived(final ChannelHandlerContext ctx, final MessageEvent e)
+        public void inboundBufferUpdated(final ChannelHandlerContext ctx, final ByteBuf in)
         {
-            log.debug("Message event: {}", e);
+            log.debug("Bytes updated{} ", in);
+
+            final ByteBuffer bufCopy = ByteBuffer.allocate(in.readableBytes());
+            in.readBytes(bufCopy);
+            bufCopy.flip();
             runner.enqueueTask(new ScriptTask()
             {
                 @Override
                 public void execute(Context cx, Scriptable scope)
                 {
-                    NetSocket sock = (NetSocket)ctx.getChannel().getAttachment();
-                    if (sock == null) {
-                        log.debug("Rejecting callback that arrived before attachment was set");
-                        return;
-                    }
-
-                    ChannelBuffer data = (ChannelBuffer)e.getMessage();
-                    sock.sendData(data, cx, scope);
+                    socket.sendData(bufCopy, cx, scope);
                 }
             });
         }

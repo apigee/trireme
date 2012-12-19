@@ -4,6 +4,7 @@ import com.apigee.noderunner.core.NodeModule;
 import com.apigee.noderunner.core.internal.Charsets;
 import com.apigee.noderunner.core.internal.ScriptRunner;
 import com.apigee.noderunner.core.internal.Utils;
+import io.netty.buffer.ByteBuf;
 import org.mozilla.javascript.Context;
 import org.mozilla.javascript.EvaluatorException;
 import org.mozilla.javascript.Function;
@@ -54,17 +55,31 @@ public class Stream
             return CLASS_NAME;
         }
 
-        public void sendDataEvent(ByteBuffer buf, Context cx, Scriptable scope)
+        public void sendDataEvent(ByteBuffer buf, boolean copy, Context cx, Scriptable scope)
         {
             log.debug("Got {}", buf);
             if (encoding == null) {
                 Buffer.BufferImpl jsBuf =
                     (Buffer.BufferImpl)cx.newObject(scope, Buffer.BUFFER_CLASS_NAME);
-                jsBuf.initialize(buf);
+                jsBuf.initialize(buf, copy);
                 fireEvent("data", jsBuf);
 
             } else {
                 fireEvent("data", Utils.bufferToString(buf, encoding));
+            }
+        }
+
+        public void sendDataEvent(ByteBuf buf, boolean copy, Context cx, Scriptable scope)
+        {
+            log.debug("Got {}", buf);
+            if (encoding == null) {
+                Buffer.BufferImpl jsBuf =
+                    (Buffer.BufferImpl)cx.newObject(scope, Buffer.BUFFER_CLASS_NAME);
+                jsBuf.initialize(buf, copy);
+                fireEvent("data", jsBuf);
+
+            } else {
+                fireEvent("data", buf.toString(encoding));
             }
         }
 
@@ -177,13 +192,14 @@ public class Stream
         {
             ensureArg(args, 0);
             if (args[0] instanceof String) {
-                String encoding = stringArg(args, 1, Charsets.DEFAULT_ENCODING);
-                if ((args.length >= 2) && (args[1] instanceof String)) {
+                String encoding = Charsets.DEFAULT_ENCODING;
+                if ((args.length >= 2) && (args[1] instanceof String) &&
+                    (!(args[1] instanceof Function))) {
                     encoding = (String)args[1];
                 }
                 Charset cs = Charsets.get().getCharset(encoding);
                 if (cs == null) {
-                    throw new EvaluatorException("Invalid charset");
+                    throw new EvaluatorException("Invalid charset \"" + encoding + '\"');
                 }
                return Utils.stringToBuffer((String)args[0], cs);
 

@@ -9,4 +9,10 @@ export CLASSPATH
 rm ${CP}
 
 cd src/test/python
-python test.py
+
+if [ $# -eq 0 ]
+then
+  python test.py simple
+else
+  python test.py $*
+fi

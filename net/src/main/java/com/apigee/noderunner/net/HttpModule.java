@@ -29,10 +29,7 @@ public class HttpModule
     @Override
     public Object registerExports(Context cx, Scriptable scope, ScriptRunner runner) throws InvocationTargetException, IllegalAccessException, InstantiationException
     {
-        // TODO a better Java dependency mechanism?
-        if (!runner.getModuleCache().containsKey("net")) {
-            runner.registerModule("net", cx, scope);
-        }
+        runner.require("net", cx, scope);
 
         ScriptableObject.defineClass(scope, HttpImpl.class);
         ScriptableObject.defineClass(scope, HttpServer.class, false, true);

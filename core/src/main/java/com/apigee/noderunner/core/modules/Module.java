@@ -1,26 +1,23 @@
 package com.apigee.noderunner.core.modules;
 
-import com.apigee.noderunner.core.NodeEnvironment;
-import com.apigee.noderunner.core.NodeException;
 import com.apigee.noderunner.core.NodeModule;
-import com.apigee.noderunner.core.internal.ModuleRegistry;
 import com.apigee.noderunner.core.internal.ScriptRunner;
 import com.apigee.noderunner.core.internal.Utils;
 import org.mozilla.javascript.Context;
 import org.mozilla.javascript.EvaluatorException;
 import org.mozilla.javascript.Function;
 import org.mozilla.javascript.FunctionObject;
-import org.mozilla.javascript.RhinoException;
 import org.mozilla.javascript.Scriptable;
 import org.mozilla.javascript.ScriptableObject;
 import org.mozilla.javascript.WrappedException;
 import org.mozilla.javascript.annotations.JSFunction;
 import org.mozilla.javascript.annotations.JSGetter;
 import org.mozilla.javascript.annotations.JSSetter;
-import org.mozilla.javascript.annotations.JSStaticFunction;
 import org.mozilla.javascript.json.JsonParser;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
+import static com.apigee.noderunner.core.internal.ArgUtils.*;
 
 import java.io.File;
 import java.io.FileInputStream;
@@ -29,7 +26,6 @@ import java.io.InputStreamReader;
 import java.io.Reader;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
-import java.util.HashMap;
 
 /**
  * An implementation of the "module" package from node.js 0.8.15.
@@ -118,11 +114,7 @@ public class Module
         @JSFunction
         public static Object require(Context cx, Scriptable thisObj, Object[] args, Function func)
         {
-            // TODO caching of loaded modules!
-            if (args.length != 1) {
-                throw new EvaluatorException("Invalid arguments to 'require'");
-            }
-            String name = (String)Context.jsToJava(args[0], String.class);
+            String name = stringArg(args, 0);
             ModuleImpl mod = (ModuleImpl)thisObj;
             if (log.isDebugEnabled()) {
                 log.debug("require({})...", name);
@@ -166,14 +158,12 @@ public class Module
             newMod.setParent(mod);
             newMod.setId(name);
             newMod.setParentScope(mod.parentScope);
-            Scriptable firstExports = newMod.bindVariables(cx, newScope, newMod);
 
             File modFile = null;
             String resourceMod = mod.runner.getEnvironment().getRegistry().getResource(name);
             String cacheKey = resourceMod;
             if (resourceMod == null) {
                 // Else, search for the file
-                // TODO node_modules
                 try {
                     File search = (mod.file == null) ? new File(".") : mod.file.getParentFile();
                     modFile = locateFile(name, search, cx, mod.parentScope, false);
@@ -203,6 +193,9 @@ public class Module
                 return cached;
             }
 
+            // Set globals that actually act at module scope
+            Scriptable firstExports = newMod.bindVariables(cx, newScope, newMod);
+
             // Register exports temporarily to prevent cycles
             mod.runner.getModuleCache().put(cacheKey, firstExports);
 
@@ -211,8 +204,15 @@ public class Module
                           System.identityHashCode(newScope),
                           System.identityHashCode(newScope.get("exports", newScope)));
             }
+
             if (resourceMod == null) {
                 log.debug("Executing {}", modFile.getPath());
+                newScope.put("__filename", newScope, modFile.getAbsolutePath());
+                if (modFile.getParent() == null) {
+                    newScope.put("__dirname", newScope, new File(".").getAbsolutePath());
+                } else {
+                    newScope.put("__dirname", newScope, modFile.getParentFile().getAbsolutePath());
+                }
                 newMod.setFile(modFile);
                 evaluateFile(cx, newScope, modFile, name);
             } else {

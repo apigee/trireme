@@ -288,6 +288,13 @@ public class Buffer
             }
         }
 
+        public void initialize(byte[] buf)
+        {
+            this.buf = buf;
+            bufOffset = 0;
+            bufLength = buf.length;
+        }
+
         public ByteBuffer getBuffer()
         {
             return ByteBuffer.wrap(buf, bufOffset, bufLength);

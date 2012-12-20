@@ -4,25 +4,20 @@ import com.apigee.noderunner.core.NodeModule;
 import com.apigee.noderunner.core.internal.Charsets;
 import com.apigee.noderunner.core.internal.NodeExitException;
 import com.apigee.noderunner.core.internal.ScriptRunner;
-import com.apigee.noderunner.core.internal.Utils;
 import org.mozilla.javascript.Context;
 import org.mozilla.javascript.Function;
-import org.mozilla.javascript.FunctionObject;
 import org.mozilla.javascript.Scriptable;
 import org.mozilla.javascript.ScriptableObject;
 import org.mozilla.javascript.WrappedException;
 import org.mozilla.javascript.annotations.JSConstructor;
 import org.mozilla.javascript.annotations.JSFunction;
 import org.mozilla.javascript.annotations.JSGetter;
-import org.mozilla.javascript.annotations.JSSetter;
 
 import static com.apigee.noderunner.core.internal.ArgUtils.*;
 
-import javax.swing.plaf.basic.BasicInternalFrameTitlePane;
 import java.io.IOException;
 import java.io.OutputStream;
 import java.lang.reflect.InvocationTargetException;
-import java.lang.reflect.Method;
 import java.nio.charset.Charset;
 import java.util.Map;
 
@@ -32,12 +27,10 @@ import java.util.Map;
 public class Process
     implements NodeModule
 {
-    // TODO
     public static final String NODERUNNER_VERSION = "0.1";
 
     protected final static String CLASS_NAME = "_processClass";
     protected final static String OBJECT_NAME = "process";
-    protected static final String ENV_GETTER_CLASS_NAME = "_processEnvGetter";
 
     private static final long NANO = 1000000000L;
 
@@ -51,7 +44,6 @@ public class Process
         throws InvocationTargetException, IllegalAccessException, InstantiationException
     {
         ScriptableObject.defineClass(scope, ProcessImpl.class, false, true);
-        ScriptableObject.defineClass(scope, EnvGetter.class);
         ProcessImpl exports = (ProcessImpl)cx.newObject(scope, CLASS_NAME);
 
         ScriptableObject.defineClass(scope, SimpleOutputStreamImpl.class);
@@ -154,10 +146,24 @@ public class Process
         // TODO getuid
         // TODO setuid
 
+        @JSGetter("config")
+        public static Scriptable getConfig(Scriptable scope)
+        {
+            Scriptable c = Context.getCurrentContext().newObject(scope);
+            Scriptable vars = Context.getCurrentContext().newObject(scope);
+            // TODO fill it in
+            c.put("variables", c, vars);
+            return c;
+        }
+
         @JSGetter("env")
         public static Scriptable getEnv(Scriptable scope)
         {
-            return Context.getCurrentContext().newObject(scope, ENV_GETTER_CLASS_NAME);
+            Scriptable env = Context.getCurrentContext().newObject(scope);
+            for (Map.Entry<String, String> ee : System.getenv().entrySet()) {
+                env.put(ee.getKey(), env, ee.getValue());
+            }
+            return env;
         }
 
         @JSGetter("version")
@@ -174,10 +180,14 @@ public class Process
             return env;
         }
 
-        // TODO config
+        @JSGetter("title")
+        public String getTitle()
+        {
+            return "noderunner";
+        }
+
         // TODO kill
         // TODO pid
-        // TODO title
         // TODO arch
         // TODO umask
 
@@ -201,7 +211,7 @@ public class Process
         {
             ensureArg(args, 0);
             ProcessImpl proc = (ProcessImpl)thisObj;
-            proc.runner.enqueueCallback((Function)args[0], thisObj, null);
+            proc.runner.enqueueCallback((Function)args[0], (Function)args[0], thisObj, null);
         }
 
         @JSFunction
@@ -275,22 +285,6 @@ public class Process
         @JSGetter("writable")
         public boolean isWriteable() {
             return true;
-        }
-    }
-
-    public static class EnvGetter
-        extends ScriptableObject
-    {
-
-        @Override
-        public String getClassName() {
-            return ENV_GETTER_CLASS_NAME;
-        }
-
-        @Override
-        public Object get(String index, Scriptable scope)
-        {
-            return System.getenv(index);
         }
     }
 }

@@ -9,28 +9,20 @@ import com.apigee.noderunner.core.modules.EventEmitter;
 import com.apigee.noderunner.core.modules.Module;
 import com.apigee.noderunner.core.modules.Process;
 import com.apigee.noderunner.core.modules.Timers;
-import com.sun.servicetag.SystemEnvironment;
 import org.mozilla.javascript.Context;
 import org.mozilla.javascript.Function;
-import org.mozilla.javascript.FunctionObject;
-import org.mozilla.javascript.JavaScriptException;
 import org.mozilla.javascript.RhinoException;
 import org.mozilla.javascript.Scriptable;
-import org.mozilla.javascript.ScriptableObject;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import sun.awt.TimedWindowEvent;
 
+import java.io.BufferedReader;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.IOException;
-import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.io.Reader;
 import java.lang.reflect.InvocationTargetException;
-import java.lang.reflect.Method;
-import java.util.ArrayDeque;
-import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.PriorityQueue;
@@ -94,9 +86,9 @@ public class ScriptRunner
         return moduleCache;
     }
 
-    public void enqueueCallback(Function f, Scriptable scope, Object[] args)
+    public void enqueueCallback(Function f, Scriptable scope, Scriptable thisObj, Object[] args)
     {
-        tickFunctions.offer(new Callback(f, scope, args));
+        tickFunctions.offer(new Callback(f, scope, thisObj, args));
     }
 
     public void enqueueEvent(EventEmitter.EventEmitterImpl emitter,
@@ -179,7 +171,15 @@ public class ScriptRunner
                     log.debug("Evaluating {} from {}", scriptName, scriptFile);
                     FileInputStream fis = new FileInputStream(scriptFile);
                     try {
-                        InputStreamReader rdr = new InputStreamReader(fis, Utils.UTF8);
+                        // Handle scripts that start with "#!"
+                        BufferedReader rdr =
+                            new BufferedReader(new InputStreamReader(fis, Utils.UTF8));
+                        rdr.mark(2048);
+                        String firstLine = rdr.readLine();
+                        if ((firstLine == null) || !firstLine.startsWith("#!")) {
+                            // Not a weird script -- rewind and read again
+                            rdr.reset();
+                        }
                         cx.evaluateReader(scope, rdr, scriptName, 1, null);
                     } finally {
                         fis.close();
@@ -327,7 +327,11 @@ public class ScriptRunner
                 scope.put("__dirname", scope, new File(".").getAbsolutePath());
             } else {
                 scope.put("__filename", scope, scriptFile.getAbsolutePath());
-                scope.put("__dirname", scope, scriptFile.getParentFile().getAbsolutePath());
+                if (scriptFile.getParentFile() == null) {
+                    scope.put("__dirname", scope, new File(".").getAbsolutePath());
+                } else {
+                    scope.put("__dirname", scope, scriptFile.getParentFile().getAbsolutePath());
+                }
             }
             // All modules share one "global" object that has, well, global stuff
             scope.put("global", scope, scope);
@@ -357,6 +361,19 @@ public class ScriptRunner
         }
         moduleCache.put(modName, exp);
         return exp;
+    }
+
+    /**
+     * This is used internally when one native module depends on another.
+     */
+    public Object require(String modName, Context cx, Scriptable scope)
+        throws InvocationTargetException, InstantiationException, IllegalAccessException
+    {
+        Object exports = moduleCache.get(modName);
+        if (exports == null) {
+            exports = registerModule(modName, cx, scope);
+        }
+        return exports;
     }
 
     private static final class Timed
@@ -403,18 +420,20 @@ public class ScriptRunner
     {
         Function function;
         Scriptable scope;
+        Scriptable thisObj;
         Object[] args;
 
-        Callback(Function f, Scriptable s, Object[] args)
+        Callback(Function f, Scriptable s, Scriptable thisObj, Object[] args)
         {
             this.function = f;
             this.scope = s;
+            this.thisObj = thisObj;
             this.args = args;
         }
 
         void execute(Context cx)
         {
-            function.call(cx, scope, null, args);
+            function.call(cx, scope, thisObj, args);
         }
     }
 

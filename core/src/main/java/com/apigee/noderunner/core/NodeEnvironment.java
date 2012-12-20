@@ -6,6 +6,11 @@ import org.mozilla.javascript.RhinoException;
 import org.mozilla.javascript.ScriptableObject;
 
 import java.io.File;
+import java.util.concurrent.ArrayBlockingQueue;
+import java.util.concurrent.Executor;
+import java.util.concurrent.ThreadFactory;
+import java.util.concurrent.ThreadPoolExecutor;
+import java.util.concurrent.TimeUnit;
 
 /**
  * This class is the root of all script processing. Typically it will be created once per process
@@ -14,10 +19,24 @@ import java.io.File;
  */
 public class NodeEnvironment
 {
-    private boolean initialized;
-    private boolean noExit;
+    public static final int CORE_POOL_SIZE = 1;
+    public static final int MAX_POOL_SIZE = 50;
+    public static final int POOL_QUEUE_SIZE = 8;
+    public static final int POOL_TIMEOUT_SECS = 60;
+
+    private boolean          initialized;
+    private boolean          noExit;
     private ScriptableObject rootScope;
-    private ModuleRegistry registry;
+    private ModuleRegistry   registry;
+    private Executor         asyncPool;
+
+    public NodeEnvironment()
+    {
+        asyncPool = new ThreadPoolExecutor(CORE_POOL_SIZE, MAX_POOL_SIZE, POOL_TIMEOUT_SECS, TimeUnit.SECONDS,
+                                           new ArrayBlockingQueue<Runnable>(POOL_QUEUE_SIZE),
+                                           new PoolNameFactory(),
+                                           new ThreadPoolExecutor.AbortPolicy());
+    }
 
     /**
      * Create an instance of a script attached to this environment. Any "setters" that you wish to change
@@ -53,6 +72,10 @@ public class NodeEnvironment
         return noExit;
     }
 
+    public Executor getAsyncPool() {
+        return asyncPool;
+    }
+
     private synchronized void initialize()
         throws NodeException
     {
@@ -72,5 +95,17 @@ public class NodeEnvironment
         }
 
         initialized = true;
+    }
+
+    private static final class PoolNameFactory
+        implements ThreadFactory
+    {
+        @Override
+        public Thread newThread(Runnable runnable)
+        {
+            Thread t = new Thread(runnable, "NodeRunner async pool");
+            t.setDaemon(true);
+            return t;
+        }
     }
 }

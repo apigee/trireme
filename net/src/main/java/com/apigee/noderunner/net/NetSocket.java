@@ -187,7 +187,7 @@ public class NetSocket
                 public void operationComplete(ChannelFuture channelFuture)
                 {
                     if (cb != null) {
-                        runner.enqueueCallback(cb, NetSocket.this, null);
+                        runner.enqueueCallback(cb, NetSocket.this, NetSocket.this, null);
                     }
                 }
             });

@@ -1,14 +1,15 @@
 package com.apigee.noderunner.core.modules;
 
 import com.apigee.noderunner.core.NodeModule;
+import com.apigee.noderunner.core.Sandbox;
 import com.apigee.noderunner.core.internal.Charsets;
 import com.apigee.noderunner.core.internal.NodeExitException;
 import com.apigee.noderunner.core.internal.ScriptRunner;
 import org.mozilla.javascript.Context;
+import org.mozilla.javascript.EvaluatorException;
 import org.mozilla.javascript.Function;
 import org.mozilla.javascript.Scriptable;
 import org.mozilla.javascript.ScriptableObject;
-import org.mozilla.javascript.WrappedException;
 import org.mozilla.javascript.annotations.JSConstructor;
 import org.mozilla.javascript.annotations.JSFunction;
 import org.mozilla.javascript.annotations.JSGetter;
@@ -46,13 +47,27 @@ public class Process
         ScriptableObject.defineClass(scope, ProcessImpl.class, false, true);
         ProcessImpl exports = (ProcessImpl)cx.newObject(scope, CLASS_NAME);
 
-        ScriptableObject.defineClass(scope, SimpleOutputStreamImpl.class);
+        ScriptableObject.defineClass(scope, SimpleOutputStreamImpl.class, false, true);
         SimpleOutputStreamImpl stdout = (SimpleOutputStreamImpl)cx.newObject(scope, SimpleOutputStreamImpl.CLASS_NAME);
-        stdout.setOutput(System.out);
-        exports.setStdout(stdout);
         SimpleOutputStreamImpl stderr = (SimpleOutputStreamImpl)cx.newObject(scope, SimpleOutputStreamImpl.CLASS_NAME);
-        stderr.setOutput(System.err);
+
+        Sandbox sb = runner.getSandbox();
+        if ((sb != null) && (sb.getStdout() != null)) {
+            stdout.setOutput(sb.getStdout());
+        } else {
+            stdout.setOutput(System.out);
+        }
+        exports.setStdout(stdout);
+
+        if ((sb != null) && (sb.getStderr() != null)) {
+            stderr.setOutput(sb.getStderr());
+        } else {
+            stderr.setOutput(System.err);
+        }
         exports.setStderr(stderr);
+
+        // Put the object directly in the scope -- we only do this for modules that are always deployed
+        // as global variables in the script.
         scope.put(OBJECT_NAME, scope, exports);
         return exports;
     }
@@ -244,11 +259,16 @@ public class Process
      * stderr, but that is a lot of complication.
      */
     public static class SimpleOutputStreamImpl
-        extends ScriptableObject
+        extends Stream.WritableStream
     {
         protected static final String CLASS_NAME = "_outStreamClass";
 
         private OutputStream out;
+
+        public SimpleOutputStreamImpl()
+        {
+            writable = true;
+        }
 
         @Override
         public String getClassName() {
@@ -259,31 +279,18 @@ public class Process
             this.out = out;
         }
 
-        @JSFunction
-        public static boolean write(Context ctx, Scriptable thisObj, Object[] args, Function caller)
+        @Override
+        protected boolean write(Context cx, Object[] args)
         {
-            if (args.length == 0) {
-                return true;
-            }
+            String str = stringArg(args, 0, "");
+            String encoding = stringArg(args, 1, Charsets.DEFAULT_ENCODING);
+            Charset charset = Charsets.get().getCharset(encoding);
 
-            String s = (String)Context.jsToJava(args[0], String.class);
-            String enc = null;
-            if (args.length > 1) {
-                enc = (String)Context.jsToJava(args[1], String.class);
-            }
-            Charset charset = Charsets.get().resolveCharset(enc);
-
-            SimpleOutputStreamImpl os = (SimpleOutputStreamImpl)thisObj;
             try {
-                os.out.write(s.getBytes(charset));
+                out.write(str.getBytes(charset));
             } catch (IOException e) {
-                throw new WrappedException(e);
+                throw new EvaluatorException("Error on write: " + e.toString());
             }
-            return true;
-        }
-
-        @JSGetter("writable")
-        public boolean isWriteable() {
             return true;
         }
     }

@@ -3,7 +3,11 @@ package com.apigee.noderunner.core.internal;
 import com.apigee.noderunner.core.NodeEnvironment;
 import com.apigee.noderunner.core.NodeException;
 import com.apigee.noderunner.core.NodeModule;
+import com.apigee.noderunner.core.RunningScript;
+import com.apigee.noderunner.core.Sandbox;
+import com.apigee.noderunner.core.ScriptCancelledException;
 import com.apigee.noderunner.core.ScriptException;
+import com.apigee.noderunner.core.ScriptStatus;
 import com.apigee.noderunner.core.ScriptTask;
 import com.apigee.noderunner.core.modules.EventEmitter;
 import com.apigee.noderunner.core.modules.Module;
@@ -21,11 +25,12 @@ import java.io.File;
 import java.io.FileInputStream;
 import java.io.IOException;
 import java.io.InputStreamReader;
-import java.io.Reader;
 import java.lang.reflect.InvocationTargetException;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.PriorityQueue;
+import java.util.concurrent.Callable;
+import java.util.concurrent.Future;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.TimeUnit;
 
@@ -33,6 +38,7 @@ import java.util.concurrent.TimeUnit;
  * This class actually runs the script.
  */
 public class ScriptRunner
+    implements RunningScript, Callable<ScriptStatus>
 {
     private static final Logger log = LoggerFactory.getLogger(ScriptRunner.class);
 
@@ -41,45 +47,57 @@ public class ScriptRunner
     private static final long DEFAULT_DELAY = 60000L;
 
     private final NodeEnvironment env;
-    private File scriptFile;
-    private String script;
-    private final String[] args;
-    private final String scriptName;
+    private       File            scriptFile;
+    private       String          script;
+    private final String[]        args;
+    private final String          scriptName;
     private final HashMap<String, Object> moduleCache = new HashMap<String, Object>();
+    private final Sandbox              sandbox;
+    private       Future<ScriptStatus> future;
 
     private final LinkedBlockingQueue<Activity> tickFunctions = new LinkedBlockingQueue<Activity>();
-    private final PriorityQueue<Timed> timerQueue = new PriorityQueue<Timed>();
-    private final HashMap<Integer, Timed> timersMap = new HashMap<Integer, Timed>();
+    private final PriorityQueue<Timed>          timerQueue    = new PriorityQueue<Timed>();
+    private final HashMap<Integer, Timed>       timersMap     = new HashMap<Integer, Timed>();
     private int timerSequence;
     private int pinCount;
 
     // Globals that are set up for the process
-    private Timers.TimersImpl timers;
+    private Timers.TimersImpl   timers;
     private Process.ProcessImpl process;
-    private Object globals;
+    private Object              globals;
 
     private Scriptable scope;
 
     public ScriptRunner(NodeEnvironment env, String scriptName, File scriptFile,
-                        String[] args)
+                        String[] args, Sandbox sandbox)
     {
         this.env = env;
         this.scriptFile = scriptFile;
         this.scriptName = scriptName;
         this.args = args;
+        this.sandbox = sandbox;
     }
 
     public ScriptRunner(NodeEnvironment env, String scriptName, String script,
-                        String[] args)
+                        String[] args, Sandbox sandbox)
     {
         this.env = env;
         this.scriptName = scriptName;
         this.script = script;
         this.args = args;
+        this.sandbox = sandbox;
+    }
+
+    public void setFuture(Future<ScriptStatus> future) {
+        this.future = future;
     }
 
     public NodeEnvironment getEnvironment() {
         return env;
+    }
+
+    public Sandbox getSandbox() {
+        return sandbox;
     }
 
     public Map<String, Object> getModuleCache() {
@@ -145,8 +163,9 @@ public class ScriptRunner
     /**
      * Execute the script. We do this by actually executing the script.
      */
-    public void execute()
-        throws NodeException
+    @Override
+    public ScriptStatus call()
+        throws NodeException, InterruptedException
     {
         Context cx = Context.enter();
         try {
@@ -203,6 +222,9 @@ public class ScriptRunner
             long pollTimeout = 0L;
             while (true) {
                 try {
+                    if ((future != null) && future.isCancelled()) {
+                        throw new ScriptCancelledException();
+                    }
                     // Call one tick function
                     Activity nextCall = tickFunctions.poll(pollTimeout, TimeUnit.MILLISECONDS);
                     while (nextCall != null) {
@@ -269,19 +291,14 @@ public class ScriptRunner
             log.debug("Normal script exit.");
             process.fireEvent("exit", ne.getCode());
             if (ne.isFatal()) {
-                System.err.println(ne.getScriptStackTrace());
+                return new ScriptStatus(ne.getCode());
+            } else {
+                return ScriptStatus.OK;
             }
-            /* TODO confirm and remove
-            if (!env.isNoExit()) {
-                System.exit(ne.getCode());
-            }
-            */
         } catch (RhinoException re) {
             throw new ScriptException(re);
         } catch (IOException ioe) {
             throw new NodeException(ioe);
-        } catch (InterruptedException intt) {
-            throw new NodeException(intt);
         } finally {
             Context.exit();
         }

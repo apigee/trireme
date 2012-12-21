@@ -8,6 +8,7 @@ import org.mozilla.javascript.ScriptableObject;
 import java.io.File;
 import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.Executor;
+import java.util.concurrent.Executors;
 import java.util.concurrent.ThreadFactory;
 import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
@@ -25,17 +26,26 @@ public class NodeEnvironment
     public static final int POOL_TIMEOUT_SECS = 60;
 
     private boolean          initialized;
-    private boolean          noExit;
     private ScriptableObject rootScope;
     private ModuleRegistry   registry;
     private Executor         asyncPool;
+    private Executor         scriptPool;
 
+    /**
+     * Create a new NodeEnvironment with all the defaults.
+     */
     public NodeEnvironment()
     {
+        // This pool is used for operations that must appear async to JavaScript but are synchronous
+        // in Java. Right now this means file I/O, at least in Java 6.
         asyncPool = new ThreadPoolExecutor(CORE_POOL_SIZE, MAX_POOL_SIZE, POOL_TIMEOUT_SECS, TimeUnit.SECONDS,
                                            new ArrayBlockingQueue<Runnable>(POOL_QUEUE_SIZE),
-                                           new PoolNameFactory(),
+                                           new PoolNameFactory("NodeRunner Async Pool"),
                                            new ThreadPoolExecutor.AbortPolicy());
+
+        // This pool is used to run scripts. As a cached thread pool it will grow as necessary and shrink
+        // down to zero when idle.
+        scriptPool = Executors.newCachedThreadPool(new PoolNameFactory("NodeRunner Script Thread"));
     }
 
     /**
@@ -64,19 +74,15 @@ public class NodeEnvironment
         return registry;
     }
 
-    public void setNoExit(boolean noExit) {
-        this.noExit = noExit;
-    }
-
-    public boolean isNoExit() {
-        return noExit;
-    }
-
     public Executor getAsyncPool() {
         return asyncPool;
     }
 
-    private synchronized void initialize()
+    public Executor getScriptPool() {
+        return scriptPool;
+    }
+
+    private void initialize()
         throws NodeException
     {
         if (initialized) {
@@ -100,10 +106,17 @@ public class NodeEnvironment
     private static final class PoolNameFactory
         implements ThreadFactory
     {
+        private final String name;
+
+        PoolNameFactory(String name)
+        {
+            this.name = name;
+        }
+
         @Override
         public Thread newThread(Runnable runnable)
         {
-            Thread t = new Thread(runnable, "NodeRunner async pool");
+            Thread t = new Thread(runnable, name);
             t.setDaemon(true);
             return t;
         }

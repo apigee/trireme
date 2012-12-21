@@ -8,6 +8,8 @@ import org.slf4j.LoggerFactory;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.IOException;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.Future;
 
 /**
  * This is the "main," which runs the script.
@@ -41,12 +43,17 @@ public class NodeRunner
         try {
             NodeEnvironment env = new NodeEnvironment();
             NodeScript ns = env.createScript(scriptName, script, args);
-            ns.execute();
-        } catch (NodeExitException nee) {
-            // Handled elsewhere
+            Future<ScriptStatus> future = ns.execute();
+            ScriptStatus status = future.get();
+            System.exit(status.getExitCode());
+
         } catch (NodeException ne) {
             ne.printStackTrace(System.err);
             System.exit(5);
+        } catch (InterruptedException ie) {
+            System.exit(6);
+        } catch (ExecutionException ee) {
+            ee.getCause().printStackTrace(System.err);
         }
     }
 }

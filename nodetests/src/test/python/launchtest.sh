@@ -1,3 +1,3 @@
 #!/bin/sh
 
-exec java com.apigee.noderunner.core.NodeRunner $*
+exec java com.apigee.noderunner.shell.Main $*

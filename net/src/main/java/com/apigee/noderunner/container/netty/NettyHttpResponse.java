@@ -1,6 +1,7 @@
-package com.apigee.noderunner.net.netty;
+package com.apigee.noderunner.container.netty;
 
 import com.apigee.noderunner.net.HttpServerResponse;
+import com.apigee.noderunner.net.netty.NettyServer;
 import com.apigee.noderunner.net.spi.HttpResponseAdapter;
 import io.netty.channel.ChannelFuture;
 import io.netty.channel.ChannelFutureListener;

@@ -2,7 +2,6 @@ package com.apigee.noderunner.net;
 
 import com.apigee.noderunner.core.NodeModule;
 import com.apigee.noderunner.core.internal.ScriptRunner;
-import com.apigee.noderunner.net.netty.NettyHttpContainer;
 import com.apigee.noderunner.net.spi.HttpServerContainer;
 import org.mozilla.javascript.Context;
 import org.mozilla.javascript.EvaluatorException;
@@ -21,9 +20,6 @@ public class HttpModule
     implements NodeModule
 {
     public static final String CLASS_NAME = "_httpModule";
-
-    // BIG TODO on this one
-    private final HttpServerContainer httpContainer = new NettyHttpContainer();
 
     @Override
     public String getModuleName()
@@ -53,7 +49,7 @@ public class HttpModule
                                                      "Agent", "get"
                                                     },
                                       HttpImpl.class, 0);
-        http.initialize(runner, httpContainer);
+        http.initialize(runner, runner.getEnvironment().getHttpContainer());
         return http;
     }
 

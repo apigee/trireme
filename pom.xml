@@ -29,6 +29,7 @@
   <modules>
     <module>core</module>
     <module>net</module>
+    <module>shell</module>
     <module>nodetests</module>
   </modules>
    

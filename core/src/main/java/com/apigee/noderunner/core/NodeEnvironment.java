@@ -1,6 +1,7 @@
 package com.apigee.noderunner.core;
 
 import com.apigee.noderunner.core.internal.ModuleRegistry;
+import com.apigee.noderunner.net.spi.HttpServerContainer;
 import org.mozilla.javascript.Context;
 import org.mozilla.javascript.RhinoException;
 import org.mozilla.javascript.ScriptableObject;
@@ -20,16 +21,17 @@ import java.util.concurrent.TimeUnit;
  */
 public class NodeEnvironment
 {
-    public static final int CORE_POOL_SIZE = 1;
-    public static final int MAX_POOL_SIZE = 50;
-    public static final int POOL_QUEUE_SIZE = 8;
+    public static final int CORE_POOL_SIZE    = 1;
+    public static final int MAX_POOL_SIZE     = 50;
+    public static final int POOL_QUEUE_SIZE   = 8;
     public static final int POOL_TIMEOUT_SECS = 60;
 
-    private boolean          initialized;
-    private ScriptableObject rootScope;
-    private ModuleRegistry   registry;
-    private Executor         asyncPool;
-    private Executor         scriptPool;
+    private boolean             initialized;
+    private ScriptableObject    rootScope;
+    private ModuleRegistry      registry;
+    private Executor            asyncPool;
+    private Executor            scriptPool;
+    private HttpServerContainer httpContainer;
 
     /**
      * Create a new NodeEnvironment with all the defaults.
@@ -59,6 +61,10 @@ public class NodeEnvironment
         return new NodeScript(this, scriptName, script, args);
     }
 
+    /**
+     * Create an instance of a script attached to this environment. Any "setters" that you wish to change
+     * for this environment must be called before the first script is run.
+     */
     public NodeScript createScript(String scriptName, String script, String[] args)
         throws NodeException
     {
@@ -66,18 +72,41 @@ public class NodeEnvironment
         return new NodeScript(this, scriptName, script, args);
     }
 
+    /**
+     * Set up the HTTP implementation, which is kept in a separate module.
+     */
+    public void setHttpContainer(HttpServerContainer container) {
+        this.httpContainer = container;
+    }
+
+    public HttpServerContainer getHttpContainer() {
+        return httpContainer;
+    }
+
+    /**
+     * Internal: Get the global scope.
+     */
     public ScriptableObject getScope() {
         return rootScope;
     }
 
+    /**
+     * Internal: Get the registry of built-in modules.
+     */
     public ModuleRegistry getRegistry() {
         return registry;
     }
 
+    /**
+     * Internal: Get the thread pool for async tasks.
+     */
     public Executor getAsyncPool() {
         return asyncPool;
     }
 
+    /**
+     * Internal: Get the thread pool for running script threads.
+     */
     public Executor getScriptPool() {
         return scriptPool;
     }
@@ -104,8 +133,8 @@ public class NodeEnvironment
     }
 
     /**
-     * Set up the Rhino Context object for language level, etc. This gives us a way to override
-     * this stuff across lots of scripts.
+     * Internal: Set up the Rhino Context object for language level, etc.
+     * This gives us a way to override this stuff across lots of scripts.
      */
     public void setUpContext(Context cx)
     {

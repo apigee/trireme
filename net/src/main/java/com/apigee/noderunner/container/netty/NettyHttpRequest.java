@@ -1,4 +1,4 @@
-package com.apigee.noderunner.net.netty;
+package com.apigee.noderunner.container.netty;
 
 import com.apigee.noderunner.net.spi.HttpRequestAdapter;
 import io.netty.handler.codec.http.HttpMethod;

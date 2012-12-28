@@ -10,3 +10,5 @@ com.apigee.noderunner.core.modules.Timers
 com.apigee.noderunner.core.modules.Tty
 com.apigee.noderunner.core.modules.VM
 com.apigee.noderunner.core.modules.ZLib
+com.apigee.noderunner.net.NetModule
+com.apigee.noderunner.net.HttpModule

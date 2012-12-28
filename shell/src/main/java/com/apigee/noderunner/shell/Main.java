@@ -1,5 +1,10 @@
-package com.apigee.noderunner.core;
+package com.apigee.noderunner.shell;
 
+import com.apigee.noderunner.container.netty.NettyHttpContainer;
+import com.apigee.noderunner.core.NodeEnvironment;
+import com.apigee.noderunner.core.NodeException;
+import com.apigee.noderunner.core.NodeScript;
+import com.apigee.noderunner.core.ScriptStatus;
 import com.apigee.noderunner.core.internal.NodeExitException;
 import com.apigee.noderunner.core.internal.Utils;
 import org.slf4j.Logger;
@@ -14,13 +19,13 @@ import java.util.concurrent.Future;
 /**
  * This is the "main," which runs the script.
  */
-public class NodeRunner
+public class Main
 {
-    private static final Logger log = LoggerFactory.getLogger(NodeRunner.class);
+    private static final Logger log = LoggerFactory.getLogger(Main.class);
 
     private static void printUsage()
     {
-        System.err.println("Usage: NodeRunner <script>");
+        System.err.println("Usage: Main <script>");
     }
 
     public static void main(String[] args)
@@ -42,6 +47,7 @@ public class NodeRunner
 
         try {
             NodeEnvironment env = new NodeEnvironment();
+            env.setHttpContainer(new NettyHttpContainer());
             NodeScript ns = env.createScript(scriptName, script, args);
             Future<ScriptStatus> future = ns.execute();
             ScriptStatus status = future.get();

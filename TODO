@@ -12,6 +12,9 @@ Implement "sandbox" for filesystem and network access and call from
 all native modules. Must support IP-level filtering as well as
 filesystem protection.
 
+Refactor NodeEnvironment into an interface and "Impl" to prevent
+exposing internal stuff.
+
 ** Node module status:
 * Important for completion of various frameworks:
 

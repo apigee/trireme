@@ -3,21 +3,12 @@ package com.apigee.noderunner.net;
 import com.apigee.noderunner.core.ScriptTask;
 import com.apigee.noderunner.core.internal.ScriptRunner;
 import com.apigee.noderunner.core.modules.EventEmitter;
-import com.apigee.noderunner.net.netty.NettyFactory;
-import com.apigee.noderunner.net.netty.NettyServer;
-import io.netty.channel.ChannelException;
-import io.netty.channel.ChannelHandlerContext;
-import io.netty.channel.ChannelInboundMessageHandlerAdapter;
-import io.netty.channel.ChannelInitializer;
-import io.netty.channel.socket.SocketChannel;
-import io.netty.handler.codec.http.HttpChunk;
-import io.netty.handler.codec.http.HttpObject;
-import io.netty.handler.codec.http.HttpRequest;
-import io.netty.handler.codec.http.HttpRequestDecoder;
-import io.netty.handler.codec.http.HttpResponseEncoder;
-import io.netty.handler.logging.LogLevel;
-import io.netty.handler.logging.LoggingHandler;
-import io.netty.handler.timeout.IdleStateHandler;
+import com.apigee.noderunner.net.spi.HttpDataAdapter;
+import com.apigee.noderunner.net.spi.HttpRequestAdapter;
+import com.apigee.noderunner.net.spi.HttpResponseAdapter;
+import com.apigee.noderunner.net.spi.HttpServerAdapter;
+import com.apigee.noderunner.net.spi.HttpServerContainer;
+import com.apigee.noderunner.net.spi.HttpServerStub;
 import org.mozilla.javascript.Context;
 import org.mozilla.javascript.EvaluatorException;
 import org.mozilla.javascript.Function;
@@ -32,6 +23,7 @@ import static com.apigee.noderunner.core.internal.ArgUtils.*;
 
 public class HttpServer
     extends EventEmitter.EventEmitterImpl
+    implements HttpServerStub
 {
     public static final int IDLE_CONNECTION_SECONDS = 60;
 
@@ -39,10 +31,10 @@ public class HttpServer
 
     public static final String CLASS_NAME = "_httpServer";
 
-    private NettyServer  server;
-    private ScriptRunner runner;
-    private int          connectionCount;
-    private boolean      closed;
+    private HttpServerAdapter httpServer;
+    private ScriptRunner      runner;
+    private int               connectionCount;
+    private boolean           closed;
 
     @Override
     public String getClassName()
@@ -50,8 +42,9 @@ public class HttpServer
         return CLASS_NAME;
     }
 
-    public void initialize(Function listen, ScriptRunner runner)
+    public void initialize(Function listen, ScriptRunner runner, HttpServerContainer container)
     {
+        this.httpServer = container.newServer(this);
         this.runner = runner;
         if (listen != null) {
             register("request", listen, false);
@@ -87,39 +80,104 @@ public class HttpServer
         }
 
         HttpServer h = (HttpServer) thisObj;
-        try {
-            h.server = NettyFactory.get().createServer(port, hostName, backlog, h.makePipeline());
-        } catch (ChannelException ce) {
-            h.runner.enqueueEvent(h, "error",
-                                  new Object[] { NetServer.makeError(ce, "EADDRINUSE", cx, thisObj) });
-            h.runner.enqueueEvent(h, "closed", null);
-            return;
-        }
-        h.runner.pin();
         if (listening != null) {
             h.register("listening", listening, true);
         }
-        h.runner.enqueueEvent(h, "listening", null);
+
+        h.runner.pin();
+        h.httpServer.listen(hostName, port, backlog);
     }
 
-    private ChannelInitializer<SocketChannel> makePipeline()
+    @Override
+    public void onError(final String message)
     {
-        return new ChannelInitializer<SocketChannel>()
+        runner.enqueueTask(new ScriptTask()
         {
             @Override
-            public void initChannel(SocketChannel c) throws Exception
+            public void execute(Context cx, Scriptable scope)
             {
-                if (log.isTraceEnabled()) {
-                    c.pipeline().addFirst("logging", new LoggingHandler(LogLevel.INFO));
-                }
-                c.pipeline().addLast(new IdleStateHandler(
-                                     IDLE_CONNECTION_SECONDS, IDLE_CONNECTION_SECONDS,
-                                     IDLE_CONNECTION_SECONDS))
-                            .addLast(new HttpRequestDecoder())
-                            .addLast(new Handler())
-                            .addLast(new HttpResponseEncoder());
+                fireEvent("error",
+                          NetServer.makeError(null, message, cx, HttpServer.this));
             }
-        };
+        });
+    }
+
+    @Override
+    public void onError(final String message, final Throwable cause)
+    {
+        runner.enqueueTask(new ScriptTask()
+        {
+            @Override
+            public void execute(Context cx, Scriptable scope)
+            {
+                fireEvent("error",
+                          NetServer.makeError(cause, message, cx, HttpServer.this));
+            }
+        });
+    }
+
+    @Override
+    public void onClose()
+    {
+        runner.enqueueEvent(this, "closed", null);
+        runner.unPin();
+    }
+
+    @Override
+    public void onListening()
+    {
+        runner.enqueueEvent(this, "listening", null);
+    }
+
+    @Override
+    public void onRequest(final HttpRequestAdapter request, final HttpResponseAdapter response)
+    {
+        runner.enqueueTask(new ScriptTask()
+        {
+            @Override
+            public void execute(Context cx, Scriptable scope)
+            {
+                HttpServerRequest requestObj =
+                    (HttpServerRequest)cx.newObject(HttpServer.this, HttpServerRequest.CLASS_NAME);
+                request.setAttachment(requestObj);
+                // TODO socket
+                requestObj.initialize(HttpServer.this, request, response,
+                                      null, runner, cx, HttpServer.this);
+            }
+        });
+    }
+
+    @Override
+    public void onData(final HttpRequestAdapter request, final HttpResponseAdapter response,
+                       final HttpDataAdapter data)
+    {
+        runner.enqueueTask(new ScriptTask()
+        {
+            @Override
+            public void execute(Context cx, Scriptable scope)
+            {
+                // TODO performance do we really need to enqueue these?
+                HttpServerRequest requestObj = (HttpServerRequest)request.getAttachment();
+                requestObj.enqueueData(data.getData(), cx, requestObj);
+                if (data.isLastChunk()) {
+                    requestObj.enqueueEnd();
+                }
+            }
+        });
+    }
+
+    @Override
+    public void onConnection()
+    {
+        runner.enqueueTask(new ScriptTask()
+        {
+            @Override
+            public void execute(Context cx, Scriptable scope)
+            {
+                // TODO include a Socket object...
+                fireEvent("connection");
+            }
+        });
     }
 
     @JSFunction
@@ -149,6 +207,7 @@ public class HttpServer
     @JSSetter("maxHeadersCount")
     public void setMaxHeaders(int m)
     {
+        // TODO
     }
 
     @JSGetter("maxHeadersCount")
@@ -162,111 +221,5 @@ public class HttpServer
     }
 
     // TODO destroy?
-
-    private final class Handler
-        extends ChannelInboundMessageHandlerAdapter<HttpObject>
-    {
-        NetSocket socket;
-        HttpServerRequest serverRequest;
-        HttpServerResponse serverResponse;
-
-        @Override
-        public void channelActive(final ChannelHandlerContext ctx)
-        {
-            log.debug("Channel active: {}", ctx);
-            runner.enqueueTask(new ScriptTask()
-            {
-                @Override
-                public void execute(Context cx, Scriptable scope)
-                {
-                    socket = (NetSocket)cx.newObject(scope, NetSocket.CLASS_NAME);
-                    socket.initialize((SocketChannel) ctx.channel(), runner);
-                }
-            });
-        }
-
-        @Override
-        public void channelRegistered(final ChannelHandlerContext ctx)
-        {
-            connectionCount++;
-            log.debug("Channel connected: {} new count = {}", ctx, connectionCount);
-            runner.enqueueTask(new ScriptTask()
-            {
-                @Override
-                public void execute(Context cx, Scriptable scope)
-                {
-                    HttpServer.this.fireEvent("connection", socket);
-                }
-            });
-        }
-
-        @Override
-        public void channelUnregistered(final ChannelHandlerContext ctx)
-        {
-            connectionCount--;
-            log.debug("Channel disconnected: {} new count = {}", ctx, connectionCount);
-            runner.enqueueTask(new ScriptTask()
-            {
-                @Override
-                public void execute(Context cx, Scriptable scope)
-                {
-                    socket.setReadable(false);
-                    socket.setWritable(false);
-                    socket.fireEvent("end");
-                }
-            });
-            if (closed && (connectionCount == 0)) {
-                doClose();
-            }
-        }
-
-        /*
-         * TODO
-        @Override
-        public void channelIdle(ChannelHandlerContext ctx, IdleStateEvent e)
-        {
-            log.debug("Channel is idle: {}", e);
-            ctx.getChannel().close();
-        }
-        */
-
-        @Override
-        public void messageReceived(final ChannelHandlerContext ctx, final HttpObject msg)
-        {
-            log.debug("Message event: {}", msg);
-
-            runner.enqueueTask(new ScriptTask()
-            {
-                @Override
-                public void execute(Context cx, Scriptable scope)
-                {
-                    if (msg instanceof HttpRequest) {
-                        HttpServerRequest req =
-                            (HttpServerRequest)cx.newObject(scope, HttpServerRequest.CLASS_NAME);
-                        serverRequest = req;
-                        HttpServerResponse resp =
-                            req.initialize(HttpServer.this, (HttpRequest)msg,
-                                           ctx.channel(),
-                                           socket, runner, cx, scope);
-                        serverResponse = resp;
-
-                    } else if (msg instanceof HttpChunk) {
-                        if (serverRequest == null) {
-                            log.debug("Rejecting callback with no request object");
-                            return;
-                        }
-                        HttpChunk chunk = (HttpChunk)msg;
-                        serverRequest.enqueueData(chunk.getContent(),
-                                                  cx, scope);
-                        if (chunk.isLast()) {
-                            serverRequest.enqueueEnd();
-                        }
-
-                    } else {
-                        throw new AssertionError("Invalid message: " + msg);
-                    }
-                }
-            });
-        }
-    }
 }
+

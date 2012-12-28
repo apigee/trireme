@@ -1,9 +1,15 @@
 package com.apigee.noderunner.net.spi;
 
-/**
- * Created by: Apigee
- * Date: 12/24/12
- */
+import java.nio.ByteBuffer;
+
 public interface HttpDataAdapter
 {
+    boolean hasData();
+
+    ByteBuffer getData();
+
+    void setData(ByteBuffer buf);
+
+    boolean isLastChunk();
+    void setLastChunk(boolean last);
 }

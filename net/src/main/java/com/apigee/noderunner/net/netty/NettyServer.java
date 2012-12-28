@@ -1,6 +1,8 @@
 package com.apigee.noderunner.net.netty;
 
 import io.netty.bootstrap.ServerBootstrap;
+import io.netty.buffer.ByteBuf;
+import io.netty.buffer.Unpooled;
 import io.netty.channel.Channel;
 import io.netty.channel.ChannelInitializer;
 import io.netty.channel.ChannelOption;
@@ -8,6 +10,7 @@ import io.netty.channel.socket.SocketChannel;
 import io.netty.channel.socket.nio.NioServerSocketChannel;
 
 import java.net.InetSocketAddress;
+import java.nio.ByteBuffer;
 
 public class NettyServer
 {
@@ -48,5 +51,21 @@ public class NettyServer
 
     public InetSocketAddress getAddress() {
         return address;
+    }
+
+    /**
+     * Copy the Netty byte buffer into a new buffer.
+     */
+    public static ByteBuffer copyBuffer(ByteBuf buf)
+    {
+        ByteBuffer ret = ByteBuffer.allocate(buf.readableBytes());
+        buf.readBytes(ret);
+        ret.flip();
+        return ret;
+    }
+
+    public static ByteBuf copyBuffer(ByteBuffer buf)
+    {
+        return Unpooled.copiedBuffer(buf);
     }
 }

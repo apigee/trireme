@@ -2,12 +2,13 @@ package com.apigee.noderunner.net;
 
 import com.apigee.noderunner.core.NodeModule;
 import com.apigee.noderunner.core.internal.ScriptRunner;
+import com.apigee.noderunner.net.netty.NettyHttpContainer;
+import com.apigee.noderunner.net.spi.HttpServerContainer;
 import org.mozilla.javascript.Context;
 import org.mozilla.javascript.EvaluatorException;
 import org.mozilla.javascript.Function;
 import org.mozilla.javascript.Scriptable;
 import org.mozilla.javascript.ScriptableObject;
-import org.mozilla.javascript.annotations.JSFunction;
 
 import static com.apigee.noderunner.core.internal.ArgUtils.*;
 
@@ -21,13 +22,20 @@ public class HttpModule
 {
     public static final String CLASS_NAME = "_httpModule";
 
+    // BIG TODO on this one
+    private final HttpServerContainer httpContainer = new NettyHttpContainer();
+
     @Override
-    public String getModuleName() {
+    public String getModuleName()
+    {
         return "http";
     }
 
     @Override
-    public Object registerExports(Context cx, Scriptable scope, ScriptRunner runner) throws InvocationTargetException, IllegalAccessException, InstantiationException
+    public Object registerExports(Context cx, Scriptable scope, ScriptRunner runner) throws
+                                                                                     InvocationTargetException,
+                                                                                     IllegalAccessException,
+                                                                                     InstantiationException
     {
         runner.require("net", cx, scope);
 
@@ -45,7 +53,7 @@ public class HttpModule
                                                      "Agent", "get"
                                                     },
                                       HttpImpl.class, 0);
-        http.initialize(runner);
+        http.initialize(runner, httpContainer);
         return http;
     }
 
@@ -53,15 +61,17 @@ public class HttpModule
         extends ScriptableObject
     {
         private ScriptRunner runner;
+        private HttpServerContainer container;
 
         @Override
         public String getClassName() {
             return CLASS_NAME;
         }
 
-        void initialize(ScriptRunner runner)
+        void initialize(ScriptRunner runner, HttpServerContainer container)
         {
             this.runner = runner;
+            this.container = container;
         }
 
         // TODO STATUS_CODES
@@ -79,7 +89,7 @@ public class HttpModule
                 listener = (Function)args[0];
             }
             HttpServer svr = (HttpServer)cx.newObject(thisObj, HttpServer.CLASS_NAME);
-            svr.initialize(listener, h.runner);
+            svr.initialize(listener, h.runner, h.container);
             return svr;
         }
 

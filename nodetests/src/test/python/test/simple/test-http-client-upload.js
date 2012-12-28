@@ -58,6 +58,7 @@ server.on('listening', function() {
       console.log(chunk);
     });
     res.on('end', function() {
+      console.log('Client got end');
       client_res_complete = true;
       server.close();
     });

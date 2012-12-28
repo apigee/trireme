@@ -1,9 +1,11 @@
 package com.apigee.noderunner.net.spi;
 
 /**
- * Created by: Apigee
- * Date: 12/24/12
+ * This is the main clas implemented by an HTTP Server container.
  */
-public class HttpServerAdapter
+public interface HttpServerAdapter
 {
+    void listen(String host, int port, int backlog);
+
+    void close();
 }

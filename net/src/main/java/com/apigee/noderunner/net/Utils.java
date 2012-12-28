@@ -6,7 +6,7 @@ import org.mozilla.javascript.Scriptable;
 
 import java.net.Inet6Address;
 import java.net.InetSocketAddress;
-import java.util.List;
+import java.util.Collection;
 import java.util.Map;
 
 public class Utils
@@ -24,7 +24,7 @@ public class Utils
         return addr;
     }
 
-    public static Scriptable getHttpHeaders(List< Map.Entry<String, String>> headers,
+    public static Scriptable getHttpHeaders(Collection< Map.Entry<String, String>> headers,
                                             Context cx, Scriptable thisObj)
     {
         Scriptable h = cx.newObject(thisObj);

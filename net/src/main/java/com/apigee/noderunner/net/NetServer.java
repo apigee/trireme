@@ -67,7 +67,9 @@ public class NetServer
     {
         Scriptable err = cx.newObject(scope);
         err.put("code", err, code);
-        err.put("exception", err, ce.getMessage());
+        if (ce != null) {
+            err.put("exception", err, ce.getMessage());
+        }
         return err;
     }
 

@@ -1,9 +1,11 @@
 package com.apigee.noderunner.net.spi;
 
-/**
- * Created by: Apigee
- * Date: 12/24/12
- */
 public interface HttpRequestAdapter
+    extends HttpMessageAdapter
 {
+    String getUrl();
+    void setUrl(String url);
+
+    String getMethod();
+    void setMethod(String method);
 }

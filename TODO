@@ -1,4 +1,19 @@
-Test failures: Get a more reasonable subset working.
+* Coding tasks:
+
+Pre-compile built-in JS scripts and include .class files in the JAR.
+Not needed for script performance -- may be helpful for startup time
+to save JS compilation time.
+
+"Seal" the root context, and possibily built-in modules and scripts.
+
+Turn on the "class shutter" to prevent invoking internal Java classes.
+
+Implement "sandbox" for filesystem and network access and call from
+all native modules. Must support IP-level filtering as well as
+filesystem protection.
+
+** Node module status:
+* Important for completion of various frameworks:
 
 crypto: 
   Need it for express
@@ -15,14 +30,13 @@ cluster:
 os:
   Complete it.
 stream:
-  Need to finish support for the Stream class itself.
-  It should inhert from EventEmitter and many things should
-  inherit from it. Needed for zlib.
+  Implement "pipe" for both JS and native objects.
 readline:
   Use the JS
 domain:
   May need more module support.
 
+* Less important but needed for compatibility:
 
 tls:
   Probably won't be used directly.

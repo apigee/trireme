@@ -103,6 +103,19 @@ public class NodeEnvironment
         initialized = true;
     }
 
+    /**
+     * Set up the Rhino Context object for language level, etc. This gives us a way to override
+     * this stuff across lots of scripts.
+     */
+    public void setUpContext(Context cx)
+    {
+        // TODO is this the best version to use for V8 compatibility?
+        cx.setLanguageVersion(Context.VERSION_1_8);
+        // Testing has not shown that 9 is any faster and it is theoretically riskier.
+        // Re-test later with better workloads.
+        cx.setOptimizationLevel(1);
+    }
+
     private static final class PoolNameFactory
         implements ThreadFactory
     {

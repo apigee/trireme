@@ -42,8 +42,6 @@ public class ScriptRunner
 {
     private static final Logger log = LoggerFactory.getLogger(ScriptRunner.class);
 
-    public static final String ATTACHMENT = "_scriptrunner";
-
     private static final long DEFAULT_DELAY = 60000L;
 
     private final NodeEnvironment env;
@@ -168,11 +166,11 @@ public class ScriptRunner
         throws NodeException, InterruptedException
     {
         Context cx = Context.enter();
+        env.setUpContext(cx);
         try {
             // Re-use the global scope from before, but make it top-level so that there are no shared variables
             // TODO set some of these every time we create a new context to run the script.
             scope = cx.newObject(env.getScope());
-            cx.putThreadLocal(ATTACHMENT, this);
             scope.setPrototype(env.getScope());
             scope.setParentScope(null);
             /*

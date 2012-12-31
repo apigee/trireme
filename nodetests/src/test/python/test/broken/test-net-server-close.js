@@ -27,6 +27,7 @@ var events = [];
 var sockets = [];
 
 process.on('exit', function() {
+  console.log('Events: ' + events);
   assert.equal(server.connections, 0);
   assert.deepEqual(events, 'client client server'.split(' '));
 });

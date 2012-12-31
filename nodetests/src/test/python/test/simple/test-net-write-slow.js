@@ -21,60 +21,49 @@
 
 var common = require('../common');
 var assert = require('assert');
-
 var net = require('net');
 
-var N = 50;
-var c = 0;
-var client_recv_count = 0;
-var disconnect_count = 0;
+var SIZE = 2E5;
+var N = 10;
+var flushed = 0;
+var received = 0;
+var buf = new Buffer(SIZE);
+buf.fill(0x61); // 'a'
 
 var server = net.createServer(function(socket) {
-  socket.on('connect', function() {
-    socket.write('hello\r\n');
+  socket.setNoDelay();
+  socket.setTimeout(1000);
+  socket.on('timeout', function() {
+    assert.fail('flushed: ' + flushed +
+                ', received: ' + received + '/' + SIZE * N);
   });
 
-  socket.on('end', function() {
-    socket.end();
-  });
+  for (var i = 0; i < N; ++i) {
+    socket.write(buf, function() {
+      ++flushed;
+      if (flushed === N) {
+        socket.setTimeout(0);
+      }
+    });
+  }
+  socket.end();
 
-  socket.on('close', function(had_error) {
-    //console.log('server had_error: ' + JSON.stringify(had_error));
-    assert.equal(false, had_error);
-  });
 });
 
 server.listen(common.PORT, function() {
-  console.log('listening');
-  var client = net.createConnection(common.PORT);
-
-  // TODO GREG Invalid isn't this an invalid charset according to other tests?
-  //client.setEncoding('UTF8');
-  client.setEncoding('utf8');
-
-  client.on('connect', function() {
-    console.log('client connected.');
+  var conn = net.connect(common.PORT);
+  conn.on('data', function(buf) {
+    received += buf.length;
+    conn.pause();
+    setTimeout(function() {
+      conn.resume();
+    }, 20);
   });
-
-  client.on('data', function(chunk) {
-    client_recv_count += 1;
-    console.log('client_recv_count ' + client_recv_count);
-    assert.equal('hello\r\n', chunk);
-    client.end();
-  });
-
-  client.on('close', function(had_error) {
-    console.log('disconnect');
-    assert.equal(false, had_error);
-    if (disconnect_count++ < N)
-      client.connect(common.PORT); // reconnect
-    else
-      server.close();
+  conn.on('end', function() {
+    server.close();
   });
 });
 
 process.on('exit', function() {
-  assert.equal(N + 1, disconnect_count);
-  assert.equal(N + 1, client_recv_count);
+  assert.equal(received, SIZE * N);
 });
-

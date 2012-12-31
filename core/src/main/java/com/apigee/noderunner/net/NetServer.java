@@ -1,16 +1,7 @@
 package com.apigee.noderunner.net;
 
-import com.apigee.noderunner.core.ScriptTask;
 import com.apigee.noderunner.core.internal.ScriptRunner;
 import com.apigee.noderunner.core.modules.EventEmitter;
-import com.apigee.noderunner.net.netty.NettyFactory;
-import com.apigee.noderunner.net.netty.NettyServer;
-import io.netty.buffer.ByteBuf;
-import io.netty.channel.ChannelException;
-import io.netty.channel.ChannelHandlerContext;
-import io.netty.channel.ChannelInboundByteHandlerAdapter;
-import io.netty.channel.ChannelInitializer;
-import io.netty.channel.socket.SocketChannel;
 import org.mozilla.javascript.Context;
 import org.mozilla.javascript.Function;
 import org.mozilla.javascript.Scriptable;
@@ -20,7 +11,11 @@ import org.mozilla.javascript.annotations.JSSetter;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.nio.ByteBuffer;
+import java.io.IOException;
+import java.net.InetSocketAddress;
+import java.nio.channels.SelectionKey;
+import java.nio.channels.ServerSocketChannel;
+import java.nio.channels.SocketChannel;
 
 import static com.apigee.noderunner.core.internal.ArgUtils.*;
 
@@ -29,6 +24,7 @@ import static com.apigee.noderunner.core.internal.ArgUtils.*;
  */
 public class NetServer
     extends EventEmitter.EventEmitterImpl
+    implements SelectorHandler
 {
     protected static final Logger log = LoggerFactory.getLogger(NetServer.class);
 
@@ -39,9 +35,11 @@ public class NetServer
     private Function listener;
     private boolean allowHalfOpen;
     private ScriptRunner runner;
-    private NettyServer server;
+    private SelectionKey key;
+    private ServerSocketChannel channel;
     private boolean referenced;
     private boolean closed;
+    private boolean suspended;
     private boolean destroyed;
 
     private int connections;
@@ -100,33 +98,85 @@ public class NetServer
         }
 
         NetServer svr = (NetServer) thisObj;
+        if (callback != null) {
+            svr.register("listening", callback, false);
+        }
+
         try {
-            svr.server = NettyFactory.get().createServer(port, host, backlog, svr.makePipeline());
-        } catch (ChannelException ce) {
+            InetSocketAddress address;
+            if (host == null) {
+                address = new InetSocketAddress(port);
+            } else {
+                address = new InetSocketAddress(host, port);
+            }
+
+            svr.channel = ServerSocketChannel.open();
+            svr.channel.configureBlocking(false);
+            svr.channel.socket().setReuseAddress(true);
+            svr.channel.socket().bind(address, backlog);
+            svr.key = svr.channel.register(svr.runner.getSelector(),
+                                           SelectionKey.OP_ACCEPT, svr);
+
+        } catch (IOException ioe) {
             svr.runner.enqueueEvent(svr, "error",
-                                    new Object[] { makeError(ce, "EADDRINUSE", cx, thisObj) });
+                                    new Object[] { makeError(ioe, "EADDRINUSE", cx, thisObj) });
             svr.runner.enqueueEvent(svr, "close", null);
             return;
         }
 
         svr.runner.pin();
         svr.referenced = true;
-        if (callback != null) {
-            svr.register("listening", callback, false);
-        }
+
         svr.runner.enqueueEvent(svr, "listening", null);
     }
 
-    private ChannelInitializer<SocketChannel> makePipeline()
+    @Override
+    public void selected(SelectionKey key)
     {
-        return new ChannelInitializer<SocketChannel>()
-        {
-            @Override
-            public void initChannel(SocketChannel c)
-            {
-                c.pipeline().addLast(new Handler());
-            }
-        };
+        Context cx = Context.getCurrentContext();
+        if (key.isAcceptable()) {
+            SocketChannel child = null;
+            do {
+                try {
+                    child = channel.accept();
+                    if (child != null) {
+                        if (suspended) {
+                            log.debug("Rejecting connection because we have suspended connections");
+                            child.close();
+
+                        } else if ((maxConnections >= 0) && (connections >= maxConnections)) {
+                            log.debug("Rejecting connection count beyond the max");
+                            child.close();
+
+                        } else {
+                            connections++;
+                            if (log.isDebugEnabled()) {
+                                log.debug("Accepted new socket {}. connections = {}",
+                                          child, connections);
+                            }
+                            NetSocket sock = (NetSocket) cx.newObject(this, NetSocket.CLASS_NAME);
+                            sock.initialize(child, runner, allowHalfOpen, this);
+                            runner.enqueueEvent(this, "connection", new Object[] { sock });
+                            runner.enqueueEvent(sock, "connect", null);
+                        }
+                    }
+
+                } catch (IOException ioe) {
+                    log.error("Error accepting a new socket: {}", ioe);
+                }
+            } while (child != null);
+        }
+    }
+
+    void decrementConnection()
+    {
+        connections--;
+        if (log.isDebugEnabled()) {
+            log.debug("Server now has {} connections", connections);
+        }
+        if (closed && (connections <= 0)) {
+            completeClose();
+        }
     }
 
     @JSFunction
@@ -144,7 +194,7 @@ public class NetServer
 
         log.debug("Suspending incoming server connections");
         svr.closed = true;
-        svr.server.suspend();
+        svr.suspended = true;
         if (svr.connections <= 0) {
             svr.completeClose();
         }
@@ -152,8 +202,15 @@ public class NetServer
 
     protected void completeClose()
     {
+        if (destroyed) {
+            return;
+        }
         log.debug("Server closing completely");
-        server.close();
+        try {
+            channel.close();
+        } catch (IOException ioe) {
+            log.debug("Error closing server channel: {}", ioe);
+        }
         runner.enqueueEvent(this, "close", null);
         unref();
         destroyed = true;
@@ -163,7 +220,12 @@ public class NetServer
     public static Object address(Context cx, Scriptable thisObj, Object[] args, Function func)
     {
         NetServer svr = (NetServer)thisObj;
-        return Utils.formatAddress(svr.server.getAddress(), cx, thisObj);
+        InetSocketAddress addr = (InetSocketAddress)svr.channel.socket().getLocalSocketAddress();
+        if (addr == null) {
+            return null;
+        }
+        return Utils.formatAddress(addr.getAddress(), addr.getPort(),
+                                   cx, thisObj);
     }
 
     @JSFunction
@@ -197,78 +259,5 @@ public class NetServer
     @JSGetter("connections")
     public int getConnections() {
         return connections;
-    }
-
-    private class Handler
-        extends ChannelInboundByteHandlerAdapter
-    {
-        private NetSocket socket;
-        private boolean rejected;
-
-        @Override
-        public void channelRegistered(final ChannelHandlerContext ctx)
-        {
-            log.debug("Channel registered: {}", ctx);
-
-            runner.enqueueTask(new ScriptTask()
-            {
-                @Override
-                public void execute(Context cx, Scriptable scope)
-                {
-                    if ((maxConnections >= 0) && (connections >= maxConnections)) {
-                        log.debug("Rejecting connection count beyond the max");
-                        rejected = true;
-                        ctx.channel().close();
-                        return;
-                    }
-                    connections++;
-                    socket = (NetSocket) cx.newObject(scope, NetSocket.CLASS_NAME);
-                    socket.initialize((SocketChannel) ctx.channel(), runner);
-                    NetServer.this.fireEvent("connection", socket);
-                }
-            });
-        }
-
-        @Override
-        public void channelUnregistered(final ChannelHandlerContext ctx)
-        {
-            log.debug("Channel unregistered: {}", ctx);
-
-            runner.enqueueTask(new ScriptTask()
-            {
-                @Override
-                public void execute(Context cx, Scriptable scope)
-                {
-                    if (!rejected) {
-                        connections--;
-                        socket.setReadable(false);
-                        socket.setWritable(false);
-                        socket.fireEvent("end");
-                    }
-                    if (closed && !destroyed && (connections <= 0)) {
-                        log.debug("Last socket closed -- completing shutdown");
-                        completeClose();
-                    }
-                }
-            });
-        }
-
-        @Override
-        public void inboundBufferUpdated(final ChannelHandlerContext ctx, final ByteBuf in)
-        {
-            log.debug("Bytes updated{} ", in);
-
-            final ByteBuffer bufCopy = ByteBuffer.allocate(in.readableBytes());
-            in.readBytes(bufCopy);
-            bufCopy.flip();
-            runner.enqueueTask(new ScriptTask()
-            {
-                @Override
-                public void execute(Context cx, Scriptable scope)
-                {
-                    socket.sendData(bufCopy, cx, scope);
-                }
-            });
-        }
     }
 }

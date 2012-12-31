@@ -13,6 +13,7 @@ import com.apigee.noderunner.core.modules.EventEmitter;
 import com.apigee.noderunner.core.modules.Module;
 import com.apigee.noderunner.core.modules.Process;
 import com.apigee.noderunner.core.modules.Timers;
+import com.apigee.noderunner.net.SelectorHandler;
 import org.mozilla.javascript.Context;
 import org.mozilla.javascript.Function;
 import org.mozilla.javascript.RhinoException;
@@ -26,13 +27,15 @@ import java.io.FileInputStream;
 import java.io.IOException;
 import java.io.InputStreamReader;
 import java.lang.reflect.InvocationTargetException;
+import java.nio.channels.SelectionKey;
+import java.nio.channels.Selector;
 import java.util.HashMap;
+import java.util.Iterator;
 import java.util.Map;
 import java.util.PriorityQueue;
 import java.util.concurrent.Callable;
 import java.util.concurrent.Future;
 import java.util.concurrent.LinkedBlockingQueue;
-import java.util.concurrent.TimeUnit;
 
 /**
  * This class actually runs the script.
@@ -44,20 +47,21 @@ public class ScriptRunner
 
     private static final long DEFAULT_DELAY = 60000L;
 
-    private final NodeEnvironment env;
+    private       NodeEnvironment env;
     private       File            scriptFile;
     private       String          script;
-    private final String[]        args;
-    private final String          scriptName;
+    private       String[]        args;
+    private       String          scriptName;
     private final HashMap<String, Object> moduleCache = new HashMap<String, Object>();
-    private final Sandbox              sandbox;
+    private       Sandbox              sandbox;
     private       Future<ScriptStatus> future;
 
     private final LinkedBlockingQueue<Activity> tickFunctions = new LinkedBlockingQueue<Activity>();
-    private final PriorityQueue<Timed>          timerQueue    = new PriorityQueue<Timed>();
-    private final HashMap<Integer, Timed>       timersMap     = new HashMap<Integer, Timed>();
-    private int timerSequence;
-    private int pinCount;
+    private final PriorityQueue<Activity>       timerQueue    = new PriorityQueue<Activity>();
+    private final HashMap<Integer, Activity>    timersMap     = new HashMap<Integer, Activity>();
+    private       Selector                      selector;
+    private       int                           timerSequence;
+    private       int                           pinCount;
 
     // Globals that are set up for the process
     private Timers.TimersImpl   timers;
@@ -69,21 +73,40 @@ public class ScriptRunner
     public ScriptRunner(NodeEnvironment env, String scriptName, File scriptFile,
                         String[] args, Sandbox sandbox)
     {
-        this.env = env;
         this.scriptFile = scriptFile;
-        this.scriptName = scriptName;
-        this.args = args;
-        this.sandbox = sandbox;
+        init(env, scriptName, args, sandbox);
     }
 
     public ScriptRunner(NodeEnvironment env, String scriptName, String script,
                         String[] args, Sandbox sandbox)
     {
+        this.script = script;
+        init(env, scriptName, args, sandbox);
+    }
+
+    public void close()
+    {
+        try {
+            selector.close();
+        } catch (IOException ioe) {
+            log.debug("Error closing selector", ioe);
+        }
+    }
+
+    private void init(NodeEnvironment env, String scriptName,
+                      String[] args, Sandbox sandbox)
+    {
         this.env = env;
         this.scriptName = scriptName;
-        this.script = script;
+
         this.args = args;
         this.sandbox = sandbox;
+
+        try {
+            this.selector = Selector.open();
+        } catch (IOException ioe) {
+            throw new AssertionError(ioe);
+        }
     }
 
     public void setFuture(Future<ScriptStatus> future) {
@@ -100,6 +123,10 @@ public class ScriptRunner
 
     public Map<String, Object> getModuleCache() {
         return moduleCache;
+    }
+
+    public Selector getSelector() {
+        return selector;
     }
 
     public void enqueueCallback(Function f, Scriptable scope, Scriptable thisObj, Object[] args)
@@ -121,25 +148,37 @@ public class ScriptRunner
     public int createTimer(long delay, boolean repeating,
                             Function func, Object[] args)
     {
-        Timed t;
+        Callback t = new Callback(func, func, null, args);
+        return createTimerInternal(delay, repeating, t);
+    }
+
+    public int createTimer(long delay, boolean repeating, ScriptTask task, Scriptable scope)
+    {
+        Task t = new Task(task, scope);
+        return createTimerInternal(delay, repeating, t);
+    }
+
+    private int createTimerInternal(long delay, boolean repeating, Activity activity)
+    {
         long timeout = System.currentTimeMillis() + delay;
         int seq = timerSequence++;
 
+        activity.setId(seq);
+        activity.setTimeout(timeout);
         if (repeating) {
-            t = new Timed(seq, timeout, func, true, delay, args);
-        } else {
-            t = new Timed(seq, timeout, func, false, 0, args);
+            activity.setInterval(delay);
+            activity.setRepeating(true);
         }
-        timersMap.put(seq, t);
-        timerQueue.add(t);
+        timersMap.put(seq, activity);
+        timerQueue.add(activity);
         return seq;
     }
 
     public void clearTimer(int id)
     {
-        Timed t = timersMap.get(id);
-        if (t != null) {
-            t.cancelled = true;
+        Activity a = timersMap.get(id);
+        if (a != null) {
+            a.setCancelled(true);
         }
     }
 
@@ -215,75 +254,7 @@ public class ScriptRunner
                 }
             }
 
-            // Node scripts don't exit unless exit is called -- they keep on trucking.
-            // The JS code inside will throw NodeExitException when it's time to exit
-            long pollTimeout = 0L;
-            while (true) {
-                try {
-                    if ((future != null) && future.isCancelled()) {
-                        throw new ScriptCancelledException();
-                    }
-                    // Call one tick function
-                    Activity nextCall = tickFunctions.poll(pollTimeout, TimeUnit.MILLISECONDS);
-                    while (nextCall != null) {
-                        log.debug("Executing one callback function");
-                        nextCall.execute(cx);
-                        nextCall = tickFunctions.poll();
-                    }
-
-                    // Check the timer queue for all expired timers
-                    Timed timed = timerQueue.peek();
-                    long now = System.currentTimeMillis();
-                    while ((timed != null) && (timed.timeout <= now)) {
-                        log.debug("Executing one timed-out task");
-                        timerQueue.poll();
-                        if (timed.cancelled) {
-                            timersMap.remove(timed.id);
-                        } else {
-                            timed.function.call(cx, scope, null, timed.args);
-                            if (timed.repeating && !timed.cancelled) {
-                                log.debug("Re-registering with delay of {}", timed.interval);
-                                timed.timeout = System.currentTimeMillis() + timed.interval;
-                                timerQueue.add(timed);
-                            } else {
-                                timersMap.remove(timed.id);
-                            }
-                        }
-                        timed = timerQueue.peek();
-                        now = System.currentTimeMillis();
-                    }
-
-                    pollTimeout = 0L;
-                    if (tickFunctions.isEmpty() && !timerQueue.isEmpty()) {
-                        // Sleep until the timer is expired
-                        timed = timerQueue.peek();
-                        pollTimeout = (timed.timeout - now);
-                        log.debug("Sleeping for {} milliseconds", pollTimeout);
-                    }
-
-                    // If there are no ticks and no timers, let's just stop the script.
-                    if (tickFunctions.isEmpty() && timerQueue.isEmpty()) {
-                        if (pinCount > 0) {
-                            log.debug("Sleeping because we are pinned");
-                            pollTimeout = DEFAULT_DELAY;
-                        } else {
-                            log.debug("Script complete -- exiting");
-                            throw new NodeExitException(false, 0);
-                        }
-                    }
-                } catch (NodeExitException ne) {
-                    throw ne;
-                } catch (RhinoException re) {
-                    log.debug("Exception in script: {}, {}", re.toString(), re.getMessage());
-                    boolean handled =
-                        process.fireEvent("uncaughtException", re);
-                    log.debug("Exception in script: {} handled = {}",
-                              re.toString(), handled);
-                    if (!handled) {
-                        throw re;
-                    }
-                }
-            }
+            mainLoop(cx);
 
         } catch (NodeExitException ne) {
             log.debug("Normal script exit.");
@@ -299,6 +270,100 @@ public class ScriptRunner
             throw new NodeException(ioe);
         } finally {
             Context.exit();
+        }
+        return ScriptStatus.OK;
+    }
+
+    private void mainLoop(Context cx)
+        throws NodeException, InterruptedException, IOException
+    {
+        // Node scripts don't exit unless exit is called -- they keep on trucking.
+        // The JS code inside will throw NodeExitException when it's time to exit
+        long pollTimeout = 0L;
+        while (true) {
+            try {
+                if ((future != null) && future.isCancelled()) {
+                    throw new ScriptCancelledException();
+                }
+
+                // Check for network I/O and also sleep if necessary
+                int selected;
+                if (pollTimeout > 0L) {
+                    selected = selector.select(pollTimeout);
+                } else {
+                    selected = selector.selectNow();
+                }
+
+                // Fire any selected I/O functions
+                if (selected > 0) {
+                    Iterator<SelectionKey> keys = selector.selectedKeys().iterator();
+                    while (keys.hasNext()) {
+                        SelectionKey selKey = keys.next();
+                        ((SelectorHandler)selKey.attachment()).selected(selKey);
+                        keys.remove();
+                    }
+                }
+
+                // Call one tick function
+                Activity nextCall = tickFunctions.poll();
+                while (nextCall != null) {
+                    log.debug("Executing one callback function");
+                    nextCall.execute(cx);
+                    nextCall = tickFunctions.poll();
+                }
+
+                // Check the timer queue for all expired timers
+                Activity timed = timerQueue.peek();
+                long now = System.currentTimeMillis();
+                while ((timed != null) && (timed.timeout <= now)) {
+                    log.debug("Executing one timed-out task");
+                    timerQueue.poll();
+                    if (timed.cancelled) {
+                        timersMap.remove(timed.id);
+                    } else {
+                        timed.execute(cx);
+                        if (timed.repeating && !timed.cancelled) {
+                            log.debug("Re-registering with delay of {}", timed.interval);
+                            timed.timeout = System.currentTimeMillis() + timed.interval;
+                            timerQueue.add(timed);
+                        } else {
+                            timersMap.remove(timed.id);
+                        }
+                    }
+                    timed = timerQueue.peek();
+                    now = System.currentTimeMillis();
+                }
+
+                pollTimeout = 0L;
+                if (tickFunctions.isEmpty() && !timerQueue.isEmpty()) {
+                    // Sleep until the timer is expired
+                    timed = timerQueue.peek();
+                    pollTimeout = (timed.timeout - now);
+                    log.debug("Sleeping for {} milliseconds", pollTimeout);
+                }
+
+                // If there are no ticks and no timers, let's just stop the script.
+                if (tickFunctions.isEmpty() && timerQueue.isEmpty()) {
+                    if (pinCount > 0) {
+                        log.debug("Sleeping because we are pinned");
+                        pollTimeout = DEFAULT_DELAY;
+                    } else {
+                        log.debug("Script complete -- exiting");
+                        throw new NodeExitException(false, 0);
+                    }
+                }
+            } catch (NodeExitException ne) {
+                throw ne;
+            } catch (RhinoException re) {
+                log.debug("Exception in script: {}, {}", re.toString(), re.getMessage());
+                boolean handled =
+                    process.fireEvent("uncaughtException", re);
+                log.debug("Exception in script: {} handled = {}",
+                          re.toString(), handled);
+                if (!handled) {
+                    throw re;
+                }
+            }
         }
     }
 
@@ -323,10 +388,9 @@ public class ScriptRunner
             mod.setLoaded(true);
             mod.bindVariables(cx, scope, mod);
 
+            // Other modules
             timers =  (Timers.TimersImpl)registerModule("timers", cx, scope);
             timers.setRunner(this);
-
-            // Other modules
             process  =
                 (Process.ProcessImpl)registerModule("process", cx, scope);
             process.setRunner(this);
@@ -391,43 +455,67 @@ public class ScriptRunner
         return exports;
     }
 
-    private static final class Timed
-        implements Comparable<Timed>
+    private abstract static class Activity
+        implements Comparable<Activity>
     {
-        int id;
-        long timeout;
-        final Function function;
-        final boolean repeating;
-        final long interval;
-        final Object[] args;
-        boolean cancelled;
+        protected int id;
+        protected long timeout;
+        protected long interval;
+        protected boolean repeating;
+        protected boolean cancelled;
 
-        Timed(int id, long timeout, Function function, boolean repeating,
-              long interval, Object[] args)
-        {
+        abstract void execute(Context cx);
+
+        int getId() {
+            return id;
+        }
+
+        void setId(int id) {
             this.id = id;
+        }
+
+        long getTimeout() {
+            return timeout;
+        }
+
+        void setTimeout(long timeout) {
             this.timeout = timeout;
-            this.function = function;
-            this.repeating = repeating;
+        }
+
+        long getInterval() {
+            return interval;
+        }
+
+        void setInterval(long interval) {
             this.interval = interval;
-            this.args = args;
+        }
+
+        boolean isRepeating() {
+            return repeating;
+        }
+
+        void setRepeating(boolean repeating) {
+            this.repeating = repeating;
+        }
+
+        boolean isCancelled() {
+            return cancelled;
+        }
+
+        void setCancelled(boolean cancelled) {
+            this.cancelled = cancelled;
         }
 
         @Override
-        public int compareTo(Timed timed)
+        public int compareTo(Activity a)
         {
-            if (timeout < timed.timeout) {
+            if (timeout < a.timeout) {
                 return -1;
-            } else if (timeout > timed.timeout) {
+            } else if (timeout > a.timeout) {
                 return 1;
             }
             return 0;
         }
-    }
-
-    private static abstract class Activity
-    {
-        abstract void execute(Context cx);
     }
 
     private static final class Callback
@@ -446,6 +534,7 @@ public class ScriptRunner
             this.args = args;
         }
 
+        @Override
         void execute(Context cx)
         {
             function.call(cx, scope, thisObj, args);
@@ -466,6 +555,7 @@ public class ScriptRunner
             this.args = args;
         }
 
+        @Override
         void execute(Context cx)
         {
             emitter.fireEvent(name, args);
@@ -484,6 +574,7 @@ public class ScriptRunner
             this.scope = scope;
         }
 
+        @Override
         void execute(Context ctx)
         {
             task.execute(ctx, scope);

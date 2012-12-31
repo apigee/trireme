@@ -1,9 +1,11 @@
 package com.apigee.noderunner.core.test;
 
+import com.apigee.noderunner.core.internal.Utils;
 import org.junit.Test;
 import org.omg.CORBA.PUBLIC_MEMBER;
 
 import java.io.UnsupportedEncodingException;
+import java.nio.ByteBuffer;
 import java.nio.charset.Charset;
 
 import static org.junit.Assert.*;
@@ -151,6 +153,52 @@ public class EncodingTest
         byte[] decodedAscii = decodedString.getBytes("ascii");
         //System.out.println(bytesToString(ascii) + " -> " + bytesToString(decodedAscii));
         assertEquals(TEXT, decodedString);
+    }
+
+    @Test
+    public void testUtf8()
+        throws UnsupportedEncodingException
+    {
+        // These are three-byte UTF-8 characters. Can we decode them partially?
+        String IN = "あああ";
+        byte[] utf = IN.getBytes("UTF-8");
+        assertEquals(9, utf.length);
+        String decoded = new String(utf, "UTF-8");
+        assertEquals(IN, decoded);
+    }
+
+    @Test
+    public void testUtf82()
+        throws UnsupportedEncodingException
+    {
+        // These are three-byte UTF-8 characters. Can we decode them partially?
+        String IN = "あああ";
+        ByteBuffer utf = ByteBuffer.wrap(IN.getBytes("UTF-8"));
+        assertEquals(9, utf.remaining());
+        String decoded = Utils.bufferToString(utf, Charset.forName("UTF-8"));
+        assertEquals(IN, decoded);
+        assertFalse(utf.hasRemaining());
+    }
+
+    @Test
+    public void testUtf8Partial()
+        throws UnsupportedEncodingException
+    {
+        // These are three-byte UTF-8 characters. Can we decode them partially?
+        String IN = "あああ";
+        ByteBuffer utf = ByteBuffer.wrap(IN.getBytes("UTF-8"));
+        assertEquals(9, utf.remaining());
+
+        ByteBuffer slice1 = utf.duplicate();
+        slice1.limit(4);
+        String decoded1 = Utils.bufferToString(slice1, Charset.forName("UTF-8"));
+        assertEquals(1, slice1.remaining());
+        ByteBuffer slice2 = utf.duplicate();
+        slice2.position(3);
+        String decoded2 = Utils.bufferToString(slice2, Charset.forName("UTF-8"));
+        assertFalse(slice2.hasRemaining());
+        String decoded = decoded1 + decoded2;
+        assertEquals(IN, decoded);
     }
 
     private void encodeDecode(String text, String encoding)

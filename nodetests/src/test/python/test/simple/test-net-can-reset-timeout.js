@@ -19,40 +19,45 @@
 // OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE
 // USE OR OTHER DEALINGS IN THE SOFTWARE.
 
+var net = require('net');
 var common = require('../common');
 var assert = require('assert');
-var net = require('net');
 
-var serverGotEnd = false;
-var clientGotEnd = false;
+var timeoutCount = 0;
 
-var server = net.createServer({allowHalfOpen: true}, function(socket) {
-  socket.on('end', function() {
-    serverGotEnd = true;
+var server = net.createServer(function(stream) {
+  console.log('Server got connection');
+  stream.setTimeout(100);
+
+  stream.on('timeout', function() {
+    console.log('timeout');
+    // try to reset the timeout.
+    stream.write('WHAT.');
+    // don't worry, the socket didn't *really* time out, we're just thinking
+    // it did.
+    timeoutCount += 1;
   });
-  socket.end();
+
+  stream.on('end', function() {
+    console.log('server side end');
+    stream.end();
+  });
 });
 
 server.listen(common.PORT, function() {
-  var client = net.connect({
-    host: '127.0.0.1',
-    port: common.PORT,
-    allowHalfOpen: true
-  }, function() {
-    client.on('end', function() {
-      clientGotEnd = true;
-      setTimeout(function() {
-        assert(client.writable);
-        client.end();
-      }, 10);
-    });
-    client.on('close', function() {
-      server.close();
-    });
+  var c = net.createConnection(common.PORT);
+
+  c.on('data', function() {
+    c.end();
+  });
+
+  c.on('end', function() {
+    console.log('client side end');
+    server.close();
   });
 });
 
+
 process.on('exit', function() {
-  assert(serverGotEnd);
-  assert(clientGotEnd);
+  assert.equal(1, timeoutCount);
 });

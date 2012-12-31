@@ -19,33 +19,43 @@
 // OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE
 // USE OR OTHER DEALINGS IN THE SOFTWARE.
 
+// This example sets a timeout then immediately attempts to disable the timeout
+// https://github.com/joyent/node/pull/2245
+
 var common = require('../common');
-var assert = require('assert');
 var net = require('net');
+var assert = require('assert');
 
-var serverConnection;
-var echoServer = net.createServer(function(connection) {
-  serverConnection = connection;
-  connection.setTimeout(0);
-  assert.notEqual(connection.setKeepAlive, undefined);
-  // send a keepalive packet after 1000 ms
-  connection.setKeepAlive(true, 1000);
-  connection.on('end', function() {
-    connection.end();
-  });
+var T = 100;
+
+var server = net.createServer(function(c) {
+  c.write('hello');
 });
-echoServer.listen(common.PORT);
+server.listen(common.PORT);
 
-echoServer.on('listening', function() {
-  var clientConnection = net.createConnection(common.PORT);
-  clientConnection.setTimeout(0);
+var killers = [0, Infinity, NaN];
 
-  setTimeout(function() {
-    // make sure both connections are still open
-    assert.equal(serverConnection.readyState, 'open');
-    assert.equal(clientConnection.readyState, 'open');
-    serverConnection.end();
-    clientConnection.end();
-    echoServer.close();
-  }, 1200);
+var left = killers.length;
+killers.forEach(function(killer) {
+  var socket = net.createConnection(common.PORT, 'localhost');
+
+  socket.setTimeout(T, function() {
+    console.log('Socket timeout: left = ' + left +
+                ' killer = ' + killer);
+    socket.destroy();
+    if (--left === 0) server.close();
+    assert.ok(killer !== 0);
+    clearTimeout(timeout);
+  });
+
+  socket.setTimeout(killer);
+
+  var timeout = setTimeout(function() {
+    console.log('Timeout: left = ' + left +
+                ' killer = ' + killer);
+    socket.destroy();
+    if (--left === 0) server.close();
+    // TODO Greg I don't understand this assertion...
+    //assert.ok(killer === 0);
+  }, T * 2);
 });

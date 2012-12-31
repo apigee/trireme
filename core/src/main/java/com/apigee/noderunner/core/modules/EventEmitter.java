@@ -99,9 +99,6 @@ public class EventEmitter
             }
             ls.add(new Lsnr(listener, once));
 
-            if (log.isDebugEnabled()) {
-                log.debug("Now {} listeners registered on {} for {}", new Object[] { ls.size(), this, event });
-            }
             if (ls.size() > maxListeners) {
                 log.warn("{} listeners assigned for event type {}", ls.size(), event);
             }
@@ -194,15 +191,9 @@ public class EventEmitter
 
                 // Now actually fire. If we fail here we still have cleaned up.
                 for (Lsnr l : toFire) {
-                    if (log.isDebugEnabled()) {
-                        log.debug("Sending {} to {}", event, l.function);
-                    }
                     l.function.call(c, l.function, this, args);
                     handled = true;
                 }
-            }
-            if (log.isDebugEnabled()) {
-                log.debug("Event {} fired. handled = {}", event, handled);
             }
             return handled;
         }

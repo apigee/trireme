@@ -3,15 +3,6 @@ package com.apigee.noderunner.net;
 import com.apigee.noderunner.core.ScriptTask;
 import com.apigee.noderunner.core.internal.ScriptRunner;
 import com.apigee.noderunner.core.modules.Stream;
-import com.apigee.noderunner.net.netty.NettyFactory;
-import io.netty.buffer.ByteBuf;
-import io.netty.buffer.Unpooled;
-import io.netty.channel.ChannelFuture;
-import io.netty.channel.ChannelFutureListener;
-import io.netty.channel.ChannelHandlerContext;
-import io.netty.channel.ChannelInboundByteHandlerAdapter;
-import io.netty.channel.ChannelInitializer;
-import io.netty.channel.socket.SocketChannel;
 import org.mozilla.javascript.Context;
 import org.mozilla.javascript.EvaluatorException;
 import org.mozilla.javascript.Function;
@@ -22,7 +13,14 @@ import org.mozilla.javascript.annotations.JSGetter;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.io.IOException;
+import java.net.InetAddress;
+import java.net.InetSocketAddress;
+import java.net.UnknownHostException;
 import java.nio.ByteBuffer;
+import java.nio.channels.SelectionKey;
+import java.nio.channels.SocketChannel;
+import java.util.ArrayDeque;
 
 import static com.apigee.noderunner.core.internal.ArgUtils.*;
 
@@ -32,18 +30,40 @@ import static com.apigee.noderunner.core.internal.ArgUtils.*;
  */
 public class NetSocket
     extends Stream.BidirectionalStream
+    implements SelectorHandler
 {
     protected static final Logger log = LoggerFactory.getLogger(NetSocket.class);
 
-    public static final String CLASS_NAME = "net.Socket";
+    public static final String CLASS_NAME       = "net.Socket";
+    public static final int    READ_BUFFER_SIZE = 8192;
+
+    private static final QueuedWrite END_MARKER = new QueuedWrite(null, null);
 
     private SocketChannel channel;
+    private SelectionKey  key;
     private boolean allowHalfOpen = true;
-    private String       localAddress;
     private ScriptRunner runner;
+    /** If open and "unref" hasn't been called */
     private boolean      referenced;
     private long         bytesRead;
     private long         bytesWritten;
+    /** Connect was called and we're waiting for success */
+    private boolean      awaitingConnect;
+    /** Close was called, or end after receiving a FIN */
+    private boolean      closed;
+    /** Pause was caled, and not resume */
+    private boolean      paused;
+    private NetServer    server;
+    /** Updated on each read and write */
+    private long         lastActivity;
+    /** Timeout in milliseconds set by "setTimeout" */
+    private int          timeout;
+    /** Key needed to cancel the timeout */
+    private int          timeoutKey = -1;
+    /** We'll queue outstanding writes here when closed or when writes don't complete */
+    private final ArrayDeque<QueuedWrite> writeBuffer = new ArrayDeque<QueuedWrite>();
+    /** We always read into this buffer, then copy from there or translate to a string */
+    private final ByteBuffer readBuffer = ByteBuffer.allocate(READ_BUFFER_SIZE);
 
     @Override
     public String getClassName()
@@ -51,61 +71,298 @@ public class NetSocket
         return CLASS_NAME;
     }
 
-    public void initialize(SocketChannel channel, ScriptRunner runner)
+    /**
+     * Called when a server-side socket was accepted
+     */
+    public void initialize(SocketChannel channel, ScriptRunner runner,
+                           boolean allowHalfOpen, NetServer server)
+        throws IOException
     {
         this.channel = channel;
         this.runner = runner;
+        this.server = server;
+        this.allowHalfOpen = allowHalfOpen;
         initChannel();
+        setReadable(true);
+        setWritable(true);
+        key = channel.register(runner.getSelector(),
+                               SelectionKey.OP_READ, this);
     }
 
+    /**
+     * Called when creating a new client-side socket
+     */
     public void initialize(String host, int port, String localAddress,
                            boolean allowHalfOpen, Function listener,
                            ScriptRunner runner)
     {
         this.allowHalfOpen = allowHalfOpen;
-        this.localAddress = localAddress;
         this.runner = runner;
         initializeInternal(host, port, listener);
+    }
+
+    private void setInterest()
+    {
+        int ops = 0;
+        if (readable && !paused) {
+            ops |= SelectionKey.OP_READ;
+        }
+        if (writable && !writeBuffer.isEmpty()) {
+            ops |= SelectionKey.OP_WRITE;
+        }
+        if (awaitingConnect) {
+            ops |= SelectionKey.OP_CONNECT;
+        }
+        key.interestOps(ops);
+    }
+
+    @Override
+    public void selected(SelectionKey key)
+    {
+        if (log.isDebugEnabled()) {
+            log.debug("selected: {} on {}. readable = {} writable = {} closed = {}",
+                      key.interestOps(), key.channel(), readable, writable, closed);
+        }
+        boolean stillOpen = true;
+        updateActivity();
+        if (awaitingConnect && key.isConnectable()) {
+            stillOpen = processConnect(key);
+        }
+        if (stillOpen && key.isReadable()) {
+            stillOpen = processReads();
+        }
+        if (stillOpen && key.isWritable()) {
+            processWrites();
+        }
+    }
+
+    private boolean processConnect(SelectionKey key)
+    {
+        try {
+            if (log.isDebugEnabled()) {
+                log.debug("Finishing connect for {}", channel);
+            }
+            awaitingConnect = false;
+            channel.finishConnect();
+
+            // Connection was successful if we got here
+            setReadable(true);
+            setWritable(true);
+            setInterest();
+            runner.enqueueEvent(this, "connect", null);
+            return true;
+
+        } catch (IOException ioe) {
+            if (log.isDebugEnabled()) {
+                log.debug("Error on connect: {}", ioe);
+            }
+            // We will get here if the connection failed
+            sendError("ECONNREFUSED", ioe);
+            doClose();
+            return false;
+        }
+    }
+
+    private boolean processReads()
+    {
+        try {
+            int read;
+            do {
+                read = channel.read(readBuffer);
+                if (log.isDebugEnabled()) {
+                    log.debug("read = {} buf = {}", read, readBuffer);
+                }
+                if (read > 0) {
+                    readBuffer.flip();
+                    bytesRead += read;
+
+                    if (encoding == null) {
+                        // Copy the bytes into a new buffer and get ready to re-read
+                        final ByteBuffer buf = ByteBuffer.allocate(readBuffer.remaining());
+                        buf.put(readBuffer);
+                        buf.flip();
+                        readBuffer.clear();
+                        runner.enqueueTask(new ScriptTask()
+                        {
+                            @Override
+                            public void execute(Context cx, Scriptable scope)
+                            {
+                                sendDataEvent(buf, false, Context.getCurrentContext(),
+                                              NetSocket.this);
+                            }
+                        });
+
+                    } else {
+                        // Decode as much of the string as the current charset allows
+                        String decoded =
+                            com.apigee.noderunner.core.internal.Utils.bufferToString(readBuffer, encoding);
+                        if (log.isDebugEnabled()) {
+                            log.debug("Decoded to {} characters with {} bytes remaining",
+                                      decoded.length(), readBuffer.remaining());
+                        }
+                        runner.enqueueEvent(this, "data", new Object[] { decoded });
+                        if (readBuffer.hasRemaining()) {
+                            // String decoding left some partial characters behind.
+                            // Move to the beginning of the read buffer and read again.
+                            byte[] remaining = new byte[readBuffer.remaining()];
+                            readBuffer.get(remaining);
+                            readBuffer.clear();
+                            readBuffer.put(remaining);
+                        } else {
+                            readBuffer.clear();
+                        }
+                    }
+                }
+            } while (read > 0);
+
+            if (read < 0) {
+                if (log.isDebugEnabled()) {
+                    log.debug("Channel closed by other side: {}", channel);
+                }
+                if (readable && writable && allowHalfOpen) {
+                    // End has not been called on this side yet
+                    log.debug("Leaving channel open for write only");
+                    runner.enqueueEvent(this, "end", null);
+                    setReadable(false);
+                    setInterest();
+                } else {
+                    // End has been called or we don't support half-close, so close.
+                    runner.enqueueEvent(this, "end", null);
+                    doClose();
+                }
+                return false;
+            }
+
+        } catch (IOException ioe) {
+            if (log.isDebugEnabled()) {
+                log.debug("I/O error on read: {}", ioe);
+            }
+            sendError("Read failed", ioe);
+            doClose();
+            return false;
+        }
+        return true;
+    }
+
+    private void processWrites()
+    {
+        QueuedWrite write;
+        boolean wroteOne = false;
+        do {
+            write = writeBuffer.poll();
+            if (write != null) {
+                if (log.isDebugEnabled()) {
+                    log.debug("Processing queued write {}", write.buf);
+                }
+                if (write == END_MARKER) {
+                    sendEnd();
+                } else {
+                    try {
+                        wroteOne = true;
+                        int written = channel.write(write.buf);
+                        if (log.isDebugEnabled()) {
+                            log.debug("Wrote {} bytes", written);
+                        }
+                        if (write.buf.hasRemaining()) {
+                            // Write did not complete all the way -- keep waiting
+                            writeBuffer.offerFirst(write);
+                            return;
+                        } else {
+                            if (write.callback != null) {
+                                runner.enqueueCallback(write.callback, write.callback,
+                                                       this, null);
+                            }
+                        }
+
+                    } catch (IOException ioe) {
+                        if (log.isDebugEnabled()) {
+                            log.debug("Error writing to channel: {}", ioe);
+                            sendError("Write failed", ioe);
+                            doClose();
+                        }
+                    }
+                }
+            }
+        } while (write != null);
+        // TODO optimize selection criteria here?
+        if (wroteOne) {
+            runner.enqueueEvent(this, "drain", null);
+        }
+        setInterest();
+    }
+
+    private void doClose()
+    {
+        if (closed) {
+            return;
+        }
+        if (log.isDebugEnabled()) {
+            log.debug("Closing channel {}", channel);
+        }
+        setReadable(false);
+        setWritable(false);
+        closed = true;
+        if (server != null) {
+            server.decrementConnection();
+        }
+        try {
+            key.cancel();
+            channel.close();
+        } catch (IOException closeExc) {
+            log.debug("Error closing failed channel {}", closeExc);
+        }
+        runner.enqueueEvent(this, "close", new Object[] { Boolean.FALSE });
+    }
+
+    private void sendError(String msg, Throwable t)
+    {
+        runner.enqueueEvent(this, "error",
+                            new Object[] { NetServer.makeError(t, msg,
+                                                               Context.getCurrentContext(), this) });
     }
 
     private void initializeInternal(String host, int port, Function listener)
     {
         bytesRead = bytesWritten = 0;
+        closed = false;
+        setReadable(false);
+        setWritable(false);
         if (listener != null) {
             register("connect", listener, false);
         }
-        ChannelFuture future =
-            NettyFactory.get().connect(port, host, localAddress, new ChannelInitializer<SocketChannel>()
-            {
-                @Override
-                public void initChannel(SocketChannel c)
-                {
-                    c.pipeline().addLast(new Handler(NetSocket.this));
-                }
-            });
-        future.addListener(new ChannelFutureListener()
-        {
-            @Override
-            public void operationComplete(ChannelFuture f)
-            {
-                if (f.isSuccess()) {
-                    channel = (SocketChannel)f.channel();
-                    initChannel();
-                    NetSocket.this.runner.enqueueEvent(NetSocket.this, "connect", null);
-                } else {
-                    NetSocket.this.runner.enqueueEvent(NetSocket.this, "error",
-                                                       new Object[] { NetServer.makeError(f.cause(), "connect error",
-                                                                           Context.getCurrentContext(),
-                                                                           NetSocket.this) });
-                }
+
+        try {
+            channel = SocketChannel.open();
+            initChannel();
+
+            if (log.isDebugEnabled()) {
+                log.debug("Initiating connect to {}:{}", host, port);
             }
-        });
+            key = channel.register(runner.getSelector(),
+                                   SelectionKey.OP_CONNECT, this);
+            awaitingConnect = true;
+            InetAddress addr = InetAddress.getByName(host);
+            channel.connect(new InetSocketAddress(addr, port));
+
+        } catch (UnknownHostException uhe) {
+            if (log.isDebugEnabled()) {
+                log.debug("Can't resolve host name {}: {}", host, uhe);
+            }
+            sendError("ENOTFOUND", uhe);
+        } catch (IOException ioe) {
+            if (log.isDebugEnabled()) {
+                log.debug("Error on connect: {}", ioe);
+            }
+            sendError("ECONNREFUSED", ioe);
+        }
     }
 
     private void initChannel()
+        throws IOException
     {
         // This is the default according to the docs
-        channel.config().setTcpNoDelay(true);
+        channel.configureBlocking(false);
+        channel.socket().setTcpNoDelay(true);
     }
 
     @JSConstructor
@@ -159,8 +416,8 @@ public class NetSocket
     @JSGetter("buffersize")
     public int getBufferSize()
     {
-        // TODO
-        return 0;
+        // TODO this is not exactly as we describe
+        return READ_BUFFER_SIZE;
     }
 
     @Override
@@ -169,6 +426,8 @@ public class NetSocket
         ensureArg(args, 0);
         Function callback = null;
 
+        // Get a view on the buffer here -- which means that it can't be modified after "write".
+        // This is what node code expects.
         ByteBuffer writeBBuf = getWriteData(args);
 
         if ((args.length >= 2) && (args[1] instanceof Function)) {
@@ -177,61 +436,168 @@ public class NetSocket
             callback = (Function)args[2];
         }
 
-        bytesWritten += writeBBuf.remaining();
-        ChannelFuture future = channel.write(Unpooled.wrappedBuffer(writeBBuf));
-
-        if (callback != null) {
-            final Function cb = callback;
-            future.addListener(new ChannelFutureListener() {
-                @Override
-                public void operationComplete(ChannelFuture channelFuture)
-                {
-                    if (cb != null) {
-                        runner.enqueueCallback(cb, NetSocket.this, NetSocket.this, null);
-                    }
-                }
-            });
+        if (closed) {
+            sendError("Socket closed", null);
+            if (callback != null) {
+                runner.enqueueCallback(callback, callback, this, null);
+            }
+            return false;
         }
-        return future.isDone();
-    }
 
-    public void sendData(ByteBuffer data, Context cx, Scriptable scope)
-    {
-        bytesRead += data.remaining();
-        sendDataEvent(data, false, cx, scope);
+        bytesWritten += writeBBuf.remaining();
+        updateActivity();
+        if (writeBuffer.isEmpty() && !awaitingConnect) {
+            try {
+                int written = channel.write(writeBBuf);
+                if (log.isDebugEnabled()) {
+                    log.debug("Immediate write of {} returned {}", writeBBuf, written);
+                }
+                if (writeBBuf.hasRemaining()) {
+                    writeBuffer.offer(new QueuedWrite(writeBBuf, callback));
+                    return false;
+                }
+                if (callback != null) {
+                    runner.enqueueCallback(callback, callback, this, null);
+                }
+                setInterest();
+                return true;
+
+            } catch (IOException ioe) {
+                if (log.isDebugEnabled()) {
+                    log.debug("Error on immediate write: {}", ioe);
+                }
+                sendError("Write error", ioe);
+                doClose();
+                setInterest();
+                return true;
+            }
+
+        } else {
+            if (log.isDebugEnabled()) {
+                log.debug("Queueing {} for writing later", writeBBuf);
+            }
+            writeBuffer.offer(new QueuedWrite(writeBBuf, callback));
+            setInterest();
+            return false;
+        }
     }
 
     @Override
     protected void doEnd(Context cx)
     {
-        channel.shutdownOutput();
+        if (closed) {
+            return;
+        }
+        if (readable && writable && allowHalfOpen) {
+            if (log.isDebugEnabled()) {
+                log.debug("Shutting down socket output and leaving open for read");
+            }
+            writeBuffer.offer(END_MARKER);
+            setInterest();
+            setWritable(false);
+        } else {
+            doClose();
+        }
+    }
+
+    private void sendEnd()
+    {
+        if (log.isDebugEnabled()) {
+            log.debug("end: Shutting down output for {}", channel);
+        }
+        try {
+            channel.socket().shutdownOutput();
+        } catch (IOException ioe) {
+            throw new EvaluatorException("I/O error");
+        }
         setWritable(false);
+        setInterest();
     }
 
     @Override
+    @JSFunction
     public void destroy()
     {
-        channel.close();
-        setReadable(false);
-        setWritable(false);
+        doClose();
     }
 
     @Override
+    @JSFunction
     public void pause()
     {
-        // TODO
+        if (!closed) {
+            paused = true;
+            setInterest();
+        }
     }
 
     @Override
+    @JSFunction
     public void resume()
     {
-        // TODO
+        if (paused && !closed) {
+            paused = false;
+            setInterest();
+        }
     }
 
     @JSFunction
     public static void setTimeout(Context cx, Scriptable thisObj, Object[] args, Function func)
     {
-        // TODO GREG How do we do this in Netty?
+        double delay = doubleArg(args, 0);
+        Function callback = functionArg(args, 1, false);
+        NetSocket sock = (NetSocket)thisObj;
+
+        if (sock.timeoutKey >= 0) {
+            sock.runner.clearTimer(sock.timeoutKey);
+            sock.timeoutKey = -1;
+        }
+
+        if ((delay > 0.0) && !Double.isNaN(delay) && !Double.isInfinite(delay)) {
+            if (callback != null) {
+                sock.register("timeout", callback, true);
+            }
+            sock.timeout = (int)delay;
+            sock.registerTimeout(sock.timeout);
+        } else if (callback != null) {
+            sock.removeListener("timeout", callback);
+        }
+    }
+
+    private void registerTimeout(long delay)
+    {
+        if (log.isDebugEnabled()) {
+            log.debug("Setting socket timeout for {} from now", delay);
+        }
+        timeoutKey = runner.createTimer(delay, false, new TimerOuter(), this);
+    }
+
+    private final class TimerOuter
+        implements ScriptTask
+    {
+        @Override
+        public void execute(Context cx, Scriptable scope)
+        {
+            if (closed) {
+                return;
+            }
+            long now = System.currentTimeMillis();
+            long idleTime = now - lastActivity;
+            if (idleTime >= timeout) {
+                // We timed out. Already in a callback so fire right away
+                fireEvent("timeout");
+                registerTimeout(timeout);
+            } else {
+                // We've got more time to go
+                long newDelay = timeout - (now - lastActivity);
+                registerTimeout(newDelay);
+            }
+        }
+    }
+
+    private void updateActivity()
+    {
+        lastActivity = System.currentTimeMillis();
     }
 
     @JSFunction
@@ -239,7 +605,11 @@ public class NetSocket
     {
         boolean noDelay = booleanArg(args, 0, true);
         NetSocket sock = (NetSocket)thisObj;
-        sock.channel.config().setTcpNoDelay(noDelay);
+        try {
+            sock.channel.socket().setTcpNoDelay(noDelay);
+        } catch (IOException ioe) {
+            throw new EvaluatorException(ioe.toString());
+        }
     }
 
     @JSFunction
@@ -247,14 +617,20 @@ public class NetSocket
     {
         boolean keepAlive = booleanArg(args, 0, false);
         NetSocket sock = (NetSocket)thisObj;
-        sock.channel.config().setKeepAlive(keepAlive);
+        try {
+            sock.channel.socket().setKeepAlive(keepAlive);
+        } catch (IOException ioe) {
+            throw new EvaluatorException(ioe.toString());
+        }
     }
 
     @JSFunction
     public static Object address(Context cx, Scriptable thisObj, Object[] args, Function func)
     {
         NetSocket sock = (NetSocket)thisObj;
-        return Utils.formatAddress(sock.channel.localAddress(), cx, thisObj);
+        return Utils.formatAddress(sock.channel.socket().getLocalAddress(),
+                                   sock.channel.socket().getLocalPort(),
+                                   cx, thisObj);
     }
 
     @JSFunction
@@ -275,16 +651,25 @@ public class NetSocket
         }
     }
 
-    @JSGetter("remoteaddress")
+    @JSGetter("remoteAddress")
     public String getRemoteAddress()
     {
-        return channel.remoteAddress().getAddress().getHostAddress();
+        InetSocketAddress sa = (InetSocketAddress)(channel.socket().getRemoteSocketAddress());
+        if (sa == null) {
+            return null;
+        }
+        InetAddress addr = sa.getAddress();
+        if (addr == null) {
+            return null;
+        }
+        return addr.getHostAddress();
     }
 
     @JSGetter("remotePort")
     public int getRemotePort()
     {
-        return channel.remoteAddress().getPort();
+        InetSocketAddress a = (InetSocketAddress)(channel.socket().getRemoteSocketAddress());
+        return a.getPort();
     }
 
     @JSGetter("bytesRead")
@@ -308,72 +693,15 @@ public class NetSocket
         throw new EvaluatorException("Not implemented");
     }
 
-    private final class Handler
-        extends ChannelInboundByteHandlerAdapter
+    private static final class QueuedWrite
     {
-        private NetSocket socket;
+        final ByteBuffer buf;
+        final Function callback;
 
-        Handler(NetSocket sock)
+        QueuedWrite(ByteBuffer buf, Function callback)
         {
-            this.socket = sock;
-        }
-
-        @Override
-        public void channelUnregistered(final ChannelHandlerContext ctx)
-        {
-            log.debug("Socket disconnected: {}", ctx);
-
-            runner.enqueueTask(new ScriptTask()
-            {
-                @Override
-                public void execute(Context cx, Scriptable scope)
-                {
-                    socket.setReadable(false);
-                    socket.setWritable(false);
-                    socket.fireEvent("end");
-                    // TODO do we handle "end" and "close" separately?
-                    socket.fireEvent("close");
-                }
-            });
-        }
-
-        @Override
-        public void inboundBufferUpdated(final ChannelHandlerContext ctx, final ByteBuf buf)
-        {
-            log.debug("Buffer update: {}", buf);
-            // In Netty 4, we need to make a copy in this thread, then pass it on.
-            // It'd be great to do the string conversion right here if necessary,
-            // but the JS code runs in another thread and may set "encoding" at any time so we can't.
-
-            final ByteBuffer bufCopy = ByteBuffer.allocate(buf.readableBytes());
-            buf.readBytes(bufCopy);
-            bufCopy.flip();
-
-            runner.enqueueTask(new ScriptTask()
-            {
-                @Override
-                public void execute(Context cx, Scriptable scope)
-                {
-                    socket.sendData(bufCopy, cx, scope);
-                }
-            });
-        }
-
-        @Override
-        public void exceptionCaught(final ChannelHandlerContext ctx, final Throwable t)
-        {
-            log.debug("Exception event: {}", t);
-
-            runner.enqueueTask(new ScriptTask()
-            {
-                @Override
-                public void execute(Context cx, Scriptable scope)
-                {
-                    socket.fireEvent("error",
-                                     new Object[]{NetServer.makeError(t, "error",
-                                                                      cx, scope)});
-                }
-            });
+            this.buf = buf;
+            this.callback = callback;
         }
     }
 }

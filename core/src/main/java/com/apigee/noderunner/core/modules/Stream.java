@@ -137,7 +137,7 @@ public class Stream
             return CLASS_NAME;
         }
 
-        @JSGetter("readable")
+        @JSGetter("writable")
         public boolean isWritable() {
             return writable;
         }

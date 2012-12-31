@@ -237,9 +237,11 @@ public class HttpClientRequest
         log.debug("Connection succeeded");
         this.channel = channel;
         this.connected = true;
+        /* TODO get sockets back in here
         socket = (NetSocket)Context.getCurrentContext().newObject(this, NetSocket.CLASS_NAME);
         socket.initialize((SocketChannel)channel, runner);
         fireEvent("socket", socket);
+        */
 
         if (getRequest || endCalled || (outgoing != null)) {
             // We called "write" or "end" (or both) before the connection was done, so

@@ -19,44 +19,63 @@
 // OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE
 // USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-var net = require('net');
 var common = require('../common');
 var assert = require('assert');
 
-var timeoutCount = 0;
+var net = require('net');
 
-var server = net.createServer(function(stream) {
-  stream.setTimeout(100);
+var N = 50;
+var c = 0;
+var client_recv_count = 0;
+var disconnect_count = 0;
 
-  stream.on('timeout', function() {
-    console.log('timeout');
-    // try to reset the timeout.
-    stream.write('WHAT.');
-    // don't worry, the socket didn't *really* time out, we're just thinking
-    // it did.
-    timeoutCount += 1;
+var server = net.createServer(function(socket) {
+  socket.on('connect', function() {
+    console.log('Server connected');
+    socket.write('hello\r\n');
   });
 
-  stream.on('end', function() {
-    console.log('server side end');
-    stream.end();
+  socket.on('end', function() {
+    socket.end();
+  });
+
+  socket.on('close', function(had_error) {
+    //console.log('server had_error: ' + JSON.stringify(had_error));
+    assert.equal(false, had_error);
   });
 });
 
 server.listen(common.PORT, function() {
-  var c = net.createConnection(common.PORT);
+  console.log('listening');
+  var client = net.createConnection(common.PORT);
 
-  c.on('data', function() {
-    c.end();
+  // TODO GREG Invalid isn't this an invalid charset according to other tests?
+  //client.setEncoding('UTF8');
+  client.setEncoding('utf8');
+
+  client.on('connect', function() {
+    console.log('client connected.');
   });
 
-  c.on('end', function() {
-    console.log('client side end');
-    server.close();
+  client.on('data', function(chunk) {
+    client_recv_count += 1;
+    console.log('client_recv_count ' + client_recv_count);
+    assert.equal('hello\r\n', chunk);
+    client.end();
+  });
+
+  client.on('close', function(had_error) {
+    console.log('disconnect');
+    assert.equal(false, had_error);
+    if (disconnect_count++ < N)
+      client.connect(common.PORT); // reconnect
+    else
+      server.close();
   });
 });
-
 
 process.on('exit', function() {
-  assert.equal(1, timeoutCount);
+  assert.equal(N + 1, disconnect_count);
+  assert.equal(N + 1, client_recv_count);
 });
+

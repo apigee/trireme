@@ -19,38 +19,48 @@
 // OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE
 // USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-// This example sets a timeout then immediately attempts to disable the timeout
-// https://github.com/joyent/node/pull/2245
-
 var common = require('../common');
-var net = require('net');
 var assert = require('assert');
+var net = require('net');
 
-var T = 100;
+var serverGotEnd = false;
+var clientGotEnd = false;
 
-var server = net.createServer(function(c) {
-  c.write('hello');
-});
-server.listen(common.PORT);
-
-var killers = [0, Infinity, NaN];
-
-var left = killers.length;
-killers.forEach(function(killer) {
-  var socket = net.createConnection(common.PORT, 'localhost');
-
-  socket.setTimeout(T, function() {
-    socket.destroy();
-    if (--left === 0) server.close();
-    assert.ok(killer !== 0);
-    clearTimeout(timeout);
+var server = net.createServer({allowHalfOpen: true}, function(socket) {
+  console.log('Server connected');
+  socket.on('end', function() {
+    console.log('Server got end');
+    serverGotEnd = true;
   });
+  socket.on('close', function() {
+    console.log('Server got close');
+  });
+  socket.end();
+});
 
-  socket.setTimeout(killer);
+server.listen(common.PORT, function() {
+  var client = net.connect({
+    host: '127.0.0.1',
+    port: common.PORT,
+    allowHalfOpen: true
+  }, function() { 
+    console.log('Client connected');
+    client.on('end', function() {
+      console.log('Client got end');
+      clientGotEnd = true;
+      setTimeout(function() {
+        assert(client.writable);
+        client.end();
+      }, 10);
+    });
+    client.on('close', function() {
+      console.log('Client got close');
+      server.close();
+    });
+  });
+});
 
-  var timeout = setTimeout(function() {
-    socket.destroy();
-    if (--left === 0) server.close();
-    assert.ok(killer === 0);
-  }, T * 2);
+process.on('exit', function() {
+  assert(serverGotEnd);
+  assert(clientGotEnd);
 });

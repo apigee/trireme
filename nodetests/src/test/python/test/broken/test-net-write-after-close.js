@@ -33,6 +33,7 @@ process.on('exit', function() {
 
 var server = net.createServer(function(socket) {
   socket.on('error', function(error) {
+    console.log('Socket error');
     server.close();
     gotError = true;
   });

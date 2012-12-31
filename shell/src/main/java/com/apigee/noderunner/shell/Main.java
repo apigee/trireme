@@ -51,6 +51,7 @@ public class Main
             NodeScript ns = env.createScript(scriptName, script, args);
             Future<ScriptStatus> future = ns.execute();
             ScriptStatus status = future.get();
+            ns.close();
             System.exit(status.getExitCode());
 
         } catch (NodeException ne) {

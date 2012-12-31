@@ -29,14 +29,16 @@ for (var i = 0; i < kPoolSize; ++i) {
   data += 'あ'; // 3bytes
 }
 var receivedSize = 0;
-var encoding = 'UTF-8';
+var encoding = 'utf-8';
 
 var server = net.createServer(function(socket) {
   socket.setEncoding(encoding);
   socket.on('data', function(data) {
+    console.log('Server: received ' + data.length + ' bytes');
     receivedSize += data.length;
   });
   socket.on('end', function() {
+    console.log('Server: received end');
     socket.end();
   });
 });
@@ -44,12 +46,16 @@ var server = net.createServer(function(socket) {
 server.listen(common.PORT, function() {
   var client = net.createConnection(common.PORT);
   client.on('end', function() {
+    console.log('Client: received end');
     server.close();
   });
   client.write(data, encoding);
   client.end();
+  console.log('Client done writing');
 });
 
 process.on('exit', function() {
+  console.log('Expected receive size: ' + kPoolSize);
+  console.log('Total receive size: ' + receivedSize);
   assert.equal(receivedSize, kPoolSize);
 });

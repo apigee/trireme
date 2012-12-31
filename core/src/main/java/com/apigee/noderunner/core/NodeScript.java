@@ -73,4 +73,15 @@ public class NodeScript
         env.getScriptPool().execute(future);
         return future;
     }
+
+    /**
+     * Callers should close the script when done to clean up resources.
+     */
+    public void close()
+    {
+        if (runner != null) {
+            runner.close();
+        }
+    }
 }
+

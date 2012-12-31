@@ -28,6 +28,7 @@ var clientConnected = 0;
 var serverConnected = 0;
 
 var server = net.createServer(function(socket) {
+  console.log('New client: ' + serverConnected);
   socket.end();
   if (++serverConnected === 4) {
     server.close();
@@ -36,6 +37,7 @@ var server = net.createServer(function(socket) {
 server.listen(tcpPort, 'localhost', function() {
   function cb() {
     ++clientConnected;
+    console.log('Client connected: ' + clientConnected);
   }
 
   net.createConnection(tcpPort).on('connect', cb);

@@ -5,18 +5,20 @@ import org.mozilla.javascript.Context;
 import org.mozilla.javascript.Scriptable;
 
 import java.net.Inet6Address;
+import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.util.Collection;
 import java.util.Map;
 
 public class Utils
 {
-    public static Scriptable formatAddress(InetSocketAddress address, Context cx, Scriptable scope)
+    public static Scriptable formatAddress(InetAddress address, int port,
+                                           Context cx, Scriptable scope)
     {
         Scriptable addr = cx.newObject(scope);
-        addr.put("port", addr, Integer.valueOf(address.getPort()));
-        addr.put("address", addr, address.getAddress().getHostAddress());
-        if (address.getAddress() instanceof Inet6Address) {
+        addr.put("port", addr, port);
+        addr.put("address", addr, address.getHostAddress());
+        if (address instanceof Inet6Address) {
             addr.put("family", addr, "IPv6");
         } else {
             addr.put("family", addr, "IPv4");

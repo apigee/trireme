@@ -78,14 +78,14 @@ public class Utils
         CoderResult result;
         do {
             result = decoder.decode(buf, cBuf, true);
-            if (result == CoderResult.OVERFLOW) {
+            if (result.isOverflow()) {
                 bufLen *= 2;
                 CharBuffer newBuf = CharBuffer.allocate(bufLen);
                 cBuf.flip();
                 newBuf.put(cBuf);
                 cBuf = newBuf;
             }
-        } while (result == CoderResult.OVERFLOW);
+        } while (result.isOverflow());
 
         cBuf.flip();
         return cBuf.toString();

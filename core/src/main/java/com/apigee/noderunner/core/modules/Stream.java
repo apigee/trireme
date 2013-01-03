@@ -29,7 +29,7 @@ public class Stream
     @Override
     public String getModuleName()
     {
-        return "stream";
+        return "nativeStream";
     }
 
     @Override

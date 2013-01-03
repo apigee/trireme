@@ -121,6 +121,10 @@ public class ScriptRunner
         return sandbox;
     }
 
+    public Scriptable getScriptScope() {
+        return scope;
+    }
+
     public Map<String, Object> getModuleCache() {
         return moduleCache;
     }
@@ -424,16 +428,32 @@ public class ScriptRunner
         }
     }
 
-    public Object registerModule(String modName, Context cx, Scriptable scope)
+    public Object initializeModule(String modName, boolean internal,
+                                   Context cx, Scriptable scope)
         throws InvocationTargetException, InstantiationException, IllegalAccessException
     {
-        NodeModule mod = env.getRegistry().get(modName);
+        NodeModule mod;
+        if (internal) {
+            mod = env.getRegistry().getInternal(modName);
+        } else {
+            mod = env.getRegistry().get(modName);
+        }
         if (mod == null) {
-            throw new AssertionError("Module " + modName + " not found");
+            return null;
         }
         Object exp = mod.registerExports(cx, scope, this);
         if (exp == null) {
             throw new AssertionError("Module " + modName + " returned a null export");
+        }
+        return exp;
+    }
+
+    public Object registerModule(String modName, Context cx, Scriptable scope)
+        throws InvocationTargetException, InstantiationException, IllegalAccessException
+    {
+        Object exp = initializeModule(modName, false, cx, scope);
+        if (exp == null) {
+            throw new AssertionError("Module " + modName + " not found");
         }
         if (log.isDebugEnabled()) {
             log.debug("Registered module {} export = {}", modName, exp);

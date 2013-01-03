@@ -24,14 +24,12 @@ public class HttpModule
     @Override
     public String getModuleName()
     {
-        return "http";
+        return "native_http";
     }
 
     @Override
-    public Object registerExports(Context cx, Scriptable scope, ScriptRunner runner) throws
-                                                                                     InvocationTargetException,
-                                                                                     IllegalAccessException,
-                                                                                     InstantiationException
+    public Object registerExports(Context cx, Scriptable scope, ScriptRunner runner)
+        throws InvocationTargetException, IllegalAccessException, InstantiationException
     {
         runner.require("net", cx, scope);
 

@@ -27,7 +27,7 @@ import java.util.List;
 public class EventEmitter
     implements NodeModule
 {
-    public static final String CLASS_NAME = "_eventEmitterClass";
+    public static final String CLASS_NAME = "_NativeEventEmitter";
 
     private static final Logger log = LoggerFactory.getLogger(EventEmitter.class);
     private static final int DEFAULT_LIST_LEN = 4;
@@ -37,31 +37,24 @@ public class EventEmitter
 
     @Override
     public String getModuleName() {
-        return "events";
+        return "_nativeEvents";
     }
 
     @Override
     public Object registerExports(Context cx, Scriptable scope, ScriptRunner runner)
         throws InvocationTargetException, IllegalAccessException, InstantiationException
     {
-        ScriptableObject.defineClass(scope, EventEmitterImpl.class);
         Scriptable exports = cx.newObject(scope);
-        exports.put("EventEmitter", exports,
-                    new FunctionObject("EventEmitter",
-                                       Utils.findMethod(EventEmitter.class, "newEventEmitter"),
-                                       exports));
-        return exports;
-    }
+        exports.setPrototype(scope);
+        exports.setParentScope(null);
 
-    public static Object newEventEmitter(Context ctx, Object[] args, Function caller, boolean inNew)
-    {
-        return ctx.newObject(caller, CLASS_NAME, args);
+        ScriptableObject.defineClass(exports, EventEmitterImpl.class);
+        return exports;
     }
 
     public static class EventEmitterImpl
         extends ScriptableObject
     {
-
         private final HashMap<String, List<Lsnr>> listeners = new HashMap<String, List<Lsnr>>();
         private int maxListeners = DEFAULT_MAX_LISTENERS;
 
@@ -71,15 +64,18 @@ public class EventEmitter
         }
 
         @JSFunction
-        public void addListener(String event, Function listener)
+        public static void addListener(Context ctx, Scriptable thisObj, Object[] args, Function caller)
         {
-            on(event, listener);
+            on(ctx, thisObj, args, caller);
         }
 
         @JSFunction
-        public void on(String event, Function listener)
+        public static void on(Context ctx, Scriptable thisObj, Object[] args, Function caller)
         {
-            register(event, listener, false);
+            EventEmitterImpl ee = (EventEmitterImpl)thisObj;
+            String event = stringArg(args, 0);
+            Function listener = functionArg(args, 1, true);
+            ee.register(event, listener, false);
         }
 
         @JSFunction

@@ -3,6 +3,7 @@ package com.apigee.noderunner.core.modules;
 import com.apigee.noderunner.core.NodeModule;
 import com.apigee.noderunner.core.Sandbox;
 import com.apigee.noderunner.core.internal.Charsets;
+import com.apigee.noderunner.core.internal.ModuleRegistry;
 import com.apigee.noderunner.core.internal.NodeExitException;
 import com.apigee.noderunner.core.internal.ScriptRunner;
 import org.mozilla.javascript.Context;
@@ -13,6 +14,8 @@ import org.mozilla.javascript.ScriptableObject;
 import org.mozilla.javascript.annotations.JSConstructor;
 import org.mozilla.javascript.annotations.JSFunction;
 import org.mozilla.javascript.annotations.JSGetter;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import static com.apigee.noderunner.core.internal.ArgUtils.*;
 
@@ -20,6 +23,7 @@ import java.io.IOException;
 import java.io.OutputStream;
 import java.lang.reflect.InvocationTargetException;
 import java.nio.charset.Charset;
+import java.util.HashMap;
 import java.util.Map;
 
 /**
@@ -30,13 +34,15 @@ public class Process
 {
     public static final String NODERUNNER_VERSION = "0.1";
 
-    protected final static String CLASS_NAME = "_processClass";
+    protected final static String CLASS_NAME  = "_processClass";
     protected final static String OBJECT_NAME = "process";
 
-    private static final long NANO = 1000000000L;
+    private static final   long   NANO = 1000000000L;
+    protected static final Logger log  = LoggerFactory.getLogger(Process.class);
 
     @Override
-    public String getModuleName() {
+    public String getModuleName()
+    {
         return "process";
     }
 
@@ -45,11 +51,11 @@ public class Process
         throws InvocationTargetException, IllegalAccessException, InstantiationException
     {
         ScriptableObject.defineClass(scope, ProcessImpl.class, false, true);
-        ProcessImpl exports = (ProcessImpl)cx.newObject(scope, CLASS_NAME);
+        ProcessImpl exports = (ProcessImpl) cx.newObject(scope, CLASS_NAME);
 
         ScriptableObject.defineClass(scope, SimpleOutputStreamImpl.class, false, true);
-        SimpleOutputStreamImpl stdout = (SimpleOutputStreamImpl)cx.newObject(scope, SimpleOutputStreamImpl.CLASS_NAME);
-        SimpleOutputStreamImpl stderr = (SimpleOutputStreamImpl)cx.newObject(scope, SimpleOutputStreamImpl.CLASS_NAME);
+        SimpleOutputStreamImpl stdout = (SimpleOutputStreamImpl) cx.newObject(scope, SimpleOutputStreamImpl.CLASS_NAME);
+        SimpleOutputStreamImpl stderr = (SimpleOutputStreamImpl) cx.newObject(scope, SimpleOutputStreamImpl.CLASS_NAME);
 
         Sandbox sb = runner.getSandbox();
         if ((sb != null) && (sb.getStdout() != null)) {
@@ -79,6 +85,7 @@ public class Process
         private Object stderr;
         private long startTime;
         private ScriptRunner runner;
+        private final HashMap<String, Object> internalModuleCache = new HashMap<String, Object>();
 
         @JSConstructor
         public ProcessImpl()
@@ -93,6 +100,36 @@ public class Process
 
         public void setRunner(ScriptRunner runner) {
             this.runner = runner;
+        }
+
+        @JSFunction
+        public static Object binding(Context cx, Scriptable thisObj, Object[] args, Function func)
+        {
+            String name = stringArg(args, 0);
+            ProcessImpl proc = (ProcessImpl)thisObj;
+
+            Object mod = proc.internalModuleCache.get(name);
+            if (mod == null) {
+                try {
+                    mod = proc.runner.initializeModule(name, true, cx, proc.runner.getScriptScope());
+                    if (log.isDebugEnabled()) {
+                        log.debug("Creating new instance {} of internal module {}",
+                                  System.identityHashCode(mod), name);
+                    }
+
+                } catch (InvocationTargetException e) {
+                    throw new EvaluatorException("Error initializing module: " + e.toString());
+                } catch (InstantiationException e) {
+                    throw new EvaluatorException("Error initializing module: " + e.toString());
+                 } catch (IllegalAccessException e) {
+                    throw new EvaluatorException("Error initializing module: " + e.toString());
+                }
+                proc.internalModuleCache.put(name, mod);
+            } else if (log.isDebugEnabled()) {
+                log.debug("Returning cached copy {} of internal module {}",
+                          System.identityHashCode(mod), name);
+            }
+            return mod;
         }
 
         // TODO stdin

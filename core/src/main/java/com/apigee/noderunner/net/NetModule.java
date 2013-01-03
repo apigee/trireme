@@ -37,7 +37,7 @@ public class NetModule
     public Object registerExports(Context cx, Scriptable scope, ScriptRunner runner)
         throws InvocationTargetException, IllegalAccessException, InstantiationException
     {
-        runner.require("stream", cx, scope);
+        runner.require("nativeStream", cx, scope);
 
         ScriptableObject.defineClass(scope, NetImpl.class);
         ScriptableObject.defineClass(scope, NetServer.class, false, true);

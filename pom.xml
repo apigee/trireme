@@ -28,9 +28,10 @@
   
   <modules>
     <module>core</module>
+    <module>compiler</module>
     <module>net</module>
-    <module>shell</module>
     <module>nodetests</module>
+    <module>shell</module>
   </modules>
    
   <dependencyManagement>

@@ -7,6 +7,7 @@ import org.mozilla.javascript.Context;
 import org.mozilla.javascript.EvaluatorException;
 import org.mozilla.javascript.Function;
 import org.mozilla.javascript.FunctionObject;
+import org.mozilla.javascript.Script;
 import org.mozilla.javascript.Scriptable;
 import org.mozilla.javascript.ScriptableObject;
 import org.mozilla.javascript.WrappedException;
@@ -23,7 +24,6 @@ import java.io.File;
 import java.io.FileInputStream;
 import java.io.IOException;
 import java.io.InputStreamReader;
-import java.io.Reader;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 
@@ -159,10 +159,12 @@ public class Module
             newMod.setId(name);
             newMod.setParentScope(mod.parentScope);
 
+            Class<Script> compiledMod = mod.runner.getEnvironment().getRegistry().getCompiledModule(name);
+            String resourceMod = null;
             File modFile = null;
-            String resourceMod = mod.runner.getEnvironment().getRegistry().getResource(name);
-            String cacheKey = resourceMod;
-            if (resourceMod == null) {
+            String cacheKey = null;
+
+            if (compiledMod == null) {
                 // Else, search for the file
                 try {
                     File search = (mod.file == null) ? new File(".") : mod.file.getParentFile();
@@ -185,12 +187,14 @@ public class Module
             }
 
             // One more check of the cache based on resolved file name
-            cached = mod.runner.getModuleCache().get(cacheKey);
-            if (cached != null) {
-                if (log.isDebugEnabled()) {
-                    log.debug("Returning cached {} for {}", System.identityHashCode(cached), cacheKey);
+            if (cacheKey != null) {
+                cached = mod.runner.getModuleCache().get(cacheKey);
+                if (cached != null) {
+                    if (log.isDebugEnabled()) {
+                        log.debug("Returning cached {} for {}", System.identityHashCode(cached), cacheKey);
+                    }
+                    return cached;
                 }
-                return cached;
             }
 
             // Set globals that actually act at module scope
@@ -205,7 +209,19 @@ public class Module
                           System.identityHashCode(newScope.get("exports", newScope)));
             }
 
-            if (resourceMod == null) {
+            if (compiledMod != null) {
+                log.debug("Executing {} from compiled code", name);
+                Script s;
+                try {
+                    s = compiledMod.newInstance();
+                } catch (InstantiationException e) {
+                    throw new EvaluatorException(e.toString());
+                } catch (IllegalAccessException e) {
+                    throw new EvaluatorException(e.toString());
+                }
+                s.exec(cx, newScope);
+
+            } else {
                 log.debug("Executing {}", modFile.getPath());
                 newScope.put("__filename", newScope, modFile.getAbsolutePath());
                 if (modFile.getParent() == null) {
@@ -215,10 +231,7 @@ public class Module
                 }
                 newMod.setFile(modFile);
                 evaluateFile(cx, newScope, modFile, name);
-            } else {
-                log.debug("Executing resource {} from classpath", resourceMod);
-                newMod.setFileName(resourceMod);
-                evaluateResource(cx, newScope, resourceMod, name);
+
             }
             newMod.setLoaded(true);
 
@@ -244,21 +257,6 @@ public class Module
                     return ret;
                 } finally {
                     fis.close();
-                }
-            } catch (IOException ioe) {
-                throw new WrappedException(ioe);
-            }
-        }
-
-        private static Object evaluateResource(Context cx, Scriptable scope, String path, String name)
-        {
-            try {
-                Reader rdr = Utils.getResource(path);
-                try {
-                    Object ret = cx.evaluateReader(scope, rdr, name, 1, null);
-                    return ret;
-                } finally {
-                    rdr.close();
                 }
             } catch (IOException ioe) {
                 throw new WrappedException(ioe);

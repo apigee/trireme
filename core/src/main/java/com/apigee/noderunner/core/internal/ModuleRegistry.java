@@ -1,44 +1,72 @@
 package com.apigee.noderunner.core.internal;
 
 import com.apigee.noderunner.core.NodeModule;
+import org.mozilla.javascript.Script;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.util.HashMap;
 import java.util.ServiceLoader;
 
 /**
- * This tracks all the modules that are available to us.
+ * <p>
+ *     This tracks all the built-in modules that are available to us. There are three types of modules:
+ * </p>
+ * <ol>
+ *     <li>Native modules are built in Java. They are loaded using the ServiceLoader, which means that
+ *     these modules must implement NodeModule and must be listed in META-INF/services/c.a.n.r.NodeModule</li>
+ *     <li>Internal modules are also built in Java but are loaded using process.binding, not "require."
+ *     This way they aren't in the namespace for ordinary users.</li>
+ *     <li>Compiled script modules are written in JavaScript -- their source lives in src/main/javascript and
+ *     is pre-compiled using Rhino (we have a plugin for this)</li>
+ * </ol>
+ * <p>
+ *     The constructor for this class manually defines all the script and compiled script modules. All the rest
+ *     are loaded using the ServiceLoader, which means that new modules can add new scripts.
+ * </p>
  */
 public class ModuleRegistry
 {
+    private static final Logger log = LoggerFactory.getLogger(ModuleRegistry.class);
+
     private final HashMap<String, NodeModule>         modules         = new HashMap<String, NodeModule>();
     private final HashMap<String, InternalNodeModule> internalModules = new HashMap<String, InternalNodeModule>();
-    private final HashMap<String, String>             scriptModules   = new HashMap<String, String>();
+    private final HashMap<String, Class<Script>>      compiledModules = new HashMap<String, Class<Script>>();
 
     public ModuleRegistry()
     {
         ServiceLoader<NodeModule> loader = ServiceLoader.load(NodeModule.class);
         for (NodeModule mod : loader) {
             if (mod instanceof InternalNodeModule) {
-                internalModules.put(mod.getModuleName(), (InternalNodeModule)mod);
+                internalModules.put(mod.getModuleName(), (InternalNodeModule) mod);
             } else {
                 modules.put(mod.getModuleName(), mod);
             }
         }
 
-        // TODO maybe there is a sexier way to do this
-        scriptModules.put("_linklist", "/noderunner/lib/_linklist.js");
-        scriptModules.put("assert", "/noderunner/lib/assert.js");
-        scriptModules.put("console", "/noderunner/lib/console.js");
-        scriptModules.put("domain", "/noderunner/lib/domain.js");
-        scriptModules.put("events", "/noderunner/lib/events.js");
-        scriptModules.put("freelist", "/noderunner/lib/freelist.js");
-        scriptModules.put("http", "/noderunner/lib/http.js");
-        scriptModules.put("punycode", "/noderunner/lib/punycode.js");
-        scriptModules.put("querystring", "/noderunner/lib/querystring.js");
-        scriptModules.put("stream", "/noderunner/lib/stream.js");
-        scriptModules.put("string_decoder", "/noderunner/lib/string_decoder.js");
-        scriptModules.put("url", "/noderunner/lib/url.js");
-        scriptModules.put("util", "/noderunner/lib/util.js");
+        addCompiledModule("_linklist", "com.apigee.noderunner.fromnode._linklist");
+        addCompiledModule("assert", "com.apigee.noderunner.fromnode.assert");
+        addCompiledModule("console", "com.apigee.noderunner.fromnode.console");
+        addCompiledModule("domain", "com.apigee.noderunner.fromnode.domain");
+        addCompiledModule("events", "com.apigee.noderunner.fromnode.events");
+        addCompiledModule("freelist", "com.apigee.noderunner.fromnode.freelist");
+        addCompiledModule("http", "com.apigee.noderunner.fromnode.http");
+        addCompiledModule("punycode", "com.apigee.noderunner.fromnode.punycode");
+        addCompiledModule("querystring", "com.apigee.noderunner.fromnode.querystring");
+        addCompiledModule("stream", "com.apigee.noderunner.fromnode.stream");
+        addCompiledModule("string_decoder", "com.apigee.noderunner.fromnode.string_decoder");
+        addCompiledModule("url", "com.apigee.noderunner.fromnode.url");
+        addCompiledModule("util", "com.apigee.noderunner.fromnode.util");
+    }
+
+    private void addCompiledModule(String name, String className)
+    {
+        try {
+            Class<Script> cl = (Class<Script>)Class.forName(className);
+            compiledModules.put(name, cl);
+        } catch (ClassNotFoundException e) {
+            throw new AssertionError("Missing built-in module " + className);
+        }
     }
 
     public NodeModule get(String name)
@@ -46,13 +74,13 @@ public class ModuleRegistry
         return modules.get(name);
     }
 
-     public NodeModule getInternal(String name)
+    public NodeModule getInternal(String name)
     {
         return internalModules.get(name);
     }
 
-    public String getResource(String name)
+    public Class<Script> getCompiledModule(String name)
     {
-        return scriptModules.get(name);
+        return compiledModules.get(name);
     }
 }

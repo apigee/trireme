@@ -11,4 +11,4 @@ rm ${CP}
 
 ARGS="-Xdebug -Xrunjdwp:server=y,suspend=y,transport=dt_socket,address=localhost:14000"
 
-time java ${ARGS} com.apigee.noderunner.shell.Main $*
+time java ${ARGS} com.apigee.noderunner.shell.Main src/test/python/test/$*

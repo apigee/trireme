@@ -306,6 +306,14 @@ public class Buffer
             return Utils.bufferToString(ByteBuffer.wrap(buf, 0, bufLength), cs);
         }
 
+        public byte[] getArray() {
+            return buf;
+        }
+
+        public int getArrayOffset() {
+            return bufOffset;
+        }
+
         @Override
         public String getClassName() {
             return BUFFER_CLASS_NAME;

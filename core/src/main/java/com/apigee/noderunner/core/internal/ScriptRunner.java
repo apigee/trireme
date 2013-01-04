@@ -17,6 +17,7 @@ import com.apigee.noderunner.net.SelectorHandler;
 import org.mozilla.javascript.Context;
 import org.mozilla.javascript.Function;
 import org.mozilla.javascript.RhinoException;
+import org.mozilla.javascript.Script;
 import org.mozilla.javascript.Scriptable;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -67,6 +68,7 @@ public class ScriptRunner
     private Timers.TimersImpl   timers;
     private Process.ProcessImpl process;
     private Object              globals;
+    private Module.ModuleImpl   module;
 
     private Scriptable scope;
 
@@ -136,17 +138,20 @@ public class ScriptRunner
     public void enqueueCallback(Function f, Scriptable scope, Scriptable thisObj, Object[] args)
     {
         tickFunctions.offer(new Callback(f, scope, thisObj, args));
+        selector.wakeup();
     }
 
     public void enqueueEvent(EventEmitter.EventEmitterImpl emitter,
                              String name, Object[] args)
     {
         tickFunctions.offer(new Event(emitter, name, args));
+        selector.wakeup();
     }
 
     public void enqueueTask(ScriptTask task)
     {
         tickFunctions.offer(new Task(task, scope));
+        selector.wakeup();
     }
 
     public int createTimer(long delay, boolean repeating,
@@ -175,6 +180,7 @@ public class ScriptRunner
         }
         timersMap.put(seq, activity);
         timerQueue.add(activity);
+        selector.wakeup();
         return seq;
     }
 
@@ -391,6 +397,7 @@ public class ScriptRunner
             mod.setParentScope(scope);
             mod.setLoaded(true);
             mod.bindVariables(cx, scope, mod);
+            this.module = mod;
 
             // Other modules
             timers =  (Timers.TimersImpl)registerModule("timers", cx, scope);
@@ -468,11 +475,7 @@ public class ScriptRunner
     public Object require(String modName, Context cx, Scriptable scope)
         throws InvocationTargetException, InstantiationException, IllegalAccessException
     {
-        Object exports = moduleCache.get(modName);
-        if (exports == null) {
-            exports = registerModule(modName, cx, scope);
-        }
-        return exports;
+        return module.require(cx, modName);
     }
 
     private abstract static class Activity

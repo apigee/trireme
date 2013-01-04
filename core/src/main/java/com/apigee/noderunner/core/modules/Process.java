@@ -19,6 +19,7 @@ import org.slf4j.LoggerFactory;
 
 import static com.apigee.noderunner.core.internal.ArgUtils.*;
 
+import java.io.File;
 import java.io.IOException;
 import java.io.OutputStream;
 import java.lang.reflect.InvocationTargetException;
@@ -191,8 +192,14 @@ public class Process
             }
         }
 
+        @JSFunction
+        public String cwd()
+        {
+            // TODO this may be set in the startup environment somewhere, otherwise this is good
+            return ".";
+        }
+
         // TODO chdir
-        // TODO cwd
         // TODO getgid
         // TODO setgid
         // TODO getuid

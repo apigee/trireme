@@ -1,0 +1,125 @@
+package com.apigee.noderunner.core.modules;
+
+import com.apigee.noderunner.core.internal.InternalNodeModule;
+import com.apigee.noderunner.core.internal.ScriptRunner;
+import org.mozilla.javascript.Context;
+import org.mozilla.javascript.Function;
+import org.mozilla.javascript.Scriptable;
+import org.mozilla.javascript.ScriptableObject;
+import org.mozilla.javascript.annotations.JSStaticFunction;
+
+import java.lang.reflect.InvocationTargetException;
+
+/**
+ * This implements the same "evals" module as regular Node. It's used by the VM and module scripts
+ * to load and run code.
+ */
+public class Evals
+    implements InternalNodeModule
+{
+    @Override
+    public String getModuleName()
+    {
+        return "evals";
+    }
+
+    @Override
+    public Object registerExports(Context cx, Scriptable scope, ScriptRunner runner) throws InvocationTargetException, IllegalAccessException, InstantiationException
+    {
+        Scriptable export = cx.newObject(scope);
+        export.setPrototype(scope);
+        export.setParentScope(null);
+
+        ScriptableObject.defineClass(export, NodeScriptImpl.class);
+
+        return export;
+    }
+
+    public static class NodeScriptImpl
+        extends ScriptableObject
+    {
+        public static final String CLASS_NAME = "NodeScript";
+
+        @Override
+        public String getClassName()
+        {
+            return CLASS_NAME;
+        }
+
+        @JSStaticFunction
+        public static Object runInThisContext(Context cx, Scriptable thisObj, Object[] args, Function func)
+        {
+            if (args.length < 1) {
+                return null;
+            }
+            String code = (String)Context.jsToJava(args[0], String.class);
+            String fileName = null;
+            if (args.length > 1) {
+                fileName = (String)Context.jsToJava(args[1], String.class);
+            }
+
+            return cx.evaluateString(func, code, fileName, 1, null);
+        }
+
+        @JSStaticFunction
+        public static Object runInNewContext(Context cx, Scriptable thisObj, Object[] args, Function func)
+        {
+            if (args.length < 1) {
+                return null;
+            }
+            String code = (String)Context.jsToJava(args[0], String.class);
+            Scriptable sandbox = null;
+            if (args.length > 1) {
+                sandbox = (Scriptable)Context.jsToJava(args[1], Scriptable.class);
+            }
+            String fileName = null;
+            if (args.length > 2) {
+                fileName = (String)Context.jsToJava(args[2], String.class);
+            }
+
+            if (sandbox == null) {
+                sandbox = createSandbox(cx, func);
+            }
+            return cx.evaluateString(sandbox, code, fileName, 1, null);
+        }
+
+        @JSStaticFunction
+        public static Object runInContext(Context cx, Scriptable thisObj, Object[] args, Function func)
+        {
+            if (args.length < 2) {
+                return null;
+            }
+            String code = (String)Context.jsToJava(args[0], String.class);
+            Scriptable sandbox = (Scriptable)Context.jsToJava(args[1], Scriptable.class);
+            String fileName = null;
+            if (args.length > 2) {
+                fileName = (String)Context.jsToJava(args[2], String.class);
+            }
+
+            return cx.evaluateString(sandbox, code, fileName, 1, null);
+        }
+
+        @JSStaticFunction
+        public static Object createContext(Context cx, Scriptable thisObj, Object[] args, Function func)
+        {
+            Scriptable sandbox = null;
+            if (args.length > 0) {
+                // TODO we're supposed to "shallow copy" this...
+                sandbox = (Scriptable)Context.jsToJava(args[0], Scriptable.class);
+            }
+
+            if (sandbox == null) {
+                sandbox = createSandbox(cx, func);
+            }
+            return sandbox;
+        }
+
+        private static Scriptable createSandbox(Context cx, Scriptable scope)
+        {
+            Scriptable sandbox = cx.newObject(scope);
+            sandbox.setPrototype(getTopLevelScope(scope));
+            sandbox.setParentScope(null);
+            return sandbox;
+        }
+    }
+}

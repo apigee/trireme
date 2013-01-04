@@ -116,12 +116,17 @@ public class Module
         {
             String name = stringArg(args, 0);
             ModuleImpl mod = (ModuleImpl)thisObj;
+            return mod.require(cx, name);
+        }
+
+        public Object require(Context cx, String name)
+        {
             if (log.isDebugEnabled()) {
                 log.debug("require({})...", name);
-                log.debug("  Parent scope {}", System.identityHashCode(mod.parentScope));
+                log.debug("  Parent scope {}", System.identityHashCode(parentScope));
             }
 
-            Object cached = mod.runner.getModuleCache().get(name);
+            Object cached = runner.getModuleCache().get(name);
             if (cached != null) {
                 if (log.isDebugEnabled()) {
                     log.debug("Returning cached {}", System.identityHashCode(cached));
@@ -130,13 +135,13 @@ public class Module
             }
 
             // Now search for the module, first as a native Java object, then elsewhere
-            NodeModule nativeMod = mod.runner.getEnvironment().getRegistry().get(name);
+            NodeModule nativeMod = runner.getEnvironment().getRegistry().get(name);
             if (nativeMod != null) {
                 // Load something that's built in
                 try {
                     log.debug("Registering {} from class {}",
                               name, nativeMod.getClass().getName());
-                    return mod.runner.registerModule(name, cx, mod.parentScope);
+                    return runner.registerModule(name, cx, parentScope);
 
                 } catch (InvocationTargetException e) {
                     throw new WrappedException(e);
@@ -148,52 +153,47 @@ public class Module
             }
 
             // Set up a new scope in which to run the new module
-            Scriptable newScope = cx.newObject(mod.parentScope);
-            newScope.setPrototype(mod.parentScope);
+            Scriptable newScope = cx.newObject(parentScope);
+            newScope.setPrototype(parentScope);
             newScope.setParentScope(null);
 
             // Register a new "module" object in the new scope for running the script
             ModuleImpl newMod = (ModuleImpl)cx.newObject(newScope, CLASS_NAME);
-            newMod.setRunner(mod.runner);
-            newMod.setParent(mod);
+            newMod.setRunner(runner);
+            newMod.setParent(this);
             newMod.setId(name);
-            newMod.setParentScope(mod.parentScope);
+            newMod.setParentScope(parentScope);
 
-            Class<Script> compiledMod = mod.runner.getEnvironment().getRegistry().getCompiledModule(name);
-            String resourceMod = null;
+            Class<Script> compiledMod = runner.getEnvironment().getRegistry().getCompiledModule(name);
             File modFile = null;
             String cacheKey = null;
 
             if (compiledMod == null) {
                 // Else, search for the file
                 try {
-                    File search = (mod.file == null) ? new File(".") : mod.file.getParentFile();
-                    modFile = locateFile(name, search, cx, mod.parentScope, false);
+                    File search = (file == null) ? new File(".") : file.getParentFile();
+                    modFile = locateFile(name, search, cx, parentScope, false);
                     if (modFile == null) {
                         File searchLevel = search;
                         while ((modFile == null) && (searchLevel != null)) {
                             File modSearch = new File(searchLevel, "node_modules");
-                            modFile = locateFile(name, modSearch, cx, mod.parentScope, true);
+                            modFile = locateFile(name, modSearch, cx, parentScope, true);
                             searchLevel = searchLevel.getParentFile();
                         }
                         if (modFile == null) {
                             throw new EvaluatorException("Cannot load module \"" + name + '\"');
                         }
                     }
-                    cacheKey = modFile.getCanonicalPath();
+                    // One more check of the cache based on resolved file name
+                    cached = runner.getModuleCache().get(modFile.getCanonicalPath());
+                    if (cached != null) {
+                        if (log.isDebugEnabled()) {
+                            log.debug("Returning cached {} for {}", System.identityHashCode(cached), cacheKey);
+                        }
+                        return cached;
+                    }
                 } catch (IOException ioe) {
                     throw new EvaluatorException("Unable to read module file: " + ioe);
-                }
-            }
-
-            // One more check of the cache based on resolved file name
-            if (cacheKey != null) {
-                cached = mod.runner.getModuleCache().get(cacheKey);
-                if (cached != null) {
-                    if (log.isDebugEnabled()) {
-                        log.debug("Returning cached {} for {}", System.identityHashCode(cached), cacheKey);
-                    }
-                    return cached;
                 }
             }
 
@@ -201,7 +201,7 @@ public class Module
             Scriptable firstExports = newMod.bindVariables(cx, newScope, newMod);
 
             // Register exports temporarily to prevent cycles
-            mod.runner.getModuleCache().put(cacheKey, firstExports);
+            runner.getModuleCache().put(cacheKey, firstExports);
 
             if (log.isDebugEnabled()) {
                 log.debug("Executing in scope {} with exports {}",
@@ -242,7 +242,7 @@ public class Module
                           System.identityHashCode(newScope.get("exports", newScope)));
             }
             Object exports = ScriptableObject.getProperty(newMod, "exports");
-            mod.runner.getModuleCache().put(cacheKey, exports);
+            runner.getModuleCache().put(cacheKey, exports);
             return exports;
         }
 

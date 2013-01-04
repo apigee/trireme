@@ -17,6 +17,7 @@ public class Charsets
 
     private Charsets()
     {
+        encodings.put("undefined", Charset.forName("UTF-8"));
         encodings.put("utf8", Charset.forName("UTF-8"));
         encodings.put("utf-8", Charset.forName("UTF-8"));
         encodings.put("utf16le", Charset.forName("UTF-16LE"));

@@ -1,6 +1,9 @@
 package com.apigee.noderunner.core.internal;
 
 import org.mozilla.javascript.Context;
+import org.mozilla.javascript.JavaScriptException;
+import org.mozilla.javascript.RhinoException;
+import org.mozilla.javascript.Scriptable;
 
 import java.io.File;
 import java.io.FileInputStream;
@@ -113,5 +116,28 @@ public class Utils
 
         writeBuf.flip();
         return writeBuf;
+    }
+
+    public static RhinoException makeError(Context cx, Scriptable scope, String message)
+    {
+        Scriptable err = cx.newObject(scope);
+        err.put("message", err, message);
+        return new JavaScriptException(err);
+    }
+
+    public static RhinoException makeError(Context cx, Scriptable scope, String message, String code)
+    {
+        Scriptable err = cx.newObject(scope);
+        err.put("message", err, message);
+        err.put("code", err, code);
+        return new JavaScriptException(err);
+    }
+
+    public static RhinoException makeError(Context cx, Scriptable scope, NodeOSException e)
+    {
+        Scriptable err = cx.newObject(scope);
+        err.put("message", err, e.getMessage());
+        err.put("code", err, e.getCodeString());
+        return new JavaScriptException(err);
     }
 }

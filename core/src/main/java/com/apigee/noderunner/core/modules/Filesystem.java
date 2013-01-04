@@ -1,43 +1,42 @@
 package com.apigee.noderunner.core.modules;
 
-import com.apigee.noderunner.core.NodeModule;
-import com.apigee.noderunner.core.internal.Charsets;
+import com.apigee.noderunner.core.internal.InternalNodeModule;
+import com.apigee.noderunner.core.internal.NodeOSException;
 import com.apigee.noderunner.core.internal.ScriptRunner;
-import com.sun.servicetag.SystemEnvironment;
+import com.apigee.noderunner.core.internal.Utils;
 import org.mozilla.javascript.Context;
-import org.mozilla.javascript.Evaluator;
-import org.mozilla.javascript.EvaluatorException;
 import org.mozilla.javascript.Function;
 import org.mozilla.javascript.Scriptable;
 import org.mozilla.javascript.ScriptableObject;
 import org.mozilla.javascript.annotations.JSFunction;
 import org.mozilla.javascript.annotations.JSGetter;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import static com.apigee.noderunner.core.internal.ArgUtils.*;
 
 import java.io.File;
-import java.io.FileInputStream;
 import java.io.IOException;
+import java.io.RandomAccessFile;
 import java.lang.reflect.InvocationTargetException;
 import java.text.DateFormat;
 import java.util.Date;
 import java.util.concurrent.Executor;
 
 /**
- * A partial implementation of the parts of the "fs" module that make sense to have
- * in Java.
+ * An implementation of the "fs" internal Node module. The "fs.js" script depends on it.
  */
 public class Filesystem
-    implements NodeModule
+    implements InternalNodeModule
 {
-    protected static final String CLASS_NAME = "_fsClass";
-    protected static final String STATS_CLASS = "_fsStatsClass";
+    private static final Logger log = LoggerFactory.getLogger(Filesystem.class);
 
     protected static final DateFormat dateFormat =
-        DateFormat.getDateTimeInstance(DateFormat.LONG,  DateFormat.LONG);
+        DateFormat.getDateTimeInstance(DateFormat.LONG, DateFormat.LONG);
 
     @Override
-    public String getModuleName() {
+    public String getModuleName()
+    {
         return "fs";
     }
 
@@ -48,14 +47,17 @@ public class Filesystem
         ScriptableObject.defineClass(scope, FSImpl.class, false, true);
         ScriptableObject.defineClass(scope, StatsImpl.class, false, true);
 
-        FSImpl fs  = (FSImpl)cx.newObject(scope, CLASS_NAME);
+        FSImpl fs = (FSImpl) cx.newObject(scope, FSImpl.CLASS_NAME);
         fs.initialize(runner, runner.getEnvironment().getAsyncPool());
+        ScriptableObject.defineClass(fs, StatsImpl.class, false, true);
         return fs;
     }
 
     public static class FSImpl
         extends ScriptableObject
     {
+        public static final String CLASS_NAME = "_fsClass";
+
         protected ScriptRunner runner;
         protected Executor pool;
 
@@ -70,237 +72,664 @@ public class Filesystem
             this.pool = fsPool;
         }
 
-        @JSFunction
-        public Object Stats()
+        private Object runAction(final Function callback, final AsyncAction action)
         {
-            return Context.getCurrentContext().newObject(this, STATS_CLASS);
-        }
-
-        @JSFunction
-        public static void stat(final Context cx, Scriptable thisObj, Object[] args, Function func)
-        {
-            final FSImpl fs = (FSImpl)thisObj;
-            final String path = stringArg(args, 0);
-            final Function callback = functionArg(args, 1, false);
-
-            fs.pool.execute(new Runnable()
-            {
-                @Override
-                public void run()
-                {
-                    StatsImpl stats = fs.doStat(path, cx, callback == null ? fs : callback);
-                    if (callback != null) {
-                        // TODO error!
-                        fs.runner.enqueueCallback(callback, callback, fs, new Object[]{0, stats});
+            if (callback == null) {
+                try {
+                    Object[] ret = action.execute();
+                    if ((ret == null) || (ret.length < 2)) {
+                        return null;
                     }
+                    return ret[1];
+                } catch (NodeOSException e) {
+                    throw Utils.makeError(Context.getCurrentContext(), this, e);
                 }
-            });
-        }
+            }
 
-        @JSFunction
-        public static Object statSync(Context cx, Scriptable thisObj, Object[] args, Function func)
-        {
-            String path = stringArg(args, 0);
-            return ((FSImpl)thisObj).doStat(path, cx, thisObj);
-        }
-
-        protected StatsImpl doStat(String fn, Context cx, Scriptable scope)
-        {
-            File f = new File(fn);
-            StatsImpl s = (StatsImpl)cx.newObject(scope, STATS_CLASS);
-            s.setFile(f);
-            return s;
-        }
-
-        @JSFunction
-        public static void exists(final Context cx, Scriptable thisObj, Object[] args, Function func)
-        {
-            final FSImpl fs = (FSImpl)thisObj;
-            final String path = stringArg(args, 0);
-            final Function callback = functionArg(args, 1, false);
-
-            fs.pool.execute(new Runnable()
+            runner.pin();
+            pool.execute(new Runnable()
             {
                 @Override
                 public void run()
                 {
-                    boolean exists = fs.doExists(path);
-                    if (callback != null) {
-                        fs.runner.enqueueCallback(callback, callback, fs, new Object[]{exists});
+                    if (log.isDebugEnabled()) {
+                        log.debug("Executing async action {}", action);
                     }
-                }
-            });
-        }
-
-        @JSFunction
-        public static Object existsSync(Context cx, Scriptable thisObj, Object[] args, Function func)
-        {
-            String path = stringArg(args, 0);
-            return ((FSImpl)thisObj).doExists(path);
-        }
-
-        protected boolean doExists(String fn)
-        {
-            File f = new File(fn);
-            return f.exists();
-        }
-
-        @JSFunction
-        public static void readdir(final Context cx, Scriptable thisObj, Object[] args, Function func)
-        {
-            final FSImpl fs = (FSImpl)thisObj;
-            final String path = stringArg(args, 0);
-            final Function callback = functionArg(args, 1, false);
-
-            fs.pool.execute(new Runnable()
-            {
-                @Override
-                public void run()
-                {
-                    Scriptable files = fs.doReaddir(path, cx, callback == null ? fs : callback);
-                    if (callback != null) {
-                        // TODO error!
-                        fs.runner.enqueueCallback(callback, callback, fs, new Object[]{0, files});
-                    }
-                }
-            });
-        }
-
-        @JSFunction
-        public static Object readdirSync(Context cx, Scriptable thisObj, Object[] args, Function func)
-        {
-            String path = stringArg(args, 0);
-            return ((FSImpl)thisObj).doReaddir(path, cx, thisObj);
-        }
-
-        protected Scriptable doReaddir(String dn, Context cx, Scriptable scope)
-        {
-            File f = new File(dn);
-            String[] files = f.list();
-            if (files == null) {
-                return cx.newArray(scope, 0);
-            }
-            Object[] objs = new Object[files.length];
-            System.arraycopy(files, 0, objs, 0, files.length);
-            return cx.newArray(scope, objs);
-        }
-
-        @JSFunction
-        public static void readFile(final Context cx, Scriptable thisObj, Object[] args, Function func)
-        {
-            final FSImpl fs = (FSImpl)thisObj;
-            final String path = stringArg(args, 0);
-            Function cb = functionArg(args, 1, false);
-            String enc = null;
-            if (cb == null) {
-                enc = stringArg(args, 1, null);
-            }
-            if (cb == null) {
-                cb = functionArg(args, 2, false);
-            }
-            final String encoding = enc;
-            final Function callback = cb;
-
-            fs.pool.execute(new Runnable()
-            {
-                @Override
-                public void run()
-                {
                     try {
-                        Object ret = fs.doReadFile(path, encoding, cx, callback == null ? fs : callback);
-                        if (callback != null) {
-                            if (ret == null) {
-                                fs.runner.enqueueCallback(callback, callback, fs, new Object[]{2, null});
-                            } else {
-                                fs.runner.enqueueCallback(callback, callback, fs, new Object[]{0, ret});
-                            }
+                        Object[] args = action.execute();
+                        runner.enqueueCallback(callback, callback, callback, args);
+                    } catch (NodeOSException e) {
+                        if (log.isDebugEnabled()) {
+                            log.debug("Async action {} failed: {}", action, e.getCodeString());
                         }
-                    } catch (IOException e) {
-                        if (callback != null) {
-                            fs.runner.enqueueCallback(callback, callback, fs, new Object[]{2, null});
-                        }
+                        runner.enqueueCallback(callback, callback, callback,
+                                               action.mapException(e));
+                    } finally {
+                        runner.unPin();
                     }
-
                 }
             });
+            return null;
         }
 
-        @JSFunction
-        public static Object readFileSync(Context cx, Scriptable thisObj, Object[] args, Function func)
-        {
-            FSImpl fs = (FSImpl)thisObj;
-            String path = stringArg(args, 0);
-            String encoding = stringArg(args, 1, null);
-
-            try {
-                Object result = fs.doReadFile(path, encoding, cx, thisObj);
-                if (result == null) {
-                    throw new EvaluatorException("File not found: " + path);
-                }
-                return result;
-            } catch (IOException e) {
-                throw new EvaluatorException(e.toString());
-            }
-        }
-
-        protected Object doReadFile(String fn, String encoding, Context cx, Scriptable scope)
+        private void createFile(File f, int mode)
             throws IOException
         {
-            File f = new File(fn);
-            if (!f.exists() || !f.canRead()) {
-                return null;
+            f.createNewFile();
+            setMode(f, mode);
+        }
+
+        private void setMode(File f, int mode)
+        {
+            if (((mode & Constants.S_IROTH) != 0) || ((mode & Constants.S_IRGRP) != 0)) {
+                f.setReadable(true, false);
+            } else if ((mode & Constants.S_IRUSR) != 0) {
+                f.setReadable(true, true);
+            } else {
+                f.setReadable(false, true);
             }
 
-            byte[] buf = new byte[(int)f.length()];
-            FileInputStream fis = new FileInputStream(f);
+            if (((mode & Constants.S_IWOTH) != 0) || ((mode & Constants.S_IWGRP) != 0)) {
+                f.setWritable(true, false);
+            } else if ((mode & Constants.S_IWUSR) != 0) {
+                f.setWritable(true, true);
+            } else {
+                f.setWritable(false, true);
+            }
+
+            if (((mode & Constants.S_IXOTH) != 0) || ((mode & Constants.S_IXGRP) != 0)) {
+                f.setExecutable(true, false);
+            } else if ((mode & Constants.S_IXUSR) != 0) {
+                f.setExecutable(true, true);
+            } else {
+                f.setExecutable(false, true);
+            }
+        }
+
+        private static FileHandle ensureHandle(Context cx, Scriptable scope,
+                                               Object[] args, int pos)
+        {
+            ensureArg(args, pos);
             try {
-                fis.read(buf);
+                ScriptableObject handle = (ScriptableObject)args[pos];
+                Object assoc = handle.getAssociatedValue(FileHandle.KEY);
+                if (assoc != null) {
+                    return (FileHandle)assoc;
+                }
+                throw Utils.makeError(cx, scope,
+                                      "Bad file handle", "EBADF");
+            } catch (ClassCastException cce) {
+                throw Utils.makeError(cx, scope,
+                                      "Bad file handle", "EBADF");
+            }
+        }
+
+        private static Buffer.BufferImpl ensureBuffer(Context cx, Scriptable scope,
+                                                      Object[] args, int pos)
+        {
+            ensureArg(args, pos);
+            try {
+                return (Buffer.BufferImpl)args[pos];
+            } catch (ClassCastException cce) {
+                throw Utils.makeError(cx, scope,
+                                      "Not a buffer", "EINVAL");
+            }
+        }
+
+        @JSFunction
+        public static Object open(final Context cx, final Scriptable thisObj, Object[] args, Function func)
+        {
+            final String pathStr = stringArg(args, 0);
+            final int flags = intArg(args, 1);
+            final int mode = intArg(args, 2);
+            final Function callback = functionArg(args, 3, false);
+            final FSImpl fs = (FSImpl)thisObj;
+            final File path = new File(pathStr);
+
+            return fs.runAction(callback, new AsyncAction()
+            {
+                @Override
+                public Object[] execute() throws NodeOSException
+                {
+                    return fs.doOpen(path, flags, mode);
+                }
+
+                @Override
+                public Object[] mapException(NodeOSException e)
+                {
+                    return new Object[] { e.getCode(), null };
+                }
+            });
+        }
+
+        private Object[] doOpen(File path, int flags, int mode)
+            throws NodeOSException
+        {
+            if (log.isDebugEnabled()) {
+                log.debug("open({}, {}, {})", path, flags, mode);
+            }
+            if (path.exists()) {
+                if ((flags & Constants.O_TRUNC) != 0) {
+                    // For exact compatibility, perhaps this should open and truncate
+                    path.delete();
+                    try {
+                        createFile(path, mode);
+                    } catch (IOException e) {
+                        throw new NodeOSException(Constants.EIO, e);
+                    }
+                }
+                if (((flags & Constants.O_CREAT) != 0) &&
+                    ((flags & Constants.O_EXCL) != 0)) {
+                    throw new NodeOSException(Constants.EEXIST);
+                }
+            } else {
+                if ((flags & Constants.O_CREAT) == 0) {
+                    throw new NodeOSException(Constants.ENOENT);
+                }
+                try {
+                    createFile(path, mode);
+                } catch (IOException e) {
+                    throw new NodeOSException(Constants.EIO, e);
+                }
+            }
+
+            String modeStr;
+            if ((flags & Constants.O_RDWR) != 0) {
+                modeStr = "rw";
+            } else if ((flags & Constants.O_WRONLY) != 0) {
+                // Java does not have write-only...
+                modeStr = "rw";
+            } else {
+                modeStr = "r";
+            }
+            if ((flags & Constants.O_SYNC) != 0) {
+                // And Java does not have read-only with sync either
+                modeStr = "rws";
+            }
+
+            RandomAccessFile file;
+            try {
+                file = new RandomAccessFile(path, modeStr);
+                if ((flags & Constants.O_APPEND) != 0) {
+                    file.seek(file.length());
+                }
+            } catch (IOException ioe) {
+                throw new NodeOSException(Constants.EIO);
+            }
+            log.debug("Opened file");
+
+            Context cx = Context.enter();
+            try {
+                ScriptableObject handle = (ScriptableObject)cx.newObject(this);
+                FileHandle fileHandle = new FileHandle(path, file);
+                handle.associateValue(FileHandle.KEY, fileHandle);
+                return new Object [] { null, handle };
             } finally {
-                fis.close();
+                Context.exit();
             }
-
-            if (encoding == null) {
-                Buffer.BufferImpl bufObj = (Buffer.BufferImpl)cx.newObject(scope, Buffer.BUFFER_CLASS_NAME);
-                bufObj.initialize(buf);
-                return bufObj;
-            }
-            return new String(buf, Charsets.get().getCharset(encoding));
         }
 
         @JSFunction
-        public void renameSync(String old, String newP)
+        public static void close(final Context cx, final Scriptable thisObj, Object[] args, Function func)
         {
-            File oldFile = new File(old);
-            File newFile = new File(newP);
-            oldFile.renameTo(newFile);
+            final FileHandle handle = ensureHandle(cx, thisObj, args, 0);
+            final Function callback = functionArg(args, 1, false);
+            final FSImpl fs = (FSImpl)thisObj;
+
+            fs.runAction(callback, new AsyncAction()
+            {
+                @Override
+                public Object[] execute()
+                    throws NodeOSException
+                {
+                    fs.doClose(handle);
+                    return null;
+                }
+            });
+        }
+
+        private void doClose(FileHandle handle)
+            throws NodeOSException
+        {
+            try {
+                handle.file.close();
+            } catch (IOException ioe) {
+                throw new NodeOSException(Constants.EIO, ioe);
+            }
         }
 
         @JSFunction
-        public static void rename(Context cx, Scriptable thisObj, Object[] args, Function func)
+        public static Object read(final Context cx, final Scriptable thisObj, Object[] args, Function func)
         {
-            if (args.length < 2) {
-                return;
+            final FileHandle handle = ensureHandle(cx, thisObj, args, 0);
+            final Buffer.BufferImpl buf = ensureBuffer(cx, thisObj, args, 1);
+            final int off = intArg(args, 2);
+            final int len = intArg(args, 3);
+            final int pos = intArg(args, 4);
+            final Function callback = functionArg(args, 5, false);
+            final FSImpl fs = (FSImpl)thisObj;
+
+            if (off >= buf.getLength()) {
+                throw Utils.makeError(cx, thisObj, "Offset is out of bounds", "EINVAL");
             }
-            String oldPath = (String)Context.jsToJava(args[0], String.class);
-            String newPath = (String)Context.jsToJava(args[1], String.class);
-            Function callback = null;
-            if (args.length > 2) {
-                callback = (Function)Context.jsToJava(args[2], Function.class);
+            if ((off + len) > buf.getLength()) {
+                throw Utils.makeError(cx, thisObj, "Length extends beyond buffer", "EINVAL");
             }
 
-            ((FSImpl)thisObj).renameSync(oldPath, newPath);
-            callback.call(cx, thisObj, null, null);
+            return fs.runAction(callback, new AsyncAction()
+            {
+                @Override
+                public Object[] execute()
+                    throws NodeOSException
+                {
+                    return fs.doRead(handle, buf, off, len, pos);
+                }
+
+                public Object[] mapException(NodeOSException e)
+                {
+                    return new Object[] { e.getCodeString(), 0, buf };
+                }
+            });
         }
+
+        private Object[] doRead(FileHandle handle, Buffer.BufferImpl buf,
+                                int off, int len, int pos)
+            throws NodeOSException
+        {
+            byte[] bytes = buf.getArray();
+            int bytesOffset = buf.getArrayOffset() + off;
+
+            try {
+                handle.file.seek(pos);
+                int count = handle.file.read(bytes, bytesOffset, len);
+                if (log.isDebugEnabled()) {
+                    log.debug("read({}, {}, {}) = {}",
+                              off, len, pos, count);
+                }
+                return new Object[] { null, count, buf };
+
+            } catch (IOException ioe) {
+                throw new NodeOSException(Constants.EIO, ioe);
+            }
+        }
+
+        @JSFunction
+        public static Object write(final Context cx, final Scriptable thisObj, Object[] args, Function func)
+        {
+            final FileHandle handle = ensureHandle(cx, thisObj, args, 0);
+            final Buffer.BufferImpl buf = ensureBuffer(cx, thisObj, args, 1);
+            final int off = intArg(args, 2);
+            final int len = intArg(args, 3);
+            final int pos = intArg(args, 4);
+            final Function callback = functionArg(args, 5, false);
+            final FSImpl fs = (FSImpl)thisObj;
+
+            if (off >= buf.getLength()) {
+                throw Utils.makeError(cx, thisObj, "Offset is out of bounds", "EINVAL");
+            }
+            if ((off + len) > buf.getLength()) {
+                throw Utils.makeError(cx, thisObj, "Length extends beyond buffer", "EINVAL");
+            }
+
+            return fs.runAction(callback, new AsyncAction()
+            {
+                @Override
+                public Object[] execute()
+                    throws NodeOSException
+                {
+                    return fs.doWrite(handle, buf, off, len, pos);
+                }
+
+                public Object[] mapException(NodeOSException e)
+                {
+                    return new Object[] { e.getCodeString(), 0, buf };
+                }
+            });
+        }
+
+        private Object[] doWrite(FileHandle handle, Buffer.BufferImpl buf,
+                                 int off, int len, int pos)
+            throws NodeOSException
+        {
+            byte[] bytes = buf.getArray();
+            int bytesOffset = buf.getArrayOffset() + off;
+
+            try {
+                handle.file.seek(pos);
+                handle.file.write(bytes, bytesOffset, len);
+                if (log.isDebugEnabled()) {
+                    log.debug("write({}, {}, {})", off, len, pos);
+                }
+                return new Object[] { null, len, buf };
+
+            } catch (IOException ioe) {
+                throw new NodeOSException(Constants.EIO, ioe);
+            }
+        }
+
+        @JSFunction
+        public static void fsync(final Context cx, final Scriptable thisObj, Object[] args, Function func)
+        {
+            final FileHandle handle = ensureHandle(cx, thisObj, args, 0);
+            final Function callback = functionArg(args, 1, false);
+            final FSImpl fs = (FSImpl)thisObj;
+
+
+            fs.runAction(callback, new AsyncAction()
+            {
+                @Override
+                public Object[] execute() throws NodeOSException
+                {
+                    fs.doSync(handle);
+                    return null;
+                }
+            });
+        }
+
+        private void doSync(FileHandle handle)
+            throws NodeOSException
+        {
+            try {
+                handle.file.getFD().sync();
+            } catch (IOException ioe) {
+                throw new NodeOSException(Constants.EIO, ioe);
+            }
+        }
+
+        @JSFunction
+        public static void fdatasync(Context cx, Scriptable thisObj, Object[] args, Function func)
+        {
+            fsync(cx, thisObj, args, func);
+        }
+
+        @JSFunction
+        public static void rename(final Context cx, final Scriptable thisObj, Object[] args, Function func)
+        {
+            final String oldPath = stringArg(args, 0);
+            final String newPath = stringArg(args, 1);
+            final Function callback = functionArg(args, 2, false);
+            final FSImpl fs = (FSImpl)thisObj;
+
+            fs.runAction(callback, new AsyncAction()
+            {
+                @Override
+                public Object[] execute() throws NodeOSException
+                {
+                    fs.doRename(oldPath, newPath);
+                    return null;
+                }
+            });
+        }
+
+        private void doRename(String oldPath, String newPath)
+            throws NodeOSException
+        {
+            File oldFile = new File(oldPath);
+            if (!oldFile.exists()) {
+                throw new NodeOSException(Constants.ENOENT);
+            }
+            File newFile = new File(newPath);
+            if ((newFile.getParentFile() != null) && !newFile.getParentFile().exists()) {
+                throw new NodeOSException(Constants.ENOENT);
+            }
+            if (!oldFile.renameTo(newFile)) {
+                throw new NodeOSException(Constants.EIO);
+            }
+        }
+
+        @JSFunction
+        public static void ftruncate(final Context cx, final Scriptable thisObj, Object[] args, Function func)
+        {
+            final FileHandle handle = ensureHandle(cx, thisObj, args, 0);
+            final int len = intArg(args, 1);
+            final Function callback = functionArg(args, 2, false);
+            final FSImpl fs = (FSImpl)thisObj;
+
+            fs.runAction(callback, new AsyncAction()
+            {
+                @Override
+                public Object[] execute()
+                    throws NodeOSException
+                {
+                    fs.doTruncate(handle, len);
+                    return null;
+                }
+            });
+        }
+
+        private void doTruncate(FileHandle handle, int len)
+            throws NodeOSException
+        {
+            try {
+                handle.file.setLength(len);
+            } catch (IOException e) {
+                throw new NodeOSException(Constants.EIO, e);
+            }
+        }
+
+        @JSFunction
+        public static void rmdir(final Context cx, final Scriptable thisObj, Object[] args, Function func)
+        {
+            final String path = stringArg(args, 0);
+            final Function callback = functionArg(args, 1, false);
+            final FSImpl fs = (FSImpl)thisObj;
+
+            fs.runAction(callback, new AsyncAction()
+            {
+                @Override
+                public Object[] execute() throws NodeOSException
+                {
+                    fs.doRmdir(path);
+                    return null;
+                }
+            });
+        }
+
+        private void doRmdir(String path)
+            throws NodeOSException
+        {
+            File file = new File(path);
+            if (!file.exists()) {
+                throw new NodeOSException(Constants.ENOENT);
+            }
+            if (!file.isDirectory()) {
+                throw new NodeOSException(Constants.ENOTDIR);
+            }
+            if (!file.delete()) {
+                throw new NodeOSException(Constants.EIO);
+            }
+        }
+
+        @JSFunction
+        public static void unlink(final Context cx, final Scriptable thisObj, Object[] args, Function func)
+        {
+            final String path = stringArg(args, 0);
+            final Function callback = functionArg(args, 1, false);
+            final FSImpl fs = (FSImpl)thisObj;
+
+            fs.runAction(callback, new AsyncAction()
+            {
+                @Override
+                public Object[] execute() throws NodeOSException
+                {
+                    fs.doUnlink(path);
+                    return null;
+                }
+            });
+        }
+
+        private void doUnlink(String path)
+            throws NodeOSException
+        {
+            File file = new File(path);
+            if (!file.exists()) {
+                throw new NodeOSException(Constants.ENOENT);
+            }
+            if (!file.delete()) {
+                throw new NodeOSException(Constants.EIO);
+            }
+        }
+
+        @JSFunction
+        public static void mkdir(final Context cx, final Scriptable thisObj, Object[] args, Function func)
+        {
+            final String path = stringArg(args, 0);
+            final int mode = intArg(args, 1);
+            final Function callback = functionArg(args, 2, false);
+            final FSImpl fs = (FSImpl)thisObj;
+
+            fs.runAction(callback, new AsyncAction()
+            {
+                @Override
+                public Object[] execute()
+                    throws NodeOSException
+                {
+                    fs.doMkdir(path, mode);
+                    return null;
+                }
+            });
+        }
+
+        private void doMkdir(String path, int mode)
+            throws NodeOSException
+        {
+            File file = new File(path);
+            if (!file.mkdir()) {
+                throw new NodeOSException(Constants.EIO);
+            }
+            setMode(file, mode);
+        }
+
+        @JSFunction
+        public static Object readdir(final Context cx, final Scriptable thisObj, Object[] args, Function func)
+        {
+            final String path = stringArg(args, 0);
+            final Function callback = functionArg(args, 1, false);
+            final FSImpl fs = (FSImpl)thisObj;
+
+            return fs.runAction(callback, new AsyncAction()
+            {
+                @Override
+                public Object[] execute()
+                    throws NodeOSException
+                {
+                    return fs.doReaddir(path);
+                }
+            });
+        }
+
+        private Object[] doReaddir(String dn)
+        {
+            Context cx = Context.enter();
+            try {
+                File f = new File(dn);
+                String[] files = f.list();
+                Scriptable fileList;
+                if (files == null) {
+                    fileList = cx.newArray(this, 0);
+                } else {
+                    Object[] objs = new Object[files.length];
+                    System.arraycopy(files, 0, objs, 0, files.length);
+                    fileList = cx.newArray(this, objs);
+                }
+                return new Object[] { null, fileList };
+            } finally {
+                Context.exit();
+            }
+        }
+
+        @JSFunction
+        public static Object stat(final Context cx, final Scriptable thisObj, Object[] args, Function func)
+        {
+            final String path = stringArg(args, 0);
+            final Function callback = functionArg(args, 1, false);
+            final FSImpl fs = (FSImpl)thisObj;
+
+            return fs.runAction(callback, new AsyncAction()
+            {
+                @Override
+                public Object[] execute()
+                    throws NodeOSException
+                {
+                    return fs.doStat(path);
+                }
+            });
+        }
+
+        private Object[] doStat(String fn)
+        {
+            Context cx = Context.enter();
+            try {
+                File f = new File(fn);
+                if (!f.exists()) {
+                    throw new NodeOSException(Constants.ENOENT);
+                }
+                StatsImpl s = (StatsImpl)cx.newObject(this, StatsImpl.CLASS_NAME);
+                s.setFile(f);
+                return new Object[] { null, s };
+            } finally {
+                Context.exit();
+            }
+        }
+
+        @JSFunction
+        public static Object fstat(final Context cx, final Scriptable thisObj, Object[] args, Function func)
+        {
+            final FileHandle handle = ensureHandle(cx, thisObj, args, 0);
+            final Function callback = functionArg(args, 1, false);
+            final FSImpl fs = (FSImpl)thisObj;
+
+            return fs.runAction(callback, new AsyncAction()
+            {
+                @Override
+                public Object[] execute()
+                    throws NodeOSException
+                {
+                    return fs.doFStat(handle.fileRef);
+                }
+            });
+        }
+
+        private Object[] doFStat(File f)
+        {
+            Context cx = Context.enter();
+            try {
+                StatsImpl s = (StatsImpl)cx.newObject(this, StatsImpl.CLASS_NAME);
+                s.setFile(f);
+                return new Object[] { null, s };
+            } finally {
+                Context.exit();
+            }
+        }
+
+        // TODO from the existing native module:
+
+        // sendfile
+        // lstat
+        // link
+        // symlink
+        // readlink
+        // chmod
+        // fchmod
+        // chown
+        // fchown
+        // utimes
+        // futimes
+        // errno
+        // node:encoding
+        // __buf
     }
 
     public static class StatsImpl
         extends ScriptableObject
     {
+        public static final String CLASS_NAME = "Stats";
+
         private File file;
 
         @Override
         public String getClassName() {
-            return STATS_CLASS;
+            return CLASS_NAME;
         }
 
         public void setFile(File file) {
@@ -332,6 +761,31 @@ public class Filesystem
         @JSGetter("mtime")
         public String getMTime() {
             return dateFormat.format(new Date(file.lastModified()));
+        }
+    }
+
+    public static class FileHandle
+    {
+        static final String KEY = "_fileHandle";
+
+        RandomAccessFile file;
+        File fileRef;
+
+        FileHandle(File fileRef, RandomAccessFile file)
+        {
+            this.fileRef = fileRef;
+            this.file = file;
+        }
+    }
+
+    private abstract static class AsyncAction
+    {
+        public abstract Object[] execute()
+            throws NodeOSException;
+
+        public Object[] mapException(NodeOSException e)
+        {
+            return new Object[] { e.getCode() };
         }
     }
 }

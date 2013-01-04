@@ -47,16 +47,20 @@ public class ModuleRegistry
         addCompiledModule("_linklist", "com.apigee.noderunner.fromnode._linklist");
         addCompiledModule("assert", "com.apigee.noderunner.fromnode.assert");
         addCompiledModule("console", "com.apigee.noderunner.fromnode.console");
+        addCompiledModule("constants", "com.apigee.noderunner.fromnode.constants");
         addCompiledModule("domain", "com.apigee.noderunner.fromnode.domain");
         addCompiledModule("events", "com.apigee.noderunner.fromnode.events");
         addCompiledModule("freelist", "com.apigee.noderunner.fromnode.freelist");
+        addCompiledModule("fs", "com.apigee.noderunner.fromnode.fs");
         addCompiledModule("http", "com.apigee.noderunner.fromnode.http");
+        addCompiledModule("path", "com.apigee.noderunner.fromnode.path");
         addCompiledModule("punycode", "com.apigee.noderunner.fromnode.punycode");
         addCompiledModule("querystring", "com.apigee.noderunner.fromnode.querystring");
         addCompiledModule("stream", "com.apigee.noderunner.fromnode.stream");
         addCompiledModule("string_decoder", "com.apigee.noderunner.fromnode.string_decoder");
         addCompiledModule("url", "com.apigee.noderunner.fromnode.url");
         addCompiledModule("util", "com.apigee.noderunner.fromnode.util");
+        addCompiledModule("vm", "com.apigee.noderunner.fromnode.vm");
     }
 
     private void addCompiledModule(String name, String className)

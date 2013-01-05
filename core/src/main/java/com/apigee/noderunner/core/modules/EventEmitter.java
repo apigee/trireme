@@ -2,6 +2,7 @@ package com.apigee.noderunner.core.modules;
 
 import com.apigee.noderunner.core.NodeModule;
 import com.apigee.noderunner.core.internal.ScriptRunner;
+import com.apigee.noderunner.core.internal.ScriptableUtils;
 import com.apigee.noderunner.core.internal.Utils;
 import org.mozilla.javascript.Context;
 import org.mozilla.javascript.Function;
@@ -45,23 +46,16 @@ public class EventEmitter
         throws InvocationTargetException, IllegalAccessException, InstantiationException
     {
         ScriptableObject.defineClass(scope, EventEmitterImpl.class);
-        Scriptable exports = cx.newObject(scope);
-        exports.put("EventEmitter", exports,
-                    new FunctionObject("EventEmitter",
-                                       Utils.findMethod(EventEmitter.class, "newEventEmitter"),
-                                       exports));
-        return exports;
-    }
 
-    public static Object newEventEmitter(Context ctx, Object[] args, Function caller, boolean inNew)
-    {
-        return ctx.newObject(caller, CLASS_NAME, args);
+        Scriptable exports = cx.newObject(scope);
+        exports.put("EventEmitter", exports, scope.get(CLASS_NAME, scope));
+
+        return exports;
     }
 
     public static class EventEmitterImpl
         extends ScriptableObject
     {
-
         private final HashMap<String, List<Lsnr>> listeners = new HashMap<String, List<Lsnr>>();
         private int maxListeners = DEFAULT_MAX_LISTENERS;
 
@@ -71,21 +65,29 @@ public class EventEmitter
         }
 
         @JSFunction
-        public void addListener(String event, Function listener)
+        public static void addListener(Context ctx, Scriptable thisObj, Object[] args, Function caller)
         {
-            on(event, listener);
+            EventEmitterImpl.on(ctx, thisObj, args, caller);
         }
 
         @JSFunction
-        public void on(String event, Function listener)
+        public static void on(Context ctx, Scriptable thisObj, Object[] args, Function caller)
         {
-            register(event, listener, false);
+            EventEmitterImpl thisClass = ScriptableUtils.prototypeCast(thisObj, EventEmitterImpl.class);
+            String event = stringArg(args, 0);
+            Function listener = functionArg(args, 1, true);
+
+            thisClass.register(event, listener, false);
         }
 
         @JSFunction
-        public void once(String event, Function listener)
+        public static void once(Context ctx, Scriptable thisObj, Object[] args, Function caller)
         {
-            register(event, listener, true);
+            EventEmitterImpl thisClass = ScriptableUtils.prototypeCast(thisObj, EventEmitterImpl.class);
+            String event = stringArg(args, 0);
+            Function listener = functionArg(args, 1, true);
+
+            thisClass.register(event, listener, true);
         }
 
         public void register(String event, Function listener, boolean once)
@@ -108,9 +110,13 @@ public class EventEmitter
         }
 
         @JSFunction
-        public void removeListener(String event, Function listener)
+        public static void removeListener(Context ctx, Scriptable thisObj, Object[] args, Function caller)
         {
-            List<Lsnr> ls = listeners.get(event);
+            EventEmitterImpl thisClass = ScriptableUtils.prototypeCast(thisObj, EventEmitterImpl.class);
+            String event = stringArg(args, 0);
+            Function listener = functionArg(args, 1, true);
+
+            List<Lsnr> ls = thisClass.listeners.get(event);
             if (ls != null) {
                 Iterator<Lsnr> i = ls.iterator();
                 while (i.hasNext()) {
@@ -122,23 +128,30 @@ public class EventEmitter
             }
         }
 
-        @JSFunction
-        public void removeAllListeners(String event)
+        public static void removeAllListeners(Context ctx, Scriptable thisObj, Object[] args, Function caller)
         {
-            listeners.remove(event);
+            EventEmitterImpl thisClass = ScriptableUtils.prototypeCast(thisObj, EventEmitterImpl.class);
+            String event = stringArg(args, 0);
+
+            thisClass.listeners.remove(event);
         }
 
         @JSFunction
-        public void setMaxListeners(int max)
+        public static void setMaxListeners(Context ctx, Scriptable thisObj, Object[] args, Function caller)
         {
-            this.maxListeners = max;
+            EventEmitterImpl thisClass = ScriptableUtils.prototypeCast(thisObj, EventEmitterImpl.class);
+            int max = intArg(args, 0);
+
+            thisClass.maxListeners = max;
         }
 
         @JSFunction
         public static Scriptable listeners(Context ctx, Scriptable thisObj, Object[] args, Function caller)
         {
+            EventEmitterImpl thisClass = ScriptableUtils.prototypeCast(thisObj, EventEmitterImpl.class);
             String event = stringArg(args, 0);
-            List<Lsnr> ls = ((EventEmitterImpl)thisObj).listeners.get(event);
+
+            List<Lsnr> ls = thisClass.listeners.get(event);
             ArrayList<Function> ret = new ArrayList<Function>();
             if (ls == null) {
                 return ctx.newArray(thisObj, 0);
@@ -155,14 +168,15 @@ public class EventEmitter
         @JSFunction
         public static void emit(Context ctx, Scriptable thisObj, Object[] args, Function caller)
         {
-            EventEmitterImpl emitter = (EventEmitterImpl)thisObj;
-            String event = (String)Context.jsToJava(args[0], String.class);
+            EventEmitterImpl thisClass = ScriptableUtils.prototypeCast(thisObj, EventEmitterImpl.class);
+            String event = stringArg(args, 0);
+
             Object[] funcArgs = null;
             if (args.length > 1) {
                 funcArgs = new Object[args.length - 1];
                 System.arraycopy(args, 1, funcArgs, 0, args.length - 1);
             }
-            emitter.fireEvent(event, funcArgs);
+            thisClass.fireEvent(event, funcArgs);
         }
 
         public boolean fireEvent(String event, Object... args)

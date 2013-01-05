@@ -93,4 +93,15 @@ public class BasicTest
             // Expected result
         }
     }
+
+    @Test
+    public void testEvents()
+            throws InterruptedException, ExecutionException, NodeException
+    {
+        NodeScript script = env.createScript("eventstest.js",
+                new File("./target/test-classes/tests/eventstest.js"),
+                null);
+        ScriptStatus stat = script.execute().get();
+        assertEquals(0, stat.getExitCode());
+    }
 }

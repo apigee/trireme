@@ -108,6 +108,7 @@ public class Module
             Scriptable exportsObj = cx.newObject(scope);
             scope.put("exports", target, exportsObj);
             scope.put("exports", scope, exportsObj);
+            scope.put("errno", scope, 0);
             return exportsObj;
         }
 

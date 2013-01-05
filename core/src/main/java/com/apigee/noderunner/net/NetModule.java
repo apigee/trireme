@@ -30,7 +30,7 @@ public class NetModule
 
     @Override
     public String getModuleName() {
-        return "net";
+        return "internalNet";
     }
 
     @Override

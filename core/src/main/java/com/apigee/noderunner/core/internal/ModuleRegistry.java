@@ -46,6 +46,8 @@ public class ModuleRegistry
 
         addCompiledModule("_linklist", "com.apigee.noderunner.fromnode._linklist");
         addCompiledModule("assert", "com.apigee.noderunner.fromnode.assert");
+        addCompiledModule("child_process", "com.apigee.noderunner.fromnode.child_process");
+        addCompiledModule("cluster", "com.apigee.noderunner.fromnode.cluster");
         addCompiledModule("console", "com.apigee.noderunner.fromnode.console");
         addCompiledModule("constants", "com.apigee.noderunner.fromnode.constants");
         addCompiledModule("domain", "com.apigee.noderunner.fromnode.domain");
@@ -53,6 +55,7 @@ public class ModuleRegistry
         addCompiledModule("freelist", "com.apigee.noderunner.fromnode.freelist");
         addCompiledModule("fs", "com.apigee.noderunner.fromnode.fs");
         addCompiledModule("http", "com.apigee.noderunner.fromnode.http");
+        addCompiledModule("net", "com.apigee.noderunner.fromnode.net");
         addCompiledModule("path", "com.apigee.noderunner.fromnode.path");
         addCompiledModule("punycode", "com.apigee.noderunner.fromnode.punycode");
         addCompiledModule("querystring", "com.apigee.noderunner.fromnode.querystring");

@@ -44,6 +44,8 @@ import java.util.concurrent.LinkedBlockingQueue;
 public class ScriptRunner
     implements RunningScript, Callable<ScriptStatus>
 {
+    public static final String RUNNER = "runner";
+
     private static final Logger log = LoggerFactory.getLogger(ScriptRunner.class);
 
     private static final long DEFAULT_DELAY = 60000L;
@@ -207,6 +209,12 @@ public class ScriptRunner
         log.debug("Pin count is now {}", pinCount);
     }
 
+    private void setUpContext(Context cx)
+    {
+        env.setUpContext(cx);
+        cx.putThreadLocal(RUNNER, this);
+    }
+
     /**
      * Execute the script. We do this by actually executing the script.
      */
@@ -215,7 +223,7 @@ public class ScriptRunner
         throws NodeException, InterruptedException
     {
         Context cx = Context.enter();
-        env.setUpContext(cx);
+        setUpContext(cx);
         try {
             // Re-use the global scope from before, but make it top-level so that there are no shared variables
             // TODO set some of these every time we create a new context to run the script.

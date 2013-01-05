@@ -42,6 +42,7 @@ public class Constants
     public static final int EISDIR = 21;
     public static final int ENOENT = 2;
     public static final int ENOTDIR = 20;
+    public static final int EOF = -1;
 
     public static final int S_IRUSR = 0000400;    /* R for owner */
     public static final int S_IWUSR = 0000200;    /* W for owner */
@@ -63,6 +64,7 @@ public class Constants
         codes.put(EISDIR, "EISDIR");
         codes.put(ENOENT, "ENOENT");
         codes.put(ENOTDIR, "ENOTDIR");
+        codes.put(EOF, "EOF");
     }
 
     public static String getErrorCode(int code)

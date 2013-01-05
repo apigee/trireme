@@ -30,14 +30,14 @@ public class RhinoCompiler
     /**
      * The base directory for JavaScript sources. Defaults to src/main/javascript.
      */
-    @Parameter(defaultValue = "src/main/javascript")
-    private String directory = "src/main/javascript";
+    @Parameter(defaultValue = "${basedir}/src/main/javascript")
+    private String directory = "${basedir}/src/main/javascript";
 
     /**
      * The target directory for the .class files. Defaults to target/classes.
      */
-    @Parameter(defaultValue = "target/classes")
-    private String targetPath = "target/classes";
+    @Parameter(defaultValue = "${project.build.outputDirectory}")
+    private String targetPath = "${project.build.outputDirectory}";
 
     private CompilerEnvirons createEnvironment()
     {

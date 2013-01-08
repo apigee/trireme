@@ -11,13 +11,13 @@ import com.apigee.noderunner.core.ScriptStatus;
 import com.apigee.noderunner.core.ScriptTask;
 import com.apigee.noderunner.core.modules.EventEmitter;
 import com.apigee.noderunner.core.modules.Module;
+import com.apigee.noderunner.core.modules.NativeModule;
 import com.apigee.noderunner.core.modules.Process;
 import com.apigee.noderunner.core.modules.Timers;
 import com.apigee.noderunner.net.SelectorHandler;
 import org.mozilla.javascript.Context;
 import org.mozilla.javascript.Function;
 import org.mozilla.javascript.RhinoException;
-import org.mozilla.javascript.Script;
 import org.mozilla.javascript.Scriptable;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -56,6 +56,7 @@ public class ScriptRunner
     private       String[]        args;
     private       String          scriptName;
     private final HashMap<String, Object> moduleCache = new HashMap<String, Object>();
+    private final HashMap<String, Object> nativeModuleCache = new HashMap<String, Object>();
     private       Sandbox              sandbox;
     private       Future<ScriptStatus> future;
 
@@ -67,10 +68,9 @@ public class ScriptRunner
     private       int                           pinCount;
 
     // Globals that are set up for the process
-    private Timers.TimersImpl   timers;
+    private NativeModule.NativeImpl nativeModule;
     private Process.ProcessImpl process;
-    private Object              globals;
-    private Module.ModuleImpl   module;
+    private Scriptable          mainModule;
 
     private Scriptable scope;
 
@@ -127,6 +127,10 @@ public class ScriptRunner
 
     public Scriptable getScriptScope() {
         return scope;
+    }
+
+    public NativeModule.NativeImpl getNativeModule() {
+        return nativeModule;
     }
 
     public Map<String, Object> getModuleCache() {
@@ -209,6 +213,16 @@ public class ScriptRunner
         log.debug("Pin count is now {}", pinCount);
     }
 
+    public void setErrno(String err)
+    {
+        scope.put("errno", scope, err);
+    }
+
+    public void clearErrno()
+    {
+        scope.put("errno", scope, 0);
+    }
+
     private void setUpContext(Context cx)
     {
         env.setUpContext(cx);
@@ -226,7 +240,6 @@ public class ScriptRunner
         setUpContext(cx);
         try {
             // Re-use the global scope from before, but make it top-level so that there are no shared variables
-            // TODO set some of these every time we create a new context to run the script.
             scope = cx.newObject(env.getScope());
             scope.setPrototype(env.getScope());
             scope.setParentScope(null);
@@ -239,27 +252,25 @@ public class ScriptRunner
 
             try {
                 if (scriptFile == null) {
-                    log.debug("Evaluating {} from string", scriptName);
+                    // Set up the script with a dummy main module like node.js does
+                    File scriptFile = new File(process.cwd(), scriptName);
+                    Function ctor = (Function)mainModule.get("Module", mainModule);
+                    Scriptable topModule = cx.newObject(scope);
+                    ctor.call(cx, scope, topModule, new Object[] { scriptName });
+                    topModule.put("filename", topModule, scriptFile.getPath());
+                    scope.put("exports", scope, topModule.get("exports", topModule));
+                    scope.put("module", scope, topModule);
+                    scope.put("require", scope, topModule.get("require", topModule));
                     cx.evaluateString(scope, script, scriptName, 1, null);
+
                 } else {
-                    log.debug("Evaluating {} from {}", scriptName, scriptFile);
-                    FileInputStream fis = new FileInputStream(scriptFile);
-                    try {
-                        // Handle scripts that start with "#!"
-                        BufferedReader rdr =
-                            new BufferedReader(new InputStreamReader(fis, Utils.UTF8));
-                        rdr.mark(2048);
-                        String firstLine = rdr.readLine();
-                        if ((firstLine == null) || !firstLine.startsWith("#!")) {
-                            // Not a weird script -- rewind and read again
-                            rdr.reset();
-                        }
-                        cx.evaluateReader(scope, rdr, scriptName, 1, null);
-                    } finally {
-                        fis.close();
-                    }
+                    // Again like the real node, delegate running the actual script to the module module.
+                    // Node does this in a separate nextTick job, not sure yet why we need to do that too
+                    process.setArgv(1, scriptFile.getAbsolutePath());
+                    Function load = (Function)mainModule.get("runMain", mainModule);
+                    load.call(cx, scope, null, null);
                 }
-                log.debug("Evaluation complete");
+
             } catch (NodeExitException ne) {
                 throw ne;
             } catch (RhinoException re) {
@@ -391,35 +402,34 @@ public class ScriptRunner
     private void initGlobals(Context cx)
         throws NodeException
     {
-        Module moduleModule = new Module();
         try {
-            // Need a little special handling for the "module" module, which does module loading
-            Module.ModuleImpl mod = (Module.ModuleImpl)moduleModule.registerExports(cx, scope, this);
-            mod.setRunner(this);
-            mod.setId(scriptName);
-            if (scriptFile == null) {
-                mod.setFileName(scriptName);
-            } else {
-                mod.setFile(scriptFile);
-            }
-            mod.setParentScope(scope);
-            mod.setLoaded(true);
-            mod.bindVariables(cx, scope, mod);
-            this.module = mod;
+            // Need the "native module" before we can do anything
+            NativeModule.NativeImpl nativeMod =
+              (NativeModule.NativeImpl)initializeModule("native_module", false, cx, scope);
+            this.nativeModule = nativeMod;
 
-            // Other modules
-            timers =  (Timers.TimersImpl)registerModule("timers", cx, scope);
-            timers.setRunner(this);
+            // "process" is expected to be initialized by the runtime too
             process  =
                 (Process.ProcessImpl)registerModule("process", cx, scope);
-            process.setRunner(this);
+            process.setMainModule(nativeMod);
+            process.setArgv(0, "./node");
+            process.setArgv(1, scriptName);
+
+            // Need a little special handling for the "module" module, which does module loading
+            //Object moduleModule = nativeMod.internalRequire("module", cx, this);
+
+            // Set up the globals that are set up for all script evaluations
+            scope.put("process", scope, process);
+            scope.put("global", scope, scope);
+            scope.put("GLOBAL", scope, scope);
+            scope.put("root", scope, scope);
             registerModule("buffer", cx, scope);
+            registerModule("timers", cx, scope);
+            scope.put("console", scope, nativeMod.internalRequire("console", cx, this));
+            clearErrno();
 
-            // Some are scripts
-            Object console = mod.callMethod(scope, "require", new Object[] { "console" });
-            scope.put("console", scope, console);
-
-            // Globals not covered in any module
+            // Set up globals that are set up when running a script from the command line (set in "evalScript"
+            // in node.js.)
             if (scriptFile == null) {
                 scope.put("__filename", scope, scriptName);
                 scope.put("__dirname", scope, new File(".").getAbsolutePath());
@@ -431,8 +441,9 @@ public class ScriptRunner
                     scope.put("__dirname", scope, scriptFile.getParentFile().getAbsolutePath());
                 }
             }
-            // All modules share one "global" object that has, well, global stuff
-            scope.put("global", scope, scope);
+
+            // Set up the main native module
+            mainModule = (Scriptable)nativeMod.internalRequire("module", cx, this);
 
         } catch (InvocationTargetException e) {
             throw new NodeException(e);
@@ -483,7 +494,26 @@ public class ScriptRunner
     public Object require(String modName, Context cx, Scriptable scope)
         throws InvocationTargetException, InstantiationException, IllegalAccessException
     {
-        return module.require(cx, modName);
+        return nativeModule.internalRequire(modName, cx, this);
+    }
+
+    /**
+     * This is where we load native modules.
+     */
+    public boolean isNativeModule(String name)
+    {
+        return (env.getRegistry().get(name) != null) ||
+               (env.getRegistry().getCompiledModule(name) != null);
+    }
+
+    public Object getCachedNativeModule(String name)
+    {
+        return nativeModuleCache.get(name);
+    }
+
+    public void cacheNativeModule(String name, Object module)
+    {
+        nativeModuleCache.put(name, module);
     }
 
     private abstract static class Activity

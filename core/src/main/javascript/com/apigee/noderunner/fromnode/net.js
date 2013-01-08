@@ -376,6 +376,7 @@ Socket.prototype.destroy = function(exception) {
 
 
 function onread(buffer, offset, length) {
+  debug('onread errno = ' + errno);
   var handle = this;
   var self = handle.owner;
   assert(handle === self._handle, 'handle != self._handle');

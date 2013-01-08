@@ -50,13 +50,11 @@ var tcp = net.Server(function(s) {
 });
 
 tcp.listen(common.PORT, function() {
-  // TODO GREG This is an undocumented old function that we aren't implementing
-  //var socket = net.Stream();
+  var socket = net.Stream();
 
   console.log('Connecting to socket ');
 
-  //socket.connect(tcpPort, function() {
-  var socket = net.connect(tcpPort, function() {
+  socket.connect(tcpPort, function() {
     console.log('socket connected');
     connectHappened = true;
   });

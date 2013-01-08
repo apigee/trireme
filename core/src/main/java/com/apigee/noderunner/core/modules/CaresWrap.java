@@ -15,6 +15,8 @@ import java.net.UnknownHostException;
 
 /**
  * Node's built-in JavaScript uses C-ARES for async DNS stuff. This module emulates that.
+ * We don't actually want to support all of DNS yet (and it is not in the Java SDK right now)
+ * so this only has the bare minimum stuff necessary to get the "net" module working.
  */
 public class CaresWrap
     implements InternalNodeModule

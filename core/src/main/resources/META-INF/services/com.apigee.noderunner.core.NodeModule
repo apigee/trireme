@@ -1,11 +1,13 @@
 com.apigee.noderunner.core.modules.Buffer
 com.apigee.noderunner.core.modules.CaresWrap
 com.apigee.noderunner.core.modules.Constants
+com.apigee.noderunner.core.modules.DNS
 com.apigee.noderunner.core.modules.Evals
 com.apigee.noderunner.core.modules.Crypto
 com.apigee.noderunner.core.modules.EventEmitter
 com.apigee.noderunner.core.modules.Filesystem
 com.apigee.noderunner.core.modules.Module
+com.apigee.noderunner.core.modules.NativeModule
 com.apigee.noderunner.core.modules.Process
 com.apigee.noderunner.core.modules.ProcessWrap
 com.apigee.noderunner.core.modules.Stream

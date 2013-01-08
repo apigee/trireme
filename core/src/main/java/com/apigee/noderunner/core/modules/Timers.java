@@ -37,7 +37,8 @@ public class Timers
         throws InvocationTargetException, IllegalAccessException, InstantiationException
     {
         ScriptableObject.defineClass(scope, TimersImpl.class);
-        Scriptable exports = cx.newObject(scope, CLASS_NAME);
+        TimersImpl exports = (TimersImpl)cx.newObject(scope, CLASS_NAME);
+        exports.setRunner(runner);
 
         scope.put(OBJ_NAME, scope, exports);
 

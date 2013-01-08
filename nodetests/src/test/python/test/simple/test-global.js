@@ -24,9 +24,6 @@ var assert = require('assert');
 
 common.globalCheck = false;
 
-// INVALID? I added this because of the check on line 39,
-// which doesn't make sense to me.
-foo='foo';
 baseFoo = 'foo';
 global.baseBar = 'bar';
 

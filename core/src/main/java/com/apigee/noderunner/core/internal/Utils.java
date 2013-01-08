@@ -118,26 +118,32 @@ public class Utils
         return writeBuf;
     }
 
+    public static Scriptable makeErrorObject(Context cx, Scriptable scope, String message)
+    {
+        return cx.newObject(scope, "Error", new Object[] { message });
+    }
+
     public static RhinoException makeError(Context cx, Scriptable scope, String message)
     {
-        Scriptable err = cx.newObject(scope);
-        err.put("message", err, message);
-        return new JavaScriptException(err);
+        return new JavaScriptException(makeErrorObject(cx, scope, message));
+    }
+
+    public static Scriptable makeErrorObject(Context cx, Scriptable scope, String message, String code)
+    {
+        Scriptable err = cx.newObject(scope, "Error", new Object[] { message });
+        err.put("code", err, code);
+        return err;
     }
 
     public static RhinoException makeError(Context cx, Scriptable scope, String message, String code)
     {
-        Scriptable err = cx.newObject(scope);
-        err.put("message", err, message);
-        err.put("code", err, code);
-        return new JavaScriptException(err);
+        return new JavaScriptException(makeErrorObject(cx, scope, message, code));
     }
 
     public static RhinoException makeError(Context cx, Scriptable scope, NodeOSException e)
     {
-        Scriptable err = cx.newObject(scope);
-        err.put("message", err, e.getMessage());
-        err.put("code", err, e.getCodeString());
+        Scriptable err = cx.newObject(scope, "Error", new Object[] { e.getMessage() });
+        err.put("code", err, e.getCode());
         return new JavaScriptException(err);
     }
 }

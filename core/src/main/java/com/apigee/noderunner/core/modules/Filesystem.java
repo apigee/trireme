@@ -16,11 +16,11 @@ import org.slf4j.LoggerFactory;
 import static com.apigee.noderunner.core.internal.ArgUtils.*;
 
 import java.io.File;
+import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.io.RandomAccessFile;
 import java.lang.reflect.InvocationTargetException;
 import java.text.DateFormat;
-import java.util.Date;
 import java.util.concurrent.Executor;
 
 /**
@@ -82,7 +82,14 @@ public class Filesystem
                     }
                     return ret[1];
                 } catch (NodeOSException e) {
-                    throw Utils.makeError(Context.getCurrentContext(), this, e);
+                    if (log.isDebugEnabled()) {
+                        log.debug("I/O exception: {}: {}", e.getCode(), e);
+                    }
+                    Object[] err = action.mapSyncException(e);
+                    if (err == null) {
+                        throw Utils.makeError(Context.getCurrentContext(), this, e);
+                    }
+                    return err[1];
                 }
             }
 
@@ -100,7 +107,7 @@ public class Filesystem
                         runner.enqueueCallback(callback, callback, callback, args);
                     } catch (NodeOSException e) {
                         if (log.isDebugEnabled()) {
-                            log.debug("Async action {} failed: {}", action, e.getCodeString());
+                            log.debug("Async action {} failed: {}", action, e.getCode());
                         }
                         runner.enqueueCallback(callback, callback, callback,
                                                action.mapException(e));
@@ -253,8 +260,10 @@ public class Filesystem
                 if ((flags & Constants.O_APPEND) != 0) {
                     file.seek(file.length());
                 }
+            } catch (FileNotFoundException fnfe) {
+                throw new NodeOSException(Constants.ENOENT);
             } catch (IOException ioe) {
-                throw new NodeOSException(Constants.EIO);
+                throw new NodeOSException(Constants.EIO, ioe);
             }
             log.debug("Opened file");
 
@@ -327,7 +336,7 @@ public class Filesystem
 
                 public Object[] mapException(NodeOSException e)
                 {
-                    return new Object[] { e.getCodeString(), 0, buf };
+                    return new Object[] { e.getCode(), 0, buf };
                 }
             });
         }
@@ -382,7 +391,7 @@ public class Filesystem
 
                 public Object[] mapException(NodeOSException e)
                 {
-                    return new Object[] { e.getCodeString(), 0, buf };
+                    return new Object[] { e.getCode(), 0, buf };
                 }
             });
         }
@@ -662,14 +671,28 @@ public class Filesystem
             try {
                 File f = new File(fn);
                 if (!f.exists()) {
+                    if (log.isDebugEnabled()) {
+                        log.debug("stat {} = {}", f.getPath(), Constants.ENOENT);
+                    }
                     throw new NodeOSException(Constants.ENOENT);
                 }
                 StatsImpl s = (StatsImpl)cx.newObject(this, StatsImpl.CLASS_NAME);
                 s.setFile(f);
+                if (log.isDebugEnabled()) {
+                    log.debug("stat {} = {}", f.getPath(), s);
+                }
                 return new Object[] { null, s };
             } finally {
                 Context.exit();
             }
+        }
+
+        @JSFunction
+        public static Object lstat(final Context cx, final Scriptable thisObj, Object[] args, Function func)
+        {
+            // TODO this means that our code can't distinguish symbolic links. This will require either
+            // native code or some changes in fs.js itself.
+            return stat(cx, thisObj, args, func);
         }
 
         @JSFunction
@@ -726,31 +749,27 @@ public class Filesystem
         public static final String CLASS_NAME = "Stats";
 
         private File file;
+        private int mode;
 
         @Override
         public String getClassName() {
             return CLASS_NAME;
         }
 
-        public void setFile(File file) {
+        public void setFile(File file)
+        {
             this.file = file;
+            if (file.isDirectory()) {
+                mode |= Constants.S_IFDIR;
+            }
+            if (file.isFile()) {
+                mode |= Constants.S_IFREG;
+            }
         }
 
-        @JSFunction
-        public boolean isFile() {
-            return file.isFile();
-        }
-
-        @JSFunction
-        public boolean isDirectory() {
-            return file.isDirectory();
-        }
-
-        // TODO isBlockDevice, isCharacterDevice, isFifo
-
-        @JSFunction
-        public boolean isSocket() {
-            return false;
+        @JSGetter("mode")
+        public int getMode() {
+            return mode;
         }
 
         @JSGetter("size")
@@ -759,8 +778,9 @@ public class Filesystem
         }
 
         @JSGetter("mtime")
-        public String getMTime() {
-            return dateFormat.format(new Date(file.lastModified()));
+        public Object getMTime()
+        {
+            return Context.getCurrentContext().newObject(this, "Date", new Object[] { file.lastModified() });
         }
     }
 
@@ -786,6 +806,11 @@ public class Filesystem
         public Object[] mapException(NodeOSException e)
         {
             return new Object[] { e.getCode() };
+        }
+
+        public Object[] mapSyncException(NodeOSException e)
+        {
+            return null;
         }
     }
 }

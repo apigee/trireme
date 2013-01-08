@@ -39,15 +39,30 @@ public class RhinoCompiler
     @Parameter(defaultValue = "${project.build.outputDirectory}")
     private String targetPath = "${project.build.outputDirectory}";
 
+    @Parameter
+    private String codePrefix;
+
+    @Parameter
+    private String codePostfix;
+
+    @Parameter
+    private boolean generateSource;
+
+    @Parameter
+    private int optimizationLevel = 1;
+
+    @Parameter
+    private boolean debugInfo;
+
     private CompilerEnvirons createEnvironment()
     {
         // Since this is only used in our own project, we hard-code these. A "real" plugin would
         // have them all configurable
         CompilerEnvirons env = new CompilerEnvirons();
         env.setLanguageVersion(Context.VERSION_1_8);
-        env.setGenerateDebugInfo(false);
-        env.setOptimizationLevel(1);
-        env.setGeneratingSource(false);
+        env.setGenerateDebugInfo(debugInfo);
+        env.setOptimizationLevel(optimizationLevel);
+        env.setGeneratingSource(generateSource);
         env.setRecordingComments(false);
         env.setRecoverFromErrors(false);
         env.setGenerateObserverCount(false);
@@ -86,7 +101,7 @@ public class RhinoCompiler
                     try {
                         Object[] bytes;
                         try {
-                            bytes = compiler.compileToClassFiles(readToString(input), input.getPath(),
+                            bytes = compiler.compileToClassFiles(loadSource(input), input.getPath(),
                                                                  1, className);
                         } catch (RhinoException re) {
                             throw new MojoExecutionException(
@@ -118,7 +133,7 @@ public class RhinoCompiler
         return fn;
     }
 
-    private String readToString(File in)
+    private String loadSource(File in)
         throws IOException
     {
         StringBuilder str = new StringBuilder();
@@ -126,6 +141,9 @@ public class RhinoCompiler
         char[] buf = new char[4096];
         int cr;
 
+        if (codePrefix != null) {
+            str.append(codePrefix);
+        }
         try {
             do {
                 cr = rdr.read(buf);
@@ -133,10 +151,13 @@ public class RhinoCompiler
                     str.append(buf, 0, cr);
                 }
             } while (cr > 0);
-            return str.toString();
         } finally {
             rdr.close();
         }
+        if (codePostfix != null) {
+            str.append(codePostfix);
+        }
+        return str.toString();
     }
 
     private void writeFromArray(byte[] bytes, File out)

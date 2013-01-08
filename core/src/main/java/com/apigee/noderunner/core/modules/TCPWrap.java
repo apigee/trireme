@@ -7,8 +7,10 @@ import com.apigee.noderunner.net.SelectorHandler;
 import com.apigee.noderunner.net.Utils;
 import org.mozilla.javascript.Context;
 import org.mozilla.javascript.Function;
+import org.mozilla.javascript.FunctionObject;
 import org.mozilla.javascript.Scriptable;
 import org.mozilla.javascript.ScriptableObject;
+import org.mozilla.javascript.annotations.JSConstructor;
 import org.mozilla.javascript.annotations.JSFunction;
 import org.mozilla.javascript.annotations.JSGetter;
 import org.mozilla.javascript.annotations.JSSetter;
@@ -78,6 +80,14 @@ public class TCPWrap
         private ByteBuffer              readBuffer;
         private PendingOp               pendingConnect;
 
+        @JSConstructor
+        public static Object newTCPImpl(Context cx, Object[] args, Function ctorObj, boolean inNewExpr)
+        {
+            TCPImpl tcp = new TCPImpl();
+            tcp.ref();
+            return tcp;
+        }
+
         private void clientInit()
             throws IOException
         {
@@ -103,17 +113,22 @@ public class TCPWrap
                                             });
         }
 
-        private void setErrno(int e)
+        private void setErrno(String err)
         {
-            ScriptableObject.putProperty(this, "errno", e);
+            getRunner().setErrno(err);
         }
 
-        private ScriptRunner getRunner(Context cx)
+        private void clearErrno()
+        {
+            getRunner().clearErrno();
+        }
+
+        private static ScriptRunner getRunner(Context cx)
         {
             return (ScriptRunner) cx.getThreadLocal(ScriptRunner.RUNNER);
         }
 
-        private ScriptRunner getRunner()
+        private static ScriptRunner getRunner()
         {
             return getRunner(Context.getCurrentContext());
         }
@@ -156,49 +171,70 @@ public class TCPWrap
             return (writeQueue == null ? 0 : writeQueue.size());
         }
 
+        private void addInterest(int i)
+        {
+            selKey.interestOps(selKey.interestOps() | i);
+            if (log.isDebugEnabled()) {
+                log.debug("Interest now {}", selKey.interestOps());
+            }
+        }
+
+        private void removeInterest(int i)
+        {
+            selKey.interestOps(selKey.interestOps() & ~i);
+            if (log.isDebugEnabled()) {
+                log.debug("Interest now {}", selKey.interestOps());
+            }
+        }
         @JSFunction
         public void close()
         {
-            setErrno(0);
+            clearErrno();
             try {
                 if (clientChannel != null) {
+                    if (log.isDebugEnabled()) {
+                        log.debug("Closing client channel {}", clientChannel);
+                    }
                     clientChannel.close();
-                    clientChannel = null;
                 }
                 if (svrChannel != null) {
+                    if (log.isDebugEnabled()) {
+                        log.debug("Closing server channel {}", svrChannel);
+                    }
                     svrChannel.close();
-                    svrChannel = null;
                 }
             } catch (IOException ioe) {
                 log.debug("Uncaught exception in channel close: {}", ioe);
                 setErrno(Constants.EIO);
             }
+            unref();
         }
 
         @JSFunction
-        public int bind(String address, int port)
+        public String bind(String address, int port)
         {
-            setErrno(0);
+            clearErrno();
             boundAddress = new InetSocketAddress(address, port);
             if (boundAddress.isUnresolved()) {
                 setErrno(Constants.ENOENT);
                 return Constants.ENOENT;
             }
-            return 0;
+            return null;
         }
 
         @JSFunction
-        public int bind6(String address, int port)
+        public String bind6(String address, int port)
         {
             // TODO Java doesn't care. Do we need a check?
             return bind(address, port);
         }
 
         @JSFunction
-        public int listen(int backlog)
+        public String listen(int backlog)
         {
-            setErrno(0);
+            clearErrno();
             if (boundAddress == null) {
+                setErrno(Constants.EIO);
                 return Constants.EINVAL;
             }
             if (log.isDebugEnabled()) {
@@ -219,9 +255,7 @@ public class TCPWrap
                                             serverSelected(key);
                                         }
                                     });
-                referenced = true;
-                getRunner().pin();
-                return 0;
+                return null;
 
             } catch (IOException ioe) {
                 log.debug("Error listening: {}", ioe);
@@ -253,6 +287,9 @@ public class TCPWrap
                                 onConnection.call(cx, onConnection, this, new Object[] { sock });
                             }
                         }
+                    } catch (ClosedChannelException cce) {
+                        log.debug("Server channel has been closed");
+                        break;
                     } catch (IOException ioe) {
                         log.error("Error accepting a new socket: {}", ioe);
                     }
@@ -267,7 +304,7 @@ public class TCPWrap
             Buffer.BufferImpl buf = (Buffer.BufferImpl)args[0];
             TCPImpl tcp = (TCPImpl)thisObj;
 
-            tcp.setErrno(0);
+            tcp.clearErrno();
             QueuedWrite qw = (QueuedWrite)cx.newObject(thisObj, QueuedWrite.CLASS_NAME);
             ByteBuffer bbuf = buf.getBuffer();
             qw.initialize(bbuf);
@@ -299,7 +336,7 @@ public class TCPWrap
 
         public Object writeString(Context cx, String s, Charset cs)
         {
-            setErrno(0);
+            clearErrno();
             QueuedWrite qw = (QueuedWrite)cx.newObject(this, QueuedWrite.CLASS_NAME);
             ByteBuffer bbuf = com.apigee.noderunner.core.internal.Utils.stringToBuffer(s, cs);
             qw.initialize(bbuf);
@@ -313,7 +350,7 @@ public class TCPWrap
         {
             TCPImpl tcp = (TCPImpl)thisObj;
 
-            tcp.setErrno(0);
+            tcp.clearErrno();
             QueuedWrite qw = (QueuedWrite)cx.newObject(thisObj, QueuedWrite.CLASS_NAME);
             qw.shutdown = true;
             tcp.offerWrite(qw);
@@ -323,7 +360,7 @@ public class TCPWrap
         private void offerWrite(QueuedWrite qw)
         {
             if (writeQueue.isEmpty()) {
-                selKey.interestOps(selKey.interestOps() | SelectionKey.OP_WRITE);
+                addInterest(SelectionKey.OP_WRITE);
             }
             writeQueue.offer(qw);
         }
@@ -331,9 +368,9 @@ public class TCPWrap
         @JSFunction
         public void readStart()
         {
-            setErrno(0);
+            clearErrno();
             if (!readStarted) {
-                selKey.interestOps(selKey.interestOps() | SelectionKey.OP_READ);
+                addInterest(SelectionKey.OP_READ);
                 readStarted = true;
             }
         }
@@ -341,9 +378,9 @@ public class TCPWrap
         @JSFunction
         public void readStop()
         {
-            setErrno(0);
+            clearErrno();
             if (readStarted) {
-                selKey.interestOps(selKey.interestOps() & ~SelectionKey.OP_READ);
+                removeInterest(SelectionKey.OP_READ);
                 readStarted = false;
             }
         }
@@ -356,7 +393,10 @@ public class TCPWrap
             int port = intArg(args, 1);
 
             try {
-                tcp.setErrno(0);
+                if (log.isDebugEnabled()) {
+                    log.debug("Client conencting to {}:{}", host, port);
+                }
+                tcp.clearErrno();
                 if (tcp.boundAddress == null) {
                     tcp.clientChannel = SocketChannel.open();
                 } else {
@@ -393,114 +433,132 @@ public class TCPWrap
         private void clientSelected(SelectionKey key)
         {
             if (log.isDebugEnabled()) {
-                log.debug("Client {} selected: r = {} w = {} c = {}", clientChannel,
-                          key.isReadable(), key.isWritable(), key.isConnectable());
+                log.debug("Client {} selected: interest = {} r = {} w = {} c = {}", clientChannel,
+                          selKey.interestOps(), key.isReadable(), key.isWritable(), key.isConnectable());
             }
             Context cx = Context.getCurrentContext();
             if (key.isConnectable()) {
+                processConnect(cx);
+            }
+            if (key.isWritable()) {
+                processWrites(cx);
+            }
+            if (key.isReadable()) {
+                processReads(cx);
+            }
+        }
+
+        private void processConnect(Context cx)
+        {
+            try {
+                removeInterest(SelectionKey.OP_CONNECT);
+                clientChannel.finishConnect();
+                if (log.isDebugEnabled()) {
+                    log.debug("Client {} connected", clientChannel);
+                }
+                if (pendingConnect.onComplete != null) {
+                    pendingConnect.onComplete.call(cx, pendingConnect.onComplete, this,
+                                                   new Object[] { 0, this, pendingConnect,
+                                                       true, true });
+                }
+                pendingConnect = null;
+
+            } catch (IOException ioe) {
+                if (log.isDebugEnabled()) {
+                    log.debug("Error completing connect: {}", ioe);
+                }
+                setErrno(Constants.EIO);
+                if (pendingConnect.onComplete != null) {
+                    pendingConnect.onComplete.call(cx, pendingConnect.onComplete, this,
+                                                   new Object[] { Constants.EIO, this, pendingConnect,
+                                                       false, false });
+                }
+            }
+        }
+
+        private void processWrites(Context cx)
+        {
+            QueuedWrite qw = writeQueue.peek();
+            while (qw != null) {
                 try {
-                    clientChannel.finishConnect();
-                    if (log.isDebugEnabled()) {
-                        log.debug("Client {} connected", clientChannel);
+                    if (qw.shutdown) {
+                        if (log.isDebugEnabled()) {
+                            log.debug("Sending shutdown for {}", clientChannel);
+                        }
+                        writeQueue.poll();
+                        clientChannel.socket().shutdownOutput();
+                        if (qw.onComplete != null) {
+                            qw.onComplete.call(cx, qw.onComplete, this,
+                                               new Object[] { 0, this, qw });
+                        }
+                    } else {
+                        int written = clientChannel.write(qw.buf);
+                        if (log.isDebugEnabled()) {
+                            log.debug("Wrote {} to {}", written, clientChannel);
+                        }
+                        if (qw.buf.hasRemaining()) {
+                            // We didn't write the whole thing.
+                            break;
+                        }
+                        writeQueue.poll();
+                        if (qw.onComplete != null) {
+                            qw.onComplete.call(cx, qw.onComplete, this,
+                                               new Object[] { 0, this, qw });
+                        }
                     }
-                    if (pendingConnect.onComplete != null) {
-                        pendingConnect.onComplete.call(cx, pendingConnect.onComplete, this,
-                                                       new Object[] { 0, this, pendingConnect,
-                                                                      true, true });
-                    }
-                    pendingConnect = null;
 
                 } catch (IOException ioe) {
                     if (log.isDebugEnabled()) {
-                        log.debug("Error completing connect: {}", ioe);
+                        log.debug("Error on write: {}", ioe);
                     }
                     setErrno(Constants.EIO);
-                    if (pendingConnect.onComplete != null) {
-                        pendingConnect.onComplete.call(cx, pendingConnect.onComplete, this,
-                                                       new Object[] { Constants.EIO, this, pendingConnect,
-                                                                      false, false });
+                    if (qw.onComplete != null) {
+                        qw.onComplete.call(cx, qw.onComplete, this,
+                                           new Object[] { Constants.EIO, this, qw });
                     }
                 }
+                qw = writeQueue.peek();
             }
-            if (key.isWritable()) {
-                QueuedWrite qw = writeQueue.peek();
-                while (qw != null) {
-                    try {
-                        if (qw.shutdown) {
-                            if (log.isDebugEnabled()) {
-                                log.debug("Sending shutdown for {}", clientChannel);
-                            }
-                            writeQueue.poll();
-                            clientChannel.socket().shutdownOutput();
-                            if (qw.onComplete != null) {
-                                qw.onComplete.call(cx, qw.onComplete, this,
-                                                   new Object[] { 0, this, qw });
-                            }
-                        } else {
-                            int written = clientChannel.write(qw.buf);
-                            if (log.isDebugEnabled()) {
-                                log.debug("Wrote {} to {}", written, clientChannel);
-                            }
-                            if (qw.buf.hasRemaining()) {
-                                // We didn't write the whole thing.
-                                break;
-                            }
-                            writeQueue.poll();
-                            if (qw.onComplete != null) {
-                                qw.onComplete.call(cx, qw.onComplete, this,
-                                                   new Object[] { 0, this, qw });
-                            }
-                        }
+            if (writeQueue.isEmpty()) {
+                removeInterest(SelectionKey.OP_WRITE);
+            }
+        }
 
-                    } catch (IOException ioe) {
-                        if (log.isDebugEnabled()) {
-                            log.debug("Error on write: {}", ioe);
-                        }
-                        setErrno(Constants.EIO);
-                        if (qw.onComplete != null) {
-                            qw.onComplete.call(cx, qw.onComplete, this,
-                                               new Object[] { Constants.EIO, this, qw });
-                        }
+        private void processReads(Context cx)
+        {
+            int read = 0;
+            do {
+                try {
+                    read = clientChannel.read(readBuffer);
+                    if (log.isDebugEnabled()) {
+                        log.debug("Read {} bytes from {} into {}", read, clientChannel, readBuffer);
                     }
-                    qw = writeQueue.peek();
-                }
-                if (writeQueue.isEmpty()) {
-                    selKey.interestOps(selKey.interestOps() & ~SelectionKey.OP_WRITE);
-                }
-            }
-            if (key.isReadable()) {
-                int read = 0;
-                do {
-                    try {
-                        read = clientChannel.read(readBuffer);
-                        if (log.isDebugEnabled()) {
-                            log.debug("Read {} bytes from {}", read, clientChannel);
-                        }
-                        if (read > 0) {
-                            Buffer.BufferImpl buf = (Buffer.BufferImpl)cx.newObject(this, Buffer.BUFFER_CLASS_NAME);
-                            buf.initialize(readBuffer, true);
-                            readBuffer.clear();
+                    if (read > 0) {
+                        Buffer.BufferImpl buf = (Buffer.BufferImpl)cx.newObject(this, Buffer.BUFFER_CLASS_NAME);
+                        readBuffer.flip();
+                        buf.initialize(readBuffer, true);
+                        readBuffer.clear();
 
-                            if (onRead != null) {
-                                onRead.call(cx, onRead, this,
-                                            new Object[] { buf, 0, read });
-                            }
-                        } else if (read < 0) {
-                            setErrno(Constants.EOF);
-                            if (onRead != null) {
-                                onRead.call(cx, onRead, this,
-                                            new Object[] { null, 0, 0 });
-                            }
+                        if (onRead != null) {
+                            onRead.call(cx, onRead, this,
+                                        new Object[] { buf, 0, read });
                         }
-                    } catch (IOException ioe) {
-                        setErrno(Constants.EIO);
+                    } else if (read < 0) {
+                        setErrno(Constants.EOF);
+                        removeInterest(SelectionKey.OP_READ);
                         if (onRead != null) {
                             onRead.call(cx, onRead, this,
                                         new Object[] { null, 0, 0 });
                         }
                     }
-                } while (read > 0);
-            }
+                } catch (IOException ioe) {
+                    setErrno(Constants.EIO);
+                    if (onRead != null) {
+                        onRead.call(cx, onRead, this,
+                                    new Object[] { null, 0, 0 });
+                    }
+                }
+            } while (read > 0);
         }
 
         @JSFunction
@@ -509,7 +567,7 @@ public class TCPWrap
             TCPImpl tcp = (TCPImpl)thisObj;
             InetSocketAddress addr;
 
-            tcp.setErrno(0);
+            tcp.clearErrno();
             if (tcp.svrChannel == null) {
                 addr = (InetSocketAddress)(tcp.clientChannel.socket().getLocalSocketAddress());
             } else {
@@ -528,7 +586,7 @@ public class TCPWrap
             TCPImpl tcp = (TCPImpl)thisObj;
             InetSocketAddress addr;
 
-            tcp.setErrno(0);
+            tcp.clearErrno();
             if (tcp.clientChannel == null) {
                 return null;
             } else {
@@ -544,7 +602,7 @@ public class TCPWrap
         @JSFunction
         public void setNoDelay(boolean nd)
         {
-            setErrno(0);
+            clearErrno();
             if (clientChannel != null) {
                 try {
                     clientChannel.socket().setTcpNoDelay(nd);
@@ -558,7 +616,7 @@ public class TCPWrap
         @JSFunction
         public void setKeepAlive(boolean nd)
         {
-            setErrno(0);
+            clearErrno();
             if (clientChannel != null) {
                 try {
                     clientChannel.socket().setKeepAlive(nd);
@@ -573,13 +631,13 @@ public class TCPWrap
         public void setSimultaneousAccepts(int accepts)
         {
             // Not implemented in Java
-            setErrno(0);
+            clearErrno();
         }
 
         @JSFunction
         public void ref()
         {
-            setErrno(0);
+            clearErrno();
             if (!referenced) {
                 referenced = true;
                 getRunner().pin();
@@ -589,8 +647,8 @@ public class TCPWrap
         @JSFunction
         public void unref()
         {
-            setErrno(0);
-            if (!referenced) {
+            clearErrno();
+            if (referenced) {
                 referenced = false;
                 getRunner().unPin();
             }
@@ -603,12 +661,14 @@ public class TCPWrap
         public static final String CLASS_NAME = "_writeWrap";
 
         ByteBuffer buf;
+        int length;
         Function onComplete;
         boolean shutdown;
 
         void initialize(ByteBuffer buf)
         {
             this.buf = buf;
+            this.length = buf.remaining();
         }
 
         @Override
@@ -626,6 +686,11 @@ public class TCPWrap
         @JSGetter("oncomplete")
         public Function getOnComplete() {
             return onComplete;
+        }
+
+        @JSGetter("bytes")
+        public int getLength() {
+            return length;
         }
     }
 

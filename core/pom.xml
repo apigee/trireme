@@ -49,6 +49,14 @@
         <groupId>com.apigee.noderunner</groupId>
         <artifactId>rhino-compiler</artifactId>
         <version>1.0.0-SNAPSHOT</version>
+        <configuration>
+          <!-- When precompiling, wrap native module code in a function as the Node code expects. -->
+          <codePrefix>(function (exports, module, require, __filename, __dirname) { </codePrefix>
+          <codePostfix>});</codePostfix>
+          <generateSource>false</generateSource>
+          <optimizationLevel>1</optimizationLevel>
+          <debugInfo>true</debugInfo>
+        </configuration>
         <executions>
           <execution>
             <phase>compile</phase>

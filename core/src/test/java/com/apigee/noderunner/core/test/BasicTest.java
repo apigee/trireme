@@ -30,7 +30,7 @@ public class BasicTest
         throws InterruptedException, ExecutionException, NodeException
     {
         NodeScript script = env.createScript("test.js",
-                                             "require('console');\nconsole.log(\'Hello, World!\');process.exit(0);  ",
+                                             "console.log(\'Hello, World!\');process.exit(0);  ",
                                              null);
         ScriptStatus stat = script.execute().get();
         assertEquals(0, stat.getExitCode());
@@ -66,7 +66,7 @@ public class BasicTest
                                              new File("./target/test-classes/tests/endless.js"),
                                              null);
         Future<ScriptStatus> status = script.execute();
-        Thread.sleep(500L);
+        Thread.sleep(250L);
         status.cancel(false);
         try {
             status.get();
@@ -84,7 +84,7 @@ public class BasicTest
                                              new File("./target/test-classes/tests/endless.js"),
                                              null);
         Future<ScriptStatus> status = script.execute();
-        Thread.sleep(500L);
+        Thread.sleep(250L);
         status.cancel(true);
         try {
             status.get();
@@ -100,6 +100,17 @@ public class BasicTest
     {
         NodeScript script = env.createScript("eventstest.js",
                 new File("./target/test-classes/tests/eventstest.js"),
+                null);
+        ScriptStatus stat = script.execute().get();
+        assertEquals(0, stat.getExitCode());
+    }
+
+    @Test
+    public void testErrno()
+            throws InterruptedException, ExecutionException, NodeException
+    {
+        NodeScript script = env.createScript("errnotest.js",
+                new File("./target/test-classes/tests/errnotest.js"),
                 null);
         ScriptStatus stat = script.execute().get();
         assertEquals(0, stat.getExitCode());

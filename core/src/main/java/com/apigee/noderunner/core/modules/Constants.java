@@ -34,15 +34,17 @@ public class Constants
     public static final int S_IFLNK = 0120000;
     public static final int S_IFIFO = 0010000;
     public static final int S_IFSOCK = 0140000;
+    public static final int S_IFMT =  0170000;
 
-    public static final int EACCES = 13;
-    public static final int EEXIST = 17;
-    public static final int EINVAL = 22;
-    public static final int EIO = 5;
-    public static final int EISDIR = 21;
-    public static final int ENOENT = 2;
-    public static final int ENOTDIR = 20;
-    public static final int EOF = -1;
+    public static final String EACCES = "EACCES";
+    public static final String EEXIST = "EEXIST";
+    public static final String EINVAL = "EINVAL";
+    public static final String EIO = "EIO";
+    public static final String EISDIR = "EISDIR";
+    public static final String ENOTFOUND = "ENOTFOUND";
+    public static final String ENOENT = "ENOENT";
+    public static final String ENOTDIR = "ENOTDIR";
+    public static final String EOF = "EOF";
 
     public static final int S_IRUSR = 0000400;    /* R for owner */
     public static final int S_IWUSR = 0000200;    /* W for owner */
@@ -54,27 +56,6 @@ public class Constants
     public static final int S_IWOTH = 0000002;    /* W for other */
     public static final int S_IXOTH = 0000001;    /* X for other */
 
-    private static final HashMap<Integer, String> codes = new HashMap<Integer, String>();
-
-    static {
-        codes.put(EACCES, "EACCES");
-        codes.put(EEXIST, "EEXIST");
-        codes.put(EINVAL, "EINVAL");
-        codes.put(EIO, "EIO");
-        codes.put(EISDIR, "EISDIR");
-        codes.put(ENOENT, "ENOENT");
-        codes.put(ENOTDIR, "ENOTDIR");
-        codes.put(EOF, "EOF");
-    }
-
-    public static String getErrorCode(int code)
-    {
-        String str = codes.get(code);
-        if (str == null) {
-            return "undefined";
-        }
-        return str;
-    }
 
     @Override
     public String getModuleName()
@@ -110,6 +91,8 @@ public class Constants
         exports.put("S_IFLNK", exports, S_IFLNK);
         exports.put("S_IFIFO", exports, S_IFIFO);
         exports.put("S_IFSOCK", exports, S_IFSOCK);
+        exports.put("S_IFMT", exports, S_IFMT);
+
 
         return exports;
     }

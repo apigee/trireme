@@ -72,7 +72,8 @@ tcp.listen(common.PORT, function() {
 });
 
 process.on('exit', function() {
-  console.log('on exit');
+  console.log('on exit read = ' + bytesRead +
+              ' written = ' + bytesWritten);
   assert.equal(bytesRead, 12);
   assert.equal(bytesWritten, 12);
 });

@@ -41,7 +41,7 @@ public class Module
     // Stuff to set up this package
     @Override
     public String getModuleName() {
-        return "module";
+        return "internalModule";
     }
 
     @Override
@@ -124,7 +124,7 @@ public class Module
         {
             if (log.isDebugEnabled()) {
                 log.debug("require({})...", name);
-                log.debug("  Parent scope {}", System.identityHashCode(parentScope));
+                log.trace("  Parent scope {}", System.identityHashCode(parentScope));
             }
 
             Object cached = runner.getModuleCache().get(name);
@@ -156,7 +156,8 @@ public class Module
             // Set up a new scope in which to run the new module
             Scriptable newScope = cx.newObject(parentScope);
             newScope.setPrototype(parentScope);
-            newScope.setParentScope(null);
+            // TODO GREG check
+            //newScope.setParentScope(null);
 
             // Register a new "module" object in the new scope for running the script
             ModuleImpl newMod = (ModuleImpl)cx.newObject(newScope, CLASS_NAME);
@@ -204,8 +205,8 @@ public class Module
             // Register exports temporarily to prevent cycles
             runner.getModuleCache().put(cacheKey, firstExports);
 
-            if (log.isDebugEnabled()) {
-                log.debug("Executing in scope {} with exports {}",
+            if (log.isTraceEnabled()) {
+                log.trace("Executing in scope {} with exports {}",
                           System.identityHashCode(newScope),
                           System.identityHashCode(newScope.get("exports", newScope)));
             }
@@ -220,6 +221,8 @@ public class Module
                 } catch (IllegalAccessException e) {
                     throw new EvaluatorException(e.toString());
                 }
+                // TODO GREG check
+                newScope.setParentScope(parentScope);
                 s.exec(cx, newScope);
 
             } else {
@@ -231,13 +234,15 @@ public class Module
                     newScope.put("__dirname", newScope, modFile.getParentFile().getAbsolutePath());
                 }
                 newMod.setFile(modFile);
+                // TODO GREG check
+                newScope.setParentScope(null);
                 evaluateFile(cx, newScope, modFile, name);
 
             }
             newMod.setLoaded(true);
 
-            if (log.isDebugEnabled()) {
-                log.debug("Done executing in scope {} with module exports {} and exports {}",
+            if (log.isTraceEnabled()) {
+                log.trace("Done executing in scope {} with module exports {} and exports {}",
                           System.identityHashCode(newScope),
                           System.identityHashCode(newMod.get("exports", newMod)),
                           System.identityHashCode(newScope.get("exports", newScope)));
@@ -277,18 +282,18 @@ public class Module
                 return null;
             }
 
-            log.debug("Looking for {} in {}", name, f);
+            log.trace("Looking for {} in {}", name, f);
             if (f.exists() && f.isFile()) {
                 return f;
             }
             File fjs = new File(f.getPath() + ".js");
-            log.debug("Looking for {} in {}", name, fjs);
+            log.trace("Looking for {} in {}", name, fjs);
             if (fjs.exists() && fjs.isFile()) {
                 return fjs;
             }
 
             File packagejson = new File(f, "package.json");
-            log.debug("Looking for {}", packagejson);
+            log.trace("Looking for {}", packagejson);
             if (packagejson.exists() && packagejson.isFile()) {
                 File packageFile = locatePackageJson(packagejson, cx, scope);
                 if (packageFile != null) {
@@ -297,7 +302,7 @@ public class Module
             }
 
             File indexjs = new File(f, "index.js");
-            log.debug("Looking for {}", indexjs);
+            log.trace("Looking for {}", indexjs);
             if (indexjs.exists() && indexjs.isFile()) {
                 return indexjs;
             }
@@ -316,7 +321,7 @@ public class Module
                 if (main == null) {
                     throw new EvaluatorException("main property is not set in package.json");
                 }
-                log.debug("Looking for {} from package.json", main);
+                log.trace("Looking for {} from package.json", main);
                 return locateFile(main, jsonFile.getParentFile(), cx, scope, true);
             } catch (JsonParser.ParseException e) {
                 throw new EvaluatorException("package.json is not valid json: " + e);

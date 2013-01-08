@@ -3,7 +3,6 @@ package com.apigee.noderunner.core.modules;
 import com.apigee.noderunner.core.NodeModule;
 import com.apigee.noderunner.core.Sandbox;
 import com.apigee.noderunner.core.internal.Charsets;
-import com.apigee.noderunner.core.internal.ModuleRegistry;
 import com.apigee.noderunner.core.internal.NodeExitException;
 import com.apigee.noderunner.core.internal.ScriptRunner;
 import org.mozilla.javascript.Context;
@@ -14,12 +13,12 @@ import org.mozilla.javascript.ScriptableObject;
 import org.mozilla.javascript.annotations.JSConstructor;
 import org.mozilla.javascript.annotations.JSFunction;
 import org.mozilla.javascript.annotations.JSGetter;
+import org.mozilla.javascript.annotations.JSSetter;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import static com.apigee.noderunner.core.internal.ArgUtils.*;
 
-import java.io.File;
 import java.io.IOException;
 import java.io.OutputStream;
 import java.lang.reflect.InvocationTargetException;
@@ -53,6 +52,7 @@ public class Process
     {
         ScriptableObject.defineClass(scope, ProcessImpl.class, false, true);
         ProcessImpl exports = (ProcessImpl) cx.newObject(scope, CLASS_NAME);
+        exports.setRunner(runner);
 
         ScriptableObject.defineClass(scope, SimpleOutputStreamImpl.class, false, true);
         SimpleOutputStreamImpl stdout = (SimpleOutputStreamImpl) cx.newObject(scope, SimpleOutputStreamImpl.CLASS_NAME);
@@ -84,14 +84,19 @@ public class Process
     {
         private Object stdout;
         private Object stderr;
+        private Scriptable argv;
         private long startTime;
         private ScriptRunner runner;
         private final HashMap<String, Object> internalModuleCache = new HashMap<String, Object>();
+        private Object mainModule;
 
         @JSConstructor
-        public ProcessImpl()
+        public static Object ProcessImpl(Context cx, Object[] args, Function ctorObj, boolean inNewExpr)
         {
-            this.startTime = System.currentTimeMillis();
+            ProcessImpl ret = new ProcessImpl();
+            ret.startTime = System.currentTimeMillis();
+            ret.argv = cx.newObject(ret);
+            return ret;
         }
 
         @Override
@@ -101,6 +106,16 @@ public class Process
 
         public void setRunner(ScriptRunner runner) {
             this.runner = runner;
+        }
+
+        @JSGetter("mainModule")
+        public Object getMainModule() {
+            return mainModule;
+        }
+
+        @JSSetter("mainModule")
+        public void setMainModule(Object m) {
+            this.mainModule = m;
         }
 
         @JSFunction
@@ -156,14 +171,12 @@ public class Process
         @JSGetter("argv")
         public Object getArgv()
         {
-            return null;
-            /*
-            ProcessImpl p = (ProcessImpl)thisObj;
-            String[] ret = new String[p.argv.length];
-            System.arraycopy(p.argv, 1, ret, 1, p.argv.length - 1);
-            ret[0] = "node";
-            return Context.javaToJS(ret, thisObj);
-            */
+            return argv;
+        }
+
+        public void setArgv(int index, String val)
+        {
+            argv.put(index, argv, val);
         }
 
         @JSGetter("execPath")

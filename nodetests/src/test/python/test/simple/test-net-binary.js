@@ -50,8 +50,7 @@ var echoServer = net.Server(function(connection) {
   connection.on('end', function() {
     connection.end();
   });
-});
-echoServer.listen(common.PORT);
+}).listen(common.PORT);
 
 var recv = '';
 
@@ -62,7 +61,7 @@ echoServer.on('listening', function() {
 
   c.setEncoding('binary');
   c.on('data', function(chunk) {
-    console.log('CLient got data');
+    console.log('Client got data');
     if (j < 256) {
       common.error('write ' + j);
       c.write(String.fromCharCode(j), 'binary');

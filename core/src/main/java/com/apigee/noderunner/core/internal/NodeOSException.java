@@ -9,32 +9,28 @@ import org.mozilla.javascript.EvaluatorException;
 public class NodeOSException
     extends EvaluatorException
 {
-    private final int code;
+    private final String code;
 
-    public NodeOSException(int code)
+    public NodeOSException(String code)
     {
         super("Error code " + code);
         this.code = code;
     }
 
-    public NodeOSException(int code, String msg)
+    public NodeOSException(String code, String msg)
     {
         super(msg);
         this.code = code;
     }
 
-    public NodeOSException(int code, Throwable cause)
+    public NodeOSException(String code, Throwable cause)
     {
         super(cause.toString());
         this.code = code;
         initCause(cause);
     }
 
-    public int getCode() {
+    public String getCode() {
         return code;
-    }
-
-    public String getCodeString() {
-        return Constants.getErrorCode(code);
     }
 }

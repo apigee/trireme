@@ -372,7 +372,7 @@ public class ScriptRunner
                 }
 
                 // If there are no ticks and no timers, let's just stop the script.
-                if (tickFunctions.isEmpty() && timerQueue.isEmpty()) {
+                if (tickFunctions.isEmpty()) {
                     if (pinCount > 0) {
                         log.debug("Sleeping because we are pinned");
                         pollTimeout = DEFAULT_DELAY;

@@ -4,10 +4,9 @@ import com.apigee.noderunner.core.internal.Charsets;
 import com.apigee.noderunner.core.internal.InternalNodeModule;
 import com.apigee.noderunner.core.internal.ScriptRunner;
 import com.apigee.noderunner.net.SelectorHandler;
-import com.apigee.noderunner.net.Utils;
+import com.apigee.noderunner.net.NetUtils;
 import org.mozilla.javascript.Context;
 import org.mozilla.javascript.Function;
-import org.mozilla.javascript.FunctionObject;
 import org.mozilla.javascript.Scriptable;
 import org.mozilla.javascript.ScriptableObject;
 import org.mozilla.javascript.annotations.JSConstructor;
@@ -22,7 +21,6 @@ import static com.apigee.noderunner.core.internal.ArgUtils.*;
 import java.io.IOException;
 import java.lang.reflect.InvocationTargetException;
 import java.net.InetSocketAddress;
-import java.net.SocketAddress;
 import java.net.SocketException;
 import java.nio.ByteBuffer;
 import java.nio.channels.ClosedChannelException;
@@ -266,6 +264,9 @@ public class TCPWrap
 
         private void serverSelected(SelectionKey key)
         {
+            if (!key.isValid()) {
+                return;
+            }
             if (log.isDebugEnabled()) {
                 log.debug("Server selected: a = {}", key.isAcceptable());
             }
@@ -437,13 +438,13 @@ public class TCPWrap
                           selKey.interestOps(), key.isReadable(), key.isWritable(), key.isConnectable());
             }
             Context cx = Context.getCurrentContext();
-            if (key.isConnectable()) {
+            if (key.isValid() && key.isConnectable()) {
                 processConnect(cx);
             }
-            if (key.isWritable()) {
+            if (key.isValid() && key.isWritable()) {
                 processWrites(cx);
             }
-            if (key.isReadable()) {
+            if (key.isValid() && key.isReadable()) {
                 processReads(cx);
             }
         }
@@ -519,14 +520,14 @@ public class TCPWrap
                 }
                 qw = writeQueue.peek();
             }
-            if (writeQueue.isEmpty()) {
+            if (writeQueue.isEmpty() && selKey.isValid()) {
                 removeInterest(SelectionKey.OP_WRITE);
             }
         }
 
         private void processReads(Context cx)
         {
-            int read = 0;
+            int read;
             do {
                 try {
                     read = clientChannel.read(readBuffer);
@@ -557,6 +558,7 @@ public class TCPWrap
                         onRead.call(cx, onRead, this,
                                     new Object[] { null, 0, 0 });
                     }
+                    return;
                 }
             } while (read > 0);
         }
@@ -576,8 +578,8 @@ public class TCPWrap
             if (addr == null) {
                 return null;
             }
-            return Utils.formatAddress(addr.getAddress(), addr.getPort(),
-                                       cx, thisObj);
+            return NetUtils.formatAddress(addr.getAddress(), addr.getPort(),
+                                          cx, thisObj);
         }
 
         @JSFunction
@@ -595,8 +597,8 @@ public class TCPWrap
             if (addr == null) {
                 return null;
             }
-            return Utils.formatAddress(addr.getAddress(), addr.getPort(),
-                                       cx, thisObj);
+            return NetUtils.formatAddress(addr.getAddress(), addr.getPort(),
+                                          cx, thisObj);
         }
 
         @JSFunction

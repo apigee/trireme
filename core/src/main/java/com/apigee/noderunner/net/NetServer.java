@@ -224,8 +224,8 @@ public class NetServer
         if (addr == null) {
             return null;
         }
-        return Utils.formatAddress(addr.getAddress(), addr.getPort(),
-                                   cx, thisObj);
+        return NetUtils.formatAddress(addr.getAddress(), addr.getPort(),
+                                      cx, thisObj);
     }
 
     @JSFunction

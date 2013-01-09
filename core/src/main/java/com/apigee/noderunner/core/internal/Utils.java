@@ -94,6 +94,33 @@ public class Utils
         return cBuf.toString();
     }
 
+    public static String bufferToString(ByteBuffer[] bufs, Charset cs)
+    {
+        CharsetDecoder decoder = cs.newDecoder();
+        int totalBytes = 0;
+        for (int i = 0; i < bufs.length; i++) {
+            totalBytes += (bufs[i] == null ? 0 : bufs[i].remaining());
+        }
+        int bufLen = (int)(totalBytes * decoder.averageCharsPerByte());
+        CharBuffer cBuf = CharBuffer.allocate(bufLen);
+        CoderResult result;
+        for (int i = 0; i < bufs.length; i++) {
+            do {
+                result = decoder.decode(bufs[i], cBuf, true);
+                if (result.isOverflow()) {
+                    bufLen *= 2;
+                    CharBuffer newBuf = CharBuffer.allocate(bufLen);
+                    cBuf.flip();
+                    newBuf.put(cBuf);
+                    cBuf = newBuf;
+                }
+            } while (result.isOverflow());
+        }
+
+        cBuf.flip();
+        return cBuf.toString();
+    }
+
     public static ByteBuffer stringToBuffer(String str, Charset cs)
     {
         CharsetEncoder enc = cs.newEncoder();

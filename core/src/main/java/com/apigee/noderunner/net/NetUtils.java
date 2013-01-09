@@ -10,7 +10,7 @@ import java.net.InetSocketAddress;
 import java.util.Collection;
 import java.util.Map;
 
-public class Utils
+public class NetUtils
 {
     public static Scriptable formatAddress(InetAddress address, int port,
                                            Context cx, Scriptable scope)

@@ -523,7 +523,7 @@ public class Buffer
             }
             int length = end - start;
             int realLength = Math.min(length, b.bufLength - start);
-            return Utils.bufferToString(ByteBuffer.wrap(b.buf, start, realLength), charset);
+            return Utils.bufferToString(ByteBuffer.wrap(b.buf, start + b.bufOffset, realLength), charset);
         }
 
         private void fromStringInternal(String s, Charset cs)

@@ -628,9 +628,9 @@ public class NetSocket
     public static Object address(Context cx, Scriptable thisObj, Object[] args, Function func)
     {
         NetSocket sock = (NetSocket)thisObj;
-        return Utils.formatAddress(sock.channel.socket().getLocalAddress(),
-                                   sock.channel.socket().getLocalPort(),
-                                   cx, thisObj);
+        return NetUtils.formatAddress(sock.channel.socket().getLocalAddress(),
+                                      sock.channel.socket().getLocalPort(),
+                                      cx, thisObj);
     }
 
     @JSFunction

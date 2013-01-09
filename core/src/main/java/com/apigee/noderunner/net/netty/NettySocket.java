@@ -3,7 +3,7 @@ package com.apigee.noderunner.net.netty;
 import com.apigee.noderunner.core.ScriptTask;
 import com.apigee.noderunner.core.internal.ScriptRunner;
 import com.apigee.noderunner.core.modules.Stream;
-import com.apigee.noderunner.net.Utils;
+import com.apigee.noderunner.net.NetUtils;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
 import io.netty.channel.ChannelFuture;
@@ -256,7 +256,7 @@ public class NettySocket
     {
         NettySocket sock = (NettySocket)thisObj;
         InetSocketAddress addr = sock.channel.localAddress();
-        return Utils.formatAddress(addr.getAddress(), addr.getPort(), cx, thisObj);
+        return NetUtils.formatAddress(addr.getAddress(), addr.getPort(), cx, thisObj);
     }
 
     @JSFunction

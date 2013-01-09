@@ -6,6 +6,7 @@ com.apigee.noderunner.core.modules.Evals
 com.apigee.noderunner.core.modules.Crypto
 com.apigee.noderunner.core.modules.EventEmitter
 com.apigee.noderunner.core.modules.Filesystem
+com.apigee.noderunner.core.modules.HTTPParser
 com.apigee.noderunner.core.modules.Module
 com.apigee.noderunner.core.modules.NativeModule
 com.apigee.noderunner.core.modules.Process

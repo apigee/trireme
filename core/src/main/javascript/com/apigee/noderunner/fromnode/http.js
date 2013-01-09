@@ -57,6 +57,7 @@ function parserOnHeaders(headers, url) {
 // info.url is not set for response parsers but that's not
 // applicable here since all our parsers are request parsers.
 function parserOnHeadersComplete(info) {
+  debug('onHeadersComplete');
   var parser = this;
   var headers = info.headers;
   var url = info.url;
@@ -115,6 +116,7 @@ function parserOnHeadersComplete(info) {
 }
 
 function parserOnBody(b, start, len) {
+  debug('onBody len = ' + len);
   var parser = this;
   var slice = b.slice(start, start + len);
   if (parser.incoming._paused || parser.incoming._pendings.length) {
@@ -125,6 +127,7 @@ function parserOnBody(b, start, len) {
 }
 
 function parserOnMessageComplete() {
+  debug('onMessageComplete');
   var parser = this;
   parser.incoming.complete = true;
 
@@ -840,12 +843,12 @@ OutgoingMessage.prototype.end = function(data, encoding) {
 OutgoingMessage.prototype._finish = function() {
   assert(this.connection);
   if (this instanceof ServerResponse) {
-    DTRACE_HTTP_SERVER_RESPONSE(this.connection);
-    COUNTER_HTTP_SERVER_RESPONSE();
+    //DTRACE_HTTP_SERVER_RESPONSE(this.connection);
+    //COUNTER_HTTP_SERVER_RESPONSE();
   } else {
     assert(this instanceof ClientRequest);
-    DTRACE_HTTP_CLIENT_REQUEST(this, this.connection);
-    COUNTER_HTTP_CLIENT_REQUEST();
+    //DTRACE_HTTP_CLIENT_REQUEST(this, this.connection);
+    //COUNTER_HTTP_CLIENT_REQUEST();
   }
   this.emit('finish');
 };
@@ -1378,6 +1381,7 @@ function socketOnData(d, start, end) {
   var parser = this.parser;
 
   var ret = parser.execute(d, start, end - start);
+  debug('parser.execute = ' + ret);
   if (ret instanceof Error) {
     debug('parse error');
     freeParser(parser, req);
@@ -1473,8 +1477,8 @@ function parserOnIncomingClient(res, shouldKeepAlive) {
   }
 
 
-  DTRACE_HTTP_CLIENT_RESPONSE(socket, req);
-  COUNTER_HTTP_CLIENT_RESPONSE();
+  //DTRACE_HTTP_CLIENT_RESPONSE(socket, req);
+  //COUNTER_HTTP_CLIENT_RESPONSE();
   req.emit('response', res);
   req.res = res;
   res.req = req;
@@ -1661,9 +1665,7 @@ function Server(requestListener) {
   });
 }
 
-// TODO GREG no it doesn't
-//util.inherits(Server, net.Server);
-util.inherits(Server, EventEmitter);
+util.inherits(Server, net.Server);
 
 exports.Server = Server;
 
@@ -1724,6 +1726,7 @@ function connectionListener(socket) {
 
   socket.ondata = function(d, start, end) {
     var ret = parser.execute(d, start, end - start);
+    debug('parser.execute returned ' + ret);
     if (ret instanceof Error) {
       debug('parse error');
       socket.destroy(ret);
@@ -1783,8 +1786,8 @@ function connectionListener(socket) {
     var res = new ServerResponse(req);
     debug('server response shouldKeepAlive: ' + shouldKeepAlive);
     res.shouldKeepAlive = shouldKeepAlive;
-    DTRACE_HTTP_SERVER_REQUEST(req, socket);
-    COUNTER_HTTP_SERVER_REQUEST();
+    //DTRACE_HTTP_SERVER_REQUEST(req, socket);
+    //COUNTER_HTTP_SERVER_REQUEST();
 
     if (socket._httpMessage) {
       // There are already pending outgoing res, append.

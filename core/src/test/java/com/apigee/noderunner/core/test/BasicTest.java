@@ -66,7 +66,7 @@ public class BasicTest
                                              new File("./target/test-classes/tests/endless.js"),
                                              null);
         Future<ScriptStatus> status = script.execute();
-        Thread.sleep(250L);
+        Thread.sleep(50L);
         status.cancel(false);
         try {
             status.get();
@@ -84,7 +84,7 @@ public class BasicTest
                                              new File("./target/test-classes/tests/endless.js"),
                                              null);
         Future<ScriptStatus> status = script.execute();
-        Thread.sleep(250L);
+        Thread.sleep(50L);
         status.cancel(true);
         try {
             status.get();

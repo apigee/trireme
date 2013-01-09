@@ -18,7 +18,6 @@ import io.netty.handler.codec.http.DefaultHttpChunkTrailer;
 import io.netty.handler.codec.http.DefaultHttpRequest;
 import io.netty.handler.codec.http.HttpChunk;
 import io.netty.handler.codec.http.HttpChunkTrailer;
-import io.netty.handler.codec.http.HttpMessage;
 import io.netty.handler.codec.http.HttpMethod;
 import io.netty.handler.codec.http.HttpObject;
 import io.netty.handler.codec.http.HttpRequest;
@@ -41,8 +40,6 @@ import java.net.MalformedURLException;
 import java.net.URL;
 import java.nio.ByteBuffer;
 import java.util.ArrayDeque;
-
-import static com.apigee.noderunner.core.internal.ArgUtils.*;
 
 public class HttpClientRequest
     extends Stream.WritableStream
@@ -301,7 +298,7 @@ public class HttpClientRequest
 
         // Do these last so users can override if they wish
         if (headers != null) {
-            Utils.setHttpHeaders(headers, req);
+            NetUtils.setHttpHeaders(headers, req);
         }
 
         // TODO agent

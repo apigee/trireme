@@ -46,7 +46,7 @@ public class HttpClientResponse
     @JSGetter("headers")
     public Object getHeaders()
     {
-        return Utils.getHttpHeaders(response.getHeaders(), Context.getCurrentContext(), this);
+        return NetUtils.getHttpHeaders(response.getHeaders(), Context.getCurrentContext(), this);
     }
 
     @JSGetter("trailers")
@@ -55,7 +55,7 @@ public class HttpClientResponse
         if (trailer == null) {
             return null;
         }
-        return Utils.getHttpHeaders(trailer.getHeaders(), Context.getCurrentContext(), this);
+        return NetUtils.getHttpHeaders(trailer.getHeaders(), Context.getCurrentContext(), this);
     }
 
     void completeResponse()

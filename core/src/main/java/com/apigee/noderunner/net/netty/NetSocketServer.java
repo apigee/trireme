@@ -3,9 +3,7 @@ package com.apigee.noderunner.net.netty;
 import com.apigee.noderunner.core.ScriptTask;
 import com.apigee.noderunner.core.internal.ScriptRunner;
 import com.apigee.noderunner.core.modules.EventEmitter;
-import com.apigee.noderunner.net.Utils;
-import com.apigee.noderunner.net.netty.NettyFactory;
-import com.apigee.noderunner.net.netty.NettyServer;
+import com.apigee.noderunner.net.NetUtils;
 import io.netty.buffer.ByteBuf;
 import io.netty.channel.ChannelException;
 import io.netty.channel.ChannelHandlerContext;
@@ -166,7 +164,7 @@ public class NetSocketServer
     {
         NetSocketServer svr = (NetSocketServer)thisObj;
         InetSocketAddress addr = svr.server.getAddress();
-        return Utils.formatAddress(addr.getAddress(), addr.getPort(), cx, thisObj);
+        return NetUtils.formatAddress(addr.getAddress(), addr.getPort(), cx, thisObj);
     }
 
     @JSFunction

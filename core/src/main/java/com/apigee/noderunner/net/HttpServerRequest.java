@@ -141,7 +141,7 @@ public class HttpServerRequest
     @JSGetter("headers")
     public Object getHeaders()
     {
-        return Utils.getHttpHeaders(request.getHeaders(), Context.getCurrentContext(), this);
+        return NetUtils.getHttpHeaders(request.getHeaders(), Context.getCurrentContext(), this);
     }
 
     @JSGetter("trailers")
@@ -151,7 +151,7 @@ public class HttpServerRequest
         if (trailers == null) {
             return null;
         }
-        return Utils.getHttpHeaders(trailers.getHeaders(), Context.getCurrentContext(), this);
+        return NetUtils.getHttpHeaders(trailers.getHeaders(), Context.getCurrentContext(), this);
         */
         return null;
     }

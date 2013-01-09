@@ -32,6 +32,7 @@ process.on('exit', function() {
 });
 
 var server = net.createServer(function(socket) {
+  console.log('Server created');
   socket.on('error', function(error) {
     console.log('Socket error');
     server.close();
@@ -39,6 +40,7 @@ var server = net.createServer(function(socket) {
   });
 
   setTimeout(function() {
+    console.log('Timeout fired');
     socket.write('test', function(e) {
       gotWriteCB = true;
     });
@@ -46,7 +48,9 @@ var server = net.createServer(function(socket) {
 });
 
 server.listen(common.PORT, function() {
+  console.log('Server listening');
   var client = net.connect(common.PORT, function() {
+    console.log('Client connected');
     client.end();
   });
 });

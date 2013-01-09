@@ -7,6 +7,7 @@ import com.apigee.noderunner.core.NodeScript;
 import com.apigee.noderunner.core.ScriptStatus;
 import com.apigee.noderunner.core.internal.NodeExitException;
 import com.apigee.noderunner.core.internal.Utils;
+import org.mozilla.javascript.RhinoException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -38,12 +39,6 @@ public class Main
 
         String scriptName = args[0];
         File script = new File(scriptName);
-        log.debug("Loading {}", script.getAbsolutePath());
-        if (!script.exists() || !script.isFile()) {
-            System.err.println("Can't read " + scriptName);
-            System.exit(3);
-            return;
-        }
 
         try {
             NodeEnvironment env = new NodeEnvironment();
@@ -52,6 +47,15 @@ public class Main
             Future<ScriptStatus> future = ns.execute();
             ScriptStatus status = future.get();
             ns.close();
+            if (status.hasCause()) {
+                Throwable cause = status.getCause();
+                if (cause instanceof RhinoException) {
+                    System.err.println(cause.toString());
+                    System.err.println(((RhinoException)cause).getScriptStackTrace());
+                } else {
+                    status.getCause().printStackTrace(System.err);
+                }
+            }
             System.exit(status.getExitCode());
 
         } catch (NodeException ne) {

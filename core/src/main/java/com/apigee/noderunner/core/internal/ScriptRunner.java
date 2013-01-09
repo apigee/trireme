@@ -236,21 +236,23 @@ public class ScriptRunner
     public ScriptStatus call()
         throws NodeException, InterruptedException
     {
+        ScriptStatus status;
         Context cx = Context.enter();
         setUpContext(cx);
+
         try {
-            // Re-use the global scope from before, but make it top-level so that there are no shared variables
-            scope = cx.newObject(env.getScope());
-            scope.setPrototype(env.getScope());
-            scope.setParentScope(null);
+            try {
+                // Re-use the global scope from before, but make it top-level so that there are no shared variables
+                scope = cx.newObject(env.getScope());
+                scope.setPrototype(env.getScope());
+                scope.setParentScope(null);
             /*
             if (log.isTraceEnabled()) {
                 cx.setDebugger(new DebugTracer(), null);
             }
             */
-            initGlobals(cx);
+                initGlobals(cx);
 
-            try {
                 if (scriptFile == null) {
                     // Set up the script with a dummy main module like node.js does
                     File scriptFile = new File(process.cwd(), scriptName);
@@ -265,46 +267,40 @@ public class ScriptRunner
 
                 } else {
                     // Again like the real node, delegate running the actual script to the module module.
-                    // Node does this in a separate nextTick job, not sure yet why we need to do that too
+                    // Node does this in a separate nextTick job, not sure yet why so we don't.
                     process.setArgv(1, scriptFile.getAbsolutePath());
                     Function load = (Function)mainModule.get("runMain", mainModule);
                     load.call(cx, scope, null, null);
                 }
 
+                status = mainLoop(cx);
+
             } catch (NodeExitException ne) {
-                throw ne;
+                status = ne.getStatus();
             } catch (RhinoException re) {
                 boolean handled =
-                    process.fireEvent("uncaughtException", re);
-                log.debug("Exception in script: {} handled = {}",
-                          re.toString(), handled);
-                if (!handled) {
-                    throw re;
+                    handleRhinoException(re);
+                if (handled) {
+                    status = ScriptStatus.OK;
+                } else {
+                    status = new ScriptStatus(re);
                 }
+            } catch (IOException ioe) {
+                log.debug("I/O exception processing script: {}", ioe);
+                status = new ScriptStatus(ioe);
             }
 
-            mainLoop(cx);
+            log.debug("Script exiting with exit code {}", status.getExitCode());
+            process.fireEvent("exit", status.getExitCode());
 
-        } catch (NodeExitException ne) {
-            log.debug("Normal script exit.");
-            process.fireEvent("exit", ne.getCode());
-            if (ne.isFatal()) {
-                return new ScriptStatus(ne.getCode());
-            } else {
-                return ScriptStatus.OK;
-            }
-        } catch (RhinoException re) {
-            throw new ScriptException(re);
-        } catch (IOException ioe) {
-            throw new NodeException(ioe);
         } finally {
             Context.exit();
         }
-        return ScriptStatus.OK;
+        return status;
     }
 
-    private void mainLoop(Context cx)
-        throws NodeException, InterruptedException, IOException
+    private ScriptStatus mainLoop(Context cx)
+        throws IOException
     {
         // Node scripts don't exit unless exit is called -- they keep on trucking.
         // The JS code inside will throw NodeExitException when it's time to exit
@@ -312,12 +308,15 @@ public class ScriptRunner
         while (true) {
             try {
                 if ((future != null) && future.isCancelled()) {
-                    throw new ScriptCancelledException();
+                    return ScriptStatus.CANCELLED;
                 }
 
                 // Check for network I/O and also sleep if necessary
                 int selected;
                 if (pollTimeout > 0L) {
+                    if (log.isDebugEnabled()) {
+                        log.debug("mainLoop: sleeping for {}", pollTimeout);
+                    }
                     selected = selector.select(pollTimeout);
                 } else {
                     selected = selector.selectNow();
@@ -333,10 +332,9 @@ public class ScriptRunner
                     }
                 }
 
-                // Call one tick function
+                // Call all the tick functions
                 Activity nextCall = tickFunctions.poll();
                 while (nextCall != null) {
-                    log.debug("Executing one callback function");
                     nextCall.execute(cx);
                     nextCall = tickFunctions.poll();
                 }
@@ -353,7 +351,7 @@ public class ScriptRunner
                         timed.execute(cx);
                         if (timed.repeating && !timed.cancelled) {
                             log.debug("Re-registering with delay of {}", timed.interval);
-                            timed.timeout = System.currentTimeMillis() + timed.interval;
+                            timed.timeout = now + timed.interval;
                             timerQueue.add(timed);
                         } else {
                             timersMap.remove(timed.id);
@@ -364,36 +362,43 @@ public class ScriptRunner
                 }
 
                 pollTimeout = 0L;
-                if (tickFunctions.isEmpty() && !timerQueue.isEmpty()) {
-                    // Sleep until the timer is expired
-                    timed = timerQueue.peek();
-                    pollTimeout = (timed.timeout - now);
-                    log.debug("Sleeping for {} milliseconds", pollTimeout);
-                }
-
-                // If there are no ticks and no timers, let's just stop the script.
+                // If there are still tick functions on the queue, we will just re-spin to the top
                 if (tickFunctions.isEmpty()) {
                     if (pinCount > 0) {
-                        log.debug("Sleeping because we are pinned");
-                        pollTimeout = DEFAULT_DELAY;
+                        // We are pinned so we will not exit no matter what. The question is how long to wait.
+                        if (timerQueue.isEmpty()) {
+                            // This is a fudge factor and it helps to find stuck servers in debugging.
+                            // in theory we could wait forever at a small advantage in efficiency
+                            pollTimeout = DEFAULT_DELAY;
+                        } else {
+                            Activity nextActivity = timerQueue.peek();
+                            pollTimeout = (timed.timeout - now);
+                        }
                     } else {
-                        log.debug("Script complete -- exiting");
-                        throw new NodeExitException(false, 0);
+                        // We are not pinned and have no tasks to run
+                        // Like the "real" node we exit even if there are timers on the queue
+                        return ScriptStatus.OK;
                     }
                 }
             } catch (NodeExitException ne) {
-                throw ne;
+                // This exception is thrown by process.exit()
+                return ne.getStatus();
             } catch (RhinoException re) {
-                log.debug("Exception in script: {}, {}", re.toString(), re.getMessage());
-                boolean handled =
-                    process.fireEvent("uncaughtException", re);
-                log.debug("Exception in script: {} handled = {}",
-                          re.toString(), handled);
+                boolean handled = handleRhinoException(re);
                 if (!handled) {
-                    throw re;
+                    return new ScriptStatus(re);
                 }
             }
         }
+    }
+
+    private boolean handleRhinoException(RhinoException re)
+    {
+        log.debug("Handling uncaught exception {}", re);
+        boolean handled =
+            process.fireEvent("uncaughtException", re);
+        log.debug("  handled = {}", handled);
+        return handled;
     }
 
     /**

@@ -42,7 +42,7 @@ public class Main
 
         try {
             NodeEnvironment env = new NodeEnvironment();
-            env.setHttpContainer(new NettyHttpContainer());
+            //env.setHttpContainer(new NettyHttpContainer());
             NodeScript ns = env.createScript(scriptName, script, args);
             Future<ScriptStatus> future = ns.execute();
             ScriptStatus status = future.get();

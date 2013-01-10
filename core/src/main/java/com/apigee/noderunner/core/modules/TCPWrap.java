@@ -380,7 +380,7 @@ public class TCPWrap
 
             try {
                 if (log.isDebugEnabled()) {
-                    log.debug("Client conencting to {}:{}", host, port);
+                    log.debug("Client connecting to {}:{}", host, port);
                 }
                 clearErrno();
                 if (tcp.boundAddress == null) {
@@ -405,6 +405,7 @@ public class TCPWrap
                 return tcp.pendingConnect;
 
             } catch (IOException ioe) {
+                log.debug("Error on connect: {}", ioe);
                 setErrno(Constants.EIO);
                 return null;
             }
@@ -442,7 +443,7 @@ public class TCPWrap
                 if (log.isDebugEnabled()) {
                     log.debug("Client {} connected", clientChannel);
                 }
-                sendOnConnectComplete(cx, null, true, true);
+                sendOnConnectComplete(cx, 0, true, true);
 
             } catch (ConnectException ce) {
                 if (log.isDebugEnabled()) {
@@ -461,7 +462,7 @@ public class TCPWrap
             }
         }
 
-        private void sendOnConnectComplete(Context cx, String status,
+        private void sendOnConnectComplete(Context cx, Object status,
                                            boolean readable, boolean writable)
         {
             if (pendingConnect.onComplete != null) {
@@ -548,6 +549,7 @@ public class TCPWrap
                         }
                     }
                 } catch (IOException ioe) {
+                    log.debug("Error on read: {}", ioe);
                     setErrno(Constants.EIO);
                     if (onRead != null) {
                         onRead.call(cx, onRead, this,

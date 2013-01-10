@@ -25,6 +25,7 @@ var assert = require('assert');
 var nexits = 0;
 
 process.on('exit', function(code) {
+  console.log('On exit');
   assert.equal(nexits++, 0);
   assert.equal(code, 1);
 

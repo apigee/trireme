@@ -50,6 +50,7 @@ public class Process
     public Object registerExports(Context cx, Scriptable scope, ScriptRunner runner)
         throws InvocationTargetException, IllegalAccessException, InstantiationException
     {
+        ScriptableObject.defineClass(scope, EventEmitter.EventEmitterImpl.class, false, true);
         ScriptableObject.defineClass(scope, ProcessImpl.class, false, true);
         ProcessImpl exports = (ProcessImpl) cx.newObject(scope, CLASS_NAME);
         exports.setRunner(runner);

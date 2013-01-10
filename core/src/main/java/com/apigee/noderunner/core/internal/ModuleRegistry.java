@@ -62,6 +62,7 @@ public class ModuleRegistry
         addCompiledModule("querystring", "com.apigee.noderunner.fromnode.querystring");
         addCompiledModule("stream", "com.apigee.noderunner.fromnode.stream");
         addCompiledModule("string_decoder", "com.apigee.noderunner.fromnode.string_decoder");
+        addCompiledModule("timers", "com.apigee.noderunner.fromnode.timers");
         addCompiledModule("url", "com.apigee.noderunner.fromnode.url");
         addCompiledModule("util", "com.apigee.noderunner.fromnode.util");
         addCompiledModule("vm", "com.apigee.noderunner.fromnode.vm");

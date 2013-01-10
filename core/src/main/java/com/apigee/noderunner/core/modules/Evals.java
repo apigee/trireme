@@ -7,6 +7,8 @@ import org.mozilla.javascript.Function;
 import org.mozilla.javascript.Scriptable;
 import org.mozilla.javascript.ScriptableObject;
 import org.mozilla.javascript.annotations.JSStaticFunction;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.lang.reflect.InvocationTargetException;
 
@@ -17,6 +19,8 @@ import java.lang.reflect.InvocationTargetException;
 public class Evals
     implements InternalNodeModule
 {
+    protected static final Logger log = LoggerFactory.getLogger(Evals.class);
+
     @Override
     public String getModuleName()
     {
@@ -24,7 +28,10 @@ public class Evals
     }
 
     @Override
-    public Object registerExports(Context cx, Scriptable scope, ScriptRunner runner) throws InvocationTargetException, IllegalAccessException, InstantiationException
+    public Object registerExports(Context cx, Scriptable scope, ScriptRunner runner) throws
+                                                                                     InvocationTargetException,
+                                                                                     IllegalAccessException,
+                                                                                     InstantiationException
     {
         Scriptable export = cx.newObject(scope);
         export.setPrototype(scope);
@@ -58,7 +65,10 @@ public class Evals
                 fileName = (String)Context.jsToJava(args[1], String.class);
             }
 
-            return cx.evaluateString(func, code, fileName, 1, null);
+            if (log.isDebugEnabled()) {
+                log.debug("Running code from {} in this context of {}", fileName, thisObj);
+            }
+            return cx.evaluateString(thisObj, code, fileName, 1, null);
         }
 
         @JSStaticFunction
@@ -80,6 +90,9 @@ public class Evals
             if (sandbox == null) {
                 sandbox = createSandbox(cx, func);
             }
+            if (log.isDebugEnabled()) {
+                log.debug("Running code from {} in new context of {}", fileName, sandbox);
+            }
             return cx.evaluateString(sandbox, code, fileName, 1, null);
         }
 
@@ -95,7 +108,9 @@ public class Evals
             if (args.length > 2) {
                 fileName = (String)Context.jsToJava(args[2], String.class);
             }
-
+            if (log.isDebugEnabled()) {
+                log.debug("Running code from {} in context {}", fileName, sandbox);
+            }
             return cx.evaluateString(sandbox, code, fileName, 1, null);
         }
 

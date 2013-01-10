@@ -37,6 +37,8 @@ public class Constants
     public static final int S_IFMT =  0170000;
 
     public static final String EACCES = "EACCES";
+    public static final String EADDRINUSE = "EADDRINUSE";
+    public static final String ECONNREFUSED = "ECONNREFUSED";
     public static final String EEXIST = "EEXIST";
     public static final String EINVAL = "EINVAL";
     public static final String EIO = "EIO";

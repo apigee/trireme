@@ -7,14 +7,11 @@ com.apigee.noderunner.core.modules.Crypto
 com.apigee.noderunner.core.modules.EventEmitter
 com.apigee.noderunner.core.modules.Filesystem
 com.apigee.noderunner.core.modules.HTTPParser
-com.apigee.noderunner.core.modules.Module
 com.apigee.noderunner.core.modules.NativeModule
 com.apigee.noderunner.core.modules.Process
 com.apigee.noderunner.core.modules.ProcessWrap
 com.apigee.noderunner.core.modules.Stream
 com.apigee.noderunner.core.modules.TCPWrap
-com.apigee.noderunner.core.modules.Timers
+com.apigee.noderunner.core.modules.TimerWrap
 com.apigee.noderunner.core.modules.Tty
 com.apigee.noderunner.core.modules.ZLib
-com.apigee.noderunner.net.NetModule
-com.apigee.noderunner.net.HttpModule

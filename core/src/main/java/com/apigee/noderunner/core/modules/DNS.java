@@ -82,6 +82,9 @@ public class DNS
                 throw Utils.makeError(cx, this, "invalid argument: `family` must be 4 or 6'");
             }
 
+            // TO prevent many, many tests from exiting, we have to "pin" the main script runner thread
+            // before we go off into another thread, so it doesn't exit.
+            runner.pin();
             runner.getEnvironment().getAsyncPool().execute(new Runnable()
             {
                 @Override
@@ -112,6 +115,7 @@ public class DNS
             } catch (IOException ioe) {
                 invokeCallback(cx, callback, Constants.EIO, null, family);
             } finally {
+                runner.unPin();
                 Context.exit();
             }
         }

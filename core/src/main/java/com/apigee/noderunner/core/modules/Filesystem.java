@@ -107,7 +107,7 @@ public class Filesystem
                         runner.enqueueCallback(callback, callback, callback, args);
                     } catch (NodeOSException e) {
                         if (log.isDebugEnabled()) {
-                            log.debug("Async action {} failed: {}", action, e.getCode());
+                            log.debug("Async action {} failed: {}: {}", action, e.getCode(), e);
                         }
                         runner.enqueueCallback(callback, callback, callback,
                                                action.mapException(e));
@@ -257,7 +257,7 @@ public class Filesystem
             RandomAccessFile file;
             try {
                 file = new RandomAccessFile(path, modeStr);
-                if ((flags & Constants.O_APPEND) != 0) {
+                if (((flags & Constants.O_APPEND) != 0) && (file.length() > 0)) {
                     file.seek(file.length());
                 }
             } catch (FileNotFoundException fnfe) {
@@ -349,8 +349,14 @@ public class Filesystem
             int bytesOffset = buf.getArrayOffset() + off;
 
             try {
-                handle.file.seek(pos);
+                if (pos > 0) {
+                    handle.file.seek(pos);
+                }
                 int count = handle.file.read(bytes, bytesOffset, len);
+                // Node (like C) expects 0 on EOF, not -1
+                if (count < 0) {
+                    count = 0;
+                }
                 if (log.isDebugEnabled()) {
                     log.debug("read({}, {}, {}) = {}",
                               off, len, pos, count);
@@ -404,7 +410,9 @@ public class Filesystem
             int bytesOffset = buf.getArrayOffset() + off;
 
             try {
-                handle.file.seek(pos);
+                if (pos > 0) {
+                    handle.file.seek(pos);
+                }
                 handle.file.write(bytes, bytesOffset, len);
                 if (log.isDebugEnabled()) {
                     log.debug("write({}, {}, {})", off, len, pos);

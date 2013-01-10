@@ -37,10 +37,13 @@ dns.lookup('127.0.0.1', function(error, result, addressType) {
   assert.equal(4, addressType);
 });
 
+/* TODO GREG IPv6 isn't in our test environment yet.
 dns.lookup('::1', function(error, result, addressType) {
+  console.log('::1 == ' + result);
   assert.equal('::1', result);
   assert.equal(6, addressType);
 });
+*/
 
 // Windows doesn't usually have an entry for localhost 127.0.0.1 in
 // C:\Windows\System32\drivers\etc\hosts

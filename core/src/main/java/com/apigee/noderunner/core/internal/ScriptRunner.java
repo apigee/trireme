@@ -5,15 +5,11 @@ import com.apigee.noderunner.core.NodeException;
 import com.apigee.noderunner.core.NodeModule;
 import com.apigee.noderunner.core.RunningScript;
 import com.apigee.noderunner.core.Sandbox;
-import com.apigee.noderunner.core.ScriptCancelledException;
-import com.apigee.noderunner.core.ScriptException;
 import com.apigee.noderunner.core.ScriptStatus;
 import com.apigee.noderunner.core.ScriptTask;
 import com.apigee.noderunner.core.modules.EventEmitter;
-import com.apigee.noderunner.core.modules.Module;
 import com.apigee.noderunner.core.modules.NativeModule;
 import com.apigee.noderunner.core.modules.Process;
-import com.apigee.noderunner.core.modules.Timers;
 import com.apigee.noderunner.net.SelectorHandler;
 import org.mozilla.javascript.Context;
 import org.mozilla.javascript.Function;
@@ -22,11 +18,8 @@ import org.mozilla.javascript.Scriptable;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.io.BufferedReader;
 import java.io.File;
-import java.io.FileInputStream;
 import java.io.IOException;
-import java.io.InputStreamReader;
 import java.lang.reflect.InvocationTargetException;
 import java.nio.channels.SelectionKey;
 import java.nio.channels.Selector;
@@ -62,7 +55,6 @@ public class ScriptRunner
 
     private final LinkedBlockingQueue<Activity> tickFunctions = new LinkedBlockingQueue<Activity>();
     private final PriorityQueue<Activity>       timerQueue    = new PriorityQueue<Activity>();
-    private final HashMap<Integer, Activity>    timersMap     = new HashMap<Integer, Activity>();
     private       Selector                      selector;
     private       int                           timerSequence;
     private       int                           pinCount;
@@ -141,12 +133,18 @@ public class ScriptRunner
         return selector;
     }
 
+    /**
+     * This method uses a concurrent queue so it may be called from any thread.
+     */
     public void enqueueCallback(Function f, Scriptable scope, Scriptable thisObj, Object[] args)
     {
         tickFunctions.offer(new Callback(f, scope, thisObj, args));
         selector.wakeup();
     }
 
+    /**
+     * This method uses a concurrent queue so it may be called from any thread.
+     */
     public void enqueueEvent(EventEmitter.EventEmitterImpl emitter,
                              String name, Object[] args)
     {
@@ -154,48 +152,35 @@ public class ScriptRunner
         selector.wakeup();
     }
 
+    /**
+     * This method uses a concurrent queue so it may be called from any thread.
+     */
     public void enqueueTask(ScriptTask task)
     {
         tickFunctions.offer(new Task(task, scope));
         selector.wakeup();
     }
 
-    public int createTimer(long delay, boolean repeating,
-                            Function func, Object[] args)
-    {
-        Callback t = new Callback(func, func, null, args);
-        return createTimerInternal(delay, repeating, t);
-    }
-
-    public int createTimer(long delay, boolean repeating, ScriptTask task, Scriptable scope)
+    /**
+     * This method puts the task directly on the timer queue, which is unsynchronized. If it is ever used
+     * outside the context of the "TimerWrap" module then we need to check for synchronization, add an
+     * assertion check, or synchronize the timer queue.
+     */
+    public Activity createTimer(long delay, boolean repeating, ScriptTask task, Scriptable scope)
     {
         Task t = new Task(task, scope);
-        return createTimerInternal(delay, repeating, t);
-    }
-
-    private int createTimerInternal(long delay, boolean repeating, Activity activity)
-    {
         long timeout = System.currentTimeMillis() + delay;
         int seq = timerSequence++;
 
-        activity.setId(seq);
-        activity.setTimeout(timeout);
+        t.setId(seq);
+        t.setTimeout(timeout);
         if (repeating) {
-            activity.setInterval(delay);
-            activity.setRepeating(true);
+            t.setInterval(delay);
+            t.setRepeating(true);
         }
-        timersMap.put(seq, activity);
-        timerQueue.add(activity);
+        timerQueue.add(t);
         selector.wakeup();
-        return seq;
-    }
-
-    public void clearTimer(int id)
-    {
-        Activity a = timersMap.get(id);
-        if (a != null) {
-            a.setCancelled(true);
-        }
+        return t;
     }
 
     public void pin()
@@ -234,23 +219,20 @@ public class ScriptRunner
      */
     @Override
     public ScriptStatus call()
-        throws NodeException, InterruptedException
+        throws NodeException
     {
-        ScriptStatus status;
         Context cx = Context.enter();
         setUpContext(cx);
 
         try {
+            ScriptStatus status;
+
             try {
                 // Re-use the global scope from before, but make it top-level so that there are no shared variables
                 scope = cx.newObject(env.getScope());
                 scope.setPrototype(env.getScope());
                 scope.setParentScope(null);
-            /*
-            if (log.isTraceEnabled()) {
-                cx.setDebugger(new DebugTracer(), null);
-            }
-            */
+
                 initGlobals(cx);
 
                 if (scriptFile == null) {
@@ -258,45 +240,53 @@ public class ScriptRunner
                     File scriptFile = new File(process.cwd(), scriptName);
                     Function ctor = (Function)mainModule.get("Module", mainModule);
                     Scriptable topModule = cx.newObject(scope);
-                    ctor.call(cx, scope, topModule, new Object[] { scriptName });
+                    ctor.call(cx, scope, topModule, new Object[]{scriptName});
                     topModule.put("filename", topModule, scriptFile.getPath());
                     scope.put("exports", scope, topModule.get("exports", topModule));
                     scope.put("module", scope, topModule);
                     scope.put("require", scope, topModule.get("require", topModule));
-                    cx.evaluateString(scope, script, scriptName, 1, null);
+                    enqueueTask(new ScriptTask()
+                    {
+                        @Override
+                        public void execute(Context cx, Scriptable scope)
+                        {
+                            cx.evaluateString(scope, script, scriptName, 1, null);
+                        }
+                    });
 
                 } else {
                     // Again like the real node, delegate running the actual script to the module module.
-                    // Node does this in a separate nextTick job, not sure yet why so we don't.
+                    // Submit it as a job to the event loop to simplify exception handling.
                     process.setArgv(1, scriptFile.getAbsolutePath());
                     Function load = (Function)mainModule.get("runMain", mainModule);
-                    load.call(cx, scope, null, null);
+                    enqueueCallback(load, mainModule, mainModule, null);
                 }
 
                 status = mainLoop(cx);
 
-            } catch (NodeExitException ne) {
-                status = ne.getStatus();
-            } catch (RhinoException re) {
-                boolean handled =
-                    handleRhinoException(re);
-                if (handled) {
-                    status = ScriptStatus.OK;
-                } else {
-                    status = new ScriptStatus(re);
-                }
             } catch (IOException ioe) {
                 log.debug("I/O exception processing script: {}", ioe);
                 status = new ScriptStatus(ioe);
             }
 
             log.debug("Script exiting with exit code {}", status.getExitCode());
-            process.fireEvent("exit", status.getExitCode());
+            if (!status.hasCause()) {
+                // Fire the exit callback, but only if we aren't exiting due to an unhandled exception.
+                try {
+                    process.fireEvent("exit", status.getExitCode());
+                } catch (NodeExitException ee) {
+                    // Ignore this -- it happens if exit calls exit.
+                } catch (RhinoException re) {
+                    // Many of the unit tests fire exceptions inside exit.
+                    status = new ScriptStatus(re);
+                }
+            }
+
+            return status;
 
         } finally {
             Context.exit();
         }
-        return status;
     }
 
     private ScriptStatus mainLoop(Context cx)
@@ -305,7 +295,7 @@ public class ScriptRunner
         // Node scripts don't exit unless exit is called -- they keep on trucking.
         // The JS code inside will throw NodeExitException when it's time to exit
         long pollTimeout = 0L;
-        while (true) {
+        while (!tickFunctions.isEmpty() || (pinCount > 0)) {
             try {
                 if ((future != null) && future.isCancelled()) {
                     return ScriptStatus.CANCELLED;
@@ -315,7 +305,7 @@ public class ScriptRunner
                 int selected;
                 if (pollTimeout > 0L) {
                     if (log.isDebugEnabled()) {
-                        log.debug("mainLoop: sleeping for {}", pollTimeout);
+                        log.debug("mainLoop: sleeping for {} pinCount = {}", pollTimeout, pinCount);
                     }
                     selected = selector.select(pollTimeout);
                 } else {
@@ -345,16 +335,12 @@ public class ScriptRunner
                 while ((timed != null) && (timed.timeout <= now)) {
                     log.debug("Executing one timed-out task");
                     timerQueue.poll();
-                    if (timed.cancelled) {
-                        timersMap.remove(timed.id);
-                    } else {
+                    if (!timed.cancelled) {
                         timed.execute(cx);
                         if (timed.repeating && !timed.cancelled) {
                             log.debug("Re-registering with delay of {}", timed.interval);
                             timed.timeout = now + timed.interval;
                             timerQueue.add(timed);
-                        } else {
-                            timersMap.remove(timed.id);
                         }
                     }
                     timed = timerQueue.peek();
@@ -372,12 +358,8 @@ public class ScriptRunner
                             pollTimeout = DEFAULT_DELAY;
                         } else {
                             Activity nextActivity = timerQueue.peek();
-                            pollTimeout = (timed.timeout - now);
+                            pollTimeout = (nextActivity.timeout - now);
                         }
-                    } else {
-                        // We are not pinned and have no tasks to run
-                        // Like the "real" node we exit even if there are timers on the queue
-                        return ScriptStatus.OK;
                     }
                 }
             } catch (NodeExitException ne) {
@@ -390,6 +372,7 @@ public class ScriptRunner
                 }
             }
         }
+        return ScriptStatus.OK;
     }
 
     private boolean handleRhinoException(RhinoException re)
@@ -423,15 +406,24 @@ public class ScriptRunner
             // Need a little special handling for the "module" module, which does module loading
             //Object moduleModule = nativeMod.internalRequire("module", cx, this);
 
-            // Set up the globals that are set up for all script evaluations
+            // Set up the global modules that are set up for all script evaluations
             scope.put("process", scope, process);
             scope.put("global", scope, scope);
             scope.put("GLOBAL", scope, scope);
             scope.put("root", scope, scope);
             registerModule("buffer", cx, scope);
-            registerModule("timers", cx, scope);
+            Scriptable timers = (Scriptable)nativeMod.internalRequire("timers", cx, this);
+            scope.put("timers", scope, timers);
             scope.put("console", scope, nativeMod.internalRequire("console", cx, this));
             clearErrno();
+
+            // Set up the global timer functions
+            scope.put("setTimeout", scope, timers.get("setTimeout", timers));
+            scope.put("setInterval", scope, timers.get("setInterval", timers));
+            scope.put("clearTimeout", scope, timers.get("clearTimeout", timers));
+            scope.put("clearInterval", scope, timers.get("clearInterval", timers));
+            scope.put("setImmediate", scope, timers.get("setImmediate", timers));
+            scope.put("clearImmediate", scope, timers.get("clearImmediate", timers));
 
             // Set up globals that are set up when running a script from the command line (set in "evalScript"
             // in node.js.)
@@ -521,7 +513,7 @@ public class ScriptRunner
         nativeModuleCache.put(name, module);
     }
 
-    private abstract static class Activity
+    public abstract static class Activity
         implements Comparable<Activity>
     {
         protected int id;
@@ -540,35 +532,35 @@ public class ScriptRunner
             this.id = id;
         }
 
-        long getTimeout() {
+        public long getTimeout() {
             return timeout;
         }
 
-        void setTimeout(long timeout) {
+        public void setTimeout(long timeout) {
             this.timeout = timeout;
         }
 
-        long getInterval() {
+        public long getInterval() {
             return interval;
         }
 
-        void setInterval(long interval) {
+        public void setInterval(long interval) {
             this.interval = interval;
         }
 
-        boolean isRepeating() {
+        public boolean isRepeating() {
             return repeating;
         }
 
-        void setRepeating(boolean repeating) {
+        public void setRepeating(boolean repeating) {
             this.repeating = repeating;
         }
 
-        boolean isCancelled() {
+        public boolean isCancelled() {
             return cancelled;
         }
 
-        void setCancelled(boolean cancelled) {
+        public void setCancelled(boolean cancelled) {
             this.cancelled = cancelled;
         }
 

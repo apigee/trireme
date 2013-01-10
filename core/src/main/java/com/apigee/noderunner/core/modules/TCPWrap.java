@@ -20,6 +20,8 @@ import static com.apigee.noderunner.core.internal.ArgUtils.*;
 
 import java.io.IOException;
 import java.lang.reflect.InvocationTargetException;
+import java.net.BindException;
+import java.net.ConnectException;
 import java.net.InetSocketAddress;
 import java.net.SocketException;
 import java.nio.ByteBuffer;
@@ -51,19 +53,19 @@ public class TCPWrap
         ScriptableObject exports = (ScriptableObject)cx.newObject(scope);
         exports.setPrototype(scope);
         exports.setParentScope(null);
-        ScriptableObject.defineClass(exports, TCPImpl.class);
+        ScriptableObject.defineClass(exports, Referenceable.class, false, true);
+        ScriptableObject.defineClass(exports, TCPImpl.class, false, true);
         ScriptableObject.defineClass(exports, QueuedWrite.class);
         ScriptableObject.defineClass(exports, PendingOp.class);
         return exports;
     }
 
     public static class TCPImpl
-        extends ScriptableObject
+        extends Referenceable
     {
         public static final String CLASS_NAME       = "TCP";
         public static final int    READ_BUFFER_SIZE = 8192;
 
-        private boolean           referenced;
         private InetSocketAddress boundAddress;
         private Function          onConnection;
         private Function          onRead;
@@ -109,26 +111,6 @@ public class TCPWrap
                                                     clientSelected(key);
                                                 }
                                             });
-        }
-
-        private void setErrno(String err)
-        {
-            getRunner().setErrno(err);
-        }
-
-        private void clearErrno()
-        {
-            getRunner().clearErrno();
-        }
-
-        private static ScriptRunner getRunner(Context cx)
-        {
-            return (ScriptRunner) cx.getThreadLocal(ScriptRunner.RUNNER);
-        }
-
-        private static ScriptRunner getRunner()
-        {
-            return getRunner(Context.getCurrentContext());
         }
 
         @Override
@@ -187,7 +169,7 @@ public class TCPWrap
         @JSFunction
         public void close()
         {
-            clearErrno();
+            super.close();
             try {
                 if (clientChannel != null) {
                     if (log.isDebugEnabled()) {
@@ -205,7 +187,6 @@ public class TCPWrap
                 log.debug("Uncaught exception in channel close: {}", ioe);
                 setErrno(Constants.EIO);
             }
-            unref();
         }
 
         @JSFunction
@@ -255,6 +236,10 @@ public class TCPWrap
                                     });
                 return null;
 
+            } catch (BindException be) {
+                log.debug("Error listening: {}", be);
+                setErrno(Constants.EADDRINUSE);
+                return Constants.EADDRINUSE;
             } catch (IOException ioe) {
                 log.debug("Error listening: {}", ioe);
                 setErrno(Constants.EIO);
@@ -305,7 +290,7 @@ public class TCPWrap
             Buffer.BufferImpl buf = (Buffer.BufferImpl)args[0];
             TCPImpl tcp = (TCPImpl)thisObj;
 
-            tcp.clearErrno();
+            clearErrno();
             QueuedWrite qw = (QueuedWrite)cx.newObject(thisObj, QueuedWrite.CLASS_NAME);
             ByteBuffer bbuf = buf.getBuffer();
             qw.initialize(bbuf);
@@ -351,7 +336,7 @@ public class TCPWrap
         {
             TCPImpl tcp = (TCPImpl)thisObj;
 
-            tcp.clearErrno();
+            clearErrno();
             QueuedWrite qw = (QueuedWrite)cx.newObject(thisObj, QueuedWrite.CLASS_NAME);
             qw.shutdown = true;
             tcp.offerWrite(qw);
@@ -397,7 +382,7 @@ public class TCPWrap
                 if (log.isDebugEnabled()) {
                     log.debug("Client conencting to {}:{}", host, port);
                 }
-                tcp.clearErrno();
+                clearErrno();
                 if (tcp.boundAddress == null) {
                     tcp.clientChannel = SocketChannel.open();
                 } else {
@@ -405,7 +390,7 @@ public class TCPWrap
                 }
                 tcp.clientInit();
                 tcp.clientChannel.connect(new InetSocketAddress(host, port));
-                tcp.selKey = tcp.clientChannel.register(tcp.getRunner().getSelector(),
+                tcp.selKey = tcp.clientChannel.register(getRunner().getSelector(),
                                                         SelectionKey.OP_CONNECT,
                                                         new SelectorHandler()
                                                         {
@@ -420,7 +405,7 @@ public class TCPWrap
                 return tcp.pendingConnect;
 
             } catch (IOException ioe) {
-                tcp.setErrno(Constants.EIO);
+                setErrno(Constants.EIO);
                 return null;
             }
         }
@@ -457,24 +442,34 @@ public class TCPWrap
                 if (log.isDebugEnabled()) {
                     log.debug("Client {} connected", clientChannel);
                 }
-                if (pendingConnect.onComplete != null) {
-                    pendingConnect.onComplete.call(cx, pendingConnect.onComplete, this,
-                                                   new Object[] { 0, this, pendingConnect,
-                                                       true, true });
+                sendOnConnectComplete(cx, null, true, true);
+
+            } catch (ConnectException ce) {
+                if (log.isDebugEnabled()) {
+                    log.debug("Error completing connect: {}", ce);
                 }
-                pendingConnect = null;
+                setErrno(Constants.ECONNREFUSED);
+                sendOnConnectComplete(cx, Constants.ECONNREFUSED, false, false);
+
 
             } catch (IOException ioe) {
                 if (log.isDebugEnabled()) {
                     log.debug("Error completing connect: {}", ioe);
                 }
                 setErrno(Constants.EIO);
-                if (pendingConnect.onComplete != null) {
-                    pendingConnect.onComplete.call(cx, pendingConnect.onComplete, this,
-                                                   new Object[] { Constants.EIO, this, pendingConnect,
-                                                       false, false });
-                }
+                sendOnConnectComplete(cx, Constants.EIO, false, false);
             }
+        }
+
+        private void sendOnConnectComplete(Context cx, String status,
+                                           boolean readable, boolean writable)
+        {
+            if (pendingConnect.onComplete != null) {
+                pendingConnect.onComplete.call(cx, pendingConnect.onComplete, this,
+                                               new Object[] { status, this, pendingConnect,
+                                                              readable, writable });
+            }
+            pendingConnect = null;
         }
 
         private void processWrites(Context cx)
@@ -569,7 +564,7 @@ public class TCPWrap
             TCPImpl tcp = (TCPImpl)thisObj;
             InetSocketAddress addr;
 
-            tcp.clearErrno();
+            clearErrno();
             if (tcp.svrChannel == null) {
                 addr = (InetSocketAddress)(tcp.clientChannel.socket().getLocalSocketAddress());
             } else {
@@ -588,7 +583,7 @@ public class TCPWrap
             TCPImpl tcp = (TCPImpl)thisObj;
             InetSocketAddress addr;
 
-            tcp.clearErrno();
+            clearErrno();
             if (tcp.clientChannel == null) {
                 return null;
             } else {
@@ -636,25 +631,6 @@ public class TCPWrap
             clearErrno();
         }
 
-        @JSFunction
-        public void ref()
-        {
-            clearErrno();
-            if (!referenced) {
-                referenced = true;
-                getRunner().pin();
-            }
-        }
-
-        @JSFunction
-        public void unref()
-        {
-            clearErrno();
-            if (referenced) {
-                referenced = false;
-                getRunner().unPin();
-            }
-        }
     }
 
     public static class QueuedWrite

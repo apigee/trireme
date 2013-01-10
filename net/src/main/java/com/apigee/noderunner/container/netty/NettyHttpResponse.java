@@ -1,6 +1,5 @@
 package com.apigee.noderunner.container.netty;
 
-import com.apigee.noderunner.net.HttpServerResponse;
 import com.apigee.noderunner.net.netty.NettyServer;
 import com.apigee.noderunner.net.spi.HttpResponseAdapter;
 import io.netty.channel.ChannelFuture;
@@ -49,7 +48,6 @@ public class NettyHttpResponse
     public boolean send(boolean lastChunk)
     {
         ChannelFuture future;
-        final HttpServerResponse responseObj = (HttpServerResponse) attachment;
 
         if (lastChunk) {
             // We can send it all in one big chunk
@@ -93,9 +91,11 @@ public class NettyHttpResponse
                 if (log.isDebugEnabled()) {
                     log.debug("send: Last send complete: success = {}", f.isSuccess());
                 }
+                /* TODO Greg currently not working due to refactoring
                 if (!f.isSuccess()) {
                     responseObj.enqueueError(f.cause().toString());
                 }
+                */
             }
         });
         return future.isDone();
@@ -104,8 +104,6 @@ public class NettyHttpResponse
     @Override
     public boolean sendChunk(ByteBuffer buf, boolean lastChunk)
     {
-        final HttpServerResponse responseObj = (HttpServerResponse)attachment;
-
         ChannelFuture future = null;
         if (buf != null) {
             if (log.isDebugEnabled()) {
@@ -134,9 +132,12 @@ public class NettyHttpResponse
                     log.debug("sendChunk: Last write complete. Success = {}",
                               f.isSuccess());
                 }
+                /*
+                 * TODO GREG Currently not working due to refactoring
                 if (!f.isSuccess()) {
                     responseObj.enqueueError(f.cause().toString());
                 }
+                */
             }
         });
         return future.isDone();

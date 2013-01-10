@@ -130,6 +130,7 @@ public class EventEmitter
             }
         }
 
+        @JSFunction
         public static void removeAllListeners(Context ctx, Scriptable thisObj, Object[] args, Function caller)
         {
             EventEmitterImpl thisClass = ScriptableUtils.prototypeCast(thisObj, EventEmitterImpl.class);

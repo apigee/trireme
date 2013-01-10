@@ -19,7 +19,7 @@ import java.util.regex.Pattern;
 @RunWith(Parameterized.class)
 public class JavaScriptIT
 {
-    public static final String BASE_DIR = "src/test/python/test/simple";
+    public static final String BASE_DIR = "target/test-classes/test/simple";
     public static final int TEST_TIMEOUT_SECONDS = 60;
     public static final String TEST_FILE_NAME_PROP = "TestFile";
 

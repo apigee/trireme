@@ -17,7 +17,7 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 @RunWith(Parameterized.class)
-public class JavaScriptIT
+public class JavaScriptTest
 {
     public static final String BASE_DIR = "target/test-classes/test/simple";
     public static final int TEST_TIMEOUT_SECONDS = 60;
@@ -59,7 +59,7 @@ public class JavaScriptIT
         return ret;
     }
 
-    public JavaScriptIT(File fileName)
+    public JavaScriptTest(File fileName)
     {
         this.fileName = fileName;
     }

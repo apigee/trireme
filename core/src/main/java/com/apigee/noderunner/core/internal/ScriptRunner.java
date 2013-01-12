@@ -397,11 +397,18 @@ public class ScriptRunner
             this.nativeModule = nativeMod;
 
             // "process" is expected to be initialized by the runtime too
-            process  =
+            process =
                 (Process.ProcessImpl)registerModule("process", cx, scope);
             process.setMainModule(nativeMod);
-            process.setArgv(0, "./node");
-            process.setArgv(1, scriptName);
+            process.setArgv(0, "node");
+
+            if (args != null) {
+                int i = 1;
+                for (String arg : args) {
+                    process.setArgv(i, arg);
+                    i++;
+                }
+            }
 
             // Need a little special handling for the "module" module, which does module loading
             //Object moduleModule = nativeMod.internalRequire("module", cx, this);

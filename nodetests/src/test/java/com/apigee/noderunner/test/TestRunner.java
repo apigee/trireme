@@ -1,5 +1,6 @@
 package com.apigee.noderunner.test;
 
+import com.apigee.noderunner.container.netty.NettyHttpContainer;
 import com.apigee.noderunner.core.NodeEnvironment;
 import com.apigee.noderunner.core.NodeException;
 import com.apigee.noderunner.core.NodeScript;
@@ -18,13 +19,17 @@ public class TestRunner
 
     public static void main(String[] args)
     {
-        if (args.length != 1) {
+        if ((args.length < 1) || (args.length > 2)) {
             System.exit(10);
         }
 
         File fileName = new File(args[0]);
         NodeEnvironment env = new NodeEnvironment();
-        int exitCode = 999;
+        int exitCode = 101;
+
+        if ((args.length >= 2) && args[1].equals("netty")) {
+            env.setHttpContainer(new NettyHttpContainer());
+        }
 
         try {
             NodeScript script = env.createScript(fileName.getName(), fileName, null);
@@ -46,15 +51,15 @@ public class TestRunner
             }
         } catch (TimeoutException te) {
             System.out.println("Test timeout!");
-            exitCode = 995;
+            exitCode = 102;
         } catch (InterruptedException ie) {
-            exitCode = 996;
+            exitCode = 103;
         } catch (ExecutionException ee) {
             ee.getCause().printStackTrace(System.out);
-            exitCode = 997;
+            exitCode = 104;
         } catch (NodeException ne) {
             ne.printStackTrace(System.out);
-            exitCode = 998;
+            exitCode = 105;
         } finally {
             env.close();
         }

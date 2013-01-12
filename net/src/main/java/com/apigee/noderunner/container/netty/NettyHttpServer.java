@@ -45,7 +45,6 @@ public class NettyHttpServer
         log.debug("About to listen for HTTP on {}:{}", host, port);
         try {
             server = NettyFactory.get().createServer(port, host, backlog, makePipeline());
-            stub.onListening();
             log.debug("Listening on port {}", port);
         } catch (ChannelException ce) {
             stub.onError(ce.getMessage());
@@ -74,6 +73,13 @@ public class NettyHttpServer
     }
 
     @Override
+    public void suspend()
+    {
+        log.debug("Suspending HTTP server for new connections");
+        server.suspend();
+    }
+
+    @Override
     public void close()
     {
         log.debug("Closing HTTP server");
@@ -86,6 +92,32 @@ public class NettyHttpServer
     {
         private NettyHttpRequest curRequest;
         private NettyHttpResponse curResponse;
+
+        @Override
+        public void exceptionCaught(ChannelHandlerContext ctx, Throwable cause)
+        {
+            if (log.isDebugEnabled()) {
+                log.debug("Uncaught exception: {}", cause);
+            }
+        }
+
+        @Override
+        public void channelRegistered(ChannelHandlerContext ctx)
+        {
+            if (log.isDebugEnabled()) {
+                log.debug("New server-side connection {}", ctx.channel());
+            }
+            stub.onConnection();
+        }
+
+        @Override
+        public void channelUnregistered(ChannelHandlerContext ctx)
+        {
+            if (log.isDebugEnabled()) {
+                log.debug("Closed server-side connection {}", ctx.channel());
+            }
+            stub.onClose();
+        }
 
         @Override
         public void messageReceived(ChannelHandlerContext channelHandlerContext, HttpObject httpObject)

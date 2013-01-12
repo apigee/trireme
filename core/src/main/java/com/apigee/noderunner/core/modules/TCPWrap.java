@@ -526,7 +526,12 @@ public class TCPWrap
             int read;
             do {
                 try {
-                    read = clientChannel.read(readBuffer);
+                    try {
+                        read = clientChannel.read(readBuffer);
+                    } catch (ClosedChannelException cce) {
+                        log.debug("got ClosedChannelException");
+                        read = 0;
+                    }
                     if (log.isDebugEnabled()) {
                         log.debug("Read {} bytes from {} into {}", read, clientChannel, readBuffer);
                     }

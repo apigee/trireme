@@ -7,11 +7,6 @@ package com.apigee.noderunner.net.spi;
 public interface HttpServerStub
 {
     /**
-     * This method is called when the server is listening for new requests.
-     */
-    void onListening();
-
-    /**
      * This method is called on each new HTTP request. The request may or may not contain data
      */
     void onRequest(HttpRequestAdapter request, HttpResponseAdapter response);

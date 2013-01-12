@@ -23,10 +23,14 @@ public class JavaScriptTest
     public static final int TEST_TIMEOUT_SECONDS = 60;
     public static final String TEST_FILE_NAME_PROP = "TestFile";
 
-    private static final Pattern isJs =
-        Pattern.compile(".+\\.js$");
+    public static final String DEFAULT_ADAPTER = "default";
+    public static final String NETTY_ADAPTER = "netty";
+
+    private static final Pattern isJs = Pattern.compile(".+\\.js$");
+    private static final Pattern isHttp = Pattern.compile("^test-http-.+");
 
     private final File fileName;
+    private final String adapter;
 
     private static NodeEnvironment env;
 
@@ -54,27 +58,32 @@ public class JavaScriptTest
             return ret;
         }
         for (File f : files) {
-            ret.add(new Object[] { f });
+            ret.add(new Object[] { f, DEFAULT_ADAPTER });
+            if (isHttp.matcher(f.getName()).matches()) {
+                ret.add(new Object[] { f, NETTY_ADAPTER });
+            }
         }
         return ret;
     }
 
-    public JavaScriptTest(File fileName)
+    public JavaScriptTest(File fileName, String adapter)
     {
         this.fileName = fileName;
+        this.adapter = adapter;
     }
 
     @Test
     public void testJavaScript()
         throws IOException, InterruptedException
     {
-        System.out.println("**** Testing " + fileName.getName() + "...");
+        System.out.println("**** Testing " + fileName.getName() + " (" + adapter + ")...");
 
         String logLevel = System.getProperty("LOGLEVEL", "INFO");
         ProcessBuilder pb = new ProcessBuilder("java",
                                                "-DLOGLEVEL=" + logLevel,
                                                "com.apigee.noderunner.test.TestRunner",
-                                               fileName.getPath());
+                                               fileName.getPath(),
+                                               adapter);
         pb.redirectErrorStream(true);
         Map<String, String> envVars = pb.environment();
         envVars.put("CLASSPATH", System.getProperty("surefire.test.class.path"));
@@ -91,9 +100,9 @@ public class JavaScriptTest
 
         int exitCode = proc.waitFor();
         if (exitCode == 0) {
-            System.out.println("** " + fileName.getName() + " SUCCESS");
+            System.out.println("** " + fileName.getName() + " (" + adapter + ") SUCCESS");
         } else {
-            System.out.println("** " + fileName.getName() + " FAILURE = " + exitCode);
+            System.out.println("** " + fileName.getName() + " (" + adapter + ") FAILURE = " + exitCode);
         }
         assertEquals(fileName.getName() + " failed with =" + exitCode,
                      0, exitCode);

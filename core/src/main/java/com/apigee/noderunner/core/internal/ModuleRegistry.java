@@ -54,7 +54,7 @@ public class ModuleRegistry
         addCompiledModule("events", "com.apigee.noderunner.fromnode.events");
         addCompiledModule("freelist", "com.apigee.noderunner.fromnode.freelist");
         addCompiledModule("fs", "com.apigee.noderunner.fromnode.fs");
-        addCompiledModule("http", "com.apigee.noderunner.fromnode.http");
+        addCompiledModule("node_http", "com.apigee.noderunner.fromnode.http");
         addCompiledModule("net", "com.apigee.noderunner.fromnode.net");
         addCompiledModule("module", "com.apigee.noderunner.fromnode.module");
         addCompiledModule("path", "com.apigee.noderunner.fromnode.path");
@@ -66,6 +66,8 @@ public class ModuleRegistry
         addCompiledModule("url", "com.apigee.noderunner.fromnode.url");
         addCompiledModule("util", "com.apigee.noderunner.fromnode.util");
         addCompiledModule("vm", "com.apigee.noderunner.fromnode.vm");
+
+        addCompiledModule("http", "com.apigee.noderunner.scripts.adaptorhttp");
     }
 
     private void addCompiledModule(String name, String className)

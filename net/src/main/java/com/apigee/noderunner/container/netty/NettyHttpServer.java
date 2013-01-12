@@ -1,7 +1,5 @@
 package com.apigee.noderunner.container.netty;
 
-import com.apigee.noderunner.net.netty.NettyFactory;
-import com.apigee.noderunner.net.netty.NettyServer;
 import com.apigee.noderunner.net.spi.HttpServerAdapter;
 import com.apigee.noderunner.net.spi.HttpServerStub;
 import io.netty.buffer.Unpooled;

@@ -25,10 +25,6 @@
       <artifactId>slf4j-api</artifactId>
     </dependency>
     <dependency>
-        <groupId>io.netty</groupId>
-        <artifactId>netty</artifactId>
-    </dependency>
-    <dependency>
       <groupId>org.mozilla</groupId>
       <artifactId>rhino</artifactId>
     </dependency>

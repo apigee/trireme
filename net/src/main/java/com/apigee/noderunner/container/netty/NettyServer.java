@@ -1,4 +1,4 @@
-package com.apigee.noderunner.net.netty;
+package com.apigee.noderunner.container.netty;
 
 import io.netty.bootstrap.ServerBootstrap;
 import io.netty.buffer.ByteBuf;

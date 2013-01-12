@@ -1,6 +1,5 @@
-package com.apigee.noderunner.net.netty;
+package com.apigee.noderunner.container.netty;
 
-import io.netty.bootstrap.AbstractBootstrap;
 import io.netty.bootstrap.Bootstrap;
 import io.netty.channel.ChannelFuture;
 import io.netty.channel.ChannelInitializer;

@@ -1,11 +1,8 @@
 package com.apigee.noderunner.container.netty;
 
-import com.apigee.noderunner.net.netty.NettyServer;
 import com.apigee.noderunner.net.spi.HttpFuture;
 import com.apigee.noderunner.net.spi.HttpResponseAdapter;
-import com.sun.org.apache.xerces.internal.dom.ChildNode;
 import io.netty.channel.ChannelFuture;
-import io.netty.channel.ChannelFutureListener;
 import io.netty.channel.SucceededChannelFuture;
 import io.netty.channel.socket.SocketChannel;
 import io.netty.handler.codec.http.DefaultHttpChunk;

@@ -1,4 +1,4 @@
-package com.apigee.noderunner.net.netty;
+package com.apigee.noderunner.container.netty;
 
 import com.apigee.noderunner.core.ScriptTask;
 import com.apigee.noderunner.core.internal.ScriptRunner;

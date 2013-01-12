@@ -7,9 +7,13 @@ import org.mozilla.javascript.Context;
 import org.mozilla.javascript.Scriptable;
 import org.mozilla.javascript.annotations.JSFunction;
 
+import java.io.FileDescriptor;
+import java.io.FileInputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.ByteBuffer;
+import java.nio.channels.Channels;
+import java.nio.channels.ReadableByteChannel;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Future;
 
@@ -40,7 +44,7 @@ public class NativeInputStream
     @JSFunction
     public void pause()
     {
-        if (adapterFuture != null && !adapterFuture.isCancelled()) {
+        if (adapterFuture != null && !adapterFuture.isCancelled() && !adapterFuture.isDone()) {
             adapterFuture.cancel(true);
         }
     }
@@ -49,6 +53,7 @@ public class NativeInputStream
     public void resume()
     {
         if (adapterFuture == null || adapterFuture.isCancelled() || adapterFuture.isDone()) {
+            runner.pin();
             adapterFuture = pool.submit(new InputStreamAdapter(runner, in, this));
         }
     }
@@ -63,8 +68,9 @@ public class NativeInputStream
     public static class InputStreamAdapter implements Runnable {
         private ScriptRunner runner;
         private InputStream from;
+        private ReadableByteChannel fromChannel;
         private Stream.ReadableStream to;
-        private byte[] buf = new byte[BUFFER_SIZE];
+        private ByteBuffer buf = ByteBuffer.allocate(BUFFER_SIZE);
 
         public InputStreamAdapter(ScriptRunner runner, InputStream from, Stream.ReadableStream to) {
             this.runner = runner;
@@ -75,23 +81,20 @@ public class NativeInputStream
         @Override
         public void run() {
             try {
-                int len;
-
-                runner.pin();
+                if (from.equals(System.in)) {
+                    fromChannel = new FileInputStream(FileDescriptor.in).getChannel();
+                } else {
+                    fromChannel = Channels.newChannel(from);
+                }
 
                 while (!Thread.interrupted()) {
-                    len = from.read(buf, 0, buf.length);
+                    final int len = fromChannel.read(buf);
 
                     if (len < 0) {
                         break;
                     }
 
-                    // TODO: does the buffer need to be copied here or is wrap ok?
-
-                    // final ByteBuffer wrapped = ByteBuffer.wrap(buf, 0, len);
-
-                    final ByteBuffer bufCopy = ByteBuffer.allocate(len);
-                    bufCopy.put(buf, 0, len);
+                    final ByteBuffer bufCopy = buf.duplicate();
                     bufCopy.flip();
 
                     runner.enqueueTask(new ScriptTask() {

@@ -775,21 +775,78 @@ public class Filesystem
             }
         }
 
+        @JSFunction
+        public boolean isFile()
+        {
+            return file.isFile();
+        }
+
+        @JSFunction
+        public boolean isDirectory()
+        {
+            return file.isDirectory();
+        }
+
+        @JSFunction
+        public boolean isBlockDevice()
+        {
+            return false; // TODO
+        }
+
+        @JSFunction
+        public boolean isCharacterDevice()
+        {
+            return false; // TODO
+        }
+
+        @JSFunction
+        public boolean isSymbolicLink()
+        {
+            return false; // TODO
+        }
+
+        @JSFunction
+        public boolean isFIFO()
+        {
+            return false; // TODO
+        }
+
+        @JSFunction
+        public boolean isSocket()
+        {
+            return false; // TODO
+        }
+
+        // TODO dev
+        // TODO ino
+
         @JSGetter("mode")
         public int getMode() {
             return mode;
         }
+
+        // TODO nlink
+        // TODO uid
+        // TODO gid
+        // TODO rdev
 
         @JSGetter("size")
         public long getSize() {
             return file.length();
         }
 
+        // TODO blksize
+        // TODO blocks
+
+        // TODO atime
+
         @JSGetter("mtime")
         public Object getMTime()
         {
             return Context.getCurrentContext().newObject(this, "Date", new Object[] { file.lastModified() });
         }
+
+        // TODO ctime
     }
 
     public static class FileHandle

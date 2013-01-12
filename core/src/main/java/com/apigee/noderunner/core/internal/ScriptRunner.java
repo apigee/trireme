@@ -30,6 +30,7 @@ import java.util.PriorityQueue;
 import java.util.concurrent.Callable;
 import java.util.concurrent.Future;
 import java.util.concurrent.LinkedBlockingQueue;
+import java.util.concurrent.atomic.AtomicInteger;
 
 /**
  * This class actually runs the script.
@@ -57,7 +58,7 @@ public class ScriptRunner
     private final PriorityQueue<Activity>       timerQueue    = new PriorityQueue<Activity>();
     private       Selector                      selector;
     private       int                           timerSequence;
-    private       int                           pinCount;
+    private       AtomicInteger                 pinCount      = new AtomicInteger(0);
 
     // Globals that are set up for the process
     private NativeModule.NativeImpl nativeModule;
@@ -185,17 +186,18 @@ public class ScriptRunner
 
     public void pin()
     {
-        pinCount++;
-        log.debug("Pin count is now {}", pinCount);
+        int currentPinCount = pinCount.incrementAndGet();
+        log.debug("Pin count is now {}", currentPinCount);
     }
 
     public void unPin()
     {
-        pinCount--;
-        if (pinCount < 0) {
-            pinCount = 0;
+        int currentPinCount = pinCount.decrementAndGet();
+        log.debug("Pin count is now {}", currentPinCount);
+
+        if (currentPinCount < 0) {
+            log.warn("Pin count < 0", currentPinCount);
         }
-        log.debug("Pin count is now {}", pinCount);
     }
 
     public void setErrno(String err)
@@ -295,7 +297,7 @@ public class ScriptRunner
         // Node scripts don't exit unless exit is called -- they keep on trucking.
         // The JS code inside will throw NodeExitException when it's time to exit
         long pollTimeout = 0L;
-        while (!tickFunctions.isEmpty() || (pinCount > 0)) {
+        while (!tickFunctions.isEmpty() || (pinCount.get() > 0)) {
             try {
                 if ((future != null) && future.isCancelled()) {
                     return ScriptStatus.CANCELLED;
@@ -305,7 +307,7 @@ public class ScriptRunner
                 int selected;
                 if (pollTimeout > 0L) {
                     if (log.isDebugEnabled()) {
-                        log.debug("mainLoop: sleeping for {} pinCount = {}", pollTimeout, pinCount);
+                        log.debug("mainLoop: sleeping for {} pinCount = {}", pollTimeout, pinCount.get());
                     }
                     selected = selector.select(pollTimeout);
                 } else {
@@ -350,7 +352,7 @@ public class ScriptRunner
                 pollTimeout = 0L;
                 // If there are still tick functions on the queue, we will just re-spin to the top
                 if (tickFunctions.isEmpty()) {
-                    if (pinCount > 0) {
+                    if (pinCount.get() > 0) {
                         // We are pinned so we will not exit no matter what. The question is how long to wait.
                         if (timerQueue.isEmpty()) {
                             // This is a fudge factor and it helps to find stuck servers in debugging.

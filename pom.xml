@@ -29,6 +29,7 @@
   <modules>
     <module>core</module>
     <module>compiler</module>
+    <module>jar</module>
     <module>net</module>
     <module>nodetests</module>
     <module>shell</module>

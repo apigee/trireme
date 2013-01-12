@@ -4,7 +4,6 @@ import com.apigee.noderunner.core.NodeModule;
 import com.apigee.noderunner.core.internal.Charsets;
 import com.apigee.noderunner.core.internal.ScriptRunner;
 import com.apigee.noderunner.core.internal.Utils;
-import io.netty.buffer.ByteBuf;
 import org.mozilla.javascript.Context;
 import org.mozilla.javascript.EvaluatorException;
 import org.mozilla.javascript.Function;
@@ -66,20 +65,6 @@ public class Stream
 
             } else {
                 fireEvent("data", Utils.bufferToString(buf, encoding));
-            }
-        }
-
-        public void sendDataEvent(ByteBuf buf, boolean copy, Context cx, Scriptable scope)
-        {
-            log.debug("Got {}", buf);
-            if (encoding == null) {
-                Buffer.BufferImpl jsBuf =
-                    (Buffer.BufferImpl)cx.newObject(scope, Buffer.BUFFER_CLASS_NAME);
-                jsBuf.initialize(buf, copy);
-                fireEvent("data", jsBuf);
-
-            } else {
-                fireEvent("data", buf.toString(encoding));
             }
         }
 

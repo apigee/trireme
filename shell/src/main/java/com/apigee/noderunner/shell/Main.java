@@ -5,15 +5,11 @@ import com.apigee.noderunner.core.NodeEnvironment;
 import com.apigee.noderunner.core.NodeException;
 import com.apigee.noderunner.core.NodeScript;
 import com.apigee.noderunner.core.ScriptStatus;
-import com.apigee.noderunner.core.internal.NodeExitException;
-import com.apigee.noderunner.core.internal.Utils;
 import org.mozilla.javascript.RhinoException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.File;
-import java.io.FileInputStream;
-import java.io.IOException;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Future;
 
@@ -40,13 +36,17 @@ public class Main
         String scriptName = args[0];
         File script = new File(scriptName);
 
+        NodeEnvironment env = new NodeEnvironment();
         try {
-            NodeEnvironment env = new NodeEnvironment();
-            env.setHttpContainer(new NettyHttpContainer());
+            //env.setHttpContainer(new NettyHttpContainer());
             NodeScript ns = env.createScript(scriptName, script, args);
-            Future<ScriptStatus> future = ns.execute();
-            ScriptStatus status = future.get();
-            ns.close();
+            ScriptStatus status;
+            try {
+                Future<ScriptStatus> future = ns.execute();
+                status = future.get();
+            } finally {
+                ns.close();
+            }
             if (status.hasCause()) {
                 Throwable cause = status.getCause();
                 if (cause instanceof RhinoException) {
@@ -65,6 +65,8 @@ public class Main
             System.exit(6);
         } catch (ExecutionException ee) {
             ee.getCause().printStackTrace(System.err);
+        } finally {
+            env.close();
         }
     }
 }

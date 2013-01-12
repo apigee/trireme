@@ -349,7 +349,7 @@ public class Filesystem
             int bytesOffset = buf.getArrayOffset() + off;
 
             try {
-                if (pos > 0) {
+                if (pos >= 0) {
                     handle.file.seek(pos);
                 }
                 int count = handle.file.read(bytes, bytesOffset, len);

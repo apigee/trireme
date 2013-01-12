@@ -115,6 +115,13 @@ public class EncodingTest
     }
 
     @Test
+    public void testBase647()
+        throws UnsupportedEncodingException
+    {
+        encodeDecode("user:pass:", "Node-Base64");
+    }
+
+    @Test
     public void testBase646NoEquals()
         throws UnsupportedEncodingException
     {
@@ -205,12 +212,20 @@ public class EncodingTest
         throws UnsupportedEncodingException
     {
         byte[] ascii = text.getBytes("ascii");
+
         String encoded = new String(ascii, encoding);
         byte[] decoded = encoded.getBytes(encoding);
         String decodedString = new String(decoded, "ascii");
-        byte[] decodedAscii = decodedString.getBytes("ascii");
+        //byte[] decodedAscii = decodedString.getBytes("ascii");
         //System.out.println(bytesToString(ascii) + " -> " + bytesToString(decodedAscii));
         assertEquals(text, decodedString);
+
+        Charset cs = Charset.forName(encoding);
+        Charset asciiCS = Charset.forName("ascii");
+        String encoded1 = Utils.bufferToString(ByteBuffer.wrap(ascii), cs);
+        ByteBuffer decoded2 = Utils.stringToBuffer(encoded1, cs);
+        String ascii2 = Utils.bufferToString(decoded2, asciiCS);
+        assertEquals(text, ascii2);
     }
 
     private String bytesToString(byte[] bs)

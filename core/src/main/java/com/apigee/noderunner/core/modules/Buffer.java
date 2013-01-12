@@ -4,19 +4,15 @@ import com.apigee.noderunner.core.NodeModule;
 import com.apigee.noderunner.core.internal.Charsets;
 import com.apigee.noderunner.core.internal.ScriptRunner;
 import com.apigee.noderunner.core.internal.Utils;
-import io.netty.buffer.ByteBuf;
 import org.mozilla.javascript.Context;
 import org.mozilla.javascript.EvaluatorException;
 import org.mozilla.javascript.Function;
 import org.mozilla.javascript.FunctionObject;
-import org.mozilla.javascript.JavaScriptException;
 import org.mozilla.javascript.Scriptable;
 import org.mozilla.javascript.ScriptableObject;
 import org.mozilla.javascript.annotations.JSConstructor;
 import org.mozilla.javascript.annotations.JSFunction;
 import org.mozilla.javascript.annotations.JSGetter;
-import org.mozilla.javascript.annotations.JSSetter;
-import org.mozilla.javascript.annotations.JSStaticFunction;
 
 import static com.apigee.noderunner.core.internal.ArgUtils.*;
 
@@ -25,7 +21,6 @@ import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 import java.nio.CharBuffer;
 import java.nio.charset.Charset;
-import java.nio.charset.CharsetDecoder;
 import java.nio.charset.CharsetEncoder;
 import java.nio.charset.CoderResult;
 import java.nio.charset.CodingErrorAction;
@@ -266,23 +261,6 @@ public class Buffer
             } else {
                 buf = new byte[bb.remaining()];
                 bb.get(buf);
-                bufOffset = 0;
-                bufLength = buf.length;
-            }
-        }
-
-        /**
-         * Copy the bytes from the corresponding buffer into this one. Netty kind of expects this.
-         */
-        public void initialize(ByteBuf bb, boolean copy)
-        {
-            if (bb.hasArray() && !copy) {
-                buf = bb.array();
-                bufOffset = bb.arrayOffset() + bb.readerIndex();
-                bufLength = bb.readableBytes();
-            } else {
-                buf = new byte[bb.readableBytes()];
-                bb.readBytes(buf);
                 bufOffset = 0;
                 bufLength = buf.length;
             }

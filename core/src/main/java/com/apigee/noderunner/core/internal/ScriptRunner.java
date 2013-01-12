@@ -277,7 +277,9 @@ public class ScriptRunner
                 try {
                     process.fireEvent("exit", status.getExitCode());
                 } catch (NodeExitException ee) {
-                    // Ignore this -- it happens if exit calls exit.
+                    // Exit called exit -- allow it to replace the exit code
+                    log.debug("Script replacing exit code with {}", ee.getCode());
+                    status = ee.getStatus();
                 } catch (RhinoException re) {
                     // Many of the unit tests fire exceptions inside exit.
                     status = new ScriptStatus(re);

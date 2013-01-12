@@ -257,9 +257,17 @@ public class NodeCharsetProvider
                 46, 47, 48, 49, 50, 51
             };
 
+            private int inPos;
+
             Enc(Charset c)
             {
                 super(c, 0.75f, 1.0f);
+            }
+
+            @Override
+            protected void implReset()
+            {
+                inPos = 0;
             }
 
             @Override
@@ -271,17 +279,19 @@ public class NodeCharsetProvider
             private int getFourChars(int[] chars, CharBuffer in)
             {
                 int count = 0;
-                while (in.hasRemaining() && (count < 4)) {
-                    char c = in.get();
+                while ((inPos < in.limit()) && (count < 4)) {
+                    char c = in.get(inPos);
                     // Node tests require that we ignore white space and illegal characters
                     // in the middle of the base-64 output -- so do that. Note that this is
                     // different from the usual CharsetEncoder meaning of an "malformed input"
                     // because we decided that we can handle it ;-)
                     if (!canEncode(c) || (c == '=')) {
+                        inPos++;
                         continue;
                     }
                     chars[count] = decoding[c];
                     count++;
+                    inPos++;
                 }
                 return count;
             }
@@ -290,30 +300,39 @@ public class NodeCharsetProvider
             protected CoderResult encodeLoop(CharBuffer in, ByteBuffer out)
             {
                 int[] chars = new int[4];
+                inPos = in.position();
+                // Get up to four characters without moving position()
                 int rem = getFourChars(chars, in);
                 while (rem >= 2) {
                     if (!out.hasRemaining()) {
                         return CoderResult.OVERFLOW;
                     }
-                    out.put((byte)((chars[0] << 2) | (chars[1] >> 4)));
+                    byte[] outBytes = new byte[3];
+                    int outCount = 1;
+                    outBytes[0] = (byte)((chars[0] << 2) | (chars[1] >> 4));
 
                     int next = (chars[1] << 4) & 0xff;
                     if ((rem >= 3) || (next != 0)) {
-                        if (!out.hasRemaining()) {
-                            return CoderResult.OVERFLOW;
-                        }
-                        out.put((byte)(next | (chars[2] >> 2)));
+                        outCount++;
+                        outBytes[1] = (byte)(next | (chars[2] >> 2));
                     }
 
                     if (rem >= 3) {
                         next = (chars[2] << 6) & 0xff;
                         if ((rem >= 4) || (next != 0)) {
-                            if (!out.hasRemaining()) {
-                                return CoderResult.OVERFLOW;
-                            }
-                            out.put((byte)(next | chars[3]));
+                            outCount++;
+                            outBytes[2] = (byte)(next | chars[3]);
                         }
                     }
+
+                    // Can we actually move forward?
+                    if (out.remaining() < outCount) {
+                        return CoderResult.OVERFLOW;
+                    }
+
+                    // Yes we can. Sync up the input and write the output.
+                    in.position(inPos);
+                    out.put(outBytes, 0, outCount);
                     rem = getFourChars(chars, in);
                 }
                 return CoderResult.UNDERFLOW;
@@ -344,11 +363,12 @@ public class NodeCharsetProvider
             {
                 int rem = in.remaining();
                 while (rem >= 1) {
-                    int b1 = (int)in.get() & 0xff;
-                    int b2 = (rem >= 2) ? ((int)in.get() & 0xff) : 0;
-                    int b3 = (rem >= 3) ? ((int)in.get() & 0xff) : 0;
+                    int inPos = in.position();
+                    int b1 = in.get(inPos++) & 0xff;
+                    int b2 = (rem >= 2) ? (in.get(inPos++) & 0xff) : 0;
+                    int b3 = (rem >= 3) ? (in.get(inPos++) & 0xff) : 0;
 
-                    if (out.remaining() < 2) {
+                    if (out.remaining() < 4) {
                         return CoderResult.OVERFLOW;
                     }
                     out.put(encoding[b1 >>> 2]);
@@ -364,6 +384,7 @@ public class NodeCharsetProvider
                         out.put('=');
                     }
 
+                    in.position(inPos);
                     rem = in.remaining();
                 }
                 return CoderResult.UNDERFLOW;

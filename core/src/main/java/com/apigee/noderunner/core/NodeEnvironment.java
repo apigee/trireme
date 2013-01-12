@@ -51,6 +51,13 @@ public class NodeEnvironment
     }
 
     /**
+     * Free any resources used by the environment.
+     */
+    public void close()
+    {
+    }
+
+    /**
      * Create an instance of a script attached to this environment. Any "setters" that you wish to change
      * for this environment must be called before the first script is run.
      */

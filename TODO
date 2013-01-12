@@ -16,6 +16,13 @@ Re-implement HTTP adapters.
 Build Java 7 versions of TCPWrap and Filesystem and load them
 conditionally.
 
+Pre-process the built-in scripts like Node does to:
+* Strip out "assert" calls
+* Strip out "debug" calls
+* Process the various macros referring to DTrace and the like
+
+Add in hooks for Codahale metrics.
+
 ** Node module status:
 * Important for completion of various frameworks:
 

@@ -412,6 +412,8 @@ public class ScriptRunner
                     process.setArgv(i, arg);
                     i++;
                 }
+            } else {
+                process.setArgv(1, scriptName);
             }
 
             // Need a little special handling for the "module" module, which does module loading

@@ -3,6 +3,7 @@ package com.apigee.noderunner.core.internal;
 import com.apigee.noderunner.core.NodeEnvironment;
 import com.apigee.noderunner.core.NodeException;
 import com.apigee.noderunner.core.NodeModule;
+import com.apigee.noderunner.core.NodeScript;
 import com.apigee.noderunner.core.RunningScript;
 import com.apigee.noderunner.core.Sandbox;
 import com.apigee.noderunner.core.ScriptStatus;
@@ -15,6 +16,7 @@ import org.mozilla.javascript.Context;
 import org.mozilla.javascript.Function;
 import org.mozilla.javascript.RhinoException;
 import org.mozilla.javascript.Scriptable;
+import org.mozilla.javascript.ScriptableObject;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -44,21 +46,22 @@ public class ScriptRunner
 
     private static final long DEFAULT_DELAY = 60000L;
 
-    private       NodeEnvironment env;
-    private       File            scriptFile;
-    private       String          script;
-    private       String[]        args;
-    private       String          scriptName;
-    private final HashMap<String, Object> moduleCache = new HashMap<String, Object>();
-    private final HashMap<String, Object> nativeModuleCache = new HashMap<String, Object>();
-    private       Sandbox              sandbox;
-    private       Future<ScriptStatus> future;
+    private        NodeEnvironment env;
+    private        File            scriptFile;
+    private        String          script;
+    private final  NodeScript      scriptObject;
+    private        String[]        args;
+    private        String          scriptName;
+    private final  HashMap<String, Object> moduleCache = new HashMap<String, Object>();
+    private final  HashMap<String, Object> nativeModuleCache = new HashMap<String, Object>();
+    private        Sandbox              sandbox;
+    private        Future<ScriptStatus> future;
 
-    private final LinkedBlockingQueue<Activity> tickFunctions = new LinkedBlockingQueue<Activity>();
-    private final PriorityQueue<Activity>       timerQueue    = new PriorityQueue<Activity>();
-    private       Selector                      selector;
-    private       int                           timerSequence;
-    private       AtomicInteger                 pinCount      = new AtomicInteger(0);
+    private final  LinkedBlockingQueue<Activity> tickFunctions = new LinkedBlockingQueue<Activity>();
+    private final  PriorityQueue<Activity>       timerQueue    = new PriorityQueue<Activity>();
+    private        Selector                      selector;
+    private        int                           timerSequence;
+    private        AtomicInteger                 pinCount      = new AtomicInteger(0);
 
     // Globals that are set up for the process
     private NativeModule.NativeImpl nativeModule;
@@ -67,16 +70,18 @@ public class ScriptRunner
 
     private Scriptable scope;
 
-    public ScriptRunner(NodeEnvironment env, String scriptName, File scriptFile,
+    public ScriptRunner(NodeScript so, NodeEnvironment env, String scriptName, File scriptFile,
                         String[] args, Sandbox sandbox)
     {
+        this.scriptObject = so;
         this.scriptFile = scriptFile;
         init(env, scriptName, args, sandbox);
     }
 
-    public ScriptRunner(NodeEnvironment env, String scriptName, String script,
+    public ScriptRunner(NodeScript so, NodeEnvironment env, String scriptName, String script,
                         String[] args, Sandbox sandbox)
     {
+        this.scriptObject = so;
         this.script = script;
         init(env, scriptName, args, sandbox);
     }
@@ -112,6 +117,10 @@ public class ScriptRunner
 
     public NodeEnvironment getEnvironment() {
         return env;
+    }
+
+    public NodeScript getScriptObject() {
+        return scriptObject;
     }
 
     public Sandbox getSandbox() {
@@ -239,6 +248,9 @@ public class ScriptRunner
 
                 if (scriptFile == null) {
                     // Set up the script with a dummy main module like node.js does
+                    // TODO this isn't actually correct -- we need to either create a new "module" and
+                    // find the reference to "require" a different way, or wrap the module in a function.
+                    // see node.js's "evalScript" function.
                     File scriptFile = new File(process.cwd(), scriptName);
                     Function ctor = (Function)mainModule.get("Module", mainModule);
                     Scriptable topModule = cx.newObject(scope);
@@ -258,7 +270,6 @@ public class ScriptRunner
 
                 } else {
                     // Again like the real node, delegate running the actual script to the module module.
-                    // Submit it as a job to the event loop to simplify exception handling.
                     process.setArgv(1, scriptFile.getAbsolutePath());
                     Function load = (Function)mainModule.get("runMain", mainModule);
                     enqueueCallback(load, mainModule, mainModule, null);
@@ -328,9 +339,8 @@ public class ScriptRunner
 
                 // Call all the tick functions
                 Activity nextCall = tickFunctions.poll();
-                while (nextCall != null) {
+                if (nextCall != null) {
                     nextCall.execute(cx);
-                    nextCall = tickFunctions.poll();
                 }
 
                 // Check the timer queue for all expired timers

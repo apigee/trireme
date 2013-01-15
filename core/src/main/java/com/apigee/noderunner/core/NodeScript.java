@@ -1,11 +1,9 @@
 package com.apigee.noderunner.core;
 
 import com.apigee.noderunner.core.internal.ScriptRunner;
-import org.mozilla.javascript.ScriptableObject;
 
 import java.io.File;
 import java.util.concurrent.Future;
-import java.util.concurrent.FutureTask;
 
 /**
  * This class represents an instance of a single Node script. It will execute the script in one or more
@@ -21,6 +19,7 @@ public class NodeScript
     private final String scriptName;
     private final String[] args;
     private ScriptRunner runner;
+    private Object attachment;
 
     NodeScript(NodeEnvironment env, String scriptName, File script, String[] args)
     {
@@ -45,7 +44,7 @@ public class NodeScript
      * Cancelling the future will make the script exit more quickly and throw CancellationException.
      * It is also OK to interrupt the script.
      */
-    public Future<ScriptStatus> execute()
+    public ScriptFuture execute()
         throws NodeException
     {
         return execute(null);
@@ -60,14 +59,14 @@ public class NodeScript
      *
      * @param sandbox Restrict what the script is allowed to do via a sandbox.
      */
-    public Future<ScriptStatus> execute(Sandbox sandbox)
+    public ScriptFuture execute(Sandbox sandbox)
     {
         if (scriptFile == null) {
-            runner = new ScriptRunner(env, scriptName, script, args, sandbox);
+            runner = new ScriptRunner(this, env, scriptName, script, args, sandbox);
         } else {
-            runner = new ScriptRunner(env, scriptName, scriptFile, args, sandbox);
+            runner = new ScriptRunner(this, env, scriptName, scriptFile, args, sandbox);
         }
-        FutureTask<ScriptStatus> future = new FutureTask<ScriptStatus>(runner);
+        ScriptFuture future = new ScriptFuture(runner);
         runner.setFuture(future);
 
         env.getScriptPool().execute(future);
@@ -82,6 +81,22 @@ public class NodeScript
         if (runner != null) {
             runner.close();
         }
+    }
+
+    /**
+     * Callers can use this method to attach objects to the script.
+     */
+    public Object getAttachment()
+    {
+        return attachment;
+    }
+
+    /**
+     * Retrieve whatever was set by getAttachment.
+     */
+    public void setAttachment(Object attachment)
+    {
+        this.attachment = attachment;
     }
 }
 

@@ -114,7 +114,7 @@ public class HTTPWrap
         void init(ScriptRunner runner, HttpServerContainer container)
         {
             this.runner = runner;
-            this.adapter = container.newServer(this);
+            this.adapter = container.newServer(runner.getScriptObject(), this);
             runner.pin();
         }
 

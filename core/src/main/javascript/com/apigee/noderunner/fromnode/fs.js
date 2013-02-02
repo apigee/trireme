@@ -52,13 +52,6 @@ var O_WRONLY = constants.O_WRONLY || 0;
 
 var isWindows = process.platform === 'win32';
 
-function assertEncoding(encoding) {
-  if (encoding && !Buffer.isEncoding(encoding)) {
-    throw new Error('Unknown encoding: ' + encoding);
-  }
-}
-
-
 fs.Stats = binding.Stats;
 
 fs.Stats.prototype._checkModeProperty = function(property) {
@@ -112,8 +105,6 @@ fs.readFile = function(path, encoding_) {
   var encoding = typeof(encoding_) === 'string' ? encoding_ : null;
   var callback = arguments[arguments.length - 1];
   if (typeof(callback) !== 'function') callback = function() {};
-
-  assertEncoding(encoding);
 
   // first, stat the file, so we know the size.
   var size;
@@ -188,8 +179,6 @@ fs.readFile = function(path, encoding_) {
 };
 
 fs.readFileSync = function(path, encoding) {
-  assertEncoding(encoding);
-
   var fd = fs.openSync(path, constants.O_RDONLY, 438 /*=0666*/);
 
   var size;
@@ -354,9 +343,6 @@ fs.read = function(fd, buffer, offset, length, position, callback) {
     // legacy string interface (fd, length, position, encoding, callback)
     var cb = arguments[4],
         encoding = arguments[3];
-
-    assertEncoding(encoding);
-
     position = arguments[2];
     length = arguments[1];
     buffer = new Buffer(length);
@@ -385,9 +371,6 @@ fs.readSync = function(fd, buffer, offset, length, position) {
     // legacy string interface (fd, length, position, encoding, callback)
     legacy = true;
     var encoding = arguments[3];
-
-    assertEncoding(encoding);
-
     position = arguments[2];
     length = arguments[1];
     buffer = new Buffer(length);
@@ -409,7 +392,6 @@ fs.write = function(fd, buffer, offset, length, position, callback) {
     // legacy string interface (fd, data, position, encoding, callback)
     callback = arguments[4];
     position = arguments[2];
-    assertEncoding(arguments[3]);
 
     buffer = new Buffer('' + arguments[1], arguments[3]);
     offset = 0;
@@ -437,7 +419,6 @@ fs.writeSync = function(fd, buffer, offset, length, position) {
   if (!Buffer.isBuffer(buffer)) {
     // legacy string interface (fd, data, position, encoding)
     position = arguments[2];
-    assertEncoding(arguments[3]);
 
     buffer = new Buffer('' + arguments[1], arguments[3]);
     offset = 0;
@@ -459,60 +440,12 @@ fs.renameSync = function(oldPath, newPath) {
                         pathModule._makeLong(newPath));
 };
 
-fs.truncate = function(path, len, callback) {
-  if (typeof path === 'number') {
-    // legacy
-    return fs.ftruncate(path, len, callback);
-  }
-  if (typeof len === 'function') {
-    callback = len;
-    len = 0;
-  } else if (typeof len === 'undefined') {
-    len = 0;
-  }
-  fs.open(path, 'w', function(er, fd) {
-    if (er) return callback(er);
-    binding.ftruncate(fd, len, function(er) {
-      fs.close(fd, function(er2) {
-        callback(er || er2);
-      });
-    });
-  });
+fs.truncate = function(fd, len, callback) {
+  binding.truncate(fd, len, makeCallback(callback));
 };
 
-fs.truncateSync = function(path, len) {
-  if (typeof path === 'number') {
-    // legacy
-    return fs.ftruncateSync(path, len);
-  }
-  if (typeof len === 'undefined') {
-    len = 0;
-  }
-  // allow error to be thrown, but still close fd.
-  var fd = fs.openSync(path, 'w');
-  try {
-    var ret = fs.ftruncateSync(fd, len);
-  } finally {
-    fs.closeSync(fd);
-  }
-  return ret;
-};
-
-fs.ftruncate = function(fd, len, callback) {
-  if (typeof len === 'function') {
-    callback = len;
-    len = 0;
-  } else if (typeof len === 'undefined') {
-    len = 0;
-  }
-  binding.ftruncate(fd, len, makeCallback(callback));
-};
-
-fs.ftruncateSync = function(fd, len) {
-  if (typeof len === 'undefined') {
-    len = 0;
-  }
-  return binding.ftruncate(fd, len);
+fs.truncateSync = function(fd, len) {
+  return binding.truncate(fd, len);
 };
 
 fs.rmdir = function(path, callback) {
@@ -806,8 +739,6 @@ function writeAll(fd, buffer, offset, length, position, callback) {
 
 fs.writeFile = function(path, data, encoding_, callback) {
   var encoding = (typeof(encoding_) == 'string' ? encoding_ : 'utf8');
-  assertEncoding(encoding);
-
   var callback_ = arguments[arguments.length - 1];
   callback = (typeof(callback_) == 'function' ? callback_ : null);
   fs.open(path, 'w', 438 /*=0666*/, function(openErr, fd) {
@@ -822,8 +753,6 @@ fs.writeFile = function(path, data, encoding_, callback) {
 };
 
 fs.writeFileSync = function(path, data, encoding) {
-  assertEncoding(encoding);
-
   var fd = fs.openSync(path, 'w');
   if (!Buffer.isBuffer(data)) {
     data = new Buffer('' + data, encoding || 'utf8');
@@ -841,8 +770,6 @@ fs.writeFileSync = function(path, data, encoding) {
 
 fs.appendFile = function(path, data, encoding_, callback) {
   var encoding = (typeof(encoding_) == 'string' ? encoding_ : 'utf8');
-  assertEncoding(encoding);
-
   var callback_ = arguments[arguments.length - 1];
   callback = (typeof(callback_) == 'function' ? callback_ : null);
 
@@ -854,8 +781,6 @@ fs.appendFile = function(path, data, encoding_, callback) {
 };
 
 fs.appendFileSync = function(path, data, encoding) {
-  assertEncoding(encoding);
-
   var fd = fs.openSync(path, 'a');
   if (!Buffer.isBuffer(data)) {
     data = new Buffer('' + data, encoding || 'utf8');
@@ -1318,8 +1243,6 @@ var ReadStream = fs.ReadStream = function(path, options) {
     this[key] = options[key];
   }
 
-  assertEncoding(this.encoding);
-
   if (this.encoding) this.setEncoding(this.encoding);
 
   if (this.start !== undefined) {
@@ -1363,7 +1286,6 @@ util.inherits(ReadStream, Stream);
 fs.FileReadStream = fs.ReadStream; // support the legacy name
 
 ReadStream.prototype.setEncoding = function(encoding) {
-  assertEncoding(encoding);
   var StringDecoder = require('string_decoder').StringDecoder; // lazy load
   this._decoder = new StringDecoder(encoding);
 };
@@ -1396,17 +1318,15 @@ ReadStream.prototype._read = function() {
   function afterRead(err, bytesRead) {
     self.reading = false;
     if (err) {
-      self.emit('error', err);
-      self.readable = false;
+      fs.close(self.fd, function() {
+        self.fd = null;
+        self.emit('error', err);
+        self.readable = false;
+      });
       return;
     }
 
     if (bytesRead === 0) {
-      if (this._decoder) {
-        var ret = this._decoder.end();
-        if (ret)
-          this.emit('data', ret);
-      }
       self.emit('end');
       self.destroy();
       return;
@@ -1450,19 +1370,25 @@ ReadStream.prototype._emitData = function(d) {
 };
 
 
-ReadStream.prototype.destroy = function() {
+ReadStream.prototype.destroy = function(cb) {
   var self = this;
 
-  if (!this.readable) return;
+  if (!this.readable) {
+    if (cb) process.nextTick(function() { cb(null); });
+    return;
+  }
   this.readable = false;
 
   function close() {
     fs.close(self.fd, function(err) {
       if (err) {
+        if (cb) cb(err);
         self.emit('error', err);
-      } else {
-        self.emit('close');
+        return;
       }
+
+      if (cb) cb(null);
+      self.emit('close');
     });
   }
 
@@ -1567,10 +1493,19 @@ WriteStream.prototype.flush = function() {
 
     if (err) {
       self.writable = false;
-      if (cb) {
-        cb(err);
+
+      function emit() {
+        self.fd = null;
+        if (cb) cb(err);
+        self.emit('error', err);
       }
-      self.emit('error', err);
+
+      if (self.fd === null) {
+        emit();
+      } else {
+        fs.close(self.fd, emit);
+      }
+
       return;
     }
 
@@ -1622,7 +1557,6 @@ WriteStream.prototype.write = function(data) {
   if (!Buffer.isBuffer(data)) {
     var encoding = 'utf8';
     if (typeof(arguments[1]) == 'string') encoding = arguments[1];
-    assertEncoding(encoding);
     data = new Buffer('' + data, encoding);
   }
 
@@ -1651,19 +1585,25 @@ WriteStream.prototype.end = function(data, encoding, cb) {
   this.flush();
 };
 
-WriteStream.prototype.destroy = function() {
+WriteStream.prototype.destroy = function(cb) {
   var self = this;
 
-  if (!this.writable) return;
+  if (!this.writable) {
+    if (cb) process.nextTick(function() { cb(null); });
+    return;
+  }
   this.writable = false;
 
   function close() {
     fs.close(self.fd, function(err) {
       if (err) {
+        if (cb) { cb(err); }
         self.emit('error', err);
-      } else {
-        self.emit('close');
+        return;
       }
+
+      if (cb) { cb(null); }
+      self.emit('close');
     });
   }
 
@@ -1709,7 +1649,6 @@ SyncWriteStream.prototype.write = function(data, arg1, arg2) {
       throw new Error('bad arg');
     }
   }
-  assertEncoding(encoding);
 
   // Change strings to buffers. SLOW
   if (typeof data == 'string') {

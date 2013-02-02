@@ -47,10 +47,11 @@ if (process.env.NODE_DEBUG && /timer/.test(process.env.NODE_DEBUG)) {
 // value = list
 var lists = {};
 
+
 // the main function - creates lists on demand and the watchers associated
 // with them.
 function insert(item, msecs) {
-  item._idleStart = Date.now();
+  item._idleStart = new Date();
   item._idleTimeout = msecs;
 
   if (msecs < 0) return;
@@ -70,8 +71,8 @@ function insert(item, msecs) {
     list.ontimeout = function() {
       debug('timeout callback ' + msecs);
 
-      var now = Date.now();
-      debug('now: ' + (new Date(now)));
+      var now = new Date();
+      debug('now: ' + now);
 
       var first;
       while (first = L.peek(list)) {
@@ -150,12 +151,11 @@ exports.enroll = function(item, msecs) {
 exports.active = function(item) {
   var msecs = item._idleTimeout;
   if (msecs >= 0) {
-
     var list = lists[msecs];
     if (!list || L.isEmpty(list)) {
       insert(item, msecs);
     } else {
-      item._idleStart = Date.now();
+      item._idleStart = new Date();
       L.append(list, item);
     }
   }
@@ -176,7 +176,9 @@ exports.setTimeout = function(callback, after) {
     after = 1; // schedule on next tick, follows browser behaviour
   }
 
-  timer = new Timeout(after);
+  timer = { _idleTimeout: after };
+  timer._idlePrev = timer;
+  timer._idleNext = timer;
 
   if (arguments.length <= 2) {
     timer._onTimeout = callback;
@@ -207,7 +209,7 @@ exports.setTimeout = function(callback, after) {
 exports.clearTimeout = function(timer) {
   if (timer && (timer.ontimeout || timer._onTimeout)) {
     timer.ontimeout = timer._onTimeout = null;
-    if (timer instanceof Timer || timer instanceof Timeout) {
+    if (timer instanceof Timer) {
       timer.close(); // for after === 0
     } else {
       exports.unenroll(timer);
@@ -241,113 +243,5 @@ exports.clearInterval = function(timer) {
   if (timer instanceof Timer) {
     timer.ontimeout = null;
     timer.close();
-  }
-};
-
-var Timeout = function(after) {
-  this._idleTimeout = after;
-  this._idlePrev = this;
-  this._idleNext = this;
-  this._when = Date.now() + after;
-};
-
-Timeout.prototype.unref = function() {
-  if (!this._handle) {
-    var delay = this._when - Date.now();
-    if (delay < 0) delay = 0;
-    exports.unenroll(this);
-    this._handle = new Timer();
-    this._handle.ontimeout = this._onTimeout;
-    this._handle.start(delay, 0);
-    this._handle.domain = this.domain;
-    this._handle.unref();
-  } else {
-    this._handle.unref();
-  }
-};
-
-Timeout.prototype.ref = function() {
-  if (this._handle)
-    this._handle.ref();
-};
-
-Timeout.prototype.close = function() {
-  this._onTimeout = null;
-  if (this._handle) {
-    this._handle.ontimeout = null;
-    this._handle.close();
-  } else {
-    exports.unenroll(this);
-  }
-};
-
-
-var immediateTimer = null;
-var immediateQueue = { started: false };
-L.init(immediateQueue);
-
-
-function lazyImmediateInit() { // what's in a name?
-  if (immediateTimer) return;
-  immediateTimer = new Timer;
-  immediateTimer.ontimeout = processImmediate;
-}
-
-
-function processImmediate() {
-  var immediate;
-  if (L.isEmpty(immediateQueue)) {
-    immediateTimer.stop();
-    immediateQueue.started = false;
-  } else {
-    immediate = L.shift(immediateQueue);
-
-    if (immediate.domain) immediate.domain.enter();
-
-    immediate._onTimeout();
-
-    if (immediate.domain) immediate.domain.exit();
-  }
-}
-
-
-exports.setImmediate = function(callback) {
-  var immediate = {}, args;
-
-  L.init(immediate);
-
-  immediate._onTimeout = callback;
-
-  if (arguments.length > 1) {
-    args = Array.prototype.slice.call(arguments, 1);
-    immediate._onTimeout = function() {
-      callback.apply(null, args);
-    };
-  }
-
-  if (!immediateQueue.started) {
-    lazyImmediateInit();
-    immediateTimer.start(0, 1);
-    immediateQueue.started = true;
-  }
-
-  if (process.domain) immediate.domain = process.domain;
-
-  L.append(immediateQueue, immediate);
-
-  return immediate;
-};
-
-
-exports.clearImmediate = function(immediate) {
-  if (!immediate) return;
-
-  immediate._onTimeout = undefined;
-
-  L.remove(immediate);
-
-  if (L.isEmpty(immediateQueue)) {
-    immediateTimer.stop();
-    immediateQueue.started = false;
   }
 };

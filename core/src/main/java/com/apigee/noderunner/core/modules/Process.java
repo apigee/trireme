@@ -301,7 +301,16 @@ public class Process
         @JSGetter("arch")
         public String getArch()
         {
-            return System.getProperty("os.arch");
+            // This is actually the bitness of the JRE, not necessarily the system
+            String arch = System.getProperty("os.arch");
+
+            if (arch.equals("x86")) {
+                return "ia32";
+            } else if (arch.equals("x86_64")) {
+                return "x64";
+            }
+
+            return arch;
         }
 
         @JSGetter("platform")

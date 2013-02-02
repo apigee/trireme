@@ -19,6 +19,8 @@ import java.io.InputStream;
 import java.util.concurrent.CancellationException;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 
 public class BasicTest
 {
@@ -104,6 +106,27 @@ public class BasicTest
         } catch (CancellationException ce) {
             // Expected result
         }
+    }
+
+    @Test
+    public void testTimeout()
+        throws InterruptedException, ExecutionException, NodeException
+    {
+        NodeScript script = env.createScript("endless.js",
+                                             new File("./target/test-classes/tests/endless.js"),
+                                             null);
+        final ScriptFuture status = script.execute();
+        status.setListener(new ScriptStatusListener()
+        {
+            @Override
+            public void onComplete(NodeScript script, ScriptStatus s)
+            {
+                assertTrue(status.isCancelled());
+            }
+        });
+        Thread.sleep(50L);
+        ScriptStatus stat = status.get(250L, TimeUnit.MILLISECONDS);
+        assertTrue(stat.isTimeout());
     }
 
     @Test

@@ -22,12 +22,12 @@ public class Main
 
     private static void printUsage()
     {
-        System.err.println("Usage: Main <script>");
+        System.err.println("Usage: Main <script> [container]");
     }
 
     public static void main(String[] args)
     {
-        if (args.length != 1) {
+        if ((args.length < 1) || (args.length > 2)) {
             printUsage();
             System.exit(2);
             return;
@@ -35,10 +35,16 @@ public class Main
 
         String scriptName = args[0];
         File script = new File(scriptName);
+        String containerName = null;
+        if (args.length > 1) {
+            containerName = args[1];
+        }
 
         NodeEnvironment env = new NodeEnvironment();
         try {
-            //env.setHttpContainer(new NettyHttpContainer());
+            if ((containerName != null) && "netty".equals(containerName)) {
+                env.setHttpContainer(new NettyHttpContainer());
+            }
             NodeScript ns = env.createScript(scriptName, script, args);
             ScriptStatus status;
             try {

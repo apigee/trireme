@@ -29,6 +29,7 @@ public class ScriptFuture
             return false;
         }
         cancelled = true;
+        notifyAll();
         return true;
     }
 
@@ -47,10 +48,12 @@ public class ScriptFuture
     private ScriptStatus getResult()
         throws ExecutionException
     {
+        assert(Thread.holdsLock(this));
         ScriptStatus s = result;
         if (s.hasCause()) {
             throw new ExecutionException(s.getCause());
-        } else if (cancelled) {
+        }
+        if (cancelled) {
             throw new CancellationException();
         }
         return s;
@@ -68,12 +71,24 @@ public class ScriptFuture
 
     @Override
     public ScriptStatus get(long timeout, TimeUnit timeUnit)
-        throws InterruptedException, ExecutionException, TimeoutException
+        throws InterruptedException, ExecutionException
     {
-        while (result == null) {
-            wait(timeUnit.toMillis(timeout));
+
+        long now = System.currentTimeMillis();
+        long expiration = now + timeUnit.toMillis(timeout);
+        while ((now < expiration) && (result == null)) {
+            synchronized (this) {
+                wait(expiration - now);
+            }
+            now = System.currentTimeMillis();
         }
-        return getResult();
+
+        synchronized (this) {
+            if (result == null) {
+                return ScriptStatus.TIMEOUT;
+            }
+            return getResult();
+        }
     }
 
     private synchronized void set(ScriptStatus status)

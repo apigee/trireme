@@ -45,6 +45,7 @@ public class ScriptRunner
     private static final Logger log = LoggerFactory.getLogger(ScriptRunner.class);
 
     private static final long DEFAULT_DELAY = 60000L;
+    private static final int DEFAULT_TICK_DEPTH = 1000;
 
     private        NodeEnvironment env;
     private        File            scriptFile;
@@ -62,6 +63,7 @@ public class ScriptRunner
     private        Selector                      selector;
     private        int                           timerSequence;
     private        AtomicInteger                 pinCount      = new AtomicInteger(0);
+    private        int                           maxTickDepth = DEFAULT_TICK_DEPTH;
 
     // Globals that are set up for the process
     private NativeModule.NativeImpl nativeModule;
@@ -143,6 +145,14 @@ public class ScriptRunner
         return selector;
     }
 
+    public int getMaxTickDepth() {
+        return maxTickDepth;
+    }
+
+    public void setMaxTickDepth(int maxTickDepth) {
+        this.maxTickDepth = maxTickDepth;
+    }
+
     /**
      * This method uses a concurrent queue so it may be called from any thread.
      */
@@ -206,6 +216,9 @@ public class ScriptRunner
 
         if (currentPinCount < 0) {
             log.warn("Pin count < 0", currentPinCount);
+        }
+        if (currentPinCount == 0) {
+            selector.wakeup();
         }
     }
 
@@ -309,11 +322,22 @@ public class ScriptRunner
     {
         // Node scripts don't exit unless exit is called -- they keep on trucking.
         // The JS code inside will throw NodeExitException when it's time to exit
-        long pollTimeout = 0L;
         while (!tickFunctions.isEmpty() || (pinCount.get() > 0)) {
             try {
                 if ((future != null) && future.isCancelled()) {
                     return ScriptStatus.CANCELLED;
+                }
+
+                long pollTimeout;
+                long now = System.currentTimeMillis();
+
+                if (timerQueue.isEmpty()) {
+                    // This is a fudge factor and it helps to find stuck servers in debugging.
+                    // in theory we could wait forever at a small advantage in efficiency
+                    pollTimeout = DEFAULT_DELAY;
+                } else {
+                    Activity nextActivity = timerQueue.peek();
+                    pollTimeout = (nextActivity.timeout - now);
                 }
 
                 // Check for network I/O and also sleep if necessary
@@ -337,15 +361,19 @@ public class ScriptRunner
                     }
                 }
 
-                // Call all the tick functions
+                // Call tick functions but don't let them starve unless configured to do so
+                int tickCount = 0;
                 Activity nextCall = tickFunctions.poll();
-                if (nextCall != null) {
+                while (nextCall != null) {
                     nextCall.execute(cx);
+                    if (++tickCount > maxTickDepth) {
+                        break;
+                    }
+                    nextCall = tickFunctions.poll();
                 }
 
                 // Check the timer queue for all expired timers
                 Activity timed = timerQueue.peek();
-                long now = System.currentTimeMillis();
                 while ((timed != null) && (timed.timeout <= now)) {
                     log.debug("Executing one timed-out task");
                     timerQueue.poll();
@@ -358,24 +386,8 @@ public class ScriptRunner
                         }
                     }
                     timed = timerQueue.peek();
-                    now = System.currentTimeMillis();
                 }
 
-                pollTimeout = 0L;
-                // If there are still tick functions on the queue, we will just re-spin to the top
-                if (tickFunctions.isEmpty()) {
-                    if (pinCount.get() > 0) {
-                        // We are pinned so we will not exit no matter what. The question is how long to wait.
-                        if (timerQueue.isEmpty()) {
-                            // This is a fudge factor and it helps to find stuck servers in debugging.
-                            // in theory we could wait forever at a small advantage in efficiency
-                            pollTimeout = DEFAULT_DELAY;
-                        } else {
-                            Activity nextActivity = timerQueue.peek();
-                            pollTimeout = (nextActivity.timeout - now);
-                        }
-                    }
-                }
             } catch (NodeExitException ne) {
                 // This exception is thrown by process.exit()
                 return ne.getStatus();

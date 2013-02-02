@@ -1,6 +1,7 @@
 package com.apigee.noderunner.test;
 
 import com.apigee.noderunner.core.NodeEnvironment;
+import org.junit.BeforeClass;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
@@ -20,6 +21,7 @@ import java.util.regex.Pattern;
 public class JavaScriptTest
 {
     public static final String BASE_DIR = "target/test-classes/test/simple";
+    public static final String TEMP_DIR = "target/test-classes/test/tmp";
     public static final int TEST_TIMEOUT_SECONDS = 60;
     public static final String TEST_FILE_NAME_PROP = "TestFile";
 
@@ -33,6 +35,16 @@ public class JavaScriptTest
     private final String adapter;
 
     private static NodeEnvironment env;
+
+    @BeforeClass
+    public static void setup()
+    {
+        File tmpDir = new File(TEMP_DIR);
+        if (!tmpDir.exists()) {
+            // The parent dir should already have been created by Maven
+            tmpDir.mkdir();
+        }
+    }
 
     @Parameterized.Parameters
     public static Collection<Object[]> enumerateTests()

@@ -319,6 +319,22 @@ public class Process
             proc.runner.enqueueCallback((Function)args[0], (Function)args[0], thisObj, null);
         }
 
+        @JSGetter("maxTickDepth")
+        public int getMaxTickDepth()
+        {
+            return runner.getMaxTickDepth();
+        }
+
+        @JSSetter("maxTickDepth")
+        public void setMaxTickDepth(double depth)
+        {
+            if (Double.isInfinite(depth)) {
+                runner.setMaxTickDepth(Integer.MAX_VALUE);
+            } else {
+                runner.setMaxTickDepth((int)depth);
+            }
+        }
+
         // TODO umask
 
         @JSFunction

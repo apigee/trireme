@@ -46,6 +46,7 @@ s.listen(common.PORT, nextTest);
 
 function nextTest() {
   if (testIdx + 1 === tests.length) {
+    console.log('Closing the server');
     return s.close();
   }
   var test = tests[testIdx];

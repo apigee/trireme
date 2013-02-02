@@ -60,7 +60,11 @@ function replacer(key, value) {
   if (typeof value === 'number' && (isNaN(value) || !isFinite(value))) {
     return value.toString();
   }
-  if (typeof value === 'function' || value instanceof RegExp) {
+  if (typeof value === 'function') {
+    // HACK to make Rhino's function toString() kind of like v8's so we don't need to change the test
+    return value.toString().trim().replace('{\n}', '{}');
+  }
+  if (value instanceof RegExp) {
     return value.toString();
   }
   return value;
@@ -149,7 +153,7 @@ assert.deepEqual = function deepEqual(actual, expected, message) {
   }
 };
 
-function _deepEqual(actual, expected) {
+function _deepEqual(actual, expected, actualVisitedObjects) {
   // 7.1. All identical values are equivalent, as determined by ===.
   if (actual === expected) {
     return true;
@@ -190,7 +194,17 @@ function _deepEqual(actual, expected) {
   // corresponding key, and an identical 'prototype' property. Note: this
   // accounts for both named and indexed properties on Arrays.
   } else {
-    return objEquiv(actual, expected);
+    actualVisitedObjects = actualVisitedObjects || [];
+
+    for (i = actualVisitedObjects.length - 1; i >= 0; i--) {
+      if (actualVisitedObjects[i] === actual) {
+        throw new Error('Objects contain circular reference');
+      }
+    }
+
+    actualVisitedObjects.push(actual);
+
+    return objEquiv(actual, expected, actualVisitedObjects);
   }
 }
 
@@ -202,7 +216,7 @@ function isArguments(object) {
   return Object.prototype.toString.call(object) == '[object Arguments]';
 }
 
-function objEquiv(a, b) {
+function objEquiv(a, b, aVisitedObjects) {
   if (isUndefinedOrNull(a) || isUndefinedOrNull(b))
     return false;
   // an identical 'prototype' property.
@@ -215,7 +229,7 @@ function objEquiv(a, b) {
     }
     a = pSlice.call(a);
     b = pSlice.call(b);
-    return _deepEqual(a, b);
+    return _deepEqual(a, b, aVisitedObjects);
   }
   try {
     var ka = Object.keys(a),
@@ -240,7 +254,7 @@ function objEquiv(a, b) {
   //~~~possibly expensive deep test
   for (i = ka.length - 1; i >= 0; i--) {
     key = ka[i];
-    if (!_deepEqual(a[key], b[key])) return false;
+    if (!_deepEqual(a[key], b[key], aVisitedObjects)) return false;
   }
   return true;
 }
@@ -281,7 +295,8 @@ function expectedException(actual, expected) {
     return expected.test(actual);
   } else if (actual instanceof expected) {
     return true;
-  } else if (expected.call({}, actual) === true) {
+  } else if (typeof expected == 'function' &&
+             expected.call({}, actual) === true) {
     return true;
   }
 
@@ -323,14 +338,12 @@ function _throws(shouldThrow, block, expected, message) {
 // assert.throws(block, Error_opt, message_opt);
 
 assert.throws = function(block, /*optional*/error, /*optional*/message) {
-  //_throws.apply(this, [true].concat(pSlice.call(arguments)));
-  _throws.call(this, [true].concat(pSlice.call(arguments)));
+  _throws.apply(this, [true].concat(pSlice.call(arguments)));
 };
 
 // EXTENSION! This is annoying to write outside this module.
-assert.doesNotThrow = function(block, /*optional*/message) {
-  //_throws.apply(this, [false].concat(pSlice.call(arguments)));
-  _throws.call(this, [false].concat(pSlice.call(arguments)));
+assert.doesNotThrow = function(block, /*optional*/error, /*optional*/message) {
+  _throws.apply(this, [false].concat(pSlice.call(arguments)));
 };
 
 assert.ifError = function(err) { if (err) {throw err;}};

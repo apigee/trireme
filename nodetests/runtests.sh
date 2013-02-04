@@ -8,11 +8,13 @@ CLASSPATH=${PWD}/target/classes:${PWD}/target/test-classes:`cat ${CP}`
 export CLASSPATH
 rm ${CP}
 
+ARGS="-p verbose"
+
 cd src/test/python
 
 if [ $# -eq 0 ]
 then
-  python test.py simple
+  python test.py ${ARGS} simple
 else
-  python test.py $*
+  python test.py ${ARGS} $*
 fi

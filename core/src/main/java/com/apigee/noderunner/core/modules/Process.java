@@ -2,9 +2,11 @@ package com.apigee.noderunner.core.modules;
 
 import com.apigee.noderunner.core.NodeModule;
 import com.apigee.noderunner.core.Sandbox;
-import com.apigee.noderunner.core.internal.Charsets;
+import com.apigee.noderunner.core.internal.NativeInputStream;
+import com.apigee.noderunner.core.internal.NativeOutputStream;
 import com.apigee.noderunner.core.internal.NodeExitException;
 import com.apigee.noderunner.core.internal.ScriptRunner;
+import com.apigee.noderunner.core.internal.Version;
 import org.mozilla.javascript.Context;
 import org.mozilla.javascript.EvaluatorException;
 import org.mozilla.javascript.Function;
@@ -13,13 +15,16 @@ import org.mozilla.javascript.ScriptableObject;
 import org.mozilla.javascript.annotations.JSConstructor;
 import org.mozilla.javascript.annotations.JSFunction;
 import org.mozilla.javascript.annotations.JSGetter;
+import org.mozilla.javascript.annotations.JSSetter;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import static com.apigee.noderunner.core.internal.ArgUtils.*;
 
-import java.io.IOException;
+import java.io.InputStream;
 import java.io.OutputStream;
 import java.lang.reflect.InvocationTargetException;
-import java.nio.charset.Charset;
+import java.util.HashMap;
 import java.util.Map;
 
 /**
@@ -28,15 +33,15 @@ import java.util.Map;
 public class Process
     implements NodeModule
 {
-    public static final String NODERUNNER_VERSION = "0.1";
-
-    protected final static String CLASS_NAME = "_processClass";
+    protected final static String CLASS_NAME  = "_processClass";
     protected final static String OBJECT_NAME = "process";
 
-    private static final long NANO = 1000000000L;
+    private static final   long   NANO = 1000000000L;
+    protected static final Logger log  = LoggerFactory.getLogger(Process.class);
 
     @Override
-    public String getModuleName() {
+    public String getModuleName()
+    {
         return "process";
     }
 
@@ -44,27 +49,49 @@ public class Process
     public Object registerExports(Context cx, Scriptable scope, ScriptRunner runner)
         throws InvocationTargetException, IllegalAccessException, InstantiationException
     {
-        ScriptableObject.defineClass(scope, ProcessImpl.class, false, true);
-        ProcessImpl exports = (ProcessImpl)cx.newObject(scope, CLASS_NAME);
+        ScriptableObject.defineClass(scope, EventEmitter.EventEmitterImpl.class, false, true);
 
-        ScriptableObject.defineClass(scope, SimpleOutputStreamImpl.class, false, true);
-        SimpleOutputStreamImpl stdout = (SimpleOutputStreamImpl)cx.newObject(scope, SimpleOutputStreamImpl.CLASS_NAME);
-        SimpleOutputStreamImpl stderr = (SimpleOutputStreamImpl)cx.newObject(scope, SimpleOutputStreamImpl.CLASS_NAME);
+        ScriptableObject.defineClass(scope, ProcessImpl.class, false, true);
+        ProcessImpl exports = (ProcessImpl) cx.newObject(scope, CLASS_NAME);
+        exports.setRunner(runner);
+
+        ScriptableObject.defineClass(scope, NativeOutputStream.class, false, true);
+        ScriptableObject.defineClass(scope, NativeInputStream.class, false, true);
+        NativeOutputStream stdout = (NativeOutputStream) cx.newObject(scope, NativeOutputStream.CLASS_NAME);
+        NativeOutputStream stderr = (NativeOutputStream) cx.newObject(scope, NativeOutputStream.CLASS_NAME);
+        NativeInputStream stdin = (NativeInputStream) cx.newObject(scope, NativeInputStream.CLASS_NAME);
 
         Sandbox sb = runner.getSandbox();
+
+        // stdout
+        OutputStream stdoutStream;
         if ((sb != null) && (sb.getStdout() != null)) {
-            stdout.setOutput(sb.getStdout());
+            stdoutStream = sb.getStdout();
         } else {
-            stdout.setOutput(System.out);
+            stdoutStream = System.out;
         }
+        stdout.initialize(stdoutStream);
         exports.setStdout(stdout);
 
+        // stderr
+        OutputStream stderrStream;
         if ((sb != null) && (sb.getStderr() != null)) {
-            stderr.setOutput(sb.getStderr());
+            stderrStream = sb.getStderr();
         } else {
-            stderr.setOutput(System.err);
+            stderrStream = System.err;
         }
+        stderr.initialize(stderrStream);
         exports.setStderr(stderr);
+
+        // stdin
+        InputStream stdinStream;
+        if ((sb != null) && (sb.getStdin() != null)) {
+            stdinStream = sb.getStdin();
+        } else {
+            stdinStream = System.in;
+        }
+        stdin.initialize(runner, runner.getEnvironment().getAsyncPool(), stdinStream);
+        exports.setStdin(stdin);
 
         // Put the object directly in the scope -- we only do this for modules that are always deployed
         // as global variables in the script.
@@ -75,15 +102,22 @@ public class Process
     public static class ProcessImpl
         extends EventEmitter.EventEmitterImpl
     {
-        private Object stdout;
-        private Object stderr;
+        private Stream.WritableStream stdout;
+        private Stream.WritableStream stderr;
+        private Stream.ReadableStream stdin;
+        private Scriptable argv;
         private long startTime;
         private ScriptRunner runner;
+        private final HashMap<String, Object> internalModuleCache = new HashMap<String, Object>();
+        private Object mainModule;
 
         @JSConstructor
-        public ProcessImpl()
+        public static Object ProcessImpl(Context cx, Object[] args, Function ctorObj, boolean inNewExpr)
         {
-            this.startTime = System.currentTimeMillis();
+            ProcessImpl ret = new ProcessImpl();
+            ret.startTime = System.currentTimeMillis();
+            ret.argv = cx.newObject(ret);
+            return ret;
         }
 
         @Override
@@ -95,14 +129,52 @@ public class Process
             this.runner = runner;
         }
 
-        // TODO stdin
+        @JSGetter("mainModule")
+        public Object getMainModule() {
+            return mainModule;
+        }
+
+        @JSSetter("mainModule")
+        public void setMainModule(Object m) {
+            this.mainModule = m;
+        }
+
+        @JSFunction
+        public static Object binding(Context cx, Scriptable thisObj, Object[] args, Function func)
+        {
+            String name = stringArg(args, 0);
+            ProcessImpl proc = (ProcessImpl)thisObj;
+
+            Object mod = proc.internalModuleCache.get(name);
+            if (mod == null) {
+                try {
+                    mod = proc.runner.initializeModule(name, true, cx, proc.runner.getScriptScope());
+                    if (log.isDebugEnabled()) {
+                        log.debug("Creating new instance {} of internal module {}",
+                                  System.identityHashCode(mod), name);
+                    }
+
+                } catch (InvocationTargetException e) {
+                    throw new EvaluatorException("Error initializing module: " + e.toString());
+                } catch (InstantiationException e) {
+                    throw new EvaluatorException("Error initializing module: " + e.toString());
+                 } catch (IllegalAccessException e) {
+                    throw new EvaluatorException("Error initializing module: " + e.toString());
+                }
+                proc.internalModuleCache.put(name, mod);
+            } else if (log.isDebugEnabled()) {
+                log.debug("Returning cached copy {} of internal module {}",
+                          System.identityHashCode(mod), name);
+            }
+            return mod;
+        }
 
         @JSGetter("stdout")
         public Object getStdout() {
             return stdout;
         }
 
-        public void setStdout(Object stdout) {
+        public void setStdout(Stream.WritableStream stdout) {
             this.stdout = stdout;
         }
 
@@ -111,21 +183,28 @@ public class Process
             return stderr;
         }
 
-        public void setStderr(Object stderr) {
+        public void setStderr(Stream.WritableStream stderr) {
             this.stderr = stderr;
+        }
+
+        @JSGetter("stdin")
+        public Object getStdin() {
+            return stdin;
+        }
+
+        public void setStdin(Stream.ReadableStream stdin) {
+            this.stdin = stdin;
         }
 
         @JSGetter("argv")
         public Object getArgv()
         {
-            return null;
-            /*
-            ProcessImpl p = (ProcessImpl)thisObj;
-            String[] ret = new String[p.argv.length];
-            System.arraycopy(p.argv, 1, ret, 1, p.argv.length - 1);
-            ret[0] = "node";
-            return Context.javaToJS(ret, thisObj);
-            */
+            return argv;
+        }
+
+        public void setArgv(int index, String val)
+        {
+            argv.put(index, argv, val);
         }
 
         @JSGetter("execPath")
@@ -142,33 +221,12 @@ public class Process
             throw new NodeExitException(true, 0);
         }
 
-        @JSFunction
-        public static Object exit(Context cx, Scriptable thisObj, Object[] args, Function func)
-            throws NodeExitException
-        {
-            if (args.length >= 1) {
-                int code = (Integer)Context.jsToJava(args[0], Integer.class);
-                throw new NodeExitException(false, code);
-            } else {
-                throw new NodeExitException(false, 0);
-            }
-        }
-
         // TODO chdir
-        // TODO cwd
-        // TODO getgid
-        // TODO setgid
-        // TODO getuid
-        // TODO setuid
 
-        @JSGetter("config")
-        public static Scriptable getConfig(Scriptable scope)
+        @JSFunction
+        public String cwd()
         {
-            Scriptable c = Context.getCurrentContext().newObject(scope);
-            Scriptable vars = Context.getCurrentContext().newObject(scope);
-            // TODO fill it in
-            c.put("variables", c, vars);
-            return c;
+            return System.getProperty("user.dir");
         }
 
         @JSGetter("env")
@@ -181,19 +239,50 @@ public class Process
             return env;
         }
 
+        @JSFunction
+        public static Object exit(Context cx, Scriptable thisObj, Object[] args, Function func)
+            throws NodeExitException
+        {
+            if (args.length >= 1) {
+                int code = (Integer)Context.jsToJava(args[0], Integer.class);
+                throw new NodeExitException(false, code);
+            } else {
+                throw new NodeExitException(false, 0);
+            }
+        }
+
+        // TODO getgid
+        // TODO setgid
+        // TODO getuid
+        // TODO setuid
+
         @JSGetter("version")
         public String getVersion()
         {
-            return NODERUNNER_VERSION;
+            return "v" + Version.NODE_VERSION;
         }
 
         @JSFunction
         public static Object versions(Context cx, Scriptable thisObj, Object[] args, Function func)
         {
             Scriptable env = cx.newObject(thisObj);
-            env.put("noderunner", thisObj, NODERUNNER_VERSION);
+            env.put("noderunner", thisObj, Version.NODERUNNER_VERSION);
+            env.put("node", thisObj, Version.NODE_VERSION);
             return env;
         }
+
+        @JSGetter("config")
+        public static Scriptable getConfig(Scriptable scope)
+        {
+            Scriptable c = Context.getCurrentContext().newObject(scope);
+            Scriptable vars = Context.getCurrentContext().newObject(scope);
+            // TODO fill it in
+            c.put("variables", c, vars);
+            return c;
+        }
+
+        // TODO kill
+        // TODO pid
 
         @JSGetter("title")
         public String getTitle()
@@ -201,10 +290,11 @@ public class Process
             return "noderunner";
         }
 
-        // TODO kill
-        // TODO pid
-        // TODO arch
-        // TODO umask
+        @JSGetter("arch")
+        public String getArch()
+        {
+            return System.getProperty("os.arch");
+        }
 
         @JSGetter("platform")
         public String getPlatform()
@@ -228,6 +318,24 @@ public class Process
             ProcessImpl proc = (ProcessImpl)thisObj;
             proc.runner.enqueueCallback((Function)args[0], (Function)args[0], thisObj, null);
         }
+
+        @JSGetter("maxTickDepth")
+        public int getMaxTickDepth()
+        {
+            return runner.getMaxTickDepth();
+        }
+
+        @JSSetter("maxTickDepth")
+        public void setMaxTickDepth(double depth)
+        {
+            if (Double.isInfinite(depth)) {
+                runner.setMaxTickDepth(Integer.MAX_VALUE);
+            } else {
+                runner.setMaxTickDepth((int)depth);
+            }
+        }
+
+        // TODO umask
 
         @JSFunction
         public long uptime()
@@ -254,44 +362,4 @@ public class Process
         }
     }
 
-    /**
-     * In theory there are lots of evented I/O things that we are supposed to do with stdout and
-     * stderr, but that is a lot of complication.
-     */
-    public static class SimpleOutputStreamImpl
-        extends Stream.WritableStream
-    {
-        protected static final String CLASS_NAME = "_outStreamClass";
-
-        private OutputStream out;
-
-        public SimpleOutputStreamImpl()
-        {
-            writable = true;
-        }
-
-        @Override
-        public String getClassName() {
-            return CLASS_NAME;
-        }
-
-        public void setOutput(OutputStream out) {
-            this.out = out;
-        }
-
-        @Override
-        protected boolean write(Context cx, Object[] args)
-        {
-            String str = stringArg(args, 0, "");
-            String encoding = stringArg(args, 1, Charsets.DEFAULT_ENCODING);
-            Charset charset = Charsets.get().getCharset(encoding);
-
-            try {
-                out.write(str.getBytes(charset));
-            } catch (IOException e) {
-                throw new EvaluatorException("Error on write: " + e.toString());
-            }
-            return true;
-        }
-    }
 }

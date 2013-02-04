@@ -1,5 +1,11 @@
 console.log('Starting a script that will endlessly run tasks');
 
-setInterval(function() {
-  console.log('Looping...');
-  }, 10);
+var count = 0;
+var looping = function() {
+  if ((count++ % 10000) == 0) {
+    console.log('Looping(' + count + ')...');
+  }
+  process.nextTick(looping);
+}
+
+looping();

@@ -1,6 +1,5 @@
 package com.apigee.noderunner.container.netty;
 
-import com.apigee.noderunner.net.netty.NettyServer;
 import com.apigee.noderunner.net.spi.HttpDataAdapter;
 import io.netty.buffer.Unpooled;
 import io.netty.handler.codec.http.HttpChunk;

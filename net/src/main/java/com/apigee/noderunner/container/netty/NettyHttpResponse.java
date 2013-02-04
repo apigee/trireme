@@ -1,10 +1,9 @@
 package com.apigee.noderunner.container.netty;
 
-import com.apigee.noderunner.net.HttpServerResponse;
-import com.apigee.noderunner.net.netty.NettyServer;
+import com.apigee.noderunner.net.spi.HttpFuture;
 import com.apigee.noderunner.net.spi.HttpResponseAdapter;
 import io.netty.channel.ChannelFuture;
-import io.netty.channel.ChannelFutureListener;
+import io.netty.channel.SucceededChannelFuture;
 import io.netty.channel.socket.SocketChannel;
 import io.netty.handler.codec.http.DefaultHttpChunk;
 import io.netty.handler.codec.http.DefaultHttpChunkTrailer;
@@ -46,13 +45,15 @@ public class NettyHttpResponse
     }
 
     @Override
-    public boolean send(boolean lastChunk)
+    public HttpFuture send(boolean lastChunk)
     {
         ChannelFuture future;
-        final HttpServerResponse responseObj = (HttpServerResponse) attachment;
 
         if (lastChunk) {
             // We can send it all in one big chunk
+            if (!response.containsHeader("Content-Length")) {
+                response.addHeader("Content-Length", data.remaining());
+            }
             response.setTransferEncoding(HttpTransferEncoding.SINGLE);
             if (data != null) {
                 response.setContent(NettyServer.copyBuffer(data));
@@ -85,27 +86,12 @@ public class NettyHttpResponse
             }
         }
 
-        future.addListener(new ChannelFutureListener()
-        {
-            @Override
-            public void operationComplete(ChannelFuture f)
-            {
-                if (log.isDebugEnabled()) {
-                    log.debug("send: Last send complete: success = {}", f.isSuccess());
-                }
-                if (!f.isSuccess()) {
-                    responseObj.enqueueError(f.cause().toString());
-                }
-            }
-        });
-        return future.isDone();
+        return new NettyHttpFuture(future);
     }
 
     @Override
-    public boolean sendChunk(ByteBuffer buf, boolean lastChunk)
+    public HttpFuture sendChunk(ByteBuffer buf, boolean lastChunk)
     {
-        final HttpServerResponse responseObj = (HttpServerResponse)attachment;
-
         ChannelFuture future = null;
         if (buf != null) {
             if (log.isDebugEnabled()) {
@@ -121,25 +107,11 @@ public class NettyHttpResponse
             }
             future = channel.write(new DefaultHttpChunkTrailer());
         }
-        if (future == null) {
-            return true;
-        }
 
-        future.addListener(new ChannelFutureListener()
-        {
-            @Override
-            public void operationComplete(ChannelFuture f)
-            {
-                if (log.isDebugEnabled()) {
-                    log.debug("sendChunk: Last write complete. Success = {}",
-                              f.isSuccess());
-                }
-                if (!f.isSuccess()) {
-                    responseObj.enqueueError(f.cause().toString());
-                }
-            }
-        });
-        return future.isDone();
+        if (future == null) {
+            future = new SucceededChannelFuture(channel);
+        }
+        return new NettyHttpFuture(future);
     }
 
     @Override

@@ -24,7 +24,7 @@ public class ArgUtils
     {
         if (pos < args.length) {
             // Since nearly everything can be converted to a string, do that
-            return (String) Context.jsToJava(args[pos], String.class);
+            return Context.toString(args[pos]);
         }
         return def;
     }
@@ -38,7 +38,8 @@ public class ArgUtils
     public static int intArg(Object[] args, int pos, int def)
     {
         if (pos < args.length) {
-            return ((Integer)Context.jsToJava(args[pos], Integer.class)).intValue();
+            Number n = Context.toNumber(args[pos]);
+            return n.intValue();
         }
         return def;
     }
@@ -49,10 +50,11 @@ public class ArgUtils
         return longArg(args, pos, 0);
     }
 
-    public static long longArg(Object[] args, int pos, int def)
+    public static long longArg(Object[] args, int pos, long def)
     {
         if (pos < args.length) {
-            return ((Long)Context.jsToJava(args[pos], Long.class)).longValue();
+            Number n = Context.toNumber(args[pos]);
+            return n.longValue();
         }
         return def;
     }
@@ -66,7 +68,7 @@ public class ArgUtils
     public static boolean booleanArg(Object[] args, int pos, boolean def)
     {
         if (pos < args.length) {
-            return ((Boolean)Context.jsToJava(args[pos], Boolean.class)).booleanValue();
+            return Context.toBoolean(args[pos]);
         }
         return def;
     }
@@ -80,7 +82,8 @@ public class ArgUtils
     public static float floatArg(Object[] args, int pos, float def)
     {
         if (pos < args.length) {
-            return ((Float)Context.jsToJava(args[pos], Float.class)).floatValue();
+            Number n = Context.toNumber(args[pos]);
+            return n.floatValue();
         }
         return def;
     }
@@ -94,7 +97,8 @@ public class ArgUtils
     public static double doubleArg(Object[] args, int pos, double def)
     {
         if (pos < args.length) {
-            return ((Double)Context.jsToJava(args[pos], Double.class)).doubleValue();
+            Number n = Context.toNumber(args[pos]);
+            return n.doubleValue();
         }
         return def;
     }
@@ -156,6 +160,8 @@ public class ArgUtils
             Double dVal = (Double)val;
             if ((dVal < 0) || dVal.isNaN()) {
                 return 0;
+            } if (dVal.isInfinite()) {
+                return Integer.MAX_VALUE;
             }
             return (int)Math.ceil(dVal);
         }

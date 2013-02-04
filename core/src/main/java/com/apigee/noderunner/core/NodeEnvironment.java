@@ -8,7 +8,7 @@ import org.mozilla.javascript.ScriptableObject;
 
 import java.io.File;
 import java.util.concurrent.ArrayBlockingQueue;
-import java.util.concurrent.Executor;
+import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ThreadFactory;
 import java.util.concurrent.ThreadPoolExecutor;
@@ -29,8 +29,8 @@ public class NodeEnvironment
     private boolean             initialized;
     private ScriptableObject    rootScope;
     private ModuleRegistry      registry;
-    private Executor            asyncPool;
-    private Executor            scriptPool;
+    private ExecutorService     asyncPool;
+    private ExecutorService     scriptPool;
     private HttpServerContainer httpContainer;
 
     /**
@@ -48,6 +48,13 @@ public class NodeEnvironment
         // This pool is used to run scripts. As a cached thread pool it will grow as necessary and shrink
         // down to zero when idle.
         scriptPool = Executors.newCachedThreadPool(new PoolNameFactory("NodeRunner Script Thread"));
+    }
+
+    /**
+     * Free any resources used by the environment.
+     */
+    public void close()
+    {
     }
 
     /**
@@ -100,14 +107,14 @@ public class NodeEnvironment
     /**
      * Internal: Get the thread pool for async tasks.
      */
-    public Executor getAsyncPool() {
+    public ExecutorService getAsyncPool() {
         return asyncPool;
     }
 
     /**
      * Internal: Get the thread pool for running script threads.
      */
-    public Executor getScriptPool() {
+    public ExecutorService getScriptPool() {
         return scriptPool;
     }
 

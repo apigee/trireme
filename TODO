@@ -1,19 +1,31 @@
 * Coding tasks:
 
-Pre-compile built-in JS scripts and include .class files in the JAR.
-Not needed for script performance -- may be helpful for startup time
-to save JS compilation time.
-
 "Seal" the root context, and possibily built-in modules and scripts.
 
 Turn on the "class shutter" to prevent invoking internal Java classes.
 
 Implement "sandbox" for filesystem and network access and call from
 all native modules. Must support IP-level filtering as well as
-filesystem protection.
+filesystem protection. Must include a "chroot" functionality so that
+scripts running inside the server can't read the wrong files.
+
+Support "multitenant" ScriptRunners, so that lots and lots of scripts
+can share an event loop.
+
+Use the instruction observer to implement an script timer.
 
 Refactor NodeEnvironment into an interface and "Impl" to prevent
 exposing internal stuff.
+
+Build Java 7 versions of TCPWrap and Filesystem and load them
+conditionally.
+
+Pre-process the built-in scripts like Node does to:
+* Strip out "assert" calls
+* Strip out "debug" calls
+* Process the various macros referring to DTrace and the like
+
+Add in hooks for Codahale metrics.
 
 ** Node module status:
 * Important for completion of various frameworks:
@@ -46,7 +58,7 @@ tls:
 repl:
   Use the JS?
 dns:
-  Probably won't be used directly.
+  Probably won't be used directly. Implemented "lookup" so far.
 dgram:
   Not gonna be relevant in the cloud -- low priority.
 debugger:

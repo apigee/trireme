@@ -1,5 +1,6 @@
 package com.apigee.noderunner.core.internal;
 
+import com.apigee.noderunner.core.ScriptStatus;
 import org.mozilla.javascript.EvaluatorException;
 
 /**
@@ -25,5 +26,13 @@ public class NodeExitException
 
     public int getCode() {
         return code;
+    }
+
+    public ScriptStatus getStatus()
+    {
+        if (fatal) {
+            return ScriptStatus.OK;
+        }
+        return new ScriptStatus(code);
     }
 }

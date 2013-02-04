@@ -5,14 +5,11 @@ import com.apigee.noderunner.core.NodeEnvironment;
 import com.apigee.noderunner.core.NodeException;
 import com.apigee.noderunner.core.NodeScript;
 import com.apigee.noderunner.core.ScriptStatus;
-import com.apigee.noderunner.core.internal.NodeExitException;
-import com.apigee.noderunner.core.internal.Utils;
+import org.mozilla.javascript.RhinoException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.File;
-import java.io.FileInputStream;
-import java.io.IOException;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Future;
 
@@ -25,12 +22,12 @@ public class Main
 
     private static void printUsage()
     {
-        System.err.println("Usage: Main <script>");
+        System.err.println("Usage: Main <script> [container]");
     }
 
     public static void main(String[] args)
     {
-        if (args.length != 1) {
+        if ((args.length < 1) || (args.length > 2)) {
             printUsage();
             System.exit(2);
             return;
@@ -38,19 +35,33 @@ public class Main
 
         String scriptName = args[0];
         File script = new File(scriptName);
-        log.debug("Loading {}", script.getAbsolutePath());
-        if (!script.exists() || !script.isFile()) {
-            System.err.println("Can't read " + scriptName);
-            System.exit(3);
-            return;
+        String containerName = null;
+        if (args.length > 1) {
+            containerName = args[1];
         }
 
+        NodeEnvironment env = new NodeEnvironment();
         try {
-            NodeEnvironment env = new NodeEnvironment();
-            env.setHttpContainer(new NettyHttpContainer());
+            if ((containerName != null) && "netty".equals(containerName)) {
+                env.setHttpContainer(new NettyHttpContainer());
+            }
             NodeScript ns = env.createScript(scriptName, script, args);
-            Future<ScriptStatus> future = ns.execute();
-            ScriptStatus status = future.get();
+            ScriptStatus status;
+            try {
+                Future<ScriptStatus> future = ns.execute();
+                status = future.get();
+            } finally {
+                ns.close();
+            }
+            if (status.hasCause()) {
+                Throwable cause = status.getCause();
+                if (cause instanceof RhinoException) {
+                    System.err.println(cause.toString());
+                    System.err.println(((RhinoException)cause).getScriptStackTrace());
+                } else {
+                    status.getCause().printStackTrace(System.err);
+                }
+            }
             System.exit(status.getExitCode());
 
         } catch (NodeException ne) {
@@ -60,6 +71,8 @@ public class Main
             System.exit(6);
         } catch (ExecutionException ee) {
             ee.getCause().printStackTrace(System.err);
+        } finally {
+            env.close();
         }
     }
 }

@@ -6,7 +6,7 @@
   <groupId>com.apigee.noderunner</groupId>
   <artifactId>noderunner</artifactId>
   <name>noderunner</name>
-  <version>1.0.0-SNAPSHOT</version>
+  <version>0.5.0-SNAPSHOT</version>
   
   <packaging>pom</packaging>
 
@@ -16,7 +16,7 @@
   </organization>
 
   <properties>
-    <project.version>1.0.0-SNAPSHOT</project.version>
+    <project.version>0.5.0-SNAPSHOT</project.version>
     <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
   </properties>
 
@@ -62,6 +62,23 @@
         <artifactId>junit</artifactId>
         <version>4.11</version>
       </dependency>
+      <dependency>
+        <groupId>commons-io</groupId>
+        <artifactId>commons-io</artifactId>
+        <version>2.4</version>
+      </dependency>
     </dependencies>
   </dependencyManagement>
+
+  <scm>
+    <connection>scm:git:https://github.com/apigee/noderunner.git</connection>
+    <developerConnection>scm:git:ssh://git@github.com:apigee/noderunner.git</developerConnection>
+  </scm>
+
+  <distributionManagement>
+    <repository>
+      <id>labdt</id>
+      <url>http://labdt1.svind.sonoasystems.com:8080/archiva/repository/gateway_prod</url>
+   </repository>
+  </distributionManagement>
 </project>

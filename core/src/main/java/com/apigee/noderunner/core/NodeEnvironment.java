@@ -26,6 +26,12 @@ public class NodeEnvironment
     public static final int POOL_QUEUE_SIZE   = 8;
     public static final int POOL_TIMEOUT_SECS = 60;
 
+    // TODO is this the best version to use for V8 compatibility?
+    public static final int DEFAULT_JS_VERSION = Context.VERSION_1_8;
+    // Testing has not shown that 9 is any faster and it is theoretically riskier.
+    // Re-test later with better workloads.
+    public static final int DEFAULT_OPT_LEVEL = 1;
+
     private boolean             initialized;
     private ScriptableObject    rootScope;
     private ModuleRegistry      registry;
@@ -129,6 +135,7 @@ public class NodeEnvironment
 
         Context cx = Context.enter();
         try {
+            registry.load(cx);
             rootScope = cx.initStandardObjects();
         } catch (RhinoException re) {
             throw new NodeException(re);
@@ -145,11 +152,8 @@ public class NodeEnvironment
      */
     public void setUpContext(Context cx)
     {
-        // TODO is this the best version to use for V8 compatibility?
-        cx.setLanguageVersion(Context.VERSION_1_8);
-        // Testing has not shown that 9 is any faster and it is theoretically riskier.
-        // Re-test later with better workloads.
-        cx.setOptimizationLevel(1);
+        cx.setLanguageVersion(DEFAULT_JS_VERSION);
+        cx.setOptimizationLevel(DEFAULT_OPT_LEVEL);
     }
 
     private static final class PoolNameFactory

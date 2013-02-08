@@ -116,7 +116,7 @@ public class NativeModule
                 }
             }
             if (ret == null) {
-                Class<Script> compiled = runner.getEnvironment().getRegistry().getCompiledModule(name);
+                Script compiled = runner.getEnvironment().getRegistry().getCompiledModule(name);
                 if (compiled != null) {
                     ret = runCompiledModule(name, compiled, cx, runner);
                 }
@@ -130,7 +130,7 @@ public class NativeModule
             return ret;
         }
 
-        private Object runCompiledModule(String name, Class<Script> source, Context cx, ScriptRunner runner)
+        private Object runCompiledModule(String name, Script compiled, Context cx, ScriptRunner runner)
             throws IllegalAccessException, InstantiationException
         {
             NativeImpl nat = (NativeImpl)cx.newObject(runner.getScriptScope(), CLASS_NAME);
@@ -148,8 +148,7 @@ public class NativeModule
             // (see the pom.xml for the wrapper code). What we actually
             // need to do here is to invoke the wrapper function after running the script.
 
-            Script s = source.newInstance();
-            Object ret = s.exec(cx, runner.getScriptScope());
+            Object ret = compiled.exec(cx, runner.getScriptScope());
             Function fn = (Function)ret;
             fn.call(cx, runner.getScriptScope(), null, new Object[] { nat.exports, nat, requireFunc, nat.fileName });
             nat.loaded = true;

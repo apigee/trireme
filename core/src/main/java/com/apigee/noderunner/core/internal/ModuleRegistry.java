@@ -1,6 +1,8 @@
 package com.apigee.noderunner.core.internal;
 
 import com.apigee.noderunner.core.NodeModule;
+import com.apigee.noderunner.core.NodeScriptModule;
+import org.mozilla.javascript.Context;
 import org.mozilla.javascript.Script;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -29,11 +31,14 @@ public class ModuleRegistry
 {
     private static final Logger log = LoggerFactory.getLogger(ModuleRegistry.class);
 
+    private static final String CODE_PREFIX = "(function (exports, module, require, __filename, __dirname) {";
+    private static final String CODE_POSTFIX = "});";
+
     private final HashMap<String, NodeModule>         modules         = new HashMap<String, NodeModule>();
     private final HashMap<String, InternalNodeModule> internalModules = new HashMap<String, InternalNodeModule>();
-    private final HashMap<String, Class<Script>>      compiledModules = new HashMap<String, Class<Script>>();
+    private final HashMap<String, Script>             compiledModules = new HashMap<String, Script>();
 
-    public ModuleRegistry()
+    public void load(Context cx)
     {
         ServiceLoader<NodeModule> loader = ServiceLoader.load(NodeModule.class);
         for (NodeModule mod : loader) {
@@ -43,6 +48,12 @@ public class ModuleRegistry
                 modules.put(mod.getModuleName(), mod);
             }
         }
+
+        ServiceLoader<NodeScriptModule> scriptLoader = ServiceLoader.load(NodeScriptModule.class);
+        for (NodeScriptModule mod: scriptLoader) {
+            compileAndAdd(cx, mod.getModuleName(), mod.getModuleScript());
+        }
+
 
         addCompiledModule("_linklist", "com.apigee.noderunner.fromnode._linklist");
         addCompiledModule("assert", "com.apigee.noderunner.fromnode.assert");
@@ -70,13 +81,25 @@ public class ModuleRegistry
         addCompiledModule("http", "com.apigee.noderunner.scripts.adaptorhttp");
     }
 
+    private void compileAndAdd(Context cx, String name, String script)
+    {
+        String finalScript = CODE_PREFIX + script + CODE_POSTFIX;
+        Script compiled = cx.compileString(finalScript, name, 1, null);
+        compiledModules.put(name, compiled);
+    }
+
     private void addCompiledModule(String name, String className)
     {
         try {
             Class<Script> cl = (Class<Script>)Class.forName(className);
-            compiledModules.put(name, cl);
+            Script script = cl.newInstance();
+            compiledModules.put(name, script);
         } catch (ClassNotFoundException e) {
             throw new AssertionError("Missing built-in module " + className);
+        } catch (InstantiationException e) {
+            throw new AssertionError("Error creating Script instance for " + className);
+        } catch (IllegalAccessException e) {
+            throw new AssertionError("Error creating Script instance for " + className);
         }
     }
 
@@ -90,7 +113,7 @@ public class ModuleRegistry
         return internalModules.get(name);
     }
 
-    public Class<Script> getCompiledModule(String name)
+    public Script getCompiledModule(String name)
     {
         return compiledModules.get(name);
     }

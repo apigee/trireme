@@ -69,4 +69,9 @@
       </dependency>
     </dependencies>
   </dependencyManagement>
+
+  <scm>
+    <connection>scm:git:https://github.com/apigee/noderunner.git</connection>
+    <developerConnection>scm:git:ssh://git@github.com:apigee/noderunner.git</developerConnection>
+  </scm>
 </project>

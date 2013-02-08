@@ -176,4 +176,15 @@ public class BasicTest
         ScriptStatus stat = script.execute().get();
         assertEquals(0, stat.getExitCode());
     }
+
+    @Test
+    public void testBuiltinModuleLoad()
+        throws InterruptedException, ExecutionException, NodeException
+    {
+        NodeScript script = env.createScript("builtinmoduletest.js",
+                                             new File("./target/test-classes/tests/builtinmoduletest.js"),
+                                             null);
+        ScriptStatus stat = script.execute().get();
+        assertEquals(0, stat.getExitCode());
+    }
 }

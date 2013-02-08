@@ -74,4 +74,11 @@
     <connection>scm:git:https://github.com/apigee/noderunner.git</connection>
     <developerConnection>scm:git:ssh://git@github.com:apigee/noderunner.git</developerConnection>
   </scm>
+
+  <distributionManagement>
+    <repository>
+      <id>labdt</id>
+      <url>http://labdt1.svind.sonoasystems.com:8080/archiva/repository/gateway_prod</url>
+   </repository>
+  </distributionManagement>
 </project>

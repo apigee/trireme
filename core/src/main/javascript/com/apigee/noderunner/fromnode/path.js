@@ -33,7 +33,7 @@ function normalizeArray(parts, allowAboveRoot) {
   var up = 0;
   for (var i = parts.length - 1; i >= 0; i--) {
     var last = parts[i];
-    if (last === '.') {
+    if (last == '.') {
       parts.splice(i, 1);
     } else if (last === '..') {
       parts.splice(i, 1);
@@ -59,7 +59,7 @@ if (isWindows) {
   // Regex to split a windows path into three parts: [*, device, slash,
   // tail] windows-only
   var splitDeviceRe =
-      /^([a-zA-Z]:|[\\\/]{2}[^\\\/]+[\\\/]+[^\\\/]+)?([\\\/])?([\s\S]*?)$/;
+      /^([a-zA-Z]:|[\\\/]{2}[^\\\/]+[\\\/][^\\\/]+)?([\\\/])?([\s\S]*?)$/;
 
   // Regex to split the tail part of the above into [*, dir, basename, ext]
   var splitTailRe =
@@ -79,10 +79,6 @@ if (isWindows) {
         ext = result2[3] || '';
     return [device, dir, basename, ext];
   };
-
-  var normalizeUNCRoot = function(device) {
-    return '\\\\' + device.replace(/^[\\\/]+/, '').replace(/[\\\/]+/g, '\\');
-  }
 
   // path.resolve([from ...], to)
   // windows version
@@ -105,7 +101,7 @@ if (isWindows) {
         path = process.env['=' + resolvedDevice];
         // Verify that a drive-local cwd was found and that it actually points
         // to our drive. If not, default to the drive's root.
-        if (!path || path.substr(0, 3).toLowerCase() !==
+        if (!path || path.slice(0, 3).toLowerCase() !==
             resolvedDevice.toLowerCase() + '\\') {
           path = resolvedDevice + '\\';
         }
@@ -142,11 +138,8 @@ if (isWindows) {
       }
     }
 
-    // Convert slashes to backslashes when `resolvedDevice` points to an UNC
-    // root. Also squash multiple slashes into a single one where appropriate.
-    if (isUnc) {
-      resolvedDevice = normalizeUNCRoot(resolvedDevice);
-    }
+    // Replace slashes (in UNC share name) by backslashes
+    resolvedDevice = resolvedDevice.replace(/\//g, '\\');
 
     // At this point the path should be resolved to a full absolute path,
     // but handle relative paths to be safe (might happen when process.cwd()
@@ -187,10 +180,7 @@ if (isWindows) {
     }
 
     // Convert slashes to backslashes when `device` points to an UNC root.
-    // Also squash multiple slashes into a single one where appropriate.
-    if (isUnc) {
-      device = normalizeUNCRoot(device);
-    }
+    device = device.replace(/\//g, '\\');
 
     return device + (isAbsolute ? '\\' : '') + tail;
   };
@@ -201,24 +191,14 @@ if (isWindows) {
       return p && typeof p === 'string';
     }
 
-    var paths = Array.prototype.filter.call(arguments, f);
+    var paths = Array.prototype.slice.call(arguments, 0).filter(f);
     var joined = paths.join('\\');
 
-    // Make sure that the joined path doesn't start with two slashes, because
-    // normalize() will mistake it for an UNC path then.
-    //
-    // This step is skipped when it is very clear that the user actually
-    // intended to point at an UNC path. This is assumed when the first
-    // non-empty string arguments starts with exactly two slashes followed by
-    // at least one more non-slash character.
-    //
-    // Note that for normalize() to treat a path as an UNC path it needs to
-    // have at least 2 components, so we don't filter for that here.
-    // This means that the user can use join to construct UNC paths from
-    // a server name and a share name; for example:
-    //   path.join('//server', 'share') -> '\\\\server\\share\')
-    if (!/^[\\\/]{2}[^\\\/]/.test(paths[0])) {
-      joined = joined.replace(/^[\\\/]{2,}/, '\\');
+    // Make sure that the joined path doesn't start with two slashes
+    // - it will be mistaken for an unc path by normalize() -
+    // unless the paths[0] also starts with two slashes
+    if (/^[\\\/]{2}/.test(joined) && !/^[\\\/]{2}/.test(paths[0])) {
+      joined = joined.slice(1);
     }
 
     return exports.normalize(joined);
@@ -282,7 +262,6 @@ if (isWindows) {
   };
 
   exports.sep = '\\';
-  exports.delimiter = ';';
 
 } else /* posix */ {
 
@@ -328,7 +307,7 @@ if (isWindows) {
   // posix version
   exports.normalize = function(path) {
     var isAbsolute = path.charAt(0) === '/',
-        trailingSlash = path.substr(-1) === '/';
+        trailingSlash = path.slice(-1) === '/';
 
     // Normalize the path
     path = normalizeArray(path.split('/').filter(function(p) {
@@ -399,7 +378,6 @@ if (isWindows) {
   };
 
   exports.sep = '/';
-  exports.delimiter = ':';
 }
 
 
@@ -415,7 +393,7 @@ exports.dirname = function(path) {
 
   if (dir) {
     // It has a dirname, strip trailing slash
-    dir = dir.substr(0, dir.length - 1);
+    dir = dir.substring(0, dir.length - 1);
   }
 
   return root + dir;
@@ -456,11 +434,11 @@ if (isWindows) {
 
     var resolvedPath = exports.resolve(path);
 
-    if (/^[a-zA-Z]\:\\/.test(resolvedPath)) {
+    if (resolvedPath.match(/^[a-zA-Z]\:\\/)) {
       // path is local filesystem path, which needs to be converted
       // to long UNC path.
       return '\\\\?\\' + resolvedPath;
-    } else if (/^\\\\[^?.]/.test(resolvedPath)) {
+    } else if (resolvedPath.match(/^\\\\[^?.]/)) {
       // path is network UNC path, which needs to be converted
       // to long UNC path.
       return '\\\\?\\UNC\\' + resolvedPath.substring(2);

@@ -66,8 +66,9 @@ public class ModuleRegistry
         addCompiledModule("freelist", "com.apigee.noderunner.fromnode.freelist");
         addCompiledModule("fs", "com.apigee.noderunner.fromnode.fs");
         addCompiledModule("node_http", "com.apigee.noderunner.fromnode.http");
-        addCompiledModule("net", "com.apigee.noderunner.fromnode.net");
         addCompiledModule("module", "com.apigee.noderunner.fromnode.module");
+        addCompiledModule("net", "com.apigee.noderunner.fromnode.net");
+        addCompiledModule("os", "com.apigee.noderunner.fromnode.os");
         addCompiledModule("path", "com.apigee.noderunner.fromnode.path");
         addCompiledModule("punycode", "com.apigee.noderunner.fromnode.punycode");
         addCompiledModule("querystring", "com.apigee.noderunner.fromnode.querystring");

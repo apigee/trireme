@@ -5,6 +5,8 @@ import com.apigee.noderunner.core.NodeEnvironment;
 import com.apigee.noderunner.core.NodeException;
 import com.apigee.noderunner.core.NodeScript;
 import com.apigee.noderunner.core.ScriptStatus;
+import org.mozilla.javascript.Context;
+import org.mozilla.javascript.JavaScriptException;
 import org.mozilla.javascript.RhinoException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -46,6 +48,7 @@ public class Main
                 env.setHttpContainer(new NettyHttpContainer());
             }
             NodeScript ns = env.createScript(scriptName, script, args);
+
             ScriptStatus status;
             try {
                 Future<ScriptStatus> future = ns.execute();
@@ -53,17 +56,22 @@ public class Main
             } finally {
                 ns.close();
             }
+
             if (status.hasCause()) {
                 Throwable cause = status.getCause();
-                if (cause instanceof RhinoException) {
-                    System.err.println(cause.toString());
-                    System.err.println(((RhinoException)cause).getScriptStackTrace());
-                } else {
-                    status.getCause().printStackTrace(System.err);
-                }
-            }
-            System.exit(status.getExitCode());
 
+                if (cause instanceof JavaScriptException) {
+                    Object value = ((JavaScriptException) cause).getValue();
+                    Context cx = Context.enter();
+                    System.err.println(Context.toString(value));
+                    Context.exit();
+                } else if (cause instanceof RhinoException) {
+                    System.err.println(((RhinoException) cause).getScriptStackTrace());
+                }
+                cause.printStackTrace(System.err);
+            }
+
+            System.exit(status.getExitCode());
         } catch (NodeException ne) {
             ne.printStackTrace(System.err);
             System.exit(5);

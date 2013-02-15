@@ -1,4 +1,4 @@
-* Coding tasks:
+## Coding tasks:
 
 "Seal" the root context, and possibily built-in modules and scripts.
 
@@ -27,6 +27,12 @@ Pre-process the built-in scripts like Node does to:
 
 Add in hooks for Codahale metrics.
 
+Split NodeEnvironment into an interface and internal file to
+make the public API cleaner.
+
+Split ScriptRunner into an interface and internal file so that
+we can realistically build modules that sit outside the environment.
+
 ** Node module status:
 * Important for completion of various frameworks:
 
@@ -51,7 +57,7 @@ readline:
 domain:
   May need more module support.
 
-* Less important but needed for compatibility:
+## Less important but needed for compatibility:
 
 tls:
   Probably won't be used directly.

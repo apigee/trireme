@@ -21,6 +21,7 @@ import org.slf4j.LoggerFactory;
 
 import static com.apigee.noderunner.core.internal.ArgUtils.*;
 
+import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.lang.reflect.InvocationTargetException;
@@ -226,7 +227,11 @@ public class Process
         @JSFunction
         public String cwd()
         {
-            return System.getProperty("user.dir");
+            try {
+                return runner.getEnvironment().reverseTranslatePath(System.getProperty("user.dir"));
+            } catch (IOException ioe) {
+                return ".";
+            }
         }
 
         @JSGetter("env")

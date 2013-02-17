@@ -187,4 +187,30 @@ public class BasicTest
         ScriptStatus stat = script.execute().get();
         assertEquals(0, stat.getExitCode());
     }
+
+    @Test
+    public void testChroot()
+        throws InterruptedException, ExecutionException, NodeException, IOException
+    {
+        NodeEnvironment rootEnv = new NodeEnvironment();
+        rootEnv.setFilesystemRoot("./target/test-classes");
+        NodeScript script = rootEnv.createScript("chroottest.js",
+                                             new File("./tests/chroottest.js"),
+                                             null);
+        ScriptStatus stat = script.execute().get();
+        assertEquals(0, stat.getExitCode());
+    }
+
+    @Test
+    public void testChrootModules()
+        throws InterruptedException, ExecutionException, NodeException, IOException
+    {
+        NodeEnvironment rootEnv = new NodeEnvironment();
+        rootEnv.setFilesystemRoot("./target/test-classes");
+        NodeScript script = rootEnv.createScript("moduletest.js",
+                                             new File("./tests/moduletest.js"),
+                                             null);
+        ScriptStatus stat = script.execute().get();
+        assertEquals(0, stat.getExitCode());
+    }
 }

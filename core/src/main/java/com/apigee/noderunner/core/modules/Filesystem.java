@@ -126,6 +126,16 @@ public class Filesystem
             setMode(f, mode);
         }
 
+        private File translatePath(String path)
+            throws NodeOSException
+        {
+            File trans = runner.getEnvironment().translatePath(path);
+            if (trans == null) {
+                throw new NodeOSException(Constants.ENOENT);
+            }
+            return trans;
+        }
+
         private void setMode(File f, int mode)
         {
             if (((mode & Constants.S_IROTH) != 0) || ((mode & Constants.S_IRGRP) != 0)) {
@@ -191,14 +201,13 @@ public class Filesystem
             final int mode = intArg(args, 2);
             final Function callback = functionArg(args, 3, false);
             final FSImpl fs = (FSImpl)thisObj;
-            final File path = new File(pathStr);
 
             return fs.runAction(callback, new AsyncAction()
             {
                 @Override
                 public Object[] execute() throws NodeOSException
                 {
-                    return fs.doOpen(path, flags, mode);
+                    return fs.doOpen(pathStr, flags, mode);
                 }
 
                 @Override
@@ -209,12 +218,14 @@ public class Filesystem
             });
         }
 
-        private Object[] doOpen(File path, int flags, int mode)
+        private Object[] doOpen(String pathStr, int flags, int mode)
             throws NodeOSException
         {
             if (log.isDebugEnabled()) {
-                log.debug("open({}, {}, {})", path, flags, mode);
+                log.debug("open({}, {}, {})", pathStr, flags, mode);
             }
+
+            File path = translatePath(pathStr);
             if (path.exists()) {
                 if ((flags & Constants.O_TRUNC) != 0) {
                     // For exact compatibility, perhaps this should open and truncate
@@ -481,11 +492,11 @@ public class Filesystem
         private void doRename(String oldPath, String newPath)
             throws NodeOSException
         {
-            File oldFile = new File(oldPath);
+            File oldFile = translatePath(oldPath);
             if (!oldFile.exists()) {
                 throw new NodeOSException(Constants.ENOENT);
             }
-            File newFile = new File(newPath);
+            File newFile = translatePath(newPath);
             if ((newFile.getParentFile() != null) && !newFile.getParentFile().exists()) {
                 throw new NodeOSException(Constants.ENOENT);
             }
@@ -545,7 +556,7 @@ public class Filesystem
         private void doRmdir(String path)
             throws NodeOSException
         {
-            File file = new File(path);
+            File file = translatePath(path);
             if (!file.exists()) {
                 throw new NodeOSException(Constants.ENOENT);
             }
@@ -578,7 +589,7 @@ public class Filesystem
         private void doUnlink(String path)
             throws NodeOSException
         {
-            File file = new File(path);
+            File file = translatePath(path);
             if (!file.exists()) {
                 throw new NodeOSException(Constants.ENOENT);
             }
@@ -610,7 +621,7 @@ public class Filesystem
         private void doMkdir(String path, int mode)
             throws NodeOSException
         {
-            File file = new File(path);
+            File file = translatePath(path);
             if (!file.mkdir()) {
                 throw new NodeOSException(Constants.EIO);
             }
@@ -639,7 +650,7 @@ public class Filesystem
         {
             Context cx = Context.enter();
             try {
-                File f = new File(dn);
+                File f = translatePath(dn);
                 String[] files = f.list();
                 Scriptable fileList;
                 if (files == null) {
@@ -677,7 +688,7 @@ public class Filesystem
         {
             Context cx = Context.enter();
             try {
-                File f = new File(fn);
+                File f = translatePath(fn);
                 if (!f.exists()) {
                     if (log.isDebugEnabled()) {
                         log.debug("stat {} = {}", f.getPath(), Constants.ENOENT);

@@ -1,12 +1,14 @@
 package com.apigee.noderunner.core;
 
 import com.apigee.noderunner.core.internal.ModuleRegistry;
+import com.apigee.noderunner.core.internal.PathTranslator;
 import com.apigee.noderunner.net.spi.HttpServerContainer;
 import org.mozilla.javascript.Context;
 import org.mozilla.javascript.RhinoException;
 import org.mozilla.javascript.ScriptableObject;
 
 import java.io.File;
+import java.io.IOException;
 import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -38,6 +40,7 @@ public class NodeEnvironment
     private ExecutorService     asyncPool;
     private ExecutorService     scriptPool;
     private HttpServerContainer httpContainer;
+    private PathTranslator      pathTranslator;
 
     /**
      * Create a new NodeEnvironment with all the defaults.
@@ -86,7 +89,7 @@ public class NodeEnvironment
     }
 
     /**
-     * Set up the HTTP implementation, which is kept in a separate module.
+     * Replace the default HTTP implementation with a custom implementation.
      */
     public void setHttpContainer(HttpServerContainer container) {
         this.httpContainer = container;
@@ -94,6 +97,22 @@ public class NodeEnvironment
 
     public HttpServerContainer getHttpContainer() {
         return httpContainer;
+    }
+
+    /**
+     * Specify that all filenames used by the "fs" module (not all files used internally by
+     * node runner) must be treated as if the "root" is in a different location. Any files
+     * "above" the root will be treated as "not found."
+     */
+    public void setFilesystemRoot(String root)
+        throws IOException
+    {
+        pathTranslator = new PathTranslator(root);
+    }
+
+    public String getFilesystemRoot()
+    {
+        return (pathTranslator == null ? null : pathTranslator.getRoot());
     }
 
     /**
@@ -122,6 +141,26 @@ public class NodeEnvironment
      */
     public ExecutorService getScriptPool() {
         return scriptPool;
+    }
+
+    /**
+     * Internal: Translate a path based on the root.
+     */
+    public File translatePath(String path)
+    {
+        if (pathTranslator == null) {
+            return new File(path);
+        }
+        return pathTranslator.translate(path);
+    }
+
+    public String reverseTranslatePath(String path)
+        throws IOException
+    {
+        if (pathTranslator == null) {
+            return path;
+        }
+        return pathTranslator.reverseTranslate(path);
     }
 
     private void initialize()

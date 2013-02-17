@@ -283,7 +283,16 @@ public class ScriptRunner
 
                 } else {
                     // Again like the real node, delegate running the actual script to the module module.
-                    process.setArgv(1, scriptFile.getAbsolutePath());
+                    String scriptPath = scriptFile.getPath();
+                    if (!scriptPath.startsWith(File.separator) &&
+                        !scriptPath.startsWith("./")) {
+                        // Add ./ before script path to un-confuse the module module if it's a local path
+                        scriptPath = "./" + scriptPath;
+                    }
+                    if (log.isDebugEnabled()) {
+                        log.debug("Launching module.runMain({})", scriptPath);
+                    }
+                    process.setArgv(1, scriptPath);
                     Function load = (Function)mainModule.get("runMain", mainModule);
                     enqueueCallback(load, mainModule, mainModule, null);
                 }
@@ -462,16 +471,24 @@ public class ScriptRunner
 
             // Set up globals that are set up when running a script from the command line (set in "evalScript"
             // in node.js.)
-            if (scriptFile == null) {
-                scope.put("__filename", scope, scriptName);
-                scope.put("__dirname", scope, new File(".").getAbsolutePath());
-            } else {
-                scope.put("__filename", scope, scriptFile.getAbsolutePath());
-                if (scriptFile.getParentFile() == null) {
-                    scope.put("__dirname", scope, new File(".").getAbsolutePath());
+            try {
+                if (scriptFile == null) {
+                    scope.put("__filename", scope, scriptName);
+                    scope.put("__dirname", scope,
+                              env.reverseTranslatePath("."));
                 } else {
-                    scope.put("__dirname", scope, scriptFile.getParentFile().getAbsolutePath());
+                    scope.put("__filename", scope,
+                              scriptFile.getPath());
+                    if (scriptFile.getParentFile() == null) {
+                        scope.put("__dirname", scope,
+                                  env.reverseTranslatePath("."));
+                    } else {
+                        scope.put("__dirname", scope,
+                                  env.reverseTranslatePath(scriptFile.getParentFile().getPath()));
+                    }
                 }
+            } catch (IOException ioe) {
+                throw new NodeException(ioe);
             }
 
             // Set up the main native module

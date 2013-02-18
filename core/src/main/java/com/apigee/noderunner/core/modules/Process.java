@@ -63,7 +63,7 @@ public class Process
         NativeOutputStream stderr = (NativeOutputStream) cx.newObject(scope, NativeOutputStream.CLASS_NAME);
         NativeInputStream stdin = (NativeInputStream) cx.newObject(scope, NativeInputStream.CLASS_NAME);
 
-        Sandbox sb = runner.getSandbox();
+        Sandbox sb = runner.getEnvironment().getSandbox();
 
         // stdout
         OutputStream stdoutStream;

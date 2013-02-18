@@ -3,6 +3,7 @@ package com.apigee.noderunner.core;
 import com.apigee.noderunner.core.internal.ModuleRegistry;
 import com.apigee.noderunner.core.internal.PathTranslator;
 import com.apigee.noderunner.net.spi.HttpServerContainer;
+import org.mozilla.javascript.ClassShutter;
 import org.mozilla.javascript.Context;
 import org.mozilla.javascript.RhinoException;
 import org.mozilla.javascript.ScriptableObject;
@@ -34,6 +35,8 @@ public class NodeEnvironment
     // Re-test later with better workloads.
     public static final int DEFAULT_OPT_LEVEL = 1;
 
+    private static final OpaqueClassShutter CLASS_SHUTTER = new OpaqueClassShutter();
+
     private boolean             initialized;
     private ScriptableObject    rootScope;
     private ModuleRegistry      registry;
@@ -41,22 +44,27 @@ public class NodeEnvironment
     private ExecutorService     scriptPool;
     private HttpServerContainer httpContainer;
     private PathTranslator      pathTranslator;
+    private Sandbox             sandbox;
 
     /**
      * Create a new NodeEnvironment with all the defaults.
      */
     public NodeEnvironment()
     {
-        // This pool is used for operations that must appear async to JavaScript but are synchronous
-        // in Java. Right now this means file I/O, at least in Java 6.
-        asyncPool = new ThreadPoolExecutor(CORE_POOL_SIZE, MAX_POOL_SIZE, POOL_TIMEOUT_SECS, TimeUnit.SECONDS,
-                                           new ArrayBlockingQueue<Runnable>(POOL_QUEUE_SIZE),
-                                           new PoolNameFactory("NodeRunner Async Pool"),
-                                           new ThreadPoolExecutor.AbortPolicy());
+    }
 
-        // This pool is used to run scripts. As a cached thread pool it will grow as necessary and shrink
-        // down to zero when idle.
-        scriptPool = Executors.newCachedThreadPool(new PoolNameFactory("NodeRunner Script Thread"));
+    /**
+     * Set up a restricted environment. The specified Sandbox object can specify restrictions on which files
+     * are opened, how standard input and output are handled, and what network I/O operations are allowed.
+     * The sandbox is checked when this call is made, so please set all parameters on the Sandbox object
+     * <i>before</i> calling this method.
+     */
+    public void setSandbox(Sandbox box) {
+        this.sandbox = box;
+    }
+
+    public Sandbox getSandbox() {
+        return sandbox;
     }
 
     /**
@@ -97,22 +105,6 @@ public class NodeEnvironment
 
     public HttpServerContainer getHttpContainer() {
         return httpContainer;
-    }
-
-    /**
-     * Specify that all filenames used by the "fs" module (not all files used internally by
-     * node runner) must be treated as if the "root" is in a different location. Any files
-     * "above" the root will be treated as "not found."
-     */
-    public void setFilesystemRoot(String root)
-        throws IOException
-    {
-        pathTranslator = new PathTranslator(root);
-    }
-
-    public String getFilesystemRoot()
-    {
-        return (pathTranslator == null ? null : pathTranslator.getRoot());
     }
 
     /**
@@ -170,12 +162,43 @@ public class NodeEnvironment
             return;
         }
 
+        if (sandbox != null) {
+            if (sandbox.getFilesystemRoot() != null) {
+                try {
+                    pathTranslator = new PathTranslator(sandbox.getFilesystemRoot());
+                } catch (IOException ioe) {
+                    throw new AssertionError("Unexpected I/O error setting filesystem root: " + ioe);
+                }
+            }
+            if (sandbox.getAsyncThreadPool() != null) {
+                asyncPool = sandbox.getAsyncThreadPool();
+            }
+        }
+
+        if (asyncPool == null) {
+            // This pool is used for operations that must appear async to JavaScript but are synchronous
+            // in Java. Right now this means file I/O, at least in Java 6.
+            asyncPool = new ThreadPoolExecutor(CORE_POOL_SIZE, MAX_POOL_SIZE, POOL_TIMEOUT_SECS, TimeUnit.SECONDS,
+                                               new ArrayBlockingQueue<Runnable>(POOL_QUEUE_SIZE),
+                                               new PoolNameFactory("NodeRunner Async Pool"),
+                                               new ThreadPoolExecutor.AbortPolicy());
+        }
+
+        // This pool is used to run scripts. As a cached thread pool it will grow as necessary and shrink
+        // down to zero when idle. This is a separate thread pool because these threads persist for the life
+        // of the script.
+        scriptPool = Executors.newCachedThreadPool(new PoolNameFactory("NodeRunner Script Thread"));
+
         registry = new ModuleRegistry();
 
         Context cx = Context.enter();
         try {
+            setUpContext(cx);
             registry.load(cx);
-            rootScope = cx.initStandardObjects();
+            // The standard objects, which are slow to create, are shared between scripts. Seal them so that
+            // one script can't modify another's.
+            rootScope = cx.initStandardObjects(null, true);
+            rootScope.sealObject();
         } catch (RhinoException re) {
             throw new NodeException(re);
         } finally {
@@ -193,6 +216,7 @@ public class NodeEnvironment
     {
         cx.setLanguageVersion(DEFAULT_JS_VERSION);
         cx.setOptimizationLevel(DEFAULT_OPT_LEVEL);
+        cx.setClassShutter(CLASS_SHUTTER);
     }
 
     private static final class PoolNameFactory
@@ -211,6 +235,19 @@ public class NodeEnvironment
             Thread t = new Thread(runnable, name);
             t.setDaemon(true);
             return t;
+        }
+    }
+
+    /**
+     * Don't allow access to Java code at all from inside Node code.
+     */
+    private static final class OpaqueClassShutter
+        implements ClassShutter
+    {
+        @Override
+        public boolean visibleToScripts(String s)
+        {
+            return false;
         }
     }
 }

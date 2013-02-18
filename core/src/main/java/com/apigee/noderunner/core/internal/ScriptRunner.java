@@ -215,7 +215,7 @@ public class ScriptRunner
         log.debug("Pin count is now {}", currentPinCount);
 
         if (currentPinCount < 0) {
-            log.warn("Pin count < 0", currentPinCount);
+            log.warn("Negative pin count: {}", currentPinCount);
         }
         if (currentPinCount == 0) {
             selector.wakeup();

@@ -8,6 +8,7 @@ import org.mozilla.javascript.Context;
 import org.mozilla.javascript.EvaluatorException;
 import org.mozilla.javascript.Function;
 import org.mozilla.javascript.FunctionObject;
+import org.mozilla.javascript.NativeArray;
 import org.mozilla.javascript.Scriptable;
 import org.mozilla.javascript.ScriptableObject;
 import org.mozilla.javascript.Undefined;
@@ -159,57 +160,31 @@ public class Buffer
 
         public static Object concat(Context cx, Scriptable thisObj, Object[] args, Function func)
         {
-            ensureArg(args, 0);
-            if (!(args[0] instanceof Scriptable)) {
-                throw new EvaluatorException("Invalid argument 0");
+            NativeArray bufs = objArg(args, 0, NativeArray.class, true);
+            int totalLen = intArg(args, 1, -1);
+
+            if (bufs.getLength() == 0) {
+                return cx.newObject(thisObj, BUFFER_CLASS_NAME, new Object[] { 0 });
+            } else if (bufs.getLength() == 1) {
+                return bufs.get(0);
             }
 
-            Scriptable bufs = (Scriptable)args[0];
-            Object[] ids = bufs.getIds();
-            if (ids.length == 0) {
-                return cx.newObject(thisObj, BUFFER_CLASS_NAME,
-                                    new Object[] { Integer.valueOf(0) });
-            }
-            if (ids.length == 1) {
-                return bufs.get(0, bufs);
-            }
-            int totalLen = intArg(args, 1, -1);
             if (totalLen < 0) {
                 totalLen = 0;
-                for (Object id : ids) {
-                    totalLen += getArrayElement(bufs, id).bufLength;
+                for (Integer i : bufs.getIndexIds()) {
+                    BufferImpl buf = (BufferImpl) bufs.get(i);
+                    totalLen += buf.bufLength;
                 }
             }
 
             int pos = 0;
-            BufferImpl ret =
-                (BufferImpl)cx.newObject(thisObj, BUFFER_CLASS_NAME,
-                                         new Object[] { Integer.valueOf(totalLen) });
-            for (Object id : ids) {
-                byte[] from = getArrayElement(bufs, id).buf;
-                int len = Math.min((ret.bufLength - pos), from.length);
-                System.arraycopy(from, 0, ret.buf, pos + ret.bufOffset, len);
-                pos += len;
+            BufferImpl ret = (BufferImpl) cx.newObject(thisObj, BUFFER_CLASS_NAME, new Object[] { totalLen });
+            for (Integer i : bufs.getIndexIds()) {
+                BufferImpl from = (BufferImpl) bufs.get(i);
+                System.arraycopy(from.buf, from.bufOffset, ret.buf, pos + ret.bufOffset, from.bufLength);
+                pos += from.bufLength;
             }
             return ret;
-        }
-
-        private static BufferImpl getArrayElement(Scriptable bufs, Object id)
-        {
-            Object o;
-            if (id instanceof Number) {
-                int idInt = (Integer)Context.jsToJava(id, Integer.class);
-                o = bufs.get(idInt, bufs);
-            } else if (id instanceof String) {
-                o = bufs.get((String)id, bufs);
-            } else {
-                throw new EvaluatorException("Invalid array of buffers");
-            }
-            try {
-                return (BufferImpl)o;
-            } catch (ClassCastException e) {
-                throw new EvaluatorException("Array of buffers does not contain Buffer objects");
-            }
         }
 
         public int getCharsWritten(Scriptable obj) {

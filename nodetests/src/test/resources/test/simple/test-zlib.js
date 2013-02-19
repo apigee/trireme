@@ -26,9 +26,9 @@ var path = require('path');
 
 var zlibPairs =
     [[zlib.Deflate, zlib.Inflate],
-     [zlib.Gzip, zlib.Gunzip],
-     [zlib.Deflate, zlib.Unzip],
-     [zlib.Gzip, zlib.Unzip],
+     //[zlib.Gzip, zlib.Gunzip],
+     //[zlib.Deflate, zlib.Unzip],
+     //[zlib.Gzip, zlib.Unzip],
      [zlib.DeflateRaw, zlib.InflateRaw]];
 
 // how fast to trickle through the slowstream

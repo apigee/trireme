@@ -123,6 +123,26 @@ public class ArgUtils
         }
     }
 
+    public static <T> T objArg(Object[] args, int pos, Class<T> type, boolean required)
+    {
+        if (required) {
+            ensureArg(args, pos);
+        }
+        if (pos < args.length) {
+            if (type.isInstance(args[pos])) {
+                return type.cast(args[pos]);
+            } else {
+                if (required) {
+                    throw new EvaluatorException("Object of type " + type + " expected");
+                } else {
+                    return null;
+                }
+            }
+        } else {
+            return null;
+        }
+    }
+
     public static boolean isIntArg(Object o)
     {
         if (o instanceof Number) {

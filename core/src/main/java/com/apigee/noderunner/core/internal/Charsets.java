@@ -10,7 +10,7 @@ public class Charsets
     public static final Charset UTF8 = Charset.forName("UTF8");
     public static final Charset UCS2 = Charset.forName("UTF-16LE");
     public static final Charset BASE64 = Charset.forName("Node-Base64");
-    public static final Charset ASCII = Charset.forName("ascii");
+    public static final Charset ASCII = Charset.forName("US-ASCII");
     public static final Charset DEFAULT = UTF8;
 
     private static final Charsets charsets = new Charsets();

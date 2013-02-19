@@ -525,18 +525,12 @@ public class Buffer
         @JSFunction
         public static int copy(Context cx, Scriptable thisObj, Object[] args, Function func)
         {
-            ensureArg(args, 0);
-            BufferImpl t = (BufferImpl)args[0];
+            BufferImpl b = (BufferImpl)thisObj;
+
+            BufferImpl t = objArg(args, 0, BufferImpl.class, true);
             int targetStart = intArg(args, 1, 0);
             int sourceStart = intArg(args, 2, 0);
-
-            BufferImpl b = (BufferImpl)thisObj;
-            int sourceEnd;
-            if (args.length > 3) {
-                sourceEnd = intArg(args, 3);
-            } else {
-                sourceEnd = b.bufLength;
-            }
+            int sourceEnd = intArg(args, 3, b.bufLength);
 
             if (sourceEnd < sourceStart) {
                 throw new EvaluatorException("sourceEnd < sourceStart");
@@ -557,8 +551,9 @@ public class Buffer
                 throw new EvaluatorException("sourceEnd out of bounds");
             }
 
-            int len = Math.min(sourceEnd - sourceStart, t.bufLength - targetStart);
-            if (len < 0) {
+            int len = Math.min(Math.min(sourceEnd - sourceStart, t.bufLength - targetStart),
+                    b.bufLength - sourceStart);
+            if (len <= 0) {
                 return 0;
             }
             System.arraycopy(b.buf, sourceStart + b.bufOffset, t.buf,

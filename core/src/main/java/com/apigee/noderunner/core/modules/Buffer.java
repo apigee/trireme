@@ -257,7 +257,7 @@ public class Buffer
         public String getString(String encoding)
         {
             Charset cs = Charsets.get().getCharset(encoding);
-            return Utils.bufferToString(ByteBuffer.wrap(buf, 0, bufLength), cs);
+            return Utils.bufferToString(ByteBuffer.wrap(buf, bufOffset, bufLength), cs);
         }
 
         public byte[] getArray() {

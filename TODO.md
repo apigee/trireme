@@ -2,13 +2,6 @@
 
 "Seal" the root context, and possibily built-in modules and scripts.
 
-Turn on the "class shutter" to prevent invoking internal Java classes.
-
-Implement "sandbox" for filesystem and network access and call from
-all native modules. Must support IP-level filtering as well as
-filesystem protection. Must include a "chroot" functionality so that
-scripts running inside the server can't read the wrong files.
-
 Support "multitenant" ScriptRunners, so that lots and lots of scripts
 can share an event loop.
 

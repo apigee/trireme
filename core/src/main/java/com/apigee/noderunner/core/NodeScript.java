@@ -3,7 +3,6 @@ package com.apigee.noderunner.core;
 import com.apigee.noderunner.core.internal.ScriptRunner;
 
 import java.io.File;
-import java.util.concurrent.Future;
 
 /**
  * This class represents an instance of a single Node script. It will execute the script in one or more
@@ -47,24 +46,10 @@ public class NodeScript
     public ScriptFuture execute()
         throws NodeException
     {
-        return execute(null);
-    }
-
-    /**
-     * Run the script and return a Future denoting its status. When the script has run to completion --
-     * which means that has left no timers or "nextTick" jobs in its queue, and the "http" and "net" modules
-     * are no longer listening for incoming network connections, then it will exit with a status code.
-     * Cancelling the future will make the script exit more quickly and throw CancellationException.
-     * It is also OK to interrupt the script.
-     *
-     * @param sandbox Restrict what the script is allowed to do via a sandbox.
-     */
-    public ScriptFuture execute(Sandbox sandbox)
-    {
         if (scriptFile == null) {
-            runner = new ScriptRunner(this, env, scriptName, script, args, sandbox);
+            runner = new ScriptRunner(this, env, scriptName, script, args);
         } else {
-            runner = new ScriptRunner(this, env, scriptName, scriptFile, args, sandbox);
+            runner = new ScriptRunner(this, env, scriptName, scriptFile, args);
         }
         ScriptFuture future = new ScriptFuture(runner);
         runner.setFuture(future);

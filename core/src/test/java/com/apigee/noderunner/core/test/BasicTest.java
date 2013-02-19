@@ -1,8 +1,10 @@
 package com.apigee.noderunner.core.test;
 
+import com.apigee.noderunner.NetworkPolicy;
 import com.apigee.noderunner.core.NodeEnvironment;
 import com.apigee.noderunner.core.NodeException;
 import com.apigee.noderunner.core.NodeScript;
+import com.apigee.noderunner.core.Sandbox;
 import com.apigee.noderunner.core.ScriptCancelledException;
 import com.apigee.noderunner.core.ScriptFuture;
 import com.apigee.noderunner.core.ScriptStatus;
@@ -16,6 +18,7 @@ import static org.junit.Assert.*;
 import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
+import java.net.InetSocketAddress;
 import java.util.concurrent.CancellationException;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Future;
@@ -47,11 +50,7 @@ public class BasicTest
     public void testModuleLoad()
         throws InterruptedException, ExecutionException, NodeException
     {
-        NodeScript script = env.createScript("moduletest.js",
-                                             new File("./target/test-classes/tests/moduletest.js"),
-                                             null);
-        ScriptStatus stat = script.execute().get();
-        assertEquals(0, stat.getExitCode());
+        runTest("moduletest.js");
     }
 
     /*
@@ -75,11 +74,7 @@ public class BasicTest
     public void testBuffer()
         throws InterruptedException, ExecutionException, NodeException
     {
-        NodeScript script = env.createScript("buffertest.js",
-                                             new File("./target/test-classes/tests/buffertest.js"),
-                                             null);
-        ScriptStatus stat = script.execute().get();
-        assertEquals(0, stat.getExitCode());
+        runTest("buffertest.js");
     }
 
     @Test
@@ -159,43 +154,48 @@ public class BasicTest
     public void testEvents()
             throws InterruptedException, ExecutionException, NodeException
     {
-        NodeScript script = env.createScript("eventstest.js",
-                new File("./target/test-classes/tests/eventstest.js"),
-                null);
-        ScriptStatus stat = script.execute().get();
-        assertEquals(0, stat.getExitCode());
+        runTest("eventstest.js");
     }
 
     @Test
     public void testErrno()
             throws InterruptedException, ExecutionException, NodeException
     {
-        NodeScript script = env.createScript("errnotest.js",
-                new File("./target/test-classes/tests/errnotest.js"),
-                null);
-        ScriptStatus stat = script.execute().get();
-        assertEquals(0, stat.getExitCode());
+        runTest("errnotest.js");
     }
 
     @Test
     public void testBuiltinModuleLoad()
         throws InterruptedException, ExecutionException, NodeException
     {
-        NodeScript script = env.createScript("builtinmoduletest.js",
-                                             new File("./target/test-classes/tests/builtinmoduletest.js"),
-                                             null);
-        ScriptStatus stat = script.execute().get();
-        assertEquals(0, stat.getExitCode());
+        runTest("builtinmoduletest.js");
     }
 
     @Test
     public void testChroot()
         throws InterruptedException, ExecutionException, NodeException, IOException
     {
+        Sandbox sb = new Sandbox();
+        sb.setFilesystemRoot("./target/test-classes");
         NodeEnvironment rootEnv = new NodeEnvironment();
-        rootEnv.setFilesystemRoot("./target/test-classes");
+        rootEnv.setSandbox(sb);
         NodeScript script = rootEnv.createScript("chroottest.js",
-                                             new File("./tests/chroottest.js"),
+                                             new File("./target/test-classes/tests/chroottest.js"),
+                                             null);
+        ScriptStatus stat = script.execute().get();
+        assertEquals(0, stat.getExitCode());
+    }
+
+    @Test
+    public void testChrootAbsolutePath()
+        throws InterruptedException, ExecutionException, NodeException, IOException
+    {
+        Sandbox sb = new Sandbox();
+        sb.setFilesystemRoot("./target/test-classes");
+        NodeEnvironment rootEnv = new NodeEnvironment();
+        rootEnv.setSandbox(sb);
+        NodeScript script = rootEnv.createScript("chroottest.js",
+                                             new File("./target/test-classes/tests/builtinmoduletest.js").getAbsoluteFile(),
                                              null);
         ScriptStatus stat = script.execute().get();
         assertEquals(0, stat.getExitCode());
@@ -205,12 +205,107 @@ public class BasicTest
     public void testChrootModules()
         throws InterruptedException, ExecutionException, NodeException, IOException
     {
+        Sandbox sb = new Sandbox();
+        sb.setFilesystemRoot("./target/test-classes");
         NodeEnvironment rootEnv = new NodeEnvironment();
-        rootEnv.setFilesystemRoot("./target/test-classes");
+        rootEnv.setSandbox(sb);
         NodeScript script = rootEnv.createScript("moduletest.js",
-                                             new File("./tests/moduletest.js"),
+                                             new File("./target/test-classes/tests/moduletest.js"),
                                              null);
         ScriptStatus stat = script.execute().get();
         assertEquals(0, stat.getExitCode());
+    }
+
+    @Test
+    public void testBasicHttp()
+        throws InterruptedException, ExecutionException, NodeException, IOException
+    {
+        runTest("basichttptest.js");
+    }
+
+    @Test
+    public void testHttpPolicy()
+        throws InterruptedException, ExecutionException, NodeException, IOException
+    {
+        NodeEnvironment localEnv = new NodeEnvironment();
+        Sandbox sb = new Sandbox();
+        sb.setNetworkPolicy(new RejectInPolicy());
+        localEnv.setSandbox(sb);
+        NodeScript script = localEnv.createScript("httppolicylisten.js",
+                                             new File("./target/test-classes/tests/httppolicylisten.js"),
+                                             null);
+        ScriptStatus status = script.execute().get();
+        assertEquals(0, status.getExitCode());
+    }
+
+    @Test
+    public void testHttpPolicyConnect()
+        throws InterruptedException, ExecutionException, NodeException, IOException
+    {
+        NodeEnvironment localEnv = new NodeEnvironment();
+        Sandbox sb = new Sandbox();
+        sb.setNetworkPolicy(new RejectOutPolicy());
+        localEnv.setSandbox(sb);
+        NodeScript script = localEnv.createScript("httppolicyconnect.js",
+                                             new File("./target/test-classes/tests/httppolicyconnect.js"),
+                                             null);
+        ScriptStatus status = script.execute().get();
+        assertEquals(0, status.getExitCode());
+    }
+
+    @Test
+    public void testJavaCode()
+        throws InterruptedException, ExecutionException, NodeException, IOException
+    {
+        runTest("javacodetest.js");
+    }
+
+    @Test
+    public void testSealing()
+        throws InterruptedException, ExecutionException, NodeException
+    {
+        runTest("rootsealtest.js");
+    }
+
+    private static final class RejectInPolicy
+        implements NetworkPolicy
+    {
+        @Override
+        public boolean allowConnection(InetSocketAddress addr)
+        {
+            return true;
+        }
+
+        @Override
+        public boolean allowListening(InetSocketAddress addrPort)
+        {
+            return false;
+        }
+    }
+
+    private void runTest(String name)
+        throws InterruptedException, ExecutionException, NodeException
+    {
+        NodeScript script = env.createScript(name,
+                                             new File("./target/test-classes/tests/" + name),
+                                             null);
+        ScriptStatus status = script.execute().get();
+        assertEquals(0, status.getExitCode());
+    }
+
+    private static final class RejectOutPolicy
+        implements NetworkPolicy
+    {
+        @Override
+        public boolean allowConnection(InetSocketAddress addr)
+        {
+            return false;
+        }
+
+        @Override
+        public boolean allowListening(InetSocketAddress addrPort)
+        {
+            return true;
+        }
     }
 }

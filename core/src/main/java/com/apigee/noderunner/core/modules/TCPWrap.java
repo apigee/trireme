@@ -1,5 +1,6 @@
 package com.apigee.noderunner.core.modules;
 
+import com.apigee.noderunner.NetworkPolicy;
 import com.apigee.noderunner.core.internal.Charsets;
 import com.apigee.noderunner.core.internal.InternalNodeModule;
 import com.apigee.noderunner.core.internal.ScriptRunner;
@@ -216,6 +217,12 @@ public class TCPWrap
                 setErrno(Constants.EIO);
                 return Constants.EINVAL;
             }
+            NetworkPolicy netPolicy = getNetworkPolicy();
+            if ((netPolicy != null) && !netPolicy.allowListening(boundAddress)) {
+                log.debug("Address {} not allowed by network policy", boundAddress);
+                setErrno(Constants.EINVAL);
+                return Constants.EINVAL;
+            }
             if (log.isDebugEnabled()) {
                 log.debug("Server listening on {} with backlog {} onconnection {}",
                           boundAddress, backlog, onConnection);
@@ -379,6 +386,14 @@ public class TCPWrap
             int port = intArg(args, 1);
 
             try {
+                InetSocketAddress targetAddress = new InetSocketAddress(host, port);
+                NetworkPolicy netPolicy = tcp.getNetworkPolicy();
+                if ((netPolicy != null) && !netPolicy.allowConnection(targetAddress)) {
+                    log.debug("Disallowed connection to {} due to network policy", targetAddress);
+                    setErrno(Constants.EINVAL);
+                    return null;
+                }
+
                 if (log.isDebugEnabled()) {
                     log.debug("Client connecting to {}:{}", host, port);
                 }
@@ -389,7 +404,7 @@ public class TCPWrap
                     tcp.clientChannel = SocketChannel.open(tcp.boundAddress);
                 }
                 tcp.clientInit();
-                tcp.clientChannel.connect(new InetSocketAddress(host, port));
+                tcp.clientChannel.connect(targetAddress);
                 tcp.selKey = tcp.clientChannel.register(getRunner().getSelector(),
                                                         SelectionKey.OP_CONNECT,
                                                         new SelectorHandler()
@@ -638,6 +653,13 @@ public class TCPWrap
             clearErrno();
         }
 
+        private NetworkPolicy getNetworkPolicy()
+        {
+            if (getRunner().getEnvironment().getSandbox() == null) {
+                return null;
+            }
+            return getRunner().getEnvironment().getSandbox().getNetworkPolicy();
+        }
     }
 
     public static class QueuedWrite

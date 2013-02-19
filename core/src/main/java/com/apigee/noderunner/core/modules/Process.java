@@ -21,6 +21,7 @@ import org.slf4j.LoggerFactory;
 
 import static com.apigee.noderunner.core.internal.ArgUtils.*;
 
+import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.lang.reflect.InvocationTargetException;
@@ -28,12 +29,11 @@ import java.util.HashMap;
 import java.util.Map;
 
 /**
- * The Node 0.8.15 Process object done on top of the VM.
+ * The Node 0.8.18 process module done on top of the VM.
  */
 public class Process
     implements NodeModule
 {
-    protected final static String CLASS_NAME  = "_processClass";
     protected final static String OBJECT_NAME = "process";
 
     private static final   long   NANO = 1000000000L;
@@ -52,7 +52,9 @@ public class Process
         ScriptableObject.defineClass(scope, EventEmitter.EventEmitterImpl.class, false, true);
 
         ScriptableObject.defineClass(scope, ProcessImpl.class, false, true);
-        ProcessImpl exports = (ProcessImpl) cx.newObject(scope, CLASS_NAME);
+        ScriptableObject.defineClass(scope, EnvImpl.class, false, true);
+
+        ProcessImpl exports = (ProcessImpl) cx.newObject(scope, ProcessImpl.CLASS_NAME);
         exports.setRunner(runner);
 
         ScriptableObject.defineClass(scope, NativeOutputStream.class, false, true);
@@ -61,7 +63,7 @@ public class Process
         NativeOutputStream stderr = (NativeOutputStream) cx.newObject(scope, NativeOutputStream.CLASS_NAME);
         NativeInputStream stdin = (NativeInputStream) cx.newObject(scope, NativeInputStream.CLASS_NAME);
 
-        Sandbox sb = runner.getSandbox();
+        Sandbox sb = runner.getEnvironment().getSandbox();
 
         // stdout
         OutputStream stdoutStream;
@@ -93,6 +95,10 @@ public class Process
         stdin.initialize(runner, runner.getEnvironment().getAsyncPool(), stdinStream);
         exports.setStdin(stdin);
 
+        // env
+        EnvImpl env = (EnvImpl) cx.newObject(scope, EnvImpl.CLASS_NAME);
+        exports.setEnv(env);
+
         // Put the object directly in the scope -- we only do this for modules that are always deployed
         // as global variables in the script.
         scope.put(OBJECT_NAME, scope, exports);
@@ -102,10 +108,13 @@ public class Process
     public static class ProcessImpl
         extends EventEmitter.EventEmitterImpl
     {
+        protected final static String CLASS_NAME = "_processClass";
+
         private Stream.WritableStream stdout;
         private Stream.WritableStream stderr;
         private Stream.ReadableStream stdin;
         private Scriptable argv;
+        private Scriptable env;
         private long startTime;
         private ScriptRunner runner;
         private final HashMap<String, Object> internalModuleCache = new HashMap<String, Object>();
@@ -207,6 +216,10 @@ public class Process
             argv.put(index, argv, val);
         }
 
+        public void setEnv(EnvImpl env) {
+            this.env = env;
+        }
+
         @JSGetter("execPath")
         public String getExecPath()
         {
@@ -226,16 +239,16 @@ public class Process
         @JSFunction
         public String cwd()
         {
-            return System.getProperty("user.dir");
+            try {
+                return runner.getEnvironment().reverseTranslatePath(System.getProperty("user.dir"));
+            } catch (IOException ioe) {
+                return ".";
+            }
         }
 
         @JSGetter("env")
-        public static Scriptable getEnv(Scriptable scope)
+        public Scriptable getEnv()
         {
-            Scriptable env = Context.getCurrentContext().newObject(scope);
-            for (Map.Entry<String, String> ee : System.getenv().entrySet()) {
-                env.put(ee.getKey(), env, ee.getValue());
-            }
             return env;
         }
 
@@ -293,7 +306,16 @@ public class Process
         @JSGetter("arch")
         public String getArch()
         {
-            return System.getProperty("os.arch");
+            // This is actually the bitness of the JRE, not necessarily the system
+            String arch = System.getProperty("os.arch");
+
+            if (arch.equals("x86")) {
+                return "ia32";
+            } else if (arch.equals("x86_64")) {
+                return "x64";
+            }
+
+            return arch;
         }
 
         @JSGetter("platform")
@@ -359,6 +381,23 @@ public class Process
             ret[0] = (int)(nanos / NANO);
             ret[1] = (int)(nanos % NANO);
             return cx.newArray(thisObj, ret);
+        }
+    }
+
+    public static class EnvImpl
+            extends ScriptableObject
+    {
+        public static final String CLASS_NAME = "_Environment";
+
+        @Override
+        public String getClassName() {
+            return CLASS_NAME;
+        }
+
+        public EnvImpl() {
+            for (Map.Entry<String, String> ee : System.getenv().entrySet()) {
+                this.put(ee.getKey(), this, ee.getValue());
+            }
         }
     }
 

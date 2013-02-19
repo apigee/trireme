@@ -1,30 +1,104 @@
 package com.apigee.noderunner.core;
 
+import com.apigee.noderunner.NetworkPolicy;
+
 import java.io.InputStream;
 import java.io.OutputStream;
+import java.util.concurrent.ExecutorService;
 
 /**
  * The Sandbox defines the execution environment for all scripts. It may be used when embedding Noderunner
  * so that there's a way to restrict the execution environment and plug in to various key services. To
  * use a sandbox, implement this interface and pass it to NodeEnvironment.setSandbox().
  */
-public interface Sandbox
+public class Sandbox
 {
-    /**
-     * Return the stream that scripts should use for standard output. By default, System.out will be used.
-     * If this method returns non-null, then the returned stream will be used instead.
-     */
-    OutputStream getStdout();
+    private OutputStream    stdout;
+    private InputStream     stdin;
+    private OutputStream    stderr;
+    private String          filesystemRoot;
+    private ExecutorService asyncPool;
+    private NetworkPolicy   networkPolicy;
 
     /**
-     * Return the stream that scripts should use for standard error output. By default, System.err will be used.
-     * If this method returns non-null, then the returned stream will be used instead.
+     * Provide a "chroot"-like facility so that all filenames used by the "fs" module
+     * (not all files used internally by
+     * NodeRunner) must be treated as if the "root" is in a different location. Any files
+     * "above" the root will be treated as "not found." This will also affect module loading
+     * of all but the root module, so that "require" statements must only refer to files
+     * under the root directory. Once this is set, then all filesystem calls must be specified
+     * relative to this root.
      */
-    OutputStream getStderr();
+    public void setFilesystemRoot(String root)
+    {
+        this.filesystemRoot = root;
+    }
+
+    public String getFilesystemRoot() {
+        return filesystemRoot;
+    }
 
     /**
-     * Return the stream that scripts should use for standard input. By default, System.in will be used.
-     * If this method returns non-null, then the returned stream will be used instead.
+     * Set the stream that scripts should use for standard output. By default, System.out will be used.
+     * If this method is used to set the stream to non-null, then the corresponding stream will be used instead.
      */
-    InputStream getStdin();
+    public void setStdout(OutputStream s) {
+        this.stdout = s;
+    }
+
+    public OutputStream getStdout() {
+        return stdout;
+    }
+
+    /**
+     * Set the stream that scripts should use for standard error output. By default, System.err will be used.
+     * If this method is used to set the stream to non-null, then the corresponding stream will be used instead.
+     */
+    public void setStderr(OutputStream s) {
+        this.stderr = s;
+    }
+
+    public OutputStream getStderr() {
+        return stderr;
+    }
+
+    /**
+     * Set the stream that scripts should use for standard input. By default, System.in will be used.
+     * If this method is used to set the stream to non-null, then the corresponding stream will be used instead.
+     */
+    public void setStdin(InputStream s) {
+        this.stdin = s;
+    }
+
+    public InputStream getStdin() {
+        return stdin;
+    }
+
+    /**
+     * Set the Executor where any jobs can be run that require a separate thread pool. At the moment, this includes
+     * DNS lookups and asynchronous filesystem calls. If this is unset or set to null then a new thread pool
+     * will be created.
+     */
+    public void setAsyncThreadPool(ExecutorService exec) {
+        this.asyncPool = exec;
+    }
+
+    public ExecutorService getAsyncThreadPool() {
+        return asyncPool;
+    }
+
+    /**
+     * Attach an object that will be called every time the process tries to open an outgoing network
+     * connection or listen for incoming connections. This may be used to protect access to and from
+     * certain hosts on an internal network. Note that this object is <i>not</i> consulted if an
+     * HttpAdapter has been registered -- in that case the HttpAdapter itself is responsible for
+     * restricting access.
+     */
+    public void setNetworkPolicy(NetworkPolicy policy) {
+        this.networkPolicy = policy;
+    }
+
+    public NetworkPolicy getNetworkPolicy() {
+        return networkPolicy;
+    }
 }

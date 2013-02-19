@@ -10,6 +10,7 @@ import org.mozilla.javascript.Function;
 import org.mozilla.javascript.FunctionObject;
 import org.mozilla.javascript.Scriptable;
 import org.mozilla.javascript.ScriptableObject;
+import org.mozilla.javascript.Undefined;
 import org.mozilla.javascript.annotations.JSConstructor;
 import org.mozilla.javascript.annotations.JSFunction;
 import org.mozilla.javascript.annotations.JSGetter;
@@ -303,7 +304,7 @@ public class Buffer
             if (index < bufLength) {
                 return (int)buf[index + bufOffset] & 0xff;
             }
-            throw new EvaluatorException("Array index out of bounds");
+            return Undefined.instance;
         }
 
         @Override
@@ -318,9 +319,6 @@ public class Buffer
             if (index < bufLength) {
                 int val = (Integer)Context.jsToJava(value, Integer.class);
                 putByte(index + bufOffset, val);
-
-            } else {
-                throw new EvaluatorException("Array index out of bounds");
             }
         }
 

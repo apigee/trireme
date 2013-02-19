@@ -5,6 +5,8 @@ import com.apigee.noderunner.core.NodeEnvironment;
 import com.apigee.noderunner.core.NodeException;
 import com.apigee.noderunner.core.NodeScript;
 import com.apigee.noderunner.core.ScriptStatus;
+import org.mozilla.javascript.Context;
+import org.mozilla.javascript.JavaScriptException;
 import org.mozilla.javascript.RhinoException;
 
 import java.io.File;
@@ -40,25 +42,32 @@ public class TestRunner
                 ScriptStatus status = exec.get(TEST_TIMEOUT_SECS, TimeUnit.SECONDS);
                 exitCode = status.getExitCode();
                 if (status.hasCause()) {
-                    if (status.getCause() instanceof RhinoException) {
-                        System.out.println(((RhinoException)status.getCause()).getScriptStackTrace());
-                        System.out.println();
+                    Throwable cause = status.getCause();
+
+                    if (cause instanceof JavaScriptException) {
+                        Object value = ((JavaScriptException) cause).getValue();
+                        Context cx = Context.enter();
+                        System.err.println(Context.toString(value));
+                        Context.exit();
                     }
-                    status.getCause().printStackTrace(System.out);
+                    if (cause instanceof RhinoException) {
+                        System.err.println(((RhinoException) cause).getScriptStackTrace());
+                    }
+                    cause.printStackTrace(System.err);
                 }
             } finally {
                 script.close();
             }
         } catch (TimeoutException te) {
-            System.out.println("Test timeout!");
+            System.err.println("Test timeout!");
             exitCode = 102;
         } catch (InterruptedException ie) {
             exitCode = 103;
         } catch (ExecutionException ee) {
-            ee.getCause().printStackTrace(System.out);
+            ee.getCause().printStackTrace(System.err);
             exitCode = 104;
         } catch (NodeException ne) {
-            ne.printStackTrace(System.out);
+            ne.printStackTrace(System.err);
             exitCode = 105;
         } finally {
             env.close();

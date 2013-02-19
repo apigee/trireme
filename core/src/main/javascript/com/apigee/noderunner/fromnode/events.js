@@ -23,6 +23,7 @@ var isArray = Array.isArray;
 var domain;
 
 function EventEmitter() {
+  this.domain = null;
   if (exports.usingDomains) {
     // if there is an active domain, then attach to it.
     domain = domain || require('domain');
@@ -30,6 +31,8 @@ function EventEmitter() {
       this.domain = domain.active;
     }
   }
+  this._events = this._events || null;
+  this._maxListeners = this._maxListeners || defaultMaxListeners;
 }
 exports.EventEmitter = EventEmitter;
 
@@ -141,10 +144,8 @@ EventEmitter.prototype.addListener = function(type, listener) {
 
   // To avoid recursion in the case that type == "newListeners"! Before
   // adding it to the listeners, first emit "newListeners".
-  if (this._events.newListener) {
-    this.emit('newListener', type, typeof listener.listener === 'function' ?
-              listener.listener : listener);
-  }
+  this.emit('newListener', type, typeof listener.listener === 'function' ?
+            listener.listener : listener);
 
   if (!this._events[type]) {
     // Optimize the case of one listener. Don't need the extra array object.
@@ -163,11 +164,7 @@ EventEmitter.prototype.addListener = function(type, listener) {
   // Check for listener leak
   if (isArray(this._events[type]) && !this._events[type].warned) {
     var m;
-    if (this._maxListeners !== undefined) {
-      m = this._maxListeners;
-    } else {
-      m = defaultMaxListeners;
-    }
+    m = this._maxListeners;
 
     if (m && m > 0 && this._events[type].length > m) {
       this._events[type].warned = true;
@@ -201,7 +198,6 @@ EventEmitter.prototype.once = function(type, listener) {
   return this;
 };
 
-// emits a 'removeListener' event iff the listener was removed
 EventEmitter.prototype.removeListener = function(type, listener) {
   if ('function' !== typeof listener) {
     throw new Error('removeListener only takes instances of Function');
@@ -227,65 +223,31 @@ EventEmitter.prototype.removeListener = function(type, listener) {
     list.splice(position, 1);
     if (list.length == 0)
       delete this._events[type];
-
-    if (this._events.removeListener) {
-      this.emit('removeListener', type, listener);
-    }
   } else if (list === listener ||
              (list.listener && list.listener === listener))
   {
     delete this._events[type];
-
-    if (this._events.removeListener) {
-      this.emit('removeListener', type, listener);
-    }
   }
 
   return this;
 };
 
 EventEmitter.prototype.removeAllListeners = function(type) {
-  if (!this._events) return this;
-
-  // fast path
-  if (!this._events.removeListener) {
-    if (arguments.length === 0) {
-      this._events = {};
-    } else if (type && this._events && this._events[type]) {
-      this._events[type] = null;
-    }
-    return this;
-  }
-
-  // slow(ish) path, emit 'removeListener' events for all removals
   if (arguments.length === 0) {
-    for (var key in this._events) {
-      if (key === 'removeListener') continue;
-      this.removeAllListeners(key);
-    }
-    this.removeAllListeners('removeListener');
     this._events = {};
     return this;
   }
 
-  var listeners = this._events[type];
-  if (isArray(listeners)) {
-    while (listeners.length) {
-      // LIFO order
-      this.removeListener(type, listeners[listeners.length - 1]);
-    }
-  } else if (listeners) {
-    this.removeListener(type, listeners);
-  }
-  this._events[type] = null;
-
+  // does not use listeners(), so no side effect of creating _events[type]
+  if (type && this._events && this._events[type]) this._events[type] = null;
   return this;
 };
 
 EventEmitter.prototype.listeners = function(type) {
-  if (!this._events || !this._events[type]) return [];
+  if (!this._events) this._events = {};
+  if (!this._events[type]) this._events[type] = [];
   if (!isArray(this._events[type])) {
-    return [this._events[type]];
+    this._events[type] = [this._events[type]];
   }
-  return this._events[type].slice(0);
+  return this._events[type];
 };

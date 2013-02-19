@@ -5,7 +5,6 @@ import com.apigee.noderunner.core.NodeException;
 import com.apigee.noderunner.core.NodeModule;
 import com.apigee.noderunner.core.NodeScript;
 import com.apigee.noderunner.core.RunningScript;
-import com.apigee.noderunner.core.Sandbox;
 import com.apigee.noderunner.core.ScriptStatus;
 import com.apigee.noderunner.core.ScriptTask;
 import com.apigee.noderunner.core.modules.EventEmitter;
@@ -16,7 +15,6 @@ import org.mozilla.javascript.Context;
 import org.mozilla.javascript.Function;
 import org.mozilla.javascript.RhinoException;
 import org.mozilla.javascript.Scriptable;
-import org.mozilla.javascript.ScriptableObject;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -55,7 +53,6 @@ public class ScriptRunner
     private        String          scriptName;
     private final  HashMap<String, Object> moduleCache = new HashMap<String, Object>();
     private final  HashMap<String, Object> nativeModuleCache = new HashMap<String, Object>();
-    private        Sandbox              sandbox;
     private        Future<ScriptStatus> future;
 
     private final  LinkedBlockingQueue<Activity> tickFunctions = new LinkedBlockingQueue<Activity>();
@@ -73,19 +70,19 @@ public class ScriptRunner
     private Scriptable scope;
 
     public ScriptRunner(NodeScript so, NodeEnvironment env, String scriptName, File scriptFile,
-                        String[] args, Sandbox sandbox)
+                        String[] args)
     {
         this.scriptObject = so;
         this.scriptFile = scriptFile;
-        init(env, scriptName, args, sandbox);
+        init(env, scriptName, args);
     }
 
     public ScriptRunner(NodeScript so, NodeEnvironment env, String scriptName, String script,
-                        String[] args, Sandbox sandbox)
+                        String[] args)
     {
         this.scriptObject = so;
         this.script = script;
-        init(env, scriptName, args, sandbox);
+        init(env, scriptName, args);
     }
 
     public void close()
@@ -98,13 +95,12 @@ public class ScriptRunner
     }
 
     private void init(NodeEnvironment env, String scriptName,
-                      String[] args, Sandbox sandbox)
+                      String[] args)
     {
         this.env = env;
         this.scriptName = scriptName;
 
         this.args = args;
-        this.sandbox = sandbox;
 
         try {
             this.selector = Selector.open();
@@ -123,10 +119,6 @@ public class ScriptRunner
 
     public NodeScript getScriptObject() {
         return scriptObject;
-    }
-
-    public Sandbox getSandbox() {
-        return sandbox;
     }
 
     public Scriptable getScriptScope() {
@@ -283,7 +275,17 @@ public class ScriptRunner
 
                 } else {
                     // Again like the real node, delegate running the actual script to the module module.
-                    process.setArgv(1, scriptFile.getAbsolutePath());
+                    String scriptPath = scriptFile.getPath();
+                    scriptPath = env.reverseTranslatePath(scriptPath);
+                    if (!scriptFile.isAbsolute() && !scriptPath.startsWith("./")) {
+                        // Add ./ before script path to un-confuse the module module if it's a local path
+                        scriptPath = "./" + scriptPath;
+                    }
+
+                    if (log.isDebugEnabled()) {
+                        log.debug("Launching module.runMain({})", scriptPath);
+                    }
+                    process.setArgv(1, scriptPath);
                     Function load = (Function)mainModule.get("runMain", mainModule);
                     enqueueCallback(load, mainModule, mainModule, null);
                 }
@@ -462,16 +464,24 @@ public class ScriptRunner
 
             // Set up globals that are set up when running a script from the command line (set in "evalScript"
             // in node.js.)
-            if (scriptFile == null) {
-                scope.put("__filename", scope, scriptName);
-                scope.put("__dirname", scope, new File(".").getAbsolutePath());
-            } else {
-                scope.put("__filename", scope, scriptFile.getAbsolutePath());
-                if (scriptFile.getParentFile() == null) {
-                    scope.put("__dirname", scope, new File(".").getAbsolutePath());
+            try {
+                if (scriptFile == null) {
+                    scope.put("__filename", scope, scriptName);
+                    scope.put("__dirname", scope,
+                              env.reverseTranslatePath("."));
                 } else {
-                    scope.put("__dirname", scope, scriptFile.getParentFile().getAbsolutePath());
+                    scope.put("__filename", scope,
+                              scriptFile.getPath());
+                    if (scriptFile.getParentFile() == null) {
+                        scope.put("__dirname", scope,
+                                  env.reverseTranslatePath("."));
+                    } else {
+                        scope.put("__dirname", scope,
+                                  env.reverseTranslatePath(scriptFile.getParentFile().getPath()));
+                    }
                 }
+            } catch (IOException ioe) {
+                throw new NodeException(ioe);
             }
 
             // Set up the main native module

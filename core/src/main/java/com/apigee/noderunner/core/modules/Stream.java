@@ -3,6 +3,7 @@ package com.apigee.noderunner.core.modules;
 import com.apigee.noderunner.core.NodeModule;
 import com.apigee.noderunner.core.internal.Charsets;
 import com.apigee.noderunner.core.internal.ScriptRunner;
+import com.apigee.noderunner.core.internal.ScriptableUtils;
 import com.apigee.noderunner.core.internal.Utils;
 import org.mozilla.javascript.Context;
 import org.mozilla.javascript.EvaluatorException;
@@ -34,6 +35,7 @@ public class Stream
     @Override
     public Object registerExports(Context cx, Scriptable scope, ScriptRunner runner) throws InvocationTargetException, IllegalAccessException, InstantiationException
     {
+        ScriptableObject.defineClass(scope, StreamImpl.class, false, true);
         ScriptableObject.defineClass(scope, ReadableStream.class, false, true);
         ScriptableObject.defineClass(scope, WritableStream.class, false, true);
         ScriptableObject.defineClass(scope, BidirectionalStream.class, false, true);
@@ -42,30 +44,18 @@ public class Stream
         return exports;
     }
 
-    public static class ReadableStream
-        extends EventEmitter.EventEmitterImpl
+    public static class StreamImpl
+            extends EventEmitter.EventEmitterImpl
     {
-        public static final String CLASS_NAME = "_ReadableStream";
+        public static final String CLASS_NAME = "_Stream";
+
         protected boolean readable;
+        protected boolean writable;
         protected Charset encoding = null;
 
         @Override
         public String getClassName() {
             return CLASS_NAME;
-        }
-
-        public void sendDataEvent(ByteBuffer buf, boolean copy, Context cx, Scriptable scope)
-        {
-            log.debug("Got {}", buf);
-            if (encoding == null) {
-                Buffer.BufferImpl jsBuf =
-                    (Buffer.BufferImpl)cx.newObject(scope, Buffer.BUFFER_CLASS_NAME);
-                jsBuf.initialize(buf, copy);
-                fireEvent("data", jsBuf);
-
-            } else {
-                fireEvent("data", Utils.bufferToString(buf, encoding));
-            }
         }
 
         @JSGetter("readable")
@@ -75,51 +65,6 @@ public class Stream
 
         public void setReadable(boolean r) {
             this.readable = r;
-        }
-
-        @JSFunction
-        public void pause()
-        {
-        }
-
-        @JSFunction
-        public void resume()
-        {
-        }
-
-        @JSFunction
-        public void destroy()
-        {
-            readable = false;
-        }
-
-        @JSFunction
-        public static void setEncoding(Context cx, final Scriptable thisObj, Object[] args, Function func)
-        {
-            String enc = stringArg(args, 0, Charsets.DEFAULT_ENCODING);
-            Charset cs = Charsets.get().getCharset(enc);
-            if (cs == null) {
-                throw new EvaluatorException("Invalid charset");
-            }
-            ((ReadableStream)thisObj).encoding = cs;
-        }
-
-        @JSFunction
-        public static void pipe(Context cx, final Scriptable thisObj, Object[] args, Function func)
-        {
-            throw new EvaluatorException("Not implemented");
-        }
-    }
-
-    public static class BidirectionalStream
-        extends ReadableStream
-    {
-        public static final String CLASS_NAME = "_BidirectionalStream";
-        protected boolean writable;
-
-        @Override
-        public String getClassName() {
-            return CLASS_NAME;
         }
 
         @JSGetter("writable")
@@ -132,9 +77,49 @@ public class Stream
         }
 
         @JSFunction
+        public static void setEncoding(Context cx, final Scriptable thisObj, Object[] args, Function func)
+        {
+            StreamImpl thisClass = ScriptableUtils.prototypeCast(thisObj, StreamImpl.class);
+            String enc = stringArg(args, 0, Charsets.DEFAULT_ENCODING);
+
+            Charset cs = Charsets.get().getCharset(enc);
+            if (cs == null) {
+                throw new EvaluatorException("Invalid charset");
+            }
+
+            thisClass.encoding = cs;
+        }
+
+        @JSFunction
+        public void pause()
+        {
+            throw new EvaluatorException("Not implemented");
+        }
+
+        @JSFunction
+        public void resume()
+        {
+            throw new EvaluatorException("Not implemented");
+        }
+
+        @JSFunction
+        public void destroy()
+        {
+            readable = false;
+            writable = false;
+        }
+
+        @JSFunction
+        public static void pipe(Context cx, final Scriptable thisObj, Object[] args, Function func)
+        {
+            throw new EvaluatorException("Not implemented");
+        }
+
+        @JSFunction
         public static boolean write(Context cx, final Scriptable thisObj, Object[] args, Function func)
         {
-            return ((BidirectionalStream)thisObj).write(cx, args);
+            StreamImpl thisClass = ScriptableUtils.prototypeCast(thisObj, StreamImpl.class);
+            return thisClass.write(cx, args);
         }
 
         protected boolean write(Context cx, Object[] args)
@@ -145,7 +130,8 @@ public class Stream
         @JSFunction
         public static void end(Context cx, final Scriptable thisObj, Object[] args, Function func)
         {
-            ((BidirectionalStream)thisObj).end(cx, args);
+            StreamImpl thisClass = ScriptableUtils.prototypeCast(thisObj, StreamImpl.class);
+            thisClass.end(cx, args);
         }
 
         protected void end(Context cx, Object[] args)
@@ -160,17 +146,24 @@ public class Stream
         {
         }
 
-        @Override
-        public void destroy()
-        {
-            super.destroy();
-            writable = false;
-        }
-
         @JSFunction
         public void destroySoon()
         {
             destroy();
+        }
+
+        public void sendDataEvent(ByteBuffer buf, boolean copy, Context cx, Scriptable scope)
+        {
+            log.debug("Got {}", buf);
+            if (encoding == null) {
+                Buffer.BufferImpl jsBuf =
+                    (Buffer.BufferImpl)cx.newObject(scope, Buffer.BUFFER_CLASS_NAME);
+                jsBuf.initialize(buf, copy);
+                fireEvent("data", jsBuf);
+
+            } else {
+                fireEvent("data", Utils.bufferToString(buf, encoding));
+            }
         }
 
         protected ByteBuffer getWriteData(Object[] args)
@@ -196,6 +189,56 @@ public class Stream
         }
     }
 
+    public static class BidirectionalStream
+        extends StreamImpl
+    {
+        public static final String CLASS_NAME = "_BidirectionalStream";
+
+        @Override
+        public String getClassName() {
+            return CLASS_NAME;
+        }
+    }
+
+    public static class ReadableStream
+        extends BidirectionalStream
+    {
+        public static final String CLASS_NAME = "_ReadableStream";
+
+        @JSGetter("writable")
+        public boolean isWritable() {
+            return false;
+        }
+
+        @Override
+        public String getClassName() {
+            return CLASS_NAME;
+        }
+
+        @JSFunction
+        public static boolean write(Context cx, final Scriptable thisObj, Object[] args, Function func)
+        {
+            throw new EvaluatorException("Not writable");
+        }
+
+        @JSFunction
+        public static void end(Context cx, final Scriptable thisObj, Object[] args, Function func)
+        {
+            throw new EvaluatorException("Not writable");
+        }
+
+        @JSFunction
+        public void destroySoon()
+        {
+            destroy();
+        }
+
+        protected ByteBuffer getWriteData(Object[] args)
+        {
+            throw new EvaluatorException("Not writable");
+        }
+    }
+
     public static class WritableStream
         extends BidirectionalStream
     {
@@ -206,13 +249,24 @@ public class Stream
             return CLASS_NAME;
         }
 
-        @Override
+        @JSGetter("readable")
+        public boolean isReadable() {
+            return false;
+        }
+
+        @JSFunction
+        public static void setEncoding(Context cx, final Scriptable thisObj, Object[] args, Function func)
+        {
+            throw new EvaluatorException("Not readable");
+        }
+
+        @JSFunction
         public void pause()
         {
             throw new EvaluatorException("Not readable");
         }
 
-        @Override
+        @JSFunction
         public void resume()
         {
             throw new EvaluatorException("Not readable");
@@ -220,6 +274,11 @@ public class Stream
 
         @JSFunction
         public static void pipe(Context cx, final Scriptable thisObj, Object[] args, Function func)
+        {
+            throw new EvaluatorException("Not readable");
+        }
+
+        public void sendDataEvent(ByteBuffer buf, boolean copy, Context cx, Scriptable scope)
         {
             throw new EvaluatorException("Not readable");
         }

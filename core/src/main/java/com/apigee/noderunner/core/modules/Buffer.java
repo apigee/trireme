@@ -490,20 +490,16 @@ public class Buffer
         @JSFunction
         public static BufferImpl slice(Context cx, Scriptable thisObj, Object[] args, Function func)
         {
-            int start = intArg(args, 0, 0);
-            int end;
-
             BufferImpl b = (BufferImpl)thisObj;
-            if (args.length > 1) {
-                end = intArg(args, 1);
-                if (end < 0) {
-                    throw new EvaluatorException("Invalid end");
-                }
-            } else {
-                end = b.bufLength;
-            }
+
+            int start = intArg(args, 0, 0);
+            int end = intArg(args, 1, b.bufLength);
+
             if (start < 0) {
                 throw new EvaluatorException("Invalid start");
+            }
+            if (end < 0) {
+                throw new EvaluatorException("Invalid end");
             }
             if (end < start) {
                 throw new EvaluatorException("end < start");

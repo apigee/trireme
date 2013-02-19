@@ -78,6 +78,7 @@ public class ModuleRegistry
         addCompiledModule("url", "com.apigee.noderunner.fromnode.url");
         addCompiledModule("util", "com.apigee.noderunner.fromnode.util");
         addCompiledModule("vm", "com.apigee.noderunner.fromnode.vm");
+        addCompiledModule("zlib", "com.apigee.noderunner.fromnode.zlib");
 
         addCompiledModule("http", "com.apigee.noderunner.scripts.adaptorhttp");
     }

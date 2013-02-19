@@ -70,6 +70,23 @@
     </dependencies>
   </dependencyManagement>
 
+  <build>
+    <plugins>
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-dependency-plugin</artifactId>
+        <executions>
+          <execution>
+            <id>analyze</id>
+            <goals>
+              <goal>analyze-only</goal>
+            </goals>
+          </execution>
+        </executions>
+      </plugin>
+    </plugins>
+  </build>
+
   <scm>
     <connection>scm:git:https://github.com/apigee/noderunner.git</connection>
     <developerConnection>scm:git:ssh://git@github.com:apigee/noderunner.git</developerConnection>

@@ -41,27 +41,25 @@ for (var i = 255; i >= 0; i--) {
 
 // safe constructor
 var echoServer = net.Server(function(connection) {
-  console.log('got connection');
   connection.setEncoding('binary');
   connection.on('data', function(chunk) {
-    common.error('recved: ' + JSON.stringify(chunk));
+    //common.error('recved: ' + JSON.stringify(chunk));
     connection.write(chunk, 'binary');
   });
   connection.on('end', function() {
     connection.end();
   });
-}).listen(common.PORT);
+});
+echoServer.listen(common.PORT);
 
 var recv = '';
 
 echoServer.on('listening', function() {
-  console.log('Got listening');
   var j = 0;
   var c = net.createConnection(common.PORT);
 
   c.setEncoding('binary');
   c.on('data', function(chunk) {
-    console.log('Client got data');
     if (j < 256) {
       common.error('write ' + j);
       c.write(String.fromCharCode(j), 'binary');
@@ -73,12 +71,10 @@ echoServer.on('listening', function() {
   });
 
   c.on('connect', function() {
-    common.log('on connect');
     c.write(binaryString, 'binary');
   });
 
   c.on('close', function() {
-    common.log('on close');
     console.dir(recv);
     echoServer.close();
   });

@@ -69,6 +69,36 @@
           </execution>
         </executions>
       </plugin>
+      <!-- Doesn't seem to help much but save for when we can use this usefully
+      <plugin>
+        <groupId>org.codehaus.mojo</groupId>
+        <artifactId>cobertura-maven-plugin</artifactId>
+        <version>2.5.2</version>
+        <configuration>
+          <check>
+            <lineRate>50</lineRate>
+            <branchRate>50</branchRate>
+            <haltOnFailure>false</haltOnFailure>
+          </check>
+        </configuration>
+        <executions>
+          <execution>
+            <id>clean</id>
+            <phase>clean</phase>
+            <goals>
+              <goal>clean</goal>
+            </goals>
+          </execution>
+          <execution>
+            <id>package</id>
+            <phase>package</phase>
+            <goals>
+              <goal>check</goal>
+            </goals>
+          </execution>
+        </executions>
+      </plugin>
+      -->
     </plugins>
   </build>
 </project>

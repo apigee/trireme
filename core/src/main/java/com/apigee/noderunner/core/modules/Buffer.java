@@ -181,7 +181,7 @@ public class Buffer
             BufferImpl ret = (BufferImpl) cx.newObject(thisObj, BUFFER_CLASS_NAME, new Object[] { totalLen });
             for (Integer i : bufs.getIndexIds()) {
                 BufferImpl from = (BufferImpl) bufs.get(i);
-                System.arraycopy(from.buf, from.bufOffset, ret.buf, pos + ret.bufOffset, from.bufLength);
+                System.arraycopy(from.buf, from.bufOffset, ret.buf, pos, from.bufLength);
                 pos += from.bufLength;
             }
             return ret;

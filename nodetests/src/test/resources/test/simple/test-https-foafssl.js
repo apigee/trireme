@@ -34,8 +34,8 @@ var exec = require('child_process').exec;
 var https = require('https');
 
 var options = {
-  key: fs.readFileSync(common.fixturesDir + '/agent.key'),
-  cert: fs.readFileSync(common.fixturesDir + '/agent.crt'),
+  keystore: common.fixturesDir + '/agent.jks'),
+  passphrase: 'secure',
   requestCert: true
 };
 

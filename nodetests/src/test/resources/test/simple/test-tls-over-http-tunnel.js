@@ -35,12 +35,11 @@ var https = require('https');
 var proxyPort = common.PORT + 1;
 var gotRequest = false;
 
-var key = fs.readFileSync(common.fixturesDir + '/keys/agent1-key.pem');
-var cert = fs.readFileSync(common.fixturesDir + '/keys/agent1-cert.pem');
+var keystore = common.fixturesDir + '/keys/agent1.jks');
 
 var options = {
-  key: key,
-  cert: cert
+  keystore: keystore,
+  passphrase: 'secure'
 };
 
 var server = https.createServer(options, function(req, res) {

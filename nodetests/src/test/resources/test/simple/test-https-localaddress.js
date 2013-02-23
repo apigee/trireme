@@ -24,14 +24,16 @@ var https = require('https'),
     fs = require('fs'),
     assert = require('assert');
 
+/*
 if (['linux', 'win32'].indexOf(process.platform) == -1) {
   console.log('Skipping platform-specific test.');
   process.exit();
 }
+*/
 
 var options = {
-  key: fs.readFileSync(common.fixturesDir + '/keys/agent1-key.pem'),
-  cert: fs.readFileSync(common.fixturesDir + '/keys/agent1-cert.pem')
+  keystore: common.fixturesDir + '/keys/agent1.jks',
+  passphrase: 'secure'
 };
 
 var server = https.createServer(options, function (req, res) {

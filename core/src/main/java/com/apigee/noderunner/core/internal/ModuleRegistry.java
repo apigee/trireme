@@ -66,6 +66,7 @@ public class ModuleRegistry
         addCompiledModule("freelist", "com.apigee.noderunner.fromnode.freelist");
         addCompiledModule("fs", "com.apigee.noderunner.fromnode.fs");
         addCompiledModule("node_http", "com.apigee.noderunner.fromnode.http");
+        addCompiledModule("node_https", "com.apigee.noderunner.fromnode.https");
         addCompiledModule("module", "com.apigee.noderunner.fromnode.module");
         addCompiledModule("net", "com.apigee.noderunner.fromnode.net");
         addCompiledModule("os", "com.apigee.noderunner.fromnode.os");
@@ -81,6 +82,8 @@ public class ModuleRegistry
         addCompiledModule("zlib", "com.apigee.noderunner.fromnode.zlib");
 
         addCompiledModule("http", "com.apigee.noderunner.scripts.adaptorhttp");
+        addCompiledModule("https", "com.apigee.noderunner.scripts.adaptorhttps");
+        addCompiledModule("tls", "com.apigee.noderunner.scripts.tls");
     }
 
     private void compileAndAdd(Context cx, String name, String script)

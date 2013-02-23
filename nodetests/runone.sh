@@ -11,5 +11,4 @@ rm ${CP}
 
 #ARGS="-Xdebug -Xrunjdwp:server=y,suspend=y,transport=dt_socket,address=localhost:14000"
 
-rm -rf target/test-classes/test/tmp
-time java ${ARGS} com.apigee.noderunner.test.TestRunner target/test-classes/test/$1
+time java ${ARGS} com.apigee.noderunner.test.TestRunner $1

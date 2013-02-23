@@ -26,8 +26,8 @@ var fs = require('fs');
 
 
 var options = {
-  key: fs.readFileSync(common.fixturesDir + '/keys/agent2-key.pem'),
-  cert: fs.readFileSync(common.fixturesDir + '/keys/agent2-cert.pem')
+  keystore: common.fixturesDir + '/keys/agent2.jks',
+  passphrase: 'secure'
 };
 
 var connections = 0;

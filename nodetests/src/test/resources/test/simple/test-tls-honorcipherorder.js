@@ -36,8 +36,8 @@ process.on('exit', function() {
 function test(honorCipherOrder, clientCipher, expectedCipher, cb) {
   var soptions = {
     secureProtocol: SSL_Method,
-    key: fs.readFileSync(common.fixturesDir + '/keys/agent2-key.pem'),
-    cert: fs.readFileSync(common.fixturesDir + '/keys/agent2-cert.pem'),
+    keystore: common.fixturesDir + '/keys/agent2.jks',
+    passphrase: 'secure',
     ciphers: 'AES256-SHA:RC4-SHA:DES-CBC-SHA',
     honorCipherOrder: !!honorCipherOrder
   };

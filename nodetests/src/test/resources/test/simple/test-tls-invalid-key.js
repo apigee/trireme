@@ -31,8 +31,8 @@ var fs = require('fs');
 var path = require('path');
 
 var options = {
-  key: fs.readFileSync(path.join(common.fixturesDir, 'keys/agent1-key.pem')),
-  cert: fs.readFileSync(path.join(common.fixturesDir, 'test_cert.pem'))
+  keystore: path.join(common.fixturesDir, 'keys/agent1.jks'),
+  passphrase: 'secure'
 };
 var serverErrorHappened = false;
 var clientErrorHappened = false;

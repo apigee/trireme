@@ -28,8 +28,8 @@ var clientConnected = 0;
 var serverConnected = 0;
 
 var options = {
-  key: fs.readFileSync(common.fixturesDir + '/keys/agent1-key.pem'),
-  cert: fs.readFileSync(common.fixturesDir + '/keys/agent1-cert.pem')
+  keystore: common.fixturesDir + '/keys/agent1.jks',
+  passphrase: 'secure',
 };
 
 var server = tls.Server(options, function(socket) {

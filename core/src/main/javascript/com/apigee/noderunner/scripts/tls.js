@@ -10,9 +10,11 @@ var assert = require('assert');
 var util = require('util');
 var net = require('net');
 var Stream = require('stream');
+var nodetls = require('node_tls');
 var StringDecoder = require('string_decoder').StringDecoder;
 var wrap = process.binding('ssl_wrap');
 var EventEmitter = require('events').EventEmitter;
+var tlscheckidentity = require('tls_checkidentity');
 
 var debug;
 if (process.env.NODE_DEBUG && /tls/.test(process.env.NODE_DEBUG)) {
@@ -41,10 +43,26 @@ function Server() {
     self.on('secureConnection', listener);
   }
 
-  self.context = wrap.createContext(options);
+  self.context = wrap.createContext();
+  self.context.setKeyStore(options.keystore, options.passphrase);
+  if (options.truststore) {
+    self.context.setTrustStore(options.truststore);
+  }
+  self.context.init();
+
+  if (options.ciphers) {
+    var tmpEngine = self.context.createEngine(false);
+    if (!tmpEngine.validateCiphers(options.ciphers)) {
+      throw 'Invalid cipher list: ' + options.ciphers;
+    }
+  }
+
 
   self.netServer = net.createServer(options, function(connection) {
     var engine = self.context.createEngine(false);
+    if (options.ciphers) {
+      engine.setCiphers(options.ciphers);
+    }
     var clearStream = new CleartextStream();
     clearStream.init(true, self, connection, engine);
   });
@@ -90,7 +108,13 @@ exports.connect = function() {
 
   var sslContext;
   if (options.rejectUnauthorized == false) {
-    sslContext = wrap.createAllTrustingContext();
+    sslContext = wrap.createContext();
+    sslContext.setTrustEverybody();
+    sslContext.init();
+  } else if (options.truststore) {
+    sslContext = wrap.createContext();
+    sslContext.setTrustStore(options.truststore);
+    sslContext.init();
   } else {
     sslContext = wrap.createDefaultContext();
   }
@@ -122,6 +146,8 @@ exports.createSecurePair = function() {
   throw 'Not implemented';
 };
 
+exports.checkServerIdentity = tlscheckidentity.checkServerIdentity;
+
 Server.prototype.close = function() {
   debug('Server.close');
   this.netServer.close();
@@ -147,6 +173,8 @@ CleartextStream.prototype.init = function(serverMode, server, connection, engine
   self.engine = engine;
   self.closed = false;
   self.closing = false;
+  self.remoteAddress = connection.remoteAddress;
+  self.remotePort = connection.remotePort;
   connection.ondata = function(data, offset, end) {
     debug(self.id + ' onData');
     readCiphertext(self, data, offset, end);
@@ -277,6 +305,14 @@ CleartextStream.prototype.setEncoding = function(encoding) {
   this.decoder = new StringDecoder(encoding);
 }
 
+CleartextStream.prototype.address = function() {
+  return this.connection.address();
+}
+
+CleartextStream.prototype.getCipher = function() {
+  return this.engine.getCipher();
+}
+
 // TODO offset and end
 function readCiphertext(self, data) {
   var sslResult = self.engine.unwrap(data);
@@ -333,7 +369,7 @@ function readCiphertext(self, data) {
 function writeCleartext(self, data, cb) {
   var sslResult = self.engine.wrap(data);
   var writeStatus = false;
-  debug(self.id + ' writeCleartext: SSL status ' + sslResult.status +
+  debug(self.id + ' writeCleartext(' + (data ? data.length : 0) + '): SSL status ' + sslResult.status +
         ' length ' + (sslResult.data ? sslResult.data.length : 0));
   if (cb) {
     if (!self.writeCallbacks) {

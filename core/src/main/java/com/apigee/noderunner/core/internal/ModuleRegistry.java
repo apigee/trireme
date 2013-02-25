@@ -84,6 +84,7 @@ public class ModuleRegistry
         addCompiledModule("http", "com.apigee.noderunner.scripts.adaptorhttp");
         addCompiledModule("https", "com.apigee.noderunner.scripts.adaptorhttps");
         addCompiledModule("tls", "com.apigee.noderunner.scripts.tls");
+        addCompiledModule("tls_checkidentity", "com.apigee.noderunner.scripts.tls_checkidentity");
     }
 
     private void compileAndAdd(Context cx, String name, String script)

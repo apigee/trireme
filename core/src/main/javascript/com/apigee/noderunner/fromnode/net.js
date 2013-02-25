@@ -1123,7 +1123,10 @@ Server.prototype.unref = function() {
 
 // TODO: isIP should be moved to the DNS code. Putting it here now because
 // this is what the legacy system did.
-exports.isIP = cares.isIP;
+// Noderunner -- turning this into an explicitl function here works -- not sure why.
+exports.isIP = function(hostname) {
+  return cares.isIP(hostname);
+}
 
 
 exports.isIPv4 = function(input) {

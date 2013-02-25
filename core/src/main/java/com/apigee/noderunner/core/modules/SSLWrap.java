@@ -21,6 +21,7 @@ import javax.net.ssl.SSLEngine;
 import javax.net.ssl.SSLEngineResult;
 import javax.net.ssl.SSLException;
 import javax.net.ssl.TrustManager;
+import javax.net.ssl.TrustManagerFactory;
 import javax.net.ssl.X509TrustManager;
 import java.io.FileInputStream;
 import java.io.IOException;
@@ -29,13 +30,12 @@ import java.nio.ByteBuffer;
 import java.security.GeneralSecurityException;
 import java.security.KeyManagementException;
 import java.security.KeyStore;
-import java.security.KeyStoreException;
 import java.security.NoSuchAlgorithmException;
-import java.security.ProviderException;
-import java.security.UnrecoverableKeyException;
-import java.security.cert.CertificateException;
 import java.security.cert.X509Certificate;
+import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.HashSet;
+import java.util.regex.Pattern;
 
 /**
  * This module is used in a similar way to "TCPWrap," but it is entirely internal to NodeRunner and different
@@ -47,6 +47,8 @@ public class SSLWrap
     implements InternalNodeModule
 {
     protected static final Logger log = LoggerFactory.getLogger(SSLWrap.class);
+
+    protected static final Pattern COLON = Pattern.compile(":");
 
     public static final int BUFFER_SIZE = 8192;
 
@@ -88,10 +90,9 @@ public class SSLWrap
         @JSFunction
         public static Object createContext(Context cx, Scriptable thisObj, Object[] args, Function func)
         {
-            ensureArg(args, 0);
             WrapperImpl self = (WrapperImpl)thisObj;
             ContextImpl ctx = (ContextImpl)cx.newObject(thisObj, ContextImpl.CLASS_NAME);
-            ctx.init(self.runner, (Scriptable)args[0]);
+            ctx.init(self.runner);
             return ctx;
         }
 
@@ -103,16 +104,6 @@ public class SSLWrap
             ctx.initDefault(self.runner);
             return ctx;
         }
-
-        @JSFunction
-        public static Object createAllTrustingContext(Context cx, Scriptable thisObj, Object[] args, Function func)
-        {
-            WrapperImpl self = (WrapperImpl)thisObj;
-            ContextImpl ctx = (ContextImpl)cx.newObject(thisObj, ContextImpl.CLASS_NAME);
-            ctx.initAllTrusting(self.runner);
-            return ctx;
-        }
-
     }
 
     public static class ContextImpl
@@ -123,29 +114,35 @@ public class SSLWrap
         private SSLContext context;
         private ScriptRunner runner;
 
+        private KeyManager[] keyManagers;
+        private TrustManager[] trustManagers;
+
         public String getClassName() {
             return CLASS_NAME;
         }
 
-        void init(ScriptRunner runner, Scriptable options)
+        void init(ScriptRunner runner)
         {
-            if (!ScriptableObject.hasProperty(options, "keystore")) {
-                throw new EvaluatorException("keystore parameter is required");
-            }
-            String keyStoreName = Context.toString(ScriptableObject.getProperty(options, "keystore"));
-            char[] passphrase = null;
-            if (ScriptableObject.hasProperty(options, "passphrase")) {
-                passphrase = Context.toString(ScriptableObject.getProperty(options, "passphrase")).toCharArray();
-            }
-
-            KeyManagerFactory keyFactory;
+            this.runner = runner;
             try {
-                FileInputStream keyIn = new FileInputStream(runner.getEnvironment().translatePath(keyStoreName));
+                context = SSLContext.getInstance("TLS");
+            } catch (NoSuchAlgorithmException nse) {
+                throw new AssertionError(nse);
+            }
+        }
+
+        @JSFunction
+        public void setKeyStore(String name, String p)
+        {
+            char[] passphrase = p.toCharArray();
+            try {
+                FileInputStream keyIn = new FileInputStream(runner.getEnvironment().translatePath(name));
                 try {
                     KeyStore keyStore = KeyStore.getInstance("JKS");
                     keyStore.load(keyIn, passphrase);
-                    keyFactory = KeyManagerFactory.getInstance("SunX509");
+                    KeyManagerFactory keyFactory = KeyManagerFactory.getInstance("SunX509");
                     keyFactory.init(keyStore, passphrase);
+                    keyManagers = keyFactory.getKeyManagers();
                 } finally {
                     if (passphrase != null) {
                         Arrays.fill(passphrase, ' ');
@@ -158,19 +155,44 @@ public class SSLWrap
             } catch (IOException ioe) {
                 throw new EvaluatorException("I/O error reading key store: " + ioe);
             }
+        }
 
-            this.runner = runner;
+        @JSFunction
+        public void setTrustStore(String name)
+        {
             try {
-                context = SSLContext.getInstance("TLS");
-            } catch (NoSuchAlgorithmException nse) {
-                throw new AssertionError(nse);
+                FileInputStream keyIn = new FileInputStream(runner.getEnvironment().translatePath(name));
+                try {
+                    KeyStore trustStore = KeyStore.getInstance("JKS");
+                    trustStore.load(keyIn, null);
+                    TrustManagerFactory trustFactory = TrustManagerFactory.getInstance("SunX509");
+                    trustFactory.init(trustStore);
+                    trustManagers = trustFactory.getTrustManagers();
+                } finally {
+                    keyIn.close();
+                }
+
+            } catch (GeneralSecurityException gse) {
+                throw new EvaluatorException("Error opening key store: " + gse);
+            } catch (IOException ioe) {
+                throw new EvaluatorException("I/O error reading key store: " + ioe);
             }
+        }
 
+        @JSFunction
+        public void init()
+        {
             try {
-                context.init(keyFactory.getKeyManagers(), null, null);
+                context.init(keyManagers, trustManagers, null);
             } catch (KeyManagementException kme) {
                 throw new EvaluatorException("Error initializing SSL context: " + kme);
             }
+        }
+
+        @JSFunction
+        public void setTrustEverybody()
+        {
+            trustManagers = new TrustManager[] { AllTrustingManager.INSTANCE };
         }
 
         void initDefault(ScriptRunner runner)
@@ -180,17 +202,6 @@ public class SSLWrap
                 context = SSLContext.getDefault();
             } catch (NoSuchAlgorithmException e) {
                 throw new EvaluatorException("Error initializing SSL context: " + e);
-            }
-        }
-
-        void initAllTrusting(ScriptRunner runner)
-        {
-            this.runner = runner;
-            try {
-                context = SSLContext.getInstance("TLS");
-                context.init(null, new TrustManager[] { AllTrustingManager.INSTANCE }, null);
-            } catch (GeneralSecurityException gse) {
-                throw new EvaluatorException(gse.toString());
             }
         }
 
@@ -465,6 +476,64 @@ public class SSLWrap
         {
             runner.enqueueCallback(callback, this, this, null);
         }
+
+        @JSFunction
+        public static Object getCipher(Context cx, Scriptable thisObj, Object[] args, Function func)
+        {
+            EngineImpl self = (EngineImpl)thisObj;
+            if ((self.engine == null) || (self.engine.getSession() == null)) {
+                return null;
+            }
+            Scriptable ret = cx.newObject(thisObj);
+            ret.put("name", ret, self.engine.getSession().getCipherSuite());
+            ret.put("version", ret, self.engine.getSession().getProtocol());
+            return ret;
+        }
+
+        @JSFunction
+        public boolean validateCiphers(String cipherList)
+        {
+            HashSet<String> supportedCiphers = new HashSet<String>(Arrays.asList(engine.getSupportedCipherSuites()));
+            if (log.isDebugEnabled()) {
+                log.debug("Supported protocols: " + Arrays.asList(engine.getEnabledProtocols()));
+                log.debug("Supported ciphers: " + supportedCiphers);
+            }
+            boolean ret = true;
+            ArrayList<String> finalList = new ArrayList<String>();
+            for (String cipher : COLON.split(cipherList)) {
+                if (!supportedCiphers.contains(cipher)) {
+                    log.debug(cipher + " is not supported");
+                    ret = false;
+                }
+            }
+            return ret;
+        }
+
+        @JSFunction
+        public void setCiphers(String cipherList)
+        {
+            HashSet<String> supportedCiphers = new HashSet<String>(Arrays.asList(engine.getSupportedCipherSuites()));
+            ArrayList<String> finalList = new ArrayList<String>();
+            for (String cipher : COLON.split(cipherList)) {
+                if (!supportedCiphers.contains(cipher)) {
+                    throw new EvaluatorException("Unsupported SSL cipher suite \"" + cipher + '\"');
+                }
+                finalList.add(cipher);
+            }
+            engine.setEnabledCipherSuites(finalList.toArray(new String[finalList.size()]));
+        }
+
+        /*
+        @JSFunction
+        public static Object getCertificate(Context cx, Scriptable thisObj, Object[] args, Function func)
+        {
+            EngineImpl self = (EngineImpl)thisObj;
+            if ((self.engine == null) || (self.engine.getSession() == null)) {
+                return null;
+            }
+
+        }
+        */
 
         @JSGetter("OK")
         public int getOK() {

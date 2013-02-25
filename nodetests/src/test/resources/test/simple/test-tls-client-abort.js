@@ -30,7 +30,7 @@ var fs = require('fs');
 var tls = require('tls');
 var path = require('path');
 
-var keystore = path.join(common.fixturesDir, 'test.jks'));
+var keystore = path.join(common.fixturesDir, 'test.jks');
 
 var conn = tls.connect({keystore: keystore, passphrase: 'secure', port: common.PORT}, function() {
   assert.ok(false); // callback should never be executed

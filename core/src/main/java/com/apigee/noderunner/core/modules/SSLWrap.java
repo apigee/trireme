@@ -297,7 +297,7 @@ public class SSLWrap
                 return self.makeException(result, ssle);
             }
 
-            return self.makeResult(cx, self.fromWrap, sslResult, result);
+            return self.makeResult(cx, self.toWrap, self.fromWrap, sslResult, result);
         }
 
         @JSFunction
@@ -335,7 +335,7 @@ public class SSLWrap
                 return self.makeException(result, ssle);
             }
 
-            return self.makeResult(cx, self.fromUnwrap, sslResult, result);
+            return self.makeResult(cx, self.toUnwrap, self.fromUnwrap, sslResult, result);
         }
 
         private Scriptable makeException(Scriptable r, Exception e)
@@ -345,7 +345,7 @@ public class SSLWrap
             return r;
         }
 
-        private Scriptable makeResult(Context cx, ByteBuffer outBuf,
+        private Scriptable makeResult(Context cx, ByteBuffer inBuf, ByteBuffer outBuf,
                                       SSLEngineResult sslResult, Scriptable result)
         {
             int returnStatus;
@@ -394,6 +394,7 @@ public class SSLWrap
             }
             result.put("status", result, returnStatus);
             result.put("consumed", result, sslResult.bytesConsumed());
+            result.put("remaining", result, inBuf.remaining());
             if (justHandshaked) {
                 result.put("justHandshaked", result, Boolean.TRUE);
             }

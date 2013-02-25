@@ -116,7 +116,7 @@ public class JavaScriptTest
         } else {
             System.out.println("** " + fileName.getName() + " (" + adapter + ") FAILURE = " + exitCode);
         }
-        assertEquals(fileName.getName() + " failed with =" + exitCode,
+        assertEquals(fileName.getName() + " (" + adapter + ") failed with =" + exitCode,
                      0, exitCode);
     }
 }

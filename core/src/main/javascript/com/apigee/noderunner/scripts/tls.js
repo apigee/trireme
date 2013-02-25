@@ -48,6 +48,7 @@ function Server() {
     var clearStream = new CleartextStream();
     clearStream.init(true, self, connection, engine);
   });
+  return self;
 }
 util.inherits(Server, net.Server);
 exports.Server = Server;
@@ -97,14 +98,22 @@ exports.connect = function() {
   // TODO pass host and port to SSL engine init
   var engine = sslContext.createEngine(true);
   var sslConn = new CleartextStream();
-  var netConn = net.connect(options, function() {
-    sslConn.engine.beginHandshake();
-    writeCleartext(sslConn);
-  });
+  var netConn;
+  if (options.socket) {
+    netConn = options.socket;
+  } else {
+    netConn = net.connect(options, function() {
+      sslConn.engine.beginHandshake();
+      writeCleartext(sslConn);
+    });
+  }
   sslConn.init(false, undefined, netConn, engine);
-  writeCleartext(sslConn);
   if (callback) {
     sslConn.on('secureConnect', callback);
+  }
+  if (options.socket) {
+    sslConn.engine.beginHandshake();
+    writeCleartext(sslConn);
   }
   return sslConn;
 };
@@ -114,6 +123,7 @@ exports.createSecurePair = function() {
 };
 
 Server.prototype.close = function() {
+  debug('Server.close');
   this.netServer.close();
   this.emit('close');
 };
@@ -122,7 +132,10 @@ Server.prototype.addContext = function(hostname, credentials) {
   // TODO something...
 };
 
+var counter = 0;
+
 function CleartextStream() {
+  this.id = ++counter;
 }
 util.inherits(CleartextStream, net.Socket);
 
@@ -135,33 +148,38 @@ CleartextStream.prototype.init = function(serverMode, server, connection, engine
   self.closed = false;
   self.closing = false;
   connection.ondata = function(data, offset, end) {
-    debug('onData');
+    debug(self.id + ' onData');
     readCiphertext(self, data, offset, end);
   };
   connection.onend = function() {
-    debug('onEnd');
+    debug(self.id + ' onEnd');
     handleEnd(self);
   };
   connection.on('error', function(err) {
-    debug('onError');
+    debug(self.id + ' onError');
     self.emit('error', err);
   });
   connection.on('close', function() {
-    debug('onClose');
+    debug(self.id + ' onClose');
     if (!self.closed) {
-      self.connection.destroy();
-      self.emit('close');
+      doClose(self);
     }
   });
   connection.on('timeout', function() {
-    debug('onTimeout');
+    debug(self.id + ' onTimeout');
     self.emit('timeout');
   });
   connection.on('drain', function() {
-    debug('onDrain');
+    debug(self.id + ' onDrain');
     self.emit('drain');
   });
 };
+
+function doClose(self) {
+  self.closed = true;
+  self.connection.destroy();
+  self.emit('close', false);
+}
 
 CleartextStream.prototype.getPeerCertificate = function() {
   // TODO
@@ -175,8 +193,16 @@ CleartextStream.prototype.address = function() {
   return this.connection.address();
 };
 
+CleartextStream.prototype.pause = function() {
+  this.connection.pause();
+}
+
+CleartextStream.prototype.resume = function() {
+  this.connection.resume();
+}
+
 CleartextStream.prototype.write = function(data, arg1, arg2) {
-  debug('write');
+  debug(this.id + ' write');
   var encoding, cb;
 
   // parse arguments
@@ -202,13 +228,13 @@ CleartextStream.prototype.write = function(data, arg1, arg2) {
 };
 
 CleartextStream.prototype.end = function(data, encoding) {
-  debug('end');
+  debug(this.id + ' end');
   if (data) {
     this.write(data, encoding);
   }
-  if (!this.closed && !this.closing) {
-    debug('Closing SSL outbound');
-    this.closing = true;
+  if (!this.closed && !this.ended) {
+    debug(this.id + ' Closing SSL outbound');
+    this.ended = true;
     this.engine.closeOutbound();
     while (!this.engine.isOutboundDone()) {
       writeCleartext(this);
@@ -216,16 +242,20 @@ CleartextStream.prototype.end = function(data, encoding) {
   }
 };
 
+// Got an end from the network
 function handleEnd(self) {
-  if (!self.closed && !self.closing) {
-    debug('Closing SSL inbound');
-    self.closing = true;
-    self.engine.closeInbound();
-    while (!self.engine.isInboundDone()) {
-      writeCleartext(self);
+  if (!self.closed) {
+    if (self.ended) {
+      doClose(self);
+    } else {
+      debug(self.id + ' Closing SSL inbound');
+      self.ended = true;
+      self.engine.closeInbound();
+      while (!self.engine.isInboundDone()) {
+        writeCleartext(self);
+      }
+      self.emit('end');
     }
-    self.connection.destroy();
-    self.emit('closed');
   }
 }
 
@@ -234,7 +264,7 @@ CleartextStream.prototype.destroy = function() {
 }
 
 CleartextStream.prototype.justHandshaked = function() {
-  debug('justHandshaked');
+  debug(this.id + ' justHandshaked');
   this.readable = this.writable = true;
   if (this.serverMode) {
     this.server.emit('secureConnection', this);
@@ -250,7 +280,8 @@ CleartextStream.prototype.setEncoding = function(encoding) {
 // TODO offset and end
 function readCiphertext(self, data) {
   var sslResult = self.engine.unwrap(data);
-  debug('readCiphertext: SSL status ' + sslResult.status + ' read ' + sslResult.consumed);
+  debug(self.id + ' readCiphertext(' + (data ? data.length : 0) + '): SSL status ' + sslResult.status +
+        ' read ' + sslResult.consumed + ' produced ' + (sslResult.data ? sslResult.data.length : 0));
   if (sslResult.justHandshaked) {
     self.justHandshaked();
   }
@@ -275,18 +306,24 @@ function readCiphertext(self, data) {
       if (sslResult.data) {
         emitRawData(self, sslResult.data);
       }
-      if ((data !== undefined) && (sslResult.consumed < data.length)) {
+      if (sslResult.remaining > 0) {
         // Once handshaking is done, we might need to unwrap again with the same data
         readCiphertext(self);
       }
       break;
     case self.engine.CLOSED:
-      self.closed = true;
-      self.connection.destroy();
-      self.emit('close');
+      if (!self.closed) {
+        if (self.ended) {
+          doClose(self);
+        } else {
+          self.ended = true;
+          self.emit('end');
+        }
+      }
       break;
     case self.engine.ERROR:
-      self.emit('error', 'SSL error');
+      debug('SSL error -- closing');
+      doClose(self);
       break;
     default:
       throw 'Unexpected SSL engine status ' + sslResult.status;
@@ -296,10 +333,8 @@ function readCiphertext(self, data) {
 function writeCleartext(self, data, cb) {
   var sslResult = self.engine.wrap(data);
   var writeStatus = false;
-  debug('writeCiphertext: SSL status ' + sslResult.status);
-  if (sslResult.justHandshaked) {
-    self.justHandshaked();
-  }
+  debug(self.id + ' writeCleartext: SSL status ' + sslResult.status +
+        ' length ' + (sslResult.data ? sslResult.data.length : 0));
   if (cb) {
     if (!self.writeCallbacks) {
       self.writeCallbacks = [];
@@ -307,7 +342,7 @@ function writeCleartext(self, data, cb) {
     self.writeCallbacks.push(cb);
   }
   if (sslResult.data) {
-    debug('Writing ' + sslResult.data.length);
+    debug(self.id + ' Writing ' + sslResult.data.length);
     writeStatus = self.connection.write(sslResult.data, function() {
       if (self.writeCallbacks) {
         var popped = self.writeCallbacks.pop();
@@ -317,6 +352,9 @@ function writeCleartext(self, data, cb) {
         }
       }
     });
+  }
+  if (sslResult.justHandshaked) {
+    self.justHandshaked();
   }
 
   switch (sslResult.status) {
@@ -335,12 +373,18 @@ function writeCleartext(self, data, cb) {
     case self.engine.OK:
       break;
     case self.engine.CLOSED:
-      self.closed = true;
-      self.connection.destroy();
-      self.emit('close');
+      if (!self.closed) {
+        if (self.ended) {
+          doClose(self);
+        } else {
+          self.ended = true;
+          self.emit('end');
+        }
+      }
       break;
     case self.engine.ERROR:
-      self.emit('error', 'SSL error');
+      debug('SSL error -- closing');
+      doClose(self);
       break;
     default:
       throw 'Unexpected SSL engine status ' + sslResult.status;
@@ -349,11 +393,11 @@ function writeCleartext(self, data, cb) {
 }
 
 function emitRawData(self, data) {
-  debug('emitBuffer: ' + data.length);
+  debug(self.id + ' emitBuffer: ' + data.length);
   if (self.decoder) {
     var decoded = self.decoder.write(data);
     if (decoded) {
-      debug('emitBuffer: decoded string ' + decoded.length);
+      debug(self.id + ' emitBuffer: decoded string ' + decoded.length);
       emitBuffer(self, decoded);
     }
   } else {

@@ -11,9 +11,6 @@ import org.mozilla.javascript.annotations.JSFunction;
 
 import java.lang.reflect.InvocationTargetException;
 
-/**
- * crypto from Node 0.8.17
- */
 public class Crypto
     implements NodeModule
 {

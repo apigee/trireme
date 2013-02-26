@@ -28,9 +28,6 @@ import java.nio.charset.CoderResult;
 import java.nio.charset.CodingErrorAction;
 import java.util.Arrays;
 
-/**
- * Native implementation of Buffer from Node 0.8.17.
- */
 public class Buffer
     implements NodeModule
 {

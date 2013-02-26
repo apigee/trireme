@@ -29,7 +29,7 @@ import java.util.HashMap;
 import java.util.Map;
 
 /**
- * The Node 0.8.18 process module done on top of the VM.
+ * The Node process module done on top of the VM.
  */
 public class Process
     implements NodeModule

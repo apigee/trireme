@@ -22,9 +22,6 @@ import java.util.HashMap;
 import java.util.Iterator;
 import java.util.List;
 
-/**
- * Implementation of EventEmitter from node0.8.15
- */
 public class EventEmitter
     implements NodeModule
 {

@@ -3,7 +3,7 @@ package com.apigee.noderunner.core.internal;
 import org.mozilla.javascript.Context;
 import org.mozilla.javascript.EvaluatorException;
 import org.mozilla.javascript.Function;
-import sun.rmi.transport.ObjectTable;
+import org.mozilla.javascript.ScriptRuntime;
 
 public class ArgUtils
 {
@@ -39,7 +39,9 @@ public class ArgUtils
     {
         if (pos < args.length) {
             Number n = Context.toNumber(args[pos]);
-            return n.intValue();
+            if (!n.equals(ScriptRuntime.NaN)) {
+                return n.intValue();
+            }
         }
         return def;
     }
@@ -54,7 +56,9 @@ public class ArgUtils
     {
         if (pos < args.length) {
             Number n = Context.toNumber(args[pos]);
-            return n.longValue();
+            if (!n.equals(ScriptRuntime.NaN)) {
+                return n.longValue();
+            }
         }
         return def;
     }
@@ -83,7 +87,9 @@ public class ArgUtils
     {
         if (pos < args.length) {
             Number n = Context.toNumber(args[pos]);
-            return n.floatValue();
+            if (!n.equals(ScriptRuntime.NaN)) {
+                return n.floatValue();
+            }
         }
         return def;
     }
@@ -98,7 +104,9 @@ public class ArgUtils
     {
         if (pos < args.length) {
             Number n = Context.toNumber(args[pos]);
-            return n.doubleValue();
+            if (!n.equals(ScriptRuntime.NaN)) {
+                return n.doubleValue();
+            }
         }
         return def;
     }

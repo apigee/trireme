@@ -198,7 +198,9 @@ var tests = [
 ];
 
 tests.forEach(function(test, i) {
-  assert.equal(tls.checkServerIdentity(test.host, test.cert),
-               test.result,
+  var result = tls.checkServerIdentity(test.host, test.cert);
+  console.log('Test# ' + i + ' result = ' + result +
+              ' expected = ' + test.result);
+  assert.ok((test.result === result),
                'Test#' + i + ' failed: ' + util.inspect(test));
 });

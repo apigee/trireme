@@ -275,12 +275,13 @@ public class Process
             return "v" + Version.NODE_VERSION;
         }
 
-        @JSFunction
-        public static Object versions(Context cx, Scriptable thisObj, Object[] args, Function func)
+        @JSGetter("versions")
+        public Object getVersions()
         {
-            Scriptable env = cx.newObject(thisObj);
-            env.put("noderunner", thisObj, Version.NODERUNNER_VERSION);
-            env.put("node", thisObj, Version.NODE_VERSION);
+            Scriptable env = Context.getCurrentContext().newObject(this);
+            env.put("noderunner", env, Version.NODERUNNER_VERSION);
+            env.put("node", env, Version.NODE_VERSION);
+            env.put("openssl", env, Version.SSL_VERSION);
             return env;
         }
 
@@ -381,6 +382,13 @@ public class Process
             ret[0] = (int)(nanos / NANO);
             ret[1] = (int)(nanos % NANO);
             return cx.newArray(thisObj, ret);
+        }
+
+        @JSGetter("features")
+        public Object getFeatures()
+        {
+            Scriptable features = Context.getCurrentContext().newObject(this);
+            return features;
         }
     }
 

@@ -364,4 +364,5 @@ if (HttpWrap.hasServerAdapter()) {
   exports.createServer = function(requestListener) {
     return new NodeHttp.Server(requestListener);
   };
+  exports._connectionListener = NodeHttp._connectionListener;
 }

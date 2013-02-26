@@ -34,8 +34,8 @@ var http = require('http');
 var https = require('https');
 
 var options = {
-  key: fs.readFileSync(common.fixturesDir + '/keys/agent1-key.pem'),
-  cert: fs.readFileSync(common.fixturesDir + '/keys/agent1-cert.pem')
+  keystore: common.fixturesDir + '/keys/agent1.jks'),
+  passphrase: 'secure'
 };
 
 var body = 'hello world\n';

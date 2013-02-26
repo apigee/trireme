@@ -36,8 +36,7 @@ var tls = require('tls');
 var spawn = require('child_process').spawn;
 
 var connections = 0;
-var key = fs.readFileSync(join(common.fixturesDir, 'agent.key')).toString();
-var cert = fs.readFileSync(join(common.fixturesDir, 'agent.crt')).toString();
+var keystore = join(common.fixturesDir, 'agent.jks');
 
 function log(a) {
   console.error('***server*** ' + a);
@@ -46,7 +45,7 @@ function log(a) {
 var server = net.createServer(function(socket) {
   connections++;
   log('connection fd=' + socket.fd);
-  var sslcontext = crypto.createCredentials({key: key, cert: cert});
+  var sslcontext = crypto.createCredentials({keystore: keystore, passphrase: 'secure', cert: cert});
   sslcontext.context.setCiphers('RC4-SHA:AES128-SHA:AES256-SHA');
 
   var pair = tls.createSecurePair(sslcontext, true);

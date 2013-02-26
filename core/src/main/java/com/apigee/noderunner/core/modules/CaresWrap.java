@@ -6,12 +6,9 @@ import org.mozilla.javascript.Context;
 import org.mozilla.javascript.Scriptable;
 import org.mozilla.javascript.ScriptableObject;
 import org.mozilla.javascript.annotations.JSFunction;
+import sun.net.util.IPAddressUtil;
 
 import java.lang.reflect.InvocationTargetException;
-import java.net.Inet4Address;
-import java.net.Inet6Address;
-import java.net.InetAddress;
-import java.net.UnknownHostException;
 
 /**
  * Node's built-in JavaScript uses C-ARES for async DNS stuff. This module emulates that.
@@ -50,19 +47,20 @@ public class CaresWrap
         @JSFunction
         public int isIP(String addrStr)
         {
-            // TODO this actually resolves the host name
-            // We need to replace this with a regex. The actual regex for IPV6 is very complicated -- see Google.
-            try {
-                InetAddress addr = InetAddress.getByName(addrStr);
-                if (addr instanceof Inet4Address) {
-                    return 4;
-                } else if (addr instanceof Inet6Address) {
-                    return 6;
-                }
-                return 0;
-            } catch (UnknownHostException unk) {
+            if ((addrStr == null) || addrStr.isEmpty() || addrStr.equals("0")) {
                 return 0;
             }
+            // Use an internal Sun module for this. This is less bad than using a giant ugly regex that comes from
+            // various places found by Google, and less bad than using "InetAddress" which will resolve
+            // a hostname into an address. various Node libraries require that this method return "0"
+            // when given a hostname, whereas InetAddress doesn't support that behavior.
+            if (IPAddressUtil.isIPv4LiteralAddress(addrStr)) {
+                return 4;
+            }
+            if (IPAddressUtil.isIPv6LiteralAddress(addrStr)) {
+                return 6;
+            }
+            return 0;
         }
     }
 }

@@ -31,8 +31,8 @@ var fs = require('fs');
 var path = require('path');
 
 var options = {
-  key: fs.readFileSync(path.join(common.fixturesDir, 'test_key.pem')),
-  cert: fs.readFileSync(path.join(common.fixturesDir, 'test_cert.pem'))
+  keystore: path.join(common.fixturesDir, 'test.jks'),
+  passphrase: 'secure'
 };
 
 var server = tls.Server(options, function(s) {

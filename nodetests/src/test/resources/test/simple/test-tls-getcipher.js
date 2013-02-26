@@ -26,8 +26,8 @@ var fs = require('fs');
 var cipher_list = ['RC4-SHA', 'AES256-SHA'];
 var cipher_version_pattern = /TLS|SSL/;
 var options = {
-  key: fs.readFileSync(common.fixturesDir + '/keys/agent2-key.pem'),
-  cert: fs.readFileSync(common.fixturesDir + '/keys/agent2-cert.pem'),
+  keystore: common.fixturesDir + '/keys/agent2.jks',
+  passphrase: 'secure',
   ciphers: cipher_list.join(':'),
   honorCipherOrder: true
 };

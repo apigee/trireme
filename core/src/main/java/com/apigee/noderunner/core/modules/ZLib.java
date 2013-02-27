@@ -281,8 +281,13 @@ public class ZLib
             deflater = new UnblockableDeflater(level, nowrap);
             deflater.setStrategy(this.strategy);
             if (this.dictionary != null) {
-                deflater.setDictionary(this.dictionary.getArray(),
-                        this.dictionary.getArrayOffset(), this.dictionary.getLength());
+                try {
+                    deflater.setDictionary(this.dictionary.getArray(),
+                            this.dictionary.getArrayOffset(), this.dictionary.getLength());
+                } catch (IllegalArgumentException e) {
+                    parentModule.runner.enqueueCallback(onError, onError, ZLibObjImpl.this,
+                            new Object[] { "Bad dictionary", Z_DATA_ERROR });
+                }
             }
 
             if (mode == GZIP) {
@@ -495,7 +500,15 @@ public class ZLib
                         while (inflaterInputStream.available() > 0 && writtenBytes < outLen) {
                             // read in from inBuffer through the inflaterInputStream, straight to out,
                             // repeating to fill out up to outLen
-                            int read = inflaterInputStream.read(outArray, outArrayOffset + outOff + readOff, readLen);
+                            int read;
+                            try {
+                                read = inflaterInputStream.read(outArray, outArrayOffset + outOff + readOff, readLen);
+                            } catch (IllegalArgumentException e) {
+                                // hopefully this is only thrown by setDictionary in the DictionaryAwareInflater
+                                parentModule.runner.enqueueCallback(onError, onError, ZLibObjImpl.this,
+                                        new Object[] { "Bad dictionary", Z_DATA_ERROR });
+                                return;
+                            }
 
                             if (read > 0) {
                                 writtenBytes += read;
@@ -505,7 +518,7 @@ public class ZLib
                             } else if (read == -1 && inflater.needsDictionary()) {
                                 // if we still need a dictionary here, it means there wasn't one preloaded
                                 parentModule.runner.enqueueCallback(onError, onError, ZLibObjImpl.this,
-                                        new Object[] { "need dictionary", Z_DATA_ERROR });
+                                        new Object[] { "Missing dictionary", Z_DATA_ERROR });
                                 return;
                             }
 

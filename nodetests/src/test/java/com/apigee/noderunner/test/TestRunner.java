@@ -40,6 +40,9 @@ public class TestRunner
             try {
                 exec = script.execute();
                 ScriptStatus status = exec.get(TEST_TIMEOUT_SECS, TimeUnit.SECONDS);
+                if (status == ScriptStatus.TIMEOUT) {
+                    throw new TimeoutException();
+                }
                 exitCode = status.getExitCode();
                 if (status.hasCause()) {
                     Throwable cause = status.getCause();
@@ -64,7 +67,12 @@ public class TestRunner
         } catch (InterruptedException ie) {
             exitCode = 103;
         } catch (ExecutionException ee) {
-            ee.getCause().printStackTrace(System.err);
+            Throwable cause = ee.getCause();
+            if (cause instanceof RhinoException) {
+                System.err.println(cause.toString());
+                System.err.println(((RhinoException)cause).getScriptStackTrace());
+            }
+            cause.printStackTrace(System.err);
             exitCode = 104;
         } catch (NodeException ne) {
             ne.printStackTrace(System.err);

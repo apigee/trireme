@@ -23,7 +23,8 @@ var common = require('../common');
 var assert = require('assert');
 var tls = require('tls');
 var fs = require('fs');
-var cipher_list = ['RC4-SHA', 'AES256-SHA'];
+//var cipher_list = ['RC4-SHA', 'AES256-SHA'];
+var cipher_list = ['SSL_RSA_WITH_RC4_128_SHA', 'TLS_RSA_WITH_AES_256_CBC_SHA'];
 var cipher_version_pattern = /TLS|SSL/;
 var options = {
   keystore: common.fixturesDir + '/keys/agent2.jks',
@@ -39,16 +40,19 @@ process.on('exit', function() {
 });
 
 var server = tls.createServer(options, function(cleartextStream) {
+  console.log('Got a connection');
   nconns++;
 });
 
 server.listen(common.PORT, '127.0.0.1', function() {
+  console.log('Listening');
   var client = tls.connect({
     host: '127.0.0.1',
     port: common.PORT,
     rejectUnauthorized: false
   }, function() {
     var cipher = client.getCipher();
+    console.log('Got a connection with cipher ' + cipher.name);
     assert.equal(cipher.name, cipher_list[0]);
     assert(cipher_version_pattern.test(cipher.version));
     client.end();

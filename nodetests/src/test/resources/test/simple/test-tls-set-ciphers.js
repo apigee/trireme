@@ -31,7 +31,7 @@ if (process.platform === 'win32') {
 }
 
 var options = {
-  keystore: common.fixturesDir + '/keys/agent2.jks'),
+  keystore: common.fixturesDir + '/keys/agent2.jks',
   passphrase: 'secure',
   ciphers: 'RC4-MD5'
 };

@@ -33,7 +33,9 @@ var options = {
 };
 
 var server = tls.Server(options, function(socket) {
-  if (++serverConnected === 2) {
+  ++serverConnected;
+  console.log('Connected server ' + serverConnected);
+  if (serverConnected === 2) {
     server.close();
   }
 });
@@ -44,6 +46,7 @@ server.listen(common.PORT, function() {
     rejectUnauthorized: false
   }, function() {
     ++clientConnected;
+    console.log('Connected client1 ' + clientConnected);
     client1.end();
   });
 
@@ -53,6 +56,7 @@ server.listen(common.PORT, function() {
   });
   client2.on('secureConnect', function() {
     ++clientConnected;
+    console.log('Connected client2 ' + clientConnected);
     client2.end();
   });
 });

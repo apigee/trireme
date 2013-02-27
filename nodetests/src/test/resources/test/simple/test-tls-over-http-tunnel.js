@@ -35,7 +35,7 @@ var https = require('https');
 var proxyPort = common.PORT + 1;
 var gotRequest = false;
 
-var keystore = common.fixturesDir + '/keys/agent1.jks');
+var keystore = common.fixturesDir + '/keys/agent1.jks';
 
 var options = {
   keystore: keystore,

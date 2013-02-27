@@ -9,6 +9,11 @@ CLASSPATH=./target/classes:./target/test-classes:`cat ${CP}`
 export CLASSPATH
 rm ${CP}
 
-#ARGS="-Xdebug -Xrunjdwp:server=y,suspend=y,transport=dt_socket,address=localhost:14000"
+if [ $1 == "-d" ]
+then
+  ARGS="-Xdebug -Xrunjdwp:server=y,suspend=y,transport=dt_socket,address=localhost:14000"
+  java ${ARGS} com.apigee.noderunner.test.TestRunner $2
 
-time java ${ARGS} com.apigee.noderunner.test.TestRunner $1
+else 
+  java ${ARGS} com.apigee.noderunner.test.TestRunner $1
+fi

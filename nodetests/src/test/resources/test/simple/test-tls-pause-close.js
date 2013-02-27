@@ -36,7 +36,7 @@ var clientClosed = false;
 var clientSocketClosed = false;
 
 var options = {
-  keystore: path.join(common.fixturesDir, 'test_key.pem'),
+  keystore: path.join(common.fixturesDir, 'test.jks'),
   passphrase: 'secure'
 };
 

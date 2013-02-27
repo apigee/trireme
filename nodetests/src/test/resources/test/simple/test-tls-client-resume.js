@@ -34,7 +34,7 @@ var tls = require('tls');
 var fs = require('fs');
 
 var options = {
-  keystore: common.fixturesDir + '/keys/agent2-key.pem',
+  keystore: common.fixturesDir + '/keys/agent2.jks',
   passphrase: 'secure'
 };
 

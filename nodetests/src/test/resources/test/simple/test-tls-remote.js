@@ -39,6 +39,8 @@ var server = tls.Server(options, function(s) {
   assert.equal(s.address().address, s.socket.address().address);
   assert.equal(s.address().port, s.socket.address().port);
 
+  console.log('SSL socket to ' + s.remoteAddress);
+  console.log('Based on ' + s.socket.remoteAddress);
   assert.equal(s.remoteAddress, s.socket.remoteAddress);
   assert.equal(s.remotePort, s.socket.remotePort);
   s.end();

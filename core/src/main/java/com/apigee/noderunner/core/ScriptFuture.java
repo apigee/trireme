@@ -1,6 +1,8 @@
 package com.apigee.noderunner.core;
 
 import com.apigee.noderunner.core.internal.ScriptRunner;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.util.concurrent.CancellationException;
 import java.util.concurrent.ExecutionException;
@@ -11,6 +13,8 @@ import java.util.concurrent.TimeoutException;
 public class ScriptFuture
     implements RunnableFuture<ScriptStatus>
 {
+    private static final Logger log = LoggerFactory.getLogger(ScriptFuture.class);
+
     private final ScriptRunner   runner;
     private ScriptStatusListener listener;
     private ScriptStatus         result;
@@ -108,6 +112,9 @@ public class ScriptFuture
             set(status);
 
         } catch (Throwable t) {
+            if (log.isDebugEnabled()) {
+                log.debug("Script failed with {}", t);
+            }
             set(new ScriptStatus(t));
         }
     }

@@ -34,8 +34,7 @@ var spawn = require('child_process').spawn;
 
 var options = {
   keystore: join(common.fixturesDir, 'agent.jks'),
-  passphrase: 'secure',
-  cert: fs.readFileSync(join(common.fixturesDir, 'alice.crt'))
+  passphrase: 'secure'
 };
 var verified = false;
 
@@ -48,7 +47,7 @@ server.listen(common.PORT, function() {
     rejectUnauthorized: false
   }, function() {
     var peerCert = socket.getPeerCertificate();
-    common.debug(util.inspect(peerCert));
+    common.log(util.inspect(peerCert));
     assert.equal(peerCert.subject.subjectAltName,
         'uniformResourceIdentifier:http://localhost:8000/alice.foaf#me');
     verified = true;

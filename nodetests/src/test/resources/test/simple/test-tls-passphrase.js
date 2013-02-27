@@ -30,13 +30,12 @@ var tls = require('tls');
 var fs = require('fs');
 var path = require('path');
 
-var keystore: path.join(common.fixturesDir, 'pass.jks');
+var keystore = path.join(common.fixturesDir, 'test.jks');
 
 var server = tls.Server({
   keystore: keystore,
   passphrase: 'secure',
-  cert: cert,
-  ca: [cert],
+  //ca: [cert],
   requestCert: true,
   rejectUnauthorized: true
 }, function(s) {
@@ -47,9 +46,8 @@ var connectCount = 0;
 server.listen(common.PORT, function() {
   var c = tls.connect({
     port: common.PORT,
-    key: key,
-    passphrase: 'passphrase',
-    cert: cert,
+    keystore: keystore,
+    passphrase: 'secure',
     rejectUnauthorized: false
   }, function() {
     ++connectCount;
@@ -62,9 +60,8 @@ server.listen(common.PORT, function() {
 assert.throws(function() {
   tls.connect({
     port: common.PORT,
-    key: key,
+    keystore: keystore,
     passphrase: 'invalid',
-    cert: cert,
     rejectUnauthorized: false
   });
 });

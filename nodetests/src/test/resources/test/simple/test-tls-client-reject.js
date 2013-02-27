@@ -75,7 +75,7 @@ function rejectUnauthorized() {
 
 function authorized() {
   var socket = tls.connect(common.PORT, {
-    ca: [fs.readFileSync(path.join(common.fixturesDir, 'test_cert.pem'))]
+    truststore: path.join(common.fixturesDir, 'test_cert.jks')
   }, function() {
     assert(socket.authorized);
     socket.end();

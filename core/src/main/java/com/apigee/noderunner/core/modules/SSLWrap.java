@@ -20,9 +20,11 @@ import javax.net.ssl.SSLContext;
 import javax.net.ssl.SSLEngine;
 import javax.net.ssl.SSLEngineResult;
 import javax.net.ssl.SSLException;
+import javax.net.ssl.SSLPeerUnverifiedException;
 import javax.net.ssl.TrustManager;
 import javax.net.ssl.TrustManagerFactory;
 import javax.net.ssl.X509TrustManager;
+import javax.security.auth.x500.X500Principal;
 import java.io.FileInputStream;
 import java.io.IOException;
 import java.lang.reflect.InvocationTargetException;
@@ -31,10 +33,18 @@ import java.security.GeneralSecurityException;
 import java.security.KeyManagementException;
 import java.security.KeyStore;
 import java.security.NoSuchAlgorithmException;
+import java.security.cert.Certificate;
+import java.security.cert.CertificateParsingException;
 import java.security.cert.X509Certificate;
+import java.text.DateFormat;
+import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Date;
+import java.util.HashMap;
 import java.util.HashSet;
+import java.util.List;
+import java.util.Map;
 import java.util.regex.Pattern;
 
 /**
@@ -49,6 +59,7 @@ public class SSLWrap
     protected static final Logger log = LoggerFactory.getLogger(SSLWrap.class);
 
     protected static final Pattern COLON = Pattern.compile(":");
+    protected static final DateFormat X509_DATE = new SimpleDateFormat("MMM dd HH:mm:ss yyyy zzz");
 
     public static final int BUFFER_SIZE = 8192;
 
@@ -281,7 +292,7 @@ public class SSLWrap
             if ((args.length > 0) && (args[0] != Context.getUndefinedValue())) {
                 Buffer.BufferImpl buf = (Buffer.BufferImpl)args[0];
                 ByteBuffer newData = buf.getBuffer();
-                append(self.toWrap, newData);
+                self.toWrap = append(self.toWrap, newData);
             }
 
             Scriptable result = cx.newObject(thisObj);
@@ -319,7 +330,7 @@ public class SSLWrap
             if ((args.length > 0) && (args[0] != Context.getUndefinedValue())) {
                 Buffer.BufferImpl buf = (Buffer.BufferImpl)args[0];
                 ByteBuffer newData = buf.getBuffer();
-                append(self.toUnwrap, newData);
+                self.toUnwrap = append(self.toUnwrap, newData);
             }
 
             Scriptable result = cx.newObject(thisObj);
@@ -523,17 +534,40 @@ public class SSLWrap
             engine.setEnabledCipherSuites(finalList.toArray(new String[finalList.size()]));
         }
 
-        /*
         @JSFunction
-        public static Object getCertificate(Context cx, Scriptable thisObj, Object[] args, Function func)
+        public static Object getPeerCertificate(Context cx, Scriptable thisObj, Object[] args, Function func)
         {
             EngineImpl self = (EngineImpl)thisObj;
             if ((self.engine == null) || (self.engine.getSession() == null)) {
                 return null;
             }
-
+            Certificate cert;
+            try {
+                cert = self.engine.getSession().getPeerCertificates()[0];
+            } catch (SSLPeerUnverifiedException puve) {
+                log.debug("getPeerCertificates threw {}", puve);
+                cert = null;
+            }
+            if ((cert == null) || (!(cert instanceof X509Certificate))) {
+                log.debug("Peer certificate is not an X.509 cert");
+                return null;
+            }
+            return self.makeCertificate(cx, (X509Certificate) cert);
         }
-        */
+
+        private Object makeCertificate(Context cx, X509Certificate cert)
+        {
+            if (log.isDebugEnabled()) {
+                log.debug("Returning cert " + cert.getSubjectX500Principal().getName(X500Principal.CANONICAL));
+            }
+            Scriptable ret = cx.newObject(this);
+            ret.put("subject", ret, cert.getSubjectX500Principal().getName(X500Principal.CANONICAL));
+            ret.put("issuer", ret, cert.getIssuerX500Principal().getName(X500Principal.CANONICAL));
+            ret.put("valid_from", ret, X509_DATE.format(cert.getNotBefore()));
+            ret.put("valid_to", ret, X509_DATE.format(cert.getNotAfter()));
+            //ret.put("fingerprint", ret, null);
+            return ret;
+        }
 
         @JSGetter("OK")
         public int getOK() {

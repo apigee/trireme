@@ -38,7 +38,8 @@ function test(honorCipherOrder, clientCipher, expectedCipher, cb) {
     secureProtocol: SSL_Method,
     keystore: common.fixturesDir + '/keys/agent2.jks',
     passphrase: 'secure',
-    ciphers: 'AES256-SHA:RC4-SHA:DES-CBC-SHA',
+    //ciphers: 'AES256-SHA:RC4-SHA:DES-CBC-SHA',
+    ciphers: 'TLS_RSA_WITH_AES_256_CBC_SHA:SSL_RSA_WITH_RC4_128_SHA:SSL_RSA_WITH_DES_CBC_SHA',
     honorCipherOrder: !!honorCipherOrder
   };
 
@@ -57,33 +58,45 @@ function test(honorCipherOrder, clientCipher, expectedCipher, cb) {
       var cipher = client.getCipher();
       client.end();
       server.close();
+      console.log('test honorOrder = ' + honorCipherOrder + 
+                  ' client order ' + clientCipher +
+                  ' expected ' + expectedCipher +
+                  ' got ' + cipher.name);
       assert.equal(cipher.name, expectedCipher);
       if (cb) cb();
     });
   });
 }
 
-test1();
-
+test1(); 
 function test1() {
   // Client has the preference of cipher suites by default
-  test(false, 'DES-CBC-SHA:RC4-SHA:AES256-SHA','DES-CBC-SHA', test2);
+  test(false, 
+       'SSL_RSA_WITH_DES_CBC_SHA:SSL_RSA_WITH_RC4_128_SHA:TLS_RSA_WITH_AES_256_CBC_SHA',
+      'SSL_RSA_WITH_DES_CBC_SHA', test2);
 }
 
 function test2() {
   // Server has the preference of cipher suites where AES256-SHA is in
   // the first.
-  test(true, 'DES-CBC-SHA:RC4-SHA:AES256-SHA', 'AES256-SHA', test3);
+  test(true, 
+       'SSL_RSA_WITH_DES_CBC_SHA:SSL_RSA_WITH_RC4_128_SHA:TLS_RSA_WITH_AES_256_CBC_SHA', 
+  'TLS_RSA_WITH_AES_256_CBC_SHA', test3);
+
+   
 }
 
 function test3() {
   // Server has the preference of cipher suites. RC4-SHA is given
   // higher priority over DES-CBC-SHA among client cipher suites.
-  test(true, 'DES-CBC-SHA:RC4-SHA', 'RC4-SHA', test4);
+  test(true, 
+       'SSL_RSA_WITH_DES_CBC_SHA:SSL_RSA_WITH_RC4_128_SHA', 
+       'SSL_RSA_WITH_RC4_128_SHA', test4);
 }
 
 function test4() {
   // As client has only one cipher, server has no choice in regardless
   // of honorCipherOrder.
-  test(true, 'DES-CBC-SHA', 'DES-CBC-SHA');
+  test(true, 'SSL_RSA_WITH_DES_CBC_SHA', 
+       'SSL_RSA_WITH_DES_CBC_SHA');
 }

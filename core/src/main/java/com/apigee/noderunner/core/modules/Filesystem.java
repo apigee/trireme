@@ -325,7 +325,16 @@ public class Filesystem
             final Buffer.BufferImpl buf = ensureBuffer(cx, thisObj, args, 1);
             final int off = intArg(args, 2);
             final int len = intArg(args, 3);
-            final int pos = intArg(args, 4);
+
+            // If position is null [or undefined], data will be read from the current file position.
+            final int pos;
+            ensureArg(args, 4);
+            if (args[4] != null) {
+                pos = intArg(args, 4, -1);
+            } else {
+                pos = -1;
+            }
+
             final Function callback = functionArg(args, 5, false);
             final FSImpl fs = (FSImpl)thisObj;
 

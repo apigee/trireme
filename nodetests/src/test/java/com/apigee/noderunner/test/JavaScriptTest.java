@@ -46,7 +46,7 @@ public class JavaScriptTest
         }
     }
 
-    @Parameterized.Parameters
+    @Parameterized.Parameters(name="{index}: {0} ({1})")
     public static Collection<Object[]> enumerateTests()
     {
         final String testFile = System.getProperty(TEST_FILE_NAME_PROP);

@@ -28,8 +28,8 @@ var clientRequest;
 
 // https options
 var httpsOptions = {
-  key: fs.readFileSync(common.fixturesDir + '/keys/agent1-key.pem'),
-  cert: fs.readFileSync(common.fixturesDir + '/keys/agent1-cert.pem')
+  keystore: common.fixturesDir + '/keys/agent1.jks',
+  passphrase: 'secure'
 };
 
 var testURL = url.parse('https://localhost:' + common.PORT);
@@ -54,5 +54,6 @@ server.listen(common.PORT, function() {
   // since there is a little magic with the agent
   // make sure that the request uses the https.Agent
   assert.ok(clientRequest.agent instanceof https.Agent);
+  console.log('Sending end');
   clientRequest.end();
 });

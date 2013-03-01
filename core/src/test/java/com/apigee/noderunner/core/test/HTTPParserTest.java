@@ -165,6 +165,25 @@ public class HTTPParserTest
     }
 
     @Test
+    public void testCompleteChunkedResponse()
+    {
+        HTTPParsingMachine parser = new HTTPParsingMachine(HTTPParsingMachine.ParsingMode.RESPONSE);
+        ByteBuffer buf = Utils.stringToBuffer(COMPLETE_CHUNKED_RESPONSE, Charsets.ASCII);
+        HTTPParsingMachine.Result r = parser.parse(buf);
+        assertFalse(r.isError());
+        assertTrue(r.isHeadersComplete());
+        assertTrue(r.hasHeadersOrURI());
+        assertTrue(r.hasBody());
+        assertEquals(200, r.getStatusCode());
+        assertEquals("ok", Utils.bufferToString(r.getBody(), Charsets.ASCII));
+
+        // With chunking we have to keep looping
+        r = parser.parse(buf);
+        assertFalse(r.isError());
+        assertTrue(r.isComplete());
+    }
+
+    @Test
     public void testCompleteChunkedChunks()
     {
         HTTPParsingMachine parser = new HTTPParsingMachine(HTTPParsingMachine.ParsingMode.REQUEST);
@@ -313,6 +332,17 @@ public class HTTPParserTest
     "d\r\n" +
     "Hello, World!" +
     "\r\n0\r\n\r\n";
+
+    private static final String COMPLETE_CHUNKED_RESPONSE =
+    "HTTP/1.1 200 OK\r\n" +
+    "Date: Wed, 27 Feb 2013 23:56:17 GMT\r\n" +
+    "Connection: keep-alive\r\n" +
+    "Transfer-Encoding: chunked\r\n" +
+    "\r\n" +
+    "2\r\n" +
+    "ok\r\n" +
+    "0\r\n" +
+    "\r\n";
 
     private static final String COMPLETE_CHUNKED_CHUNKS =
     "GET /foo/bar/baz HTTP/1.1\r\n" +

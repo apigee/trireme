@@ -117,7 +117,7 @@ exports.connect = function() {
     options = arguments[0];
   } else {
     var port = arguments[0];
-    if (arguments.length === 1) {
+    if (arguments.length === 2) {
       // port
       options = { port: port };
     } else if (typeof arguments[1] === 'object') {
@@ -180,7 +180,19 @@ exports.connect = function() {
   if (options.socket) {
     netConn = options.socket;
   } else {
-    netConn = net.connect(options, function() {
+    var netOptions = {
+      host: options.host,
+      port: options.port,
+      localAddress: options.localAddress,
+      path: options.path,
+      allowHalfOpen: options.allowHalfOpen
+    };
+    // Fix up the HTTP case, where "path" is used to mean something else, not a UNIX socket path
+    if (options.host || options.port) {
+      netOptions.path = undefined;
+    }
+    debug('Connecting with ' + JSON.stringify(netOptions));
+    netConn = net.connect(netOptions, function() {
       sslConn.remoteAddress = netConn.remoteAddress;
       sslConn.remotePort = netConn.remotePort;
       sslConn.engine.beginHandshake();
@@ -207,8 +219,10 @@ exports.checkServerIdentity = tlscheckidentity.checkServerIdentity;
 Server.prototype.close = function() {
   if (!this.closed) {
     debug('Server.close');
-    this.netServer.close();
-    this.emit('close');
+    this.netServer.close(function() {
+      debug('Server close complete');
+      this.emit('close');
+    });
     this.closed = true;
   }
 };
@@ -238,6 +252,7 @@ CleartextStream.prototype.init = function(serverMode, server, connection, engine
   self.closing = false;
   self.remoteAddress = self.socket.remoteAddress;
   self.remotePort = self.socket.remotePort;
+  self.encrypted = true;
   connection.ondata = function(data, offset, end) {
     debug(self.id + ' onData');
     readCiphertext(self, data, offset, end);
@@ -353,28 +368,38 @@ CleartextStream.prototype.end = function(data, encoding) {
 // Got an end from the network
 function handleEnd(self) {
   if (!self.closed) {
-    if (self.ended) {
+    if (!self.handshakeComplete) {
+      self.handleSSLError('Connection closed by peer');
+    } else if (self.ended) {
       doClose(self);
     } else {
-      debug(self.id + ' Closing SSL inbound');
+      debug(self.id + ' Closing SSL inbound without a close from the client');
       self.ended = true;
+      /* TODO assess if we need this.
       self.engine.closeInbound();
       while (!self.engine.isInboundDone()) {
         writeCleartext(self);
       }
+      */
       self.emit('end');
+      doClose(self);
     }
   }
 }
 
 CleartextStream.prototype.destroy = function() {
-  this.socket.destroy();
+  if (!this.closed) {
+    debug('destroy');
+    doClose(this);
+  }
 }
 
 CleartextStream.prototype.justHandshaked = function() {
   debug(this.id + ' justHandshaked');
   this.readable = this.writable = true;
   this.handshakeComplete = true;
+  // TODO right now we raise an error if negotiation fails
+  this.authorized = true;
   if (this.writeQueue) {
     var nextWrite = this.writeQueue.shift();
     while (nextWrite) {
@@ -390,6 +415,20 @@ CleartextStream.prototype.justHandshaked = function() {
     this.server.emit('secureConnection', this);
   } else {
     this.emit('secureConnect');
+    this.emit('connect');
+  }
+}
+
+CleartextStream.prototype.handleSSLError = function(err) {
+  debug(this.id + ' Received an error (handshake complete = ' +
+        this.handshakeComplete + '): ' + err);
+  if (this.serverMode && !this.handshakeComplete) {
+    this.server.emit('clientError', err);
+  } else {
+    this.emit('error', err);
+  }
+  if (!this.handshakeComplete) {
+    this.destroy();
   }
 }
 
@@ -472,8 +511,7 @@ function readCiphertext(self, data) {
       }
       break;
     case self.engine.ERROR:
-      debug('SSL error -- closing');
-      doClose(self);
+      self.handleSSLError(sslResult.error);
       break;
     default:
       throw 'Unexpected SSL engine status ' + sslResult.status;
@@ -520,8 +558,7 @@ function writeCleartext(self, data, cb) {
       }
       break;
     case self.engine.ERROR:
-      debug('SSL error -- closing');
-      doClose(self);
+      self.handleSSLError(sslResult.error);
       break;
     default:
       throw 'Unexpected SSL engine status ' + sslResult.status;

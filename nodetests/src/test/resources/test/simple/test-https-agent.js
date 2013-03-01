@@ -30,7 +30,7 @@ var https = require('https');
 var fs = require('fs');
 
 var options = {
-  keystore: common.fixturesDir + '/keys/agent1.jks'),
+  keystore: common.fixturesDir + '/keys/agent1.jks',
   passphrase: 'secure'
 };
 

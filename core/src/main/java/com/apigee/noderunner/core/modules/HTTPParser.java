@@ -64,6 +64,7 @@ public class HTTPParser
 
         private HTTPParsingMachine parser;
         private boolean sentPartialHeaders;
+        private boolean sentCompleteHeaders;
 
         private Function onHeaders;
         private Function onHeadersComplete;
@@ -80,7 +81,6 @@ public class HTTPParser
         {
             parser = new HTTPParsingMachine(
                 (type == REQUEST) ? HTTPParsingMachine.ParsingMode.REQUEST : HTTPParsingMachine.ParsingMode.RESPONSE);
-            sentPartialHeaders = false;
         }
 
         public static Object newParser(Context cx, Scriptable thisObj, Object[] args, Function fn)
@@ -185,7 +185,7 @@ public class HTTPParser
                 if (result.isError()) {
                     return Utils.makeErrorObject(cx, this, "HTTP parsing error");
                 }
-                if (result.hasHeadersOrURI()) {
+                if (!sentCompleteHeaders && result.hasHeadersOrURI()) {
                     hadSomething = true;
                     if (result.isHeadersComplete()) {
                         log.debug("Sending complete HTTP headers");
@@ -196,6 +196,7 @@ public class HTTPParser
                             // The JS code returns this when the request was a HEAD
                             parser.setIgnoreBody(true);
                         }
+                        sentCompleteHeaders = true;
                     } else {
                         log.debug("Sending partial HTTP headers");
                         sentPartialHeaders = true;
@@ -212,6 +213,8 @@ public class HTTPParser
                 if (result.isComplete()) {
                     log.debug("Sending HTTP request complete");
                     callOnComplete(cx);
+                    sentCompleteHeaders = false;
+                    sentPartialHeaders = false;
                     parser.reset();
                 }
             } while (hadSomething && !result.isComplete() && bBuf.hasRemaining());

@@ -33,7 +33,7 @@ if (process.platform === 'win32') {
 var options = {
   keystore: common.fixturesDir + '/keys/agent2.jks',
   passphrase: 'secure',
-  ciphers: 'RC4-MD5'
+  ciphers: 'SSL_RSA_WITH_RC4_128_SHA'
 };
 
 var reply = 'I AM THE WALRUS'; // something recognizable

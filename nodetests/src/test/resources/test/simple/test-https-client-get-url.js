@@ -35,7 +35,7 @@ var fs = require('fs');
 var seen_req = false;
 
 var options = {
-  keystore: common.fixturesDir + '/keys/agent1.jks'),
+  keystore: common.fixturesDir + '/keys/agent1.jks',
   passphrase: 'secure'
 };
 

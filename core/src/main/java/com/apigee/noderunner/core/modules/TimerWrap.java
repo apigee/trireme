@@ -66,7 +66,6 @@ public class TimerWrap
         public static Object newTimerImpl(Context cx, Object[] args, Function fn, boolean isNew)
         {
             TimerImpl t = new TimerImpl();
-            t.ref();
             return t;
         }
 
@@ -91,6 +90,7 @@ public class TimerWrap
                 log.debug("Starting timer for {} in {} repeating = {}",
                           timer.onTimeout, timeout, repeat);
             }
+            timer.ref();
             timer.activity = getRunner().createTimer(timeout, repeat, timer, timer);
             return 0;
         }
@@ -110,6 +110,7 @@ public class TimerWrap
         @Override
         public void execute(Context cx, Scriptable scope)
         {
+            unref();
             if (onTimeout != null) {
                 onTimeout.call(cx, onTimeout, this, null);
             }

@@ -29,7 +29,7 @@ import java.util.HashMap;
 import java.util.Map;
 
 /**
- * The Node 0.8.18 process module done on top of the VM.
+ * The Node process module done on top of the VM.
  */
 public class Process
     implements NodeModule
@@ -337,9 +337,9 @@ public class Process
         @JSFunction
         public static void nextTick(Context cx, Scriptable thisObj, Object[] args, Function func)
         {
-            ensureArg(args, 0);
+            Function f = functionArg(args, 0, true);
             ProcessImpl proc = (ProcessImpl)thisObj;
-            proc.runner.enqueueCallback((Function)args[0], (Function)args[0], thisObj, null);
+            proc.runner.enqueueCallback(f, f, thisObj, new Object[0]);
         }
 
         @JSGetter("maxTickDepth")

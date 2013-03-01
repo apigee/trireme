@@ -52,7 +52,6 @@ import java.util.regex.Pattern;
  * from what's in regular Node. Regular Node is based on OpenSSL and Java has its own SSLEngine. This module
  * is a wrapper around SSLEngine.
  */
-
 public class SSLWrap
     implements InternalNodeModule
 {

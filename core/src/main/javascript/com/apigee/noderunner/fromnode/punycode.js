@@ -35,6 +35,8 @@
 	/** Error messages */
 	errors = {
 		'overflow': 'Overflow: input needs wider integers to process.',
+		'ucs2decode': 'UCS-2(decode): illegal sequence',
+		'ucs2encode': 'UCS-2(encode): illegal value',
 		'not-basic': 'Illegal input >= 0x80 (not a basic code point)',
 		'invalid-input': 'Invalid input'
 	},
@@ -110,17 +112,14 @@
 		    extra;
 		while (counter < length) {
 			value = string.charCodeAt(counter++);
-			if ((value & 0xF800) == 0xD800 && counter < length) {
-				// high surrogate, and there is a next character
+			if ((value & 0xF800) == 0xD800) {
 				extra = string.charCodeAt(counter++);
-				if ((extra & 0xFC00) == 0xDC00) { // low surrogate
-					output.push(((value & 0x3FF) << 10) + (extra & 0x3FF) + 0x10000);
-				} else {
-					output.push(value, extra);
+				if ((value & 0xFC00) != 0xD800 || (extra & 0xFC00) != 0xDC00) {
+					error('ucs2decode');
 				}
-			} else {
-				output.push(value);
+				value = ((value & 0x3FF) << 10) + (extra & 0x3FF) + 0x10000;
 			}
+			output.push(value);
 		}
 		return output;
 	}
@@ -136,6 +135,9 @@
 	function ucs2encode(array) {
 		return map(array, function(value) {
 			var output = '';
+			if ((value & 0xF800) == 0xD800) {
+				error('ucs2encode');
+			}
 			if (value > 0xFFFF) {
 				value -= 0x10000;
 				output += stringFromCharCode(value >>> 10 & 0x3FF | 0xD800);
@@ -470,7 +472,7 @@
 		 * @memberOf punycode
 		 * @type String
 		 */
-		'version': '1.1.1',
+		'version': '1.0.0',
 		/**
 		 * An object of methods to convert from JavaScript's internal character
 		 * representation (UCS-2) to decimal Unicode code points, and back.

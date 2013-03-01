@@ -452,18 +452,7 @@ exports._forkChild = function(fd) {
   // set process.send()
   var p = createPipe(true);
   p.open(fd);
-  p.unref();
   setupChannel(process, p);
-
-  var refs = 0;
-  process.on('newListener', function(name) {
-    if (name !== 'message' && name !== 'disconnect') return;
-    if (++refs === 1) p.ref();
-  });
-  process.on('removeListener', function(name) {
-    if (name !== 'message' && name !== 'disconnect') return;
-    if (--refs === 0) p.unref();
-  });
 };
 
 
@@ -589,7 +578,7 @@ exports.execFile = function(file /* args, options, callback */) {
   child.stdout.addListener('data', function(chunk) {
     stdout += chunk;
     if (stdout.length > options.maxBuffer) {
-      err = new Error('stdout maxBuffer exceeded.');
+      err = new Error('maxBuffer exceeded.');
       kill();
     }
   });
@@ -597,7 +586,7 @@ exports.execFile = function(file /* args, options, callback */) {
   child.stderr.addListener('data', function(chunk) {
     stderr += chunk;
     if (stderr.length > options.maxBuffer) {
-      err = new Error('stderr maxBuffer exceeded.');
+      err = new Error('maxBuffer exceeded.');
       kill();
     }
   });
@@ -673,12 +662,6 @@ function ChildProcess() {
     // - normally terminated processes don't touch this.signalCode
     // - signaled processes don't touch this.exitCode
     //
-    // new in 0.9.x:
-    //
-    // - spawn failures are reported with exitCode == -1
-    //
-    var err = (exitCode == -1) ? errnoException(errno, 'spawn') : null;
-
     if (signalCode) {
       self.signalCode = signalCode;
     } else {
@@ -692,11 +675,7 @@ function ChildProcess() {
     self._handle.close();
     self._handle = null;
 
-    if (exitCode == -1) {
-      self.emit('error', err);
-    } else {
-      self.emit('exit', self.exitCode, self.signalCode);
-    }
+    self.emit('exit', self.exitCode, self.signalCode);
 
     maybeClose(self);
   };

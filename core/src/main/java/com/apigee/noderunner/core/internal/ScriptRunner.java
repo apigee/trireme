@@ -455,12 +455,27 @@ public class ScriptRunner
             clearErrno();
 
             // Set up the global timer functions
-            scope.put("setTimeout", scope, timers.get("setTimeout", timers));
-            scope.put("setInterval", scope, timers.get("setInterval", timers));
-            scope.put("clearTimeout", scope, timers.get("clearTimeout", timers));
-            scope.put("clearInterval", scope, timers.get("clearInterval", timers));
-            scope.put("setImmediate", scope, timers.get("setImmediate", timers));
-            scope.put("clearImmediate", scope, timers.get("clearImmediate", timers));
+            copyProp(timers, scope, "setTimeout");
+            copyProp(timers, scope, "setInterval");
+            copyProp(timers, scope, "clearTimeout");
+            copyProp(timers, scope, "clearInterval");
+            copyProp(timers, scope, "setImmediate");
+            copyProp(timers, scope, "clearImmediate");
+
+            // Set up metrics
+            Scriptable metrics = (Scriptable)nativeMod.internalRequire("noderunner_metrics", cx, this);
+            copyProp(metrics, scope, "DTRACE_NET_SERVER_CONNECTION");
+            copyProp(metrics, scope, "DTRACE_NET_STREAM_END");
+            copyProp(metrics, scope, "COUNTER_NET_SERVER_CONNECTION");
+            copyProp(metrics, scope, "COUNTER_NET_SERVER_CONNECTION_CLOSE");
+            copyProp(metrics, scope, "DTRACE_HTTP_CLIENT_REQUEST");
+            copyProp(metrics, scope, "DTRACE_HTTP_CLIENT_RESPONSE");
+            copyProp(metrics, scope, "DTRACE_HTTP_SERVER_REQUEST");
+            copyProp(metrics, scope, "DTRACE_HTTP_SERVER_RESPONSE");
+            copyProp(metrics, scope, "COUNTER_HTTP_CLIENT_REQUEST");
+            copyProp(metrics, scope, "COUNTER_HTTP_CLIENT_RESPONSE");
+            copyProp(metrics, scope, "COUNTER_HTTP_SERVER_REQUEST");
+            copyProp(metrics, scope, "COUNTER_HTTP_SERVER_RESPONSE");
 
             // Set up globals that are set up when running a script from the command line (set in "evalScript"
             // in node.js.)
@@ -494,6 +509,11 @@ public class ScriptRunner
         } catch (InstantiationException e) {
             throw new NodeException(e);
         }
+    }
+
+    private static void copyProp(Scriptable src, Scriptable dest, String name)
+    {
+        dest.put(name, dest, src.get(name, src));
     }
 
     public Object initializeModule(String modName, boolean internal,

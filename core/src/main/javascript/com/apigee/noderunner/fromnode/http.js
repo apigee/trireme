@@ -57,7 +57,6 @@ function parserOnHeaders(headers, url) {
 // info.url is not set for response parsers but that's not
 // applicable here since all our parsers are request parsers.
 function parserOnHeadersComplete(info) {
-  debug('onHeadersComplete');
   var parser = this;
   var headers = info.headers;
   var url = info.url;
@@ -116,7 +115,6 @@ function parserOnHeadersComplete(info) {
 }
 
 function parserOnBody(b, start, len) {
-  debug('onBody len = ' + len);
   var parser = this;
   var slice = b.slice(start, start + len);
   if (parser.incoming._paused || parser.incoming._pendings.length) {
@@ -127,7 +125,6 @@ function parserOnBody(b, start, len) {
 }
 
 function parserOnMessageComplete() {
-  debug('onMessageComplete');
   var parser = this;
   parser.incoming.complete = true;
 
@@ -366,11 +363,6 @@ IncomingMessage.prototype._emitData = function(d) {
 
 IncomingMessage.prototype._emitEnd = function() {
   if (!this._endEmitted) {
-    if (this._decoder) {
-      var ret = this._decoder.end();
-      if (ret)
-        this.emit('data', ret);
-    }
     this.emit('end');
   }
 
@@ -455,6 +447,7 @@ function OutgoingMessage() {
   this._trailer = '';
 
   this.finished = false;
+  this._hangupClose = false;
 }
 util.inherits(OutgoingMessage, Stream);
 
@@ -492,7 +485,8 @@ OutgoingMessage.prototype._writeRaw = function(data, encoding) {
 
   if (this.connection &&
       this.connection._httpMessage === this &&
-      this.connection.writable) {
+      this.connection.writable &&
+      !this.connection.destroyed) {
     // There might be pending data in the this.output buffer.
     while (this.output.length) {
       if (!this.connection.writable) {
@@ -506,7 +500,28 @@ OutgoingMessage.prototype._writeRaw = function(data, encoding) {
 
     // Directly write to socket.
     return this.connection.write(data, encoding);
+  } else if (this.connection && this.connection.destroyed) {
+    // The socket was destroyed.  If we're still trying to write to it,
+    // then something bad happened, but it could be just that we haven't
+    // gotten the 'close' event yet.
+    //
+    // In v0.10 and later, this isn't a problem, since ECONNRESET isn't
+    // ignored in the first place.  We'll probably emit 'close' on the
+    // next tick, but just in case it's not coming, set a timeout that
+    // will emit it for us.
+    if (!this._hangupClose) {
+      this._hangupClose = true;
+      var socket = this.socket;
+      var timer = setTimeout(function() {
+        socket.emit('close');
+      });
+      socket.on('close', function() {
+        clearTimeout(timer);
+      });
+    }
+    return false;
   } else {
+    // buffer, as long as we're not destroyed.
     this._buffer(data, encoding);
     return false;
   }
@@ -554,6 +569,11 @@ OutgoingMessage.prototype._storeHeader = function(firstLine, headers) {
   var self = this;
 
   function store(field, value) {
+    // Protect against response splitting. The if statement is there to
+    // minimize the performance impact in the common case.
+    if (/[\r\n]/.test(value))
+      value = value.replace(/[\r\n]+[ \t]*/g, '');
+
     messageHeader += field + ': ' + value + CRLF;
 
     if (connectionExpression.test(field)) {
@@ -707,12 +727,6 @@ OutgoingMessage.prototype._renderHeaders = function() {
 };
 
 
-Object.defineProperty(OutgoingMessage.prototype, 'headersSent', {
-  configurable: true,
-  enumerable: true,
-  get: function() { return !!this._header; }
-});
-
 
 OutgoingMessage.prototype.write = function(chunk, encoding) {
   if (!this._header) {
@@ -773,6 +787,10 @@ OutgoingMessage.prototype.addTrailers = function(headers) {
 };
 
 
+var zero_chunk_buf = new Buffer('\r\n0\r\n');
+var crlf_buf = new Buffer('\r\n');
+
+
 OutgoingMessage.prototype.end = function(data, encoding) {
   if (this.finished) {
     return false;
@@ -790,8 +808,7 @@ OutgoingMessage.prototype.end = function(data, encoding) {
   var ret;
 
   var hot = this._headerSent === false &&
-            typeof(data) === 'string' &&
-            data.length > 0 &&
+            (data && data.length > 0) &&
             this.output.length === 0 &&
             this.connection &&
             this.connection.writable &&
@@ -803,13 +820,73 @@ OutgoingMessage.prototype.end = function(data, encoding) {
     //   res.end(blah);
     // HACKY.
 
-    if (this.chunkedEncoding) {
-      var l = Buffer.byteLength(data, encoding).toString(16);
-      ret = this.connection.write(this._header + l + CRLF +
-                                  data + '\r\n0\r\n' +
-                                  this._trailer + '\r\n', encoding);
+    if (typeof data === 'string') {
+      if (this.chunkedEncoding) {
+        var l = Buffer.byteLength(data, encoding).toString(16);
+        ret = this.connection.write(this._header + l + CRLF +
+                                    data + '\r\n0\r\n' +
+                                    this._trailer + '\r\n', encoding);
+      } else {
+        ret = this.connection.write(this._header + data, encoding);
+      }
+    } else if (Buffer.isBuffer(data)) {
+      if (this.chunkedEncoding) {
+        var chunk_size = data.length.toString(16);
+
+        // Skip expensive Buffer.byteLength() calls; only ISO-8859-1 characters
+        // are allowed in HTTP headers. Therefore:
+        //
+        //   this._header.length == Buffer.byteLength(this._header.length)
+        //   this._trailer.length == Buffer.byteLength(this._trailer.length)
+        //
+        var header_len = this._header.length;
+        var chunk_size_len = chunk_size.length;
+        var data_len = data.length;
+        var trailer_len = this._trailer.length;
+
+        var len = header_len +
+                  chunk_size_len +
+                  2 + // '\r\n'.length
+                  data_len +
+                  5 + // '\r\n0\r\n'.length
+                  trailer_len +
+                  2;  // '\r\n'.length
+
+        var buf = new Buffer(len);
+        var off = 0;
+
+        buf.write(this._header, off, header_len, 'ascii');
+        off += header_len;
+
+        buf.write(chunk_size, off, chunk_size_len, 'ascii');
+        off += chunk_size_len;
+
+        crlf_buf.copy(buf, off);
+        off += 2;
+
+        data.copy(buf, off);
+        off += data_len;
+
+        zero_chunk_buf.copy(buf, off);
+        off += 5;
+
+        if (trailer_len > 0) {
+          buf.write(this._trailer, off, trailer_len, 'ascii');
+          off += trailer_len;
+        }
+
+        crlf_buf.copy(buf, off);
+
+        ret = this.connection.write(buf);
+      } else {
+        var header_len = this._header.length;
+        var buf = new Buffer(header_len + data.length);
+        buf.write(this._header, 0, header_len, 'ascii');
+        data.copy(buf, header_len);
+        ret = this.connection.write(buf);
+      }
     } else {
-      ret = this.connection.write(this._header + data, encoding);
+      throw new TypeError('first argument must be a string or Buffer');
     }
     this._headerSent = true;
 
@@ -843,12 +920,10 @@ OutgoingMessage.prototype.end = function(data, encoding) {
 OutgoingMessage.prototype._finish = function() {
   assert(this.connection);
   if (this instanceof ServerResponse) {
-    //DTRACE_HTTP_SERVER_RESPONSE(this.connection);
-    //COUNTER_HTTP_SERVER_RESPONSE();
+    DTRACE_HTTP_SERVER_RESPONSE(this.connection);
   } else {
     assert(this instanceof ClientRequest);
-    //DTRACE_HTTP_CLIENT_REQUEST(this, this.connection);
-    //COUNTER_HTTP_CLIENT_REQUEST();
+    DTRACE_HTTP_CLIENT_REQUEST(this, this.connection);
   }
   this.emit('finish');
 };
@@ -920,7 +995,24 @@ exports.ServerResponse = ServerResponse;
 ServerResponse.prototype.statusCode = 200;
 
 function onServerResponseClose() {
-  this._httpMessage.emit('close');
+  // EventEmitter.emit makes a copy of the 'close' listeners array before
+  // calling the listeners. detachSocket() unregisters onServerResponseClose
+  // but if detachSocket() is called, directly or indirectly, by a 'close'
+  // listener, onServerResponseClose is still in that copy of the listeners
+  // array. That is, in the example below, b still gets called even though
+  // it's been removed by a:
+  //
+  //   var obj = new events.EventEmitter;
+  //   obj.on('event', a);
+  //   obj.on('event', b);
+  //   function a() { obj.removeListener('event', b) }
+  //   function b() { throw "BAM!" }
+  //   obj.emit('event');  // throws
+  //
+  // Ergo, we need to deal with stale 'close' events and handle the case
+  // where the ServerResponse object has already been deconstructed.
+  // Fortunately, that requires only a single if check. :-)
+  if (this._httpMessage) this._httpMessage.emit('close');
 }
 
 ServerResponse.prototype.assignSocket = function(socket) {
@@ -1052,7 +1144,8 @@ function Agent(options) {
       name += ':' + localAddress;
     }
 
-    if (self.requests[name] && self.requests[name].length) {
+    if (!socket.destroyed &&
+        self.requests[name] && self.requests[name].length) {
       self.requests[name].shift().onSocket(socket);
       if (self.requests[name].length === 0) {
         // don't leak
@@ -1329,7 +1422,16 @@ function socketCloseListener() {
     // receive a response. The error needs to
     // fire on the request.
     req.emit('error', createHangUpError());
+    req._hadError = true;
   }
+
+  // Too bad.  That output wasn't getting written.
+  // This is pretty terrible that it doesn't raise an error.
+  // Fixed better in v0.10
+  if (req.output)
+    req.output.length = 0;
+  if (req.outputEncodings)
+    req.outputEncodings.length = 0;
 
   if (parser) {
     parser.finish();
@@ -1381,7 +1483,6 @@ function socketOnData(d, start, end) {
   var parser = this.parser;
 
   var ret = parser.execute(d, start, end - start);
-  debug('parser.execute = ' + ret);
   if (ret instanceof Error) {
     debug('parse error');
     freeParser(parser, req);
@@ -1477,8 +1578,7 @@ function parserOnIncomingClient(res, shouldKeepAlive) {
   }
 
 
-  //DTRACE_HTTP_CLIENT_RESPONSE(socket, req);
-  //COUNTER_HTTP_CLIENT_RESPONSE();
+  DTRACE_HTTP_CLIENT_RESPONSE(socket, req);
   req.emit('response', res);
   req.res = res;
   res.req = req;
@@ -1659,13 +1759,9 @@ function Server(requestListener) {
   this.httpAllowHalfOpen = false;
 
   this.addListener('connection', connectionListener);
-
-  this.addListener('clientError', function(err, conn) {
-    conn.destroy(err);
-  });
 }
-
 util.inherits(Server, net.Server);
+
 
 exports.Server = Server;
 
@@ -1692,7 +1788,8 @@ function connectionListener(socket) {
   function serverSocketCloseListener() {
     debug('server socket close');
     // mark this parser as reusable
-    freeParser(parser);
+    if (this.parser)
+      freeParser(this.parser);
 
     abortIncoming();
   }
@@ -1721,12 +1818,11 @@ function connectionListener(socket) {
   }
 
   socket.addListener('error', function(e) {
-    self.emit('clientError', e, this);
+    self.emit('clientError', e);
   });
 
   socket.ondata = function(d, start, end) {
     var ret = parser.execute(d, start, end - start);
-    debug('parser.execute returned ' + ret);
     if (ret instanceof Error) {
       debug('parse error');
       socket.destroy(ret);
@@ -1786,8 +1882,7 @@ function connectionListener(socket) {
     var res = new ServerResponse(req);
     debug('server response shouldKeepAlive: ' + shouldKeepAlive);
     res.shouldKeepAlive = shouldKeepAlive;
-    //DTRACE_HTTP_SERVER_REQUEST(req, socket);
-    //COUNTER_HTTP_SERVER_REQUEST();
+    DTRACE_HTTP_SERVER_REQUEST(req, socket);
 
     if (socket._httpMessage) {
       // There are already pending outgoing res, append.
@@ -1873,11 +1968,6 @@ Client.prototype.request = function(method, path, headers) {
   // but it will get removed when we remove this legacy interface.
   c.on('socket', function(s) {
     s.on('end', function() {
-      if (self._decoder) {
-        var ret = self._decoder.end();
-        if (ret)
-          self.emit('data', ret);
-      }
       self.emit('end');
     });
   });

@@ -437,12 +437,7 @@ Module.prototype._compile = function(content, filename) {
   var compiledWrapper = runInThisContext(wrapper, filename, true);
   if (global.v8debug) {
     if (!resolvedArgv) {
-      // we enter the repl if we're not given a filename argument.
-      if (process.argv[1]) {
-        resolvedArgv = Module._resolveFilename(process.argv[1], null);
-      } else {
-        resolvedArgv = 'repl';
-      }
+      resolvedArgv = Module._resolveFilename(process.argv[1], null);
     }
 
     // Set breakpoint on module start
@@ -498,23 +493,15 @@ Module.runMain = function() {
 };
 
 Module._initPaths = function() {
-  var isWindows = process.platform === 'win32';
-
-  if (isWindows) {
-    var homeDir = process.env.USERPROFILE;
-  } else {
-    var homeDir = process.env.HOME;
-  }
-
   var paths = [path.resolve(process.execPath, '..', '..', 'lib', 'node')];
 
-  if (homeDir) {
-    paths.unshift(path.resolve(homeDir, '.node_libraries'));
-    paths.unshift(path.resolve(homeDir, '.node_modules'));
+  if (process.env['HOME']) {
+    paths.unshift(path.resolve(process.env['HOME'], '.node_libraries'));
+    paths.unshift(path.resolve(process.env['HOME'], '.node_modules'));
   }
 
   if (process.env['NODE_PATH']) {
-    var splitter = isWindows ? ';' : ':';
+    var splitter = process.platform === 'win32' ? ';' : ':';
     paths = process.env['NODE_PATH'].split(splitter).concat(paths);
   }
 

@@ -21,7 +21,6 @@
 
 var tls = require('tls');
 var http = require('http');
-var util = require('util');
 var url = require('url');
 var inherits = require('util').inherits;
 
@@ -39,10 +38,6 @@ function Server(opts, requestListener) {
   if (requestListener) {
     this.addListener('request', requestListener);
   }
-
-  this.addListener('clientError', function(err, conn) {
-    conn.destroy(err);
-  });
 }
 inherits(Server, tls.Server);
 
@@ -102,25 +97,11 @@ exports.request = function(options, cb) {
     throw new Error('Protocol:' + options.protocol + ' not supported.');
   }
 
-  options = util._extend({
-    createConnection: createConnection,
-    defaultPort: 443
-  }, options);
-
-  if (typeof options.agent === 'undefined') {
-    if (typeof options.ca === 'undefined' &&
-        typeof options.cert === 'undefined' &&
-        typeof options.ciphers === 'undefined' &&
-        typeof options.key === 'undefined' &&
-        typeof options.passphrase === 'undefined' &&
-        typeof options.pfx === 'undefined' &&
-        typeof options.rejectUnauthorized === 'undefined') {
-      options.agent = globalAgent;
-    } else {
-      options.agent = new Agent(options);
-    }
+  if (options.agent === undefined) {
+    options.agent = globalAgent;
   }
-
+  options.createConnection = createConnection;
+  options.defaultPort = options.defaultPort || 443;
   return new http.ClientRequest(options, cb);
 };
 

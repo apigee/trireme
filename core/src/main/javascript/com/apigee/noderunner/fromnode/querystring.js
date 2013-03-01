@@ -22,8 +22,7 @@
 // Query String Utilities
 
 var QueryString = exports;
-// Seems like this is unused?
-//var urlDecode = process.binding('http_parser').urlDecode;
+var urlDecode = process.binding('http_parser').urlDecode;
 
 
 // If obj.hasOwnProperty has been overridden, then calling

@@ -31,6 +31,11 @@ public class ModuleRegistry
 {
     private static final Logger log = LoggerFactory.getLogger(ModuleRegistry.class);
 
+    /**
+     * Add this prefix to internal module code before compiling -- it makes them behave as they expect and as
+     * internal modules from "normal" Node behave. This same code must also be included by the Rhino
+     * compiler, so it is repeated in pom.xml and must be changed there if it's changed here.
+     */
     private static final String CODE_PREFIX = "(function (exports, module, require, __filename, __dirname) {";
     private static final String CODE_POSTFIX = "});";
 
@@ -54,7 +59,8 @@ public class ModuleRegistry
             compileAndAdd(cx, mod.getModuleName(), mod.getModuleScript());
         }
 
-
+        // These classes are compiled using the "Rhino Compiler" module, which is a Maven plug-in that's part
+        // of noderunner.
         addCompiledModule("_linklist", "com.apigee.noderunner.fromnode._linklist");
         addCompiledModule("assert", "com.apigee.noderunner.fromnode.assert");
         addCompiledModule("child_process", "com.apigee.noderunner.fromnode.child_process");
@@ -68,7 +74,7 @@ public class ModuleRegistry
         addCompiledModule("node_http", "com.apigee.noderunner.fromnode.http");
         addCompiledModule("node_https", "com.apigee.noderunner.fromnode.https");
         addCompiledModule("module", "com.apigee.noderunner.fromnode.module");
-        addCompiledModule("net", "com.apigee.noderunner.fromnode.net");
+        addCompiledModule("node_net", "com.apigee.noderunner.fromnode.net");
         addCompiledModule("os", "com.apigee.noderunner.fromnode.os");
         addCompiledModule("path", "com.apigee.noderunner.fromnode.path");
         addCompiledModule("punycode", "com.apigee.noderunner.fromnode.punycode");
@@ -83,6 +89,8 @@ public class ModuleRegistry
 
         addCompiledModule("http", "com.apigee.noderunner.scripts.adaptorhttp");
         addCompiledModule("https", "com.apigee.noderunner.scripts.adaptorhttps");
+        addCompiledModule("noderunner_metrics", "com.apigee.noderunner.scripts.noderunner_metrics");
+        addCompiledModule("net", "com.apigee.noderunner.scripts.net");
         addCompiledModule("tls", "com.apigee.noderunner.scripts.tls");
         addCompiledModule("tls_checkidentity", "com.apigee.noderunner.scripts.tls_checkidentity");
     }

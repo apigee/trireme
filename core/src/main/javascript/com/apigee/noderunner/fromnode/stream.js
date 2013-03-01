@@ -99,12 +99,14 @@ Stream.prototype.pipe = function(dest, options) {
     source.removeListener('end', cleanup);
     source.removeListener('close', cleanup);
 
+    dest.removeListener('end', cleanup);
     dest.removeListener('close', cleanup);
   }
 
   source.on('end', cleanup);
   source.on('close', cleanup);
 
+  dest.on('end', cleanup);
   dest.on('close', cleanup);
 
   dest.emit('pipe', source);

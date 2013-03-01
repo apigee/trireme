@@ -264,7 +264,7 @@ Socket.prototype.end = function(data, encoding) {
   this.writable = false;
 
   if (data) this.write(data, encoding);
-  // DTRACE_NET_STREAM_END(this);
+  DTRACE_NET_STREAM_END(this);
 
   if (!this.readable) {
     this.destroySoon();
@@ -361,7 +361,6 @@ Socket.prototype._destroy = function(exception, cb) {
   this.destroyed = true;
 
   if (this.server) {
-    // COUNTER_NET_SERVER_CONNECTION_CLOSE(this);
     this.server._connections--;
     if (this.server._emitCloseIfDrained) {
       this.server._emitCloseIfDrained();
@@ -376,7 +375,6 @@ Socket.prototype.destroy = function(exception) {
 
 
 function onread(buffer, offset, length) {
-  debug('onread errno = ' + errno);
   var handle = this;
   var self = handle.owner;
   assert(handle === self._handle, 'handle != self._handle');
@@ -417,11 +415,6 @@ function onread(buffer, offset, length) {
     if (!self.writable) self._destroy();
 
     if (!self.allowHalfOpen) self.end();
-    if (self._decoder) {
-      var ret = self._decoder.end();
-      if (ret)
-        self.emit('data', ret);
-    }
     if (self._events && self._events['end']) self.emit('end');
     if (self.onend) self.onend();
   } else {
@@ -673,7 +666,7 @@ Socket.prototype.connect = function(options, cb) {
   }
 
   if (typeof cb === 'function') {
-    self.on('connect', cb);
+    self.once('connect', cb);
   }
 
   timers.active(this);
@@ -721,19 +714,6 @@ Socket.prototype.connect = function(options, cb) {
   }
   return self;
 };
-
-
-Socket.prototype.ref = function() {
-  if (this._handle)
-    this._handle.ref();
-};
-
-
-Socket.prototype.unref = function() {
-  if (this._handle)
-    this._handle.unref();
-};
-
 
 
 function afterConnect(status, handle, req, readable, writable) {
@@ -1055,8 +1035,7 @@ function onconnection(clientHandle) {
   self._connections++;
   socket.server = self;
 
-  // DTRACE_NET_SERVER_CONNECTION(socket);
-  // COUNTER_NET_SERVER_CONNECTION(socket);
+  DTRACE_NET_SERVER_CONNECTION(socket);
   self.emit('connection', socket);
   socket.emit('connect');
 }
@@ -1110,23 +1089,10 @@ Server.prototype._setupSlave = function(socketList) {
   this._slaves.push(socketList);
 };
 
-Server.prototype.ref = function() {
-  if (this._handle)
-    this._handle.ref();
-};
-
-Server.prototype.unref = function() {
-  if (this._handle)
-    this._handle.unref();
-};
-
 
 // TODO: isIP should be moved to the DNS code. Putting it here now because
 // this is what the legacy system did.
-// Noderunner -- turning this into an explicitl function here works -- not sure why.
-exports.isIP = function(hostname) {
-  return cares.isIP(hostname);
-}
+exports.isIP = cares.isIP;
 
 
 exports.isIPv4 = function(input) {

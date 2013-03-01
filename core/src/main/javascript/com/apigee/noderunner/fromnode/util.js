@@ -110,38 +110,25 @@ var error = exports.error = function(x) {
  * in the best way possible given the different types.
  *
  * @param {Object} obj The object to print out.
- * @param {Object} opts Optional options object that alters the output.
+ * @param {Boolean} showHidden Flag that shows hidden (not enumerable)
+ *    properties of objects.
+ * @param {Number} depth Depth in which to descend in object. Default is 2.
+ * @param {Boolean} colors Flag to turn on ANSI escape codes to color the
+ *    output. Default is false (no coloring).
  */
-/* legacy: obj, showHidden, depth, colors*/
-function inspect(obj, opts) {
-  // default options
+function inspect(obj, showHidden, depth, colors) {
   var ctx = {
+    showHidden: showHidden,
     seen: [],
-    stylize: stylizeNoColor
+    stylize: colors ? stylizeWithColor : stylizeNoColor
   };
-  // legacy...
-  if (arguments.length >= 3) ctx.depth = arguments[2];
-  if (arguments.length >= 4) ctx.colors = arguments[3];
-  if (typeof opts === 'boolean') {
-    // legacy...
-    ctx.showHidden = opts;
-  } else if (opts) {
-    // got an "options" object
-    exports._extend(ctx, opts);
-  }
-  // set default options
-  if (typeof ctx.showHidden === 'undefined') ctx.showHidden = false;
-  if (typeof ctx.depth === 'undefined') ctx.depth = 2;
-  if (typeof ctx.colors === 'undefined') ctx.colors = false;
-  if (typeof ctx.customInspect === 'undefined') ctx.customInspect = true;
-  if (ctx.colors) ctx.stylize = stylizeWithColor;
-  return formatValue(ctx, obj, ctx.depth);
+  return formatValue(ctx, obj, (typeof depth === 'undefined' ? 2 : depth));
 }
 exports.inspect = inspect;
 
 
 // http://en.wikipedia.org/wiki/ANSI_escape_code#graphics
-inspect.colors = {
+var colors = {
   'bold' : [1, 22],
   'italic' : [3, 23],
   'underline' : [4, 24],
@@ -158,7 +145,7 @@ inspect.colors = {
 };
 
 // Don't use 'blue' not visible on cmd.exe
-inspect.styles = {
+var styles = {
   'special': 'cyan',
   'number': 'yellow',
   'boolean': 'yellow',
@@ -172,11 +159,11 @@ inspect.styles = {
 
 
 function stylizeWithColor(str, styleType) {
-  var style = inspect.styles[styleType];
+  var style = styles[styleType];
 
   if (style) {
-    return '\u001b[' + inspect.colors[style][0] + 'm' + str +
-           '\u001b[' + inspect.colors[style][1] + 'm';
+    return '\u001b[' + colors[style][0] + 'm' + str +
+           '\u001b[' + colors[style][1] + 'm';
   } else {
     return str;
   }
@@ -202,7 +189,7 @@ function arrayToHash(array) {
 function formatValue(ctx, value, recurseTimes) {
   // Provide a hook for user-specified inspect functions.
   // Check that value is an object with an inspect function on it
-  if (ctx.customInspect && value && typeof value.inspect === 'function' &&
+  if (value && typeof value.inspect === 'function' &&
       // Filter out the util module, it's inspect function is special
       value.inspect !== exports.inspect &&
       // Also filter out any prototype objects using the circular check.
@@ -495,7 +482,7 @@ exports.exec = exports.deprecate(function() {
 }, 'util.exec is now called `child_process.exec`.');
 
 
-function pump(readStream, writeStream, callback) {
+exports.pump = function(readStream, writeStream, callback) {
   var callbackCalled = false;
 
   function call(a, b, c) {
@@ -530,9 +517,7 @@ function pump(readStream, writeStream, callback) {
     readStream.destroy();
     call(err);
   });
-}
-exports.pump = exports.deprecate(pump,
-    'util.pump() is deprecated. Use ReadableStream.prototype.pump() instead.');
+};
 
 
 /**

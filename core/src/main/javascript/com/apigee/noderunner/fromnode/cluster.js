@@ -535,7 +535,7 @@ cluster._getServer = function(tcpSelf, address, port, addressType, fd, cb) {
     sendInternalMessage(cluster.worker, {
       cmd: 'listening',
       address: address,
-      port: tcpSelf.address().port || port,
+      port: port,
       addressType: addressType,
       fd: fd
     });

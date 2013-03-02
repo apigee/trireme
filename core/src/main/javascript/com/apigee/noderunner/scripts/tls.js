@@ -154,17 +154,19 @@ exports.connect = function() {
   options.host = hostname;
 
   var sslContext;
-  if (!options.keystore && !options.truststore && (rejectUnauthorized !== false)) {
+  if (!options.keystore && !options.truststore && rejectUnauthorized) {
     debug('Client using default SSL context');
     sslContext = wrap.createDefaultContext();
   } else {
     sslContext = wrap.createContext();
-    if (options.rejectUnauthorized === false) {
+    if (!options.rejectUnauthorized) {
       debug('Client using SSL context that trusts everyone');
       sslContext.setTrustEverybody();
     } else if (options.truststore) {
       debug('Client using trust store ' + options.truststore);
       sslContext.setTrustStore(options.truststore);
+    } else {
+      debug('Client will not trust anybody');
     }
     if (options.keystore) {
       debug('Client using key store ' + options.keystore);
@@ -398,7 +400,6 @@ CleartextStream.prototype.justHandshaked = function() {
   debug(this.id + ' justHandshaked');
   this.readable = this.writable = true;
   this.handshakeComplete = true;
-  // TODO right now we raise an error if negotiation fails
   this.authorized = true;
   if (this.writeQueue) {
     var nextWrite = this.writeQueue.shift();
@@ -422,13 +423,18 @@ CleartextStream.prototype.justHandshaked = function() {
 CleartextStream.prototype.handleSSLError = function(err) {
   debug(this.id + ' Received an error (handshake complete = ' +
         this.handshakeComplete + '): ' + err);
-  if (this.serverMode && !this.handshakeComplete) {
-    this.server.emit('clientError', err);
-  } else {
+  if (this.handshakeComplete) {
     this.emit('error', err);
-  }
-  if (!this.handshakeComplete) {
-    this.destroy();
+  } else {
+    if (this.serverMode) {
+      // On the server -- just emit and close
+      this.server.emit('clientError', err);
+      this.destroy();
+    } else {
+      this.authorized = false;
+      this.authorizationError = err;
+      this.emit('error', err);
+    }
   }
 }
 

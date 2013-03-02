@@ -13,6 +13,7 @@ import com.apigee.noderunner.net.spi.HttpServerAdapter;
 import com.apigee.noderunner.net.spi.HttpServerContainer;
 import com.apigee.noderunner.net.spi.HttpServerStub;
 import org.mozilla.javascript.Context;
+import org.mozilla.javascript.EvaluatorException;
 import org.mozilla.javascript.Function;
 import org.mozilla.javascript.Scriptable;
 import org.mozilla.javascript.ScriptableObject;
@@ -101,6 +102,7 @@ public class HTTPWrap
         private Function onHeaders;
         private Function onData;
         private Function onComplete;
+        private Scriptable tlsParams;
 
         private final AtomicInteger connectionCount = new AtomicInteger();
         private volatile boolean closed;
@@ -119,8 +121,17 @@ public class HTTPWrap
         }
 
         @JSFunction
+        public void setTLSParams(Scriptable tlsParams)
+        {
+            this.tlsParams = tlsParams;
+        }
+
+        @JSFunction
         public int listen(String host, int port, int backlog)
         {
+            if (tlsParams != null) {
+                throw new EvaluatorException("TLS through adapter not supported yet");
+            }
             adapter.listen(host, port, backlog);
             log.debug("Listening on port {}", port);
             return 0;

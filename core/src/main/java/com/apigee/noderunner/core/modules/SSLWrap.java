@@ -361,6 +361,12 @@ public class SSLWrap
 
         private Scriptable makeException(Scriptable r, Exception e)
         {
+            Throwable rootCause = e;
+            while ((rootCause.getCause() != null) &&
+                   ((rootCause.getCause() instanceof GeneralSecurityException) ||
+                    (rootCause.getCause() instanceof SSLException))) {
+                rootCause = rootCause.getCause();
+            }
             r.put("status", r, STATUS_ERROR);
             r.put("error", r, e.toString());
             return r;

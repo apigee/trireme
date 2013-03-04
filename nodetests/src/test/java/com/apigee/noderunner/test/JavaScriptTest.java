@@ -1,6 +1,7 @@
 package com.apigee.noderunner.test;
 
 import com.apigee.noderunner.core.NodeEnvironment;
+import org.junit.AfterClass;
 import org.junit.BeforeClass;
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -9,8 +10,10 @@ import org.junit.runners.Parameterized;
 import static org.junit.Assert.*;
 
 import java.io.File;
+import java.io.FileOutputStream;
 import java.io.FilenameFilter;
 import java.io.IOException;
+import java.io.PrintWriter;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Map;
@@ -22,7 +25,7 @@ public class JavaScriptTest
 {
     public static final String BASE_DIR = "target/test-classes/test/simple";
     public static final String TEMP_DIR = "target/test-classes/test/tmp";
-    public static final int TEST_TIMEOUT_SECONDS = 60;
+    public static final String RESULT_FILE = "target/results.out";
     public static final String TEST_FILE_NAME_PROP = "TestFile";
 
     public static final String DEFAULT_ADAPTER = "default";
@@ -35,15 +38,25 @@ public class JavaScriptTest
     private final String adapter;
 
     private static NodeEnvironment env;
+    private static PrintWriter resultWriter;
 
     @BeforeClass
     public static void setup()
+        throws IOException
     {
         File tmpDir = new File(TEMP_DIR);
         if (!tmpDir.exists()) {
             // The parent dir should already have been created by Maven
             tmpDir.mkdir();
         }
+
+        resultWriter = new PrintWriter(new FileOutputStream(RESULT_FILE));
+    }
+
+    @AfterClass
+    public static void cleanup()
+    {
+        resultWriter.close();
     }
 
     @Parameterized.Parameters(name="{index}: {0} ({1})")
@@ -111,6 +124,7 @@ public class JavaScriptTest
         } while (r > 0);
 
         int exitCode = proc.waitFor();
+        resultWriter.println(fileName.getName() + '\t' + adapter + '\t' + exitCode);
         if (exitCode == 0) {
             System.out.println("** " + fileName.getName() + " (" + adapter + ") SUCCESS");
         } else {

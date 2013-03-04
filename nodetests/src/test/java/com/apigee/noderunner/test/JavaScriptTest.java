@@ -62,18 +62,21 @@ public class JavaScriptTest
     @Parameterized.Parameters(name="{index}: {0} ({1})")
     public static Collection<Object[]> enumerateTests()
     {
-        final String testFile = System.getProperty(TEST_FILE_NAME_PROP);
+        String testFile = System.getProperty(TEST_FILE_NAME_PROP);
+        final Pattern namePattern = Pattern.compile(".*" + testFile + ".*");
+
         File baseDir = new File(BASE_DIR);
         File[] files = baseDir.listFiles(new FilenameFilter()
         {
             @Override
             public boolean accept(File file, String s)
             {
-                if (testFile == null) {
+                if (namePattern == null) {
                     Matcher m = isJs.matcher(s);
                     return m.matches();
                 } else {
-                    return (testFile.equals(s));
+                    Matcher m = namePattern.matcher(s);
+                    return m.matches();
                 }
             }
         });

@@ -14,6 +14,11 @@ component). For instance, the follow command will run the test script "test-fs-l
 
 mvn -DskipTests=false -DTestFile=test-fs-long-path.js test
 
+To run a subset of the tests, do the same thing but include only part of the file name -- "TestFile" will match
+any file name that contains the complete string. So to run all the http tests:
+
+mvn -DskipTests=false -DTestFile=test-http test
+
 To enable Noderunner debugging (that is, debugging of Noderunner's Java code), set the LOGLEVEL
 property to one of the supported SLF4J log levels such as INFO or DEBUG. The default is INFO.
 

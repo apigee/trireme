@@ -335,9 +335,14 @@ public class HTTPWrap
             return request.getUrl();
         }
 
-        @JSGetter("requestHttpVersion")
-        public String getRequestHttpVersion() {
-            return request.getVersion();
+        @JSGetter("requestMajorVersion")
+        public int getRequestMajorVersion() {
+            return request.getMajorVersion();
+        }
+
+        @JSGetter("requestMinorVersion")
+        public int getRequestMinorVersion() {
+            return request.getMinorVersion();
         }
 
         @JSGetter("requestMethod")

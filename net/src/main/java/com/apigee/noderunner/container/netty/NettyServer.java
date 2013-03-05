@@ -41,7 +41,7 @@ public class NettyServer
     {
         // Current way we do this from the Netty blog --
         // we basically set the pipeline to not have any more space in the buffer
-        serverChannel.pipeline().firstContext().readable(false);
+        serverChannel.config().setAutoRead(false);
     }
 
     public void close()

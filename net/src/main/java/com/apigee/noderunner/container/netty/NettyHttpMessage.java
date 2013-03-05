@@ -26,43 +26,43 @@ public abstract class NettyHttpMessage
     @Override
     public Collection<Map.Entry<String, String>> getHeaders()
     {
-        return msg.getHeaders();
+        return msg.headers().entries();
     }
 
     @Override
     public List<String> getHeaders(String name)
     {
-        return msg.getHeaders(name);
+        return msg.headers().getAll(name);
     }
 
     @Override
     public String getHeader(String name)
     {
-        return msg.getHeader(name);
+        return msg.headers().get(name);
     }
 
     @Override
     public void setHeader(String name, String value)
     {
-        msg.setHeader(name, value);
+        msg.headers().set(name, value);
     }
 
     @Override
     public void setHeader(String name, List<String> values)
     {
-        msg.setHeader(name, values);
+        msg.headers().set(name, values);
     }
 
     @Override
     public boolean containsHeader(String name)
     {
-        return msg.containsHeader(name);
+        return msg.headers().contains(name);
     }
 
     @Override
     public void removeHeader(String name)
     {
-        msg.removeHeader(name);
+        msg.headers().remove(name);
     }
 
     @Override
@@ -84,15 +84,22 @@ public abstract class NettyHttpMessage
     }
 
     @Override
-    public String getVersion()
+    public int getMajorVersion()
     {
-        return msg.getProtocolVersion().getProtocolName();
+        return msg.getProtocolVersion().majorVersion();
     }
 
     @Override
-    public void setVersion(String httpVersion)
+    public int getMinorVersion()
     {
-        msg.setProtocolVersion(HttpVersion.valueOf(httpVersion));
+        return msg.getProtocolVersion().minorVersion();
+    }
+
+    @Override
+    public void setVersion(String protocol, int major, int minor)
+    {
+        HttpVersion vers = new HttpVersion(protocol, major, minor, true);
+        msg.setProtocolVersion(vers);
     }
 
     @Override

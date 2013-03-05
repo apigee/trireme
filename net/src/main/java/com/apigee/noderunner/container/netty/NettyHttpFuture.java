@@ -22,13 +22,14 @@ public class NettyHttpFuture
     @Override
     public boolean cancel(boolean b)
     {
-        return channel.cancel(b);
+        // TODO!
+        return false;
     }
 
     @Override
     public boolean isCancelled()
     {
-        return channel.isCancelled();
+        return false;
     }
 
     @Override

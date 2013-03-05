@@ -3,14 +3,12 @@ package com.apigee.noderunner.container.netty;
 import com.apigee.noderunner.net.spi.HttpFuture;
 import com.apigee.noderunner.net.spi.HttpResponseAdapter;
 import io.netty.channel.ChannelFuture;
-import io.netty.channel.SucceededChannelFuture;
+import io.netty.channel.DefaultChannelPromise;
 import io.netty.channel.socket.SocketChannel;
-import io.netty.handler.codec.http.DefaultHttpChunk;
-import io.netty.handler.codec.http.DefaultHttpChunkTrailer;
-import io.netty.handler.codec.http.HttpChunk;
+import io.netty.handler.codec.http.DefaultHttpContent;
+import io.netty.handler.codec.http.DefaultLastHttpContent;
 import io.netty.handler.codec.http.HttpResponse;
 import io.netty.handler.codec.http.HttpResponseStatus;
-import io.netty.handler.codec.http.HttpTransferEncoding;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -35,7 +33,7 @@ public class NettyHttpResponse
     @Override
     public int getStatusCode()
     {
-        return response.getStatus().getCode();
+        return response.getStatus().code();
     }
 
     @Override
@@ -51,39 +49,30 @@ public class NettyHttpResponse
 
         if (lastChunk) {
             // We can send it all in one big chunk
-            if (!response.containsHeader("Content-Length")) {
-                response.addHeader("Content-Length", data.remaining());
+            if (!response.headers().contains("Content-Length")) {
+                response.headers().set("Content-Length", data.remaining());
             }
-            response.setTransferEncoding(HttpTransferEncoding.SINGLE);
-            if (data != null) {
-                response.setContent(NettyServer.copyBuffer(data));
-            }
-            if (log.isDebugEnabled()) {
-                log.debug("send: Sending response with encoding {} and data {}",
-                          response.getTransferEncoding(), data);
-            }
-            future = channel.write(response);
+        }
 
-        } else {
+        if (log.isDebugEnabled()) {
+            log.debug("send: sending HTTP response {}", response);
+        }
+        future = channel.write(response);
 
-            // There will be chunks later, so we need to figure the encoding
-            if (response.containsHeader("Content-Length")) {
-                response.setTransferEncoding(HttpTransferEncoding.STREAMED);
-            } else {
-                response.setTransferEncoding(HttpTransferEncoding.CHUNKED);
-            }
+        if (data != null) {
             if (log.isDebugEnabled()) {
-                log.debug("send: Sending response with encoding {}",
-                          response.getTransferEncoding());
+                log.debug("send: Sending HTTP chunk with data {}", data);
             }
-            future = channel.write(response);
-            if (data != null) {
-                if (log.isDebugEnabled()) {
-                    log.debug("send: Sending HTTP chunk with data {}", data);
-                }
-                HttpChunk chunk = new DefaultHttpChunk(NettyServer.copyBuffer(data));
-                future = channel.write(chunk);
+            DefaultHttpContent chunk =
+                new DefaultHttpContent(NettyServer.copyBuffer(data));
+            future = channel.write(chunk);
+        }
+
+        if (lastChunk) {
+            if (log.isDebugEnabled()) {
+                log.debug("send: Sending last HTTP chunk");
             }
+            future = channel.write(new DefaultLastHttpContent());
         }
 
         return new NettyHttpFuture(future);
@@ -97,7 +86,8 @@ public class NettyHttpResponse
             if (log.isDebugEnabled()) {
                 log.debug("sendChunk: Sending HTTP chunk {}", buf);
             }
-            HttpChunk chunk = new DefaultHttpChunk(NettyServer.copyBuffer(buf));
+            DefaultHttpContent chunk =
+                new DefaultHttpContent(NettyServer.copyBuffer(buf));
             future = channel.write(chunk);
         }
 
@@ -105,11 +95,13 @@ public class NettyHttpResponse
             if (log.isDebugEnabled()) {
                 log.debug("sendChunk: Sending last HTTP chunk");
             }
-            future = channel.write(new DefaultHttpChunkTrailer());
+            future = channel.write(new DefaultLastHttpContent());
         }
 
         if (future == null) {
-            future = new SucceededChannelFuture(channel);
+            DefaultChannelPromise doneFuture = new DefaultChannelPromise(channel);
+            doneFuture.setSuccess();
+            future = doneFuture;
         }
         return new NettyHttpFuture(future);
     }

@@ -9,13 +9,12 @@ import io.netty.channel.ChannelInboundMessageHandlerAdapter;
 import io.netty.channel.ChannelInitializer;
 import io.netty.channel.socket.SocketChannel;
 import io.netty.handler.codec.http.DefaultHttpResponse;
-import io.netty.handler.codec.http.HttpChunk;
+import io.netty.handler.codec.http.HttpContent;
 import io.netty.handler.codec.http.HttpObject;
 import io.netty.handler.codec.http.HttpRequest;
 import io.netty.handler.codec.http.HttpRequestDecoder;
 import io.netty.handler.codec.http.HttpResponseEncoder;
 import io.netty.handler.codec.http.HttpResponseStatus;
-import io.netty.handler.codec.http.HttpTransferEncoding;
 import io.netty.handler.logging.LogLevel;
 import io.netty.handler.logging.LoggingHandler;
 import io.netty.handler.timeout.IdleStateHandler;
@@ -126,12 +125,6 @@ public class NettyHttpServer
             if (httpObject instanceof HttpRequest) {
                 HttpRequest req = (HttpRequest)httpObject;
                 curRequest = new NettyHttpRequest(req);
-                if (req.getTransferEncoding() == HttpTransferEncoding.SINGLE) {
-                    curRequest.setSelfContained(true);
-                    if (req.getContent() != Unpooled.EMPTY_BUFFER) {
-                        curRequest.setData(NettyServer.copyBuffer(req.getContent()));
-                    }
-                }
 
                 curResponse = new NettyHttpResponse(
                     new DefaultHttpResponse(req.getProtocolVersion(),
@@ -139,12 +132,12 @@ public class NettyHttpServer
                     (SocketChannel)channelHandlerContext.channel());
                 stub.onRequest(curRequest, curResponse);
 
-            } else if (httpObject instanceof HttpChunk) {
+            } else if (httpObject instanceof HttpContent) {
                 if ((curRequest == null) || (curResponse == null)) {
                     log.error("Received an HTTP chunk without a request first");
                     return;
                 }
-                NettyHttpChunk chunk = new NettyHttpChunk((HttpChunk)httpObject);
+                NettyHttpChunk chunk = new NettyHttpChunk((HttpContent)httpObject);
                 stub.onData(curRequest, curResponse, chunk);
 
             } else {

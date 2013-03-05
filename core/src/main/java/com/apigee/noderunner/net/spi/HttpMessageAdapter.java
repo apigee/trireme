@@ -35,8 +35,9 @@ public interface HttpMessageAdapter
     ByteBuffer getData();
     void setData(ByteBuffer buf);
 
-    String getVersion();
-    void setVersion(String httpVersion);
+    int getMajorVersion();
+    int getMinorVersion();
+    void setVersion(String protocol, int major, int minor);
 
     /**
      * The runtime may attach an object here that it will need for the internal

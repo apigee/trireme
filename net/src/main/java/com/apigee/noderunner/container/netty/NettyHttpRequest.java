@@ -31,7 +31,7 @@ public class NettyHttpRequest
     @Override
     public String getMethod()
     {
-        return req.getMethod().getName();
+        return req.getMethod().name();
     }
 
     @Override

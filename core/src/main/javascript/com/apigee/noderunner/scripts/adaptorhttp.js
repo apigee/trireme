@@ -135,6 +135,10 @@ if (HttpWrap.hasServerAdapter()) {
     return result;
   }
 
+  ServerResponse.prototype._send = function() {
+    // Nothing to do here -- included for test compatibility
+  }
+
   ServerResponse.prototype.end = function(data, encoding) {
     if (!this._savedHeaders) {
       this.writeHead(this.statusCode);
@@ -194,10 +198,9 @@ if (HttpWrap.hasServerAdapter()) {
     var url = info.requestUrl;
 
     info.incoming = new NodeHttp.IncomingMessage(null);
-    //info.incoming.httpVersionMajor = info.versionMajor;
-    //info.incoming.httpVersionMinor = info.versionMinor;
-    //info.incoming.httpVersion = info.versionMajor + '.' + info.versionMinor;
-    info.incoming.httpVersion = info.requestHttpVersion;
+    info.incoming.httpVersionMajor = info.requestMajorVersion;
+    info.incoming.httpVersionMinor = info.requestMinorVersion;
+    info.incoming.httpVersion = info.requestMajorVersion + '.' + info.requestMinorVersion;
     info.incoming.url = url;
 
     var n = headers.length;

@@ -19,9 +19,11 @@
 // OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE
 // USE OR OTHER DEALINGS IN THE SOFTWARE.
 
+
+
+
 // Server sends a large string. Client counts bytes and pauses every few
 // seconds. Makes sure that pause and resume work properly.
-
 var common = require('../common');
 var assert = require('assert');
 var tls = require('tls');
@@ -53,10 +55,7 @@ var server = tls.Server(options, function(socket) {
 var recvCount = 0;
 
 server.listen(common.PORT, function() {
-  var client = tls.connect({
-    port: common.PORT,
-    rejectUnauthorized: false
-  });
+  var client = tls.connect(common.PORT);
 
   client.on('data', function(d) {
     process.stdout.write('.');

@@ -19,6 +19,9 @@
 // OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE
 // USE OR OTHER DEALINGS IN THE SOFTWARE.
 
+
+
+
 var common = require('../common');
 var assert = require('assert');
 
@@ -50,10 +53,7 @@ var count = 0;
 var gotResEnd = false;
 
 server.listen(common.PORT, function() {
-  https.get({
-    port: common.PORT,
-    rejectUnauthorized: false
-  }, function(res) {
+  https.get({ port: common.PORT }, function(res) {
     console.log('response!');
 
     res.on('data', function(d) {

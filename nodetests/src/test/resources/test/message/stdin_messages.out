@@ -10,7 +10,6 @@ SyntaxError: Strict mode code may not include a with statement
     at Socket.<anonymous> (node.js:*:*)
     at Socket.EventEmitter.emit (events.js:*:*)
     at Pipe.onread (net.js:*:*)
-    at process._makeCallback (node.js:*:*)
 42
 42
 
@@ -25,7 +24,6 @@ Error: hello
     at Socket.<anonymous> (node.js:*:*)
     at Socket.EventEmitter.emit (events.js:*:*)
     at Pipe.onread (net.js:*:*)
-    at process._makeCallback (node.js:*:*)
 
 [stdin]:1
 throw new Error("hello")
@@ -38,7 +36,6 @@ Error: hello
     at Socket.<anonymous> (node.js:*:*)
     at Socket.EventEmitter.emit (events.js:*:*)
     at Pipe.onread (net.js:*:*)
-    at process._makeCallback (node.js:*:*)
 100
 
 [stdin]:1
@@ -52,7 +49,6 @@ ReferenceError: y is not defined
     at Socket.<anonymous> (node.js:*:*)
     at Socket.EventEmitter.emit (events.js:*:*)
     at Pipe.onread (net.js:*:*)
-    at process._makeCallback (node.js:*:*)
 
 [stdin]:1
 var ______________________________________________; throw 10

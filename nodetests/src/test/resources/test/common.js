@@ -75,17 +75,15 @@ exports.spawnPwd = function(options) {
 
 
 // Turn this off if the test should not check for global leaks.
-// TODO GREG not now
-//exports.globalCheck = true;
+// TODO Noderunner this works differently so don't check now.t
+exports.globalCheck = false;
 
 process.on('exit', function() {
   if (!exports.globalCheck) return;
   var knownGlobals = [setTimeout,
                       setInterval,
-                      setImmediate,
                       clearTimeout,
                       clearInterval,
-                      clearImmediate,
                       console,
                       Buffer,
                       process,
@@ -99,6 +97,7 @@ process.on('exit', function() {
     knownGlobals.push(gc);
   }
 
+/*
   if (global.DTRACE_HTTP_SERVER_RESPONSE) {
     knownGlobals.push(DTRACE_HTTP_SERVER_RESPONSE);
     knownGlobals.push(DTRACE_HTTP_SERVER_REQUEST);
@@ -109,14 +108,7 @@ process.on('exit', function() {
     knownGlobals.push(DTRACE_NET_SOCKET_READ);
     knownGlobals.push(DTRACE_NET_SOCKET_WRITE);
   }
-  if (global.COUNTER_NET_SERVER_CONNECTION) {
-    knownGlobals.push(COUNTER_NET_SERVER_CONNECTION);
-    knownGlobals.push(COUNTER_NET_SERVER_CONNECTION_CLOSE);
-    knownGlobals.push(COUNTER_HTTP_SERVER_REQUEST);
-    knownGlobals.push(COUNTER_HTTP_SERVER_RESPONSE);
-    knownGlobals.push(COUNTER_HTTP_CLIENT_REQUEST);
-    knownGlobals.push(COUNTER_HTTP_CLIENT_RESPONSE);
-  }
+*/
 
   if (global.ArrayBuffer) {
     knownGlobals.push(ArrayBuffer);

@@ -27,6 +27,7 @@ public class JavaScriptTest
     public static final String TEMP_DIR = "target/test-classes/test/tmp";
     public static final String RESULT_FILE = "target/results.out";
     public static final String TEST_FILE_NAME_PROP = "TestFile";
+    public static final String TEST_ADAPTER_PROP = "TestAdapter";
 
     public static final String DEFAULT_ADAPTER = "default";
     public static final String NETTY_ADAPTER = "netty";
@@ -63,6 +64,7 @@ public class JavaScriptTest
     public static Collection<Object[]> enumerateTests()
     {
         String testFile = System.getProperty(TEST_FILE_NAME_PROP);
+        String adapter = System.getProperty(TEST_ADAPTER_PROP);
         Pattern namePattern;
         if (testFile == null) {
             namePattern = null;
@@ -96,9 +98,13 @@ public class JavaScriptTest
             return ret;
         }
         for (File f : files) {
-            ret.add(new Object[] { f, DEFAULT_ADAPTER });
-            if (isHttp.matcher(f.getName()).matches()) {
-                ret.add(new Object[] { f, NETTY_ADAPTER });
+            if (adapter != null) {
+                ret.add(new Object[] { f, adapter });
+            } else {
+                ret.add(new Object[] { f, DEFAULT_ADAPTER });
+                if (isHttp.matcher(f.getName()).matches()) {
+                    ret.add(new Object[] { f, NETTY_ADAPTER });
+                }
             }
         }
         return ret;

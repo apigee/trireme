@@ -61,8 +61,7 @@ tcp.listen(common.PORT, function() {
 
   console.log('_connecting = ' + socket._connecting);
 
-  // NOT IMPLEMENTED in our version
-  //assert.equal('opening', socket.readyState);
+  assert.equal('opening', socket.readyState);
 
   // Make sure that anything besides a buffer or a string throws.
   [null,
@@ -102,7 +101,7 @@ tcp.listen(common.PORT, function() {
   assert.equal(false, r);
   socket.end(b);
 
-  //assert.equal('opening', socket.readyState);
+  assert.equal('opening', socket.readyState);
 });
 
 process.on('exit', function() {

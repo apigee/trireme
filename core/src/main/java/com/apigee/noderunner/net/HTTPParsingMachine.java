@@ -26,7 +26,7 @@ public class HTTPParsingMachine
      *     <li>COMPLETE: We came to the end of the body</li>
      * </ul>
      */
-    private enum Status { START, HEADERS, BODY, CHUNK_HEADER, CHUNK_BODY, CHUNK_TRAILER, COMPLETE, ERROR }
+    private enum Status { START, HEADERS, BODY, CHUNK_HEADER, CHUNK_BODY, CHUNK_TRAILER, TRAILERS, COMPLETE, ERROR }
 
     private enum BodyMode { UNDELIMITED, LENGTH, CHUNKED }
 
@@ -37,13 +37,16 @@ public class HTTPParsingMachine
 
     // These are set on each request for the convenience of the callee.
     // HTTP headers and body are NOT to save on GC.
+    private boolean     readCR;
     private String      method;
+    private String      uri;
     private int         majorVersion;
     private int         minorVersion;
     private int         statusCode;
     private String      reasonPhrase;
     private boolean     shouldKeepAlive;
     private Map.Entry<String, String> lastHeader;
+    private Map.Entry<String, String> lastTrailer;
     private int         contentLength;
     private int         readLength;
 
@@ -94,6 +97,11 @@ public class HTTPParsingMachine
                     return r;
                 }
                 break;
+            case TRAILERS:
+                if (!processTrailers(buf, r)) {
+                    return r;
+                }
+                break;
             case COMPLETE:
                 return r;
             case ERROR:
@@ -111,7 +119,11 @@ public class HTTPParsingMachine
     {
         bodyMode = BodyMode.UNDELIMITED;
         state = Status.START;
+        oddData = null;
+        readCR = false;
+
         method = null;
+        uri = null;
         majorVersion = minorVersion = 0;
         statusCode = 0;
         reasonPhrase = null;
@@ -154,7 +166,7 @@ public class HTTPParsingMachine
                 return true;
             }
             method = m.group(1);
-            r.setUri(m.group(2));
+            uri = m.group(2);
             try {
                 majorVersion = Integer.parseInt(m.group(3));
                 minorVersion = Integer.parseInt(m.group(4));
@@ -221,6 +233,48 @@ public class HTTPParsingMachine
                     Matcher cm = HTTPGrammar.HEADER_CONTINUATION_PATTERN.matcher(line);
                     if (cm.matches() && (cm.groupCount() == 1)) {
                         lastHeader.setValue(lastHeader.getValue() + cm.group(1));
+                    } else {
+                        state = Status.ERROR;
+                        return true;
+                    }
+                } else {
+                    state = Status.ERROR;
+                    return true;
+                }
+            }
+            line = readLine(buf);
+        }
+        // If we get here then we can't read a full line and aren't done
+        storeRemaining(buf);
+        return false;
+    }
+
+    /**
+     * Process lines until either we can't read a complete line, or we get to the end of the headers.
+     */
+    private boolean processTrailers(ByteBuffer buf, Result r)
+    {
+        ArrayList<Map.Entry<String, String>> trailers = new ArrayList<Map.Entry<String, String>>();
+        r.setTrailers(trailers);
+        String line = readLine(buf);
+
+        while (line != null) {
+            if (line.isEmpty()) {
+                state = Status.COMPLETE;
+                return true;
+
+            } else {
+                Matcher m = HTTPGrammar.HEADER_PATTERN.matcher(line);
+                if (m.matches() && (m.groupCount() == 2)) {
+                    Map.Entry<String, String> hdr =
+                        new AbstractMap.SimpleEntry<String, String>(m.group(1), m.group(2));
+                    trailers.add(hdr);
+                    lastTrailer = hdr;
+
+                } else if (lastTrailer != null) {
+                    Matcher cm = HTTPGrammar.HEADER_CONTINUATION_PATTERN.matcher(line);
+                    if (cm.matches() && (cm.groupCount() == 1)) {
+                        lastTrailer.setValue(lastTrailer.getValue() + cm.group(1));
                     } else {
                         state = Status.ERROR;
                         return true;
@@ -329,7 +383,7 @@ public class HTTPParsingMachine
             contentLength = Integer.parseInt(hdr, 16);
             readLength = 0;
             if (contentLength == 0) {
-                state = Status.CHUNK_TRAILER;
+                state = Status.TRAILERS;
             } else {
                 state = Status.CHUNK_BODY;
             }
@@ -351,7 +405,7 @@ public class HTTPParsingMachine
             return false;
         }
         if (contentLength == 0) {
-            state = Status.COMPLETE;
+            state = Status.TRAILERS;
         } else {
             state = Status.CHUNK_HEADER;
         }
@@ -366,7 +420,7 @@ public class HTTPParsingMachine
         boolean pc = processChunk(buf, r);
         if (pc) {
             if (contentLength == 0) {
-                state = Status.COMPLETE;
+                state = Status.TRAILERS;
                 // We can actually finish processing now
                 return true;
             } else {
@@ -415,31 +469,33 @@ public class HTTPParsingMachine
     private String readLine(ByteBuffer buf)
     {
         int p = buf.position();
-        boolean cr = false;
         while (p < buf.limit()) {
             // Search for the first CRLF pair before end of buffer
             byte b = buf.get(p);
-            if (cr && (b == '\n')) {
+            if (readCR && (b == '\n')) {
                 // If we get here then "p" points to the last character in the line. Slice the buffer.
-                // Also chop off the CRLF as we do this
+                readCR = false;
                 ByteBuffer line = buf.duplicate();
-                line.limit(p - 1);
-                buf.position(p + 1);
+                p++;
+                line.limit(p);
+                buf.position(p);
 
                 // Be sure to read from the odd-data buffer as well.
+                String ret;
                 if (oddData == null) {
-                    return Utils.bufferToString(line, Charsets.ASCII);
+                    ret = Utils.bufferToString(line, Charsets.ASCII);
                 } else {
                     oddData.flip();
-                    String ret = Utils.bufferToString(new ByteBuffer[] { oddData, line }, Charsets.ASCII);
+                    ret = Utils.bufferToString(new ByteBuffer[] { oddData, line }, Charsets.ASCII);
                     oddData.clear();
-                    return ret;
                 }
+                assert(ret.endsWith("\r\n"));
+                return ret.substring(0, ret.length() - 2);
 
-            } else if (!cr && (b == '\r')) {
-                cr = true;
+            } else if (!readCR && (b == '\r')) {
+                readCR = true;
             } else {
-                cr = false;
+                readCR = false;
             }
             p++;
         }
@@ -467,8 +523,8 @@ public class HTTPParsingMachine
     public class Result
     {
         private List<Map.Entry<String, String>> headers;
+        private List<Map.Entry<String, String>> trailers;
         private ByteBuffer body;
-        private String     uri;
 
         public boolean isError()
         {
@@ -495,11 +551,6 @@ public class HTTPParsingMachine
             return uri;
         }
 
-        public void setUri(String url)
-        {
-            this.uri = url;
-        }
-
         public String getMethod()
         {
             return method;
@@ -519,6 +570,7 @@ public class HTTPParsingMachine
         {
             return statusCode;
         }
+
         public List<Map.Entry<String, String>> getHeaders()
         {
             return headers;
@@ -529,9 +581,24 @@ public class HTTPParsingMachine
             this.headers = h;
         }
 
-        public boolean hasHeadersOrURI()
+        public boolean hasHeaders()
         {
-            return (((headers != null) && !headers.isEmpty()) || (uri != null) || (statusCode != 0));
+            return ((headers != null) && !headers.isEmpty());
+        }
+
+        public List<Map.Entry<String, String>> getTrailers()
+        {
+            return trailers;
+        }
+
+        void setTrailers(List<Map.Entry<String, String>> h)
+        {
+            this.trailers = h;
+        }
+
+        public boolean hasTrailers()
+        {
+            return ((trailers != null) && !trailers.isEmpty());
         }
 
         public ByteBuffer getBody()

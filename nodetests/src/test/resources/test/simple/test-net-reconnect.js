@@ -31,7 +31,6 @@ var disconnect_count = 0;
 
 var server = net.createServer(function(socket) {
   socket.on('connect', function() {
-    console.log('Server connected');
     socket.write('hello\r\n');
   });
 
@@ -49,9 +48,7 @@ server.listen(common.PORT, function() {
   console.log('listening');
   var client = net.createConnection(common.PORT);
 
-  // TODO GREG Invalid isn't this an invalid charset according to other tests?
-  //client.setEncoding('UTF8');
-  client.setEncoding('utf8');
+  client.setEncoding('UTF8');
 
   client.on('connect', function() {
     console.log('client connected.');

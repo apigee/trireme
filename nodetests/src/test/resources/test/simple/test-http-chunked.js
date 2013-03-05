@@ -38,19 +38,14 @@ var server = http.createServer(function(req, res) {
   res.end(UTF8_STRING, 'utf8');
 });
 server.listen(common.PORT, function() {
-  console.log('got request');
   var data = '';
   var get = http.get({
     path: '/',
     host: 'localhost',
     port: common.PORT
   }, function(x) {
-    console.log('Got the response');
     x.setEncoding('utf8');
-    x.on('data', function(c) {
-      console.log('Got data');
-      data += c
-    });
+    x.on('data', function(c) {data += c});
     x.on('error', function(e) {
       throw e;
     });

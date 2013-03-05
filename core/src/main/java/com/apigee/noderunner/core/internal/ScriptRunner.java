@@ -178,7 +178,7 @@ public class ScriptRunner
      * outside the context of the "TimerWrap" module then we need to check for synchronization, add an
      * assertion check, or synchronize the timer queue.
      */
-    public Activity createTimer(long delay, boolean repeating, ScriptTask task, Scriptable scope)
+    public Activity createTimer(long delay, boolean repeating, long repeatInterval, ScriptTask task, Scriptable scope)
     {
         Task t = new Task(task, scope);
         long timeout = System.currentTimeMillis() + delay;
@@ -187,7 +187,7 @@ public class ScriptRunner
         t.setId(seq);
         t.setTimeout(timeout);
         if (repeating) {
-            t.setInterval(delay);
+            t.setInterval(repeatInterval);
             t.setRepeating(true);
         }
         timerQueue.add(t);

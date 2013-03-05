@@ -48,9 +48,7 @@ var server = net.createServer(function(socket) {
   }
   socket.end();
 
-});
-
-server.listen(common.PORT, function() {
+}).listen(common.PORT, function() {
   var conn = net.connect(common.PORT);
   conn.on('data', function(buf) {
     received += buf.length;

@@ -21,7 +21,7 @@ public class HTTPParserTest
         assertFalse(r.isError());
         assertTrue(r.isComplete());
         assertTrue(r.isHeadersComplete());
-        assertTrue(r.hasHeadersOrURI());
+        assertTrue(r.hasHeaders());
         assertTrue(r.hasBody());
         assertEquals(1, r.getMajor());
         assertEquals(1, r.getMinor());
@@ -41,7 +41,7 @@ public class HTTPParserTest
             assertFalse(r.isError());
             assertTrue(r.isComplete());
             assertTrue(r.isHeadersComplete());
-            assertTrue(r.hasHeadersOrURI());
+            assertTrue(r.hasHeaders());
             assertTrue(r.hasBody());
             assertEquals(1, r.getMajor());
             assertEquals(1, r.getMinor());
@@ -62,7 +62,7 @@ public class HTTPParserTest
         assertFalse(r.isError());
         assertTrue(r.isComplete());
         assertTrue(r.isHeadersComplete());
-        assertTrue(r.hasHeadersOrURI());
+        assertTrue(r.hasHeaders());
         assertFalse(r.hasBody());
         assertEquals(1, r.getMajor());
         assertEquals(1, r.getMinor());
@@ -80,7 +80,7 @@ public class HTTPParserTest
         assertFalse(r.isError());
         assertTrue(r.isComplete());
         assertTrue(r.isHeadersComplete());
-        assertTrue(r.hasHeadersOrURI());
+        assertTrue(r.hasHeaders());
         assertTrue(r.hasBody());
         assertEquals(1, r.getMajor());
         assertEquals(1, r.getMinor());
@@ -98,7 +98,7 @@ public class HTTPParserTest
         assertFalse(r.isError());
         assertFalse(r.isComplete());
         assertTrue(r.isHeadersComplete());
-        assertTrue(r.hasHeadersOrURI());
+        assertTrue(r.hasHeaders());
         assertEquals(1, r.getMajor());
         assertEquals(1, r.getMinor());
         assertEquals(200, r.getStatusCode());
@@ -120,7 +120,7 @@ public class HTTPParserTest
         assertFalse(r.isError());
         assertTrue(r.isComplete());
         assertTrue(r.isHeadersComplete());
-        assertTrue(r.hasHeadersOrURI());
+        assertTrue(r.hasHeaders());
         assertFalse(r.hasBody());
         assertEquals(200, r.getStatusCode());
         assertEquals("Myself", getFirstHeader(r, "Server"));
@@ -136,7 +136,7 @@ public class HTTPParserTest
         assertFalse(r.isError());
         assertTrue(r.isComplete());
         assertTrue(r.isHeadersComplete());
-        assertTrue(r.hasHeadersOrURI());
+        assertFalse(r.hasHeaders());
         assertFalse(r.hasBody());
         assertEquals(200, r.getStatusCode());
         assertNull(r.getBody());
@@ -150,7 +150,7 @@ public class HTTPParserTest
         HTTPParsingMachine.Result r = parser.parse(buf);
         assertFalse(r.isError());
         assertTrue(r.isHeadersComplete());
-        assertTrue(r.hasHeadersOrURI());
+        assertTrue(r.hasHeaders());
         assertTrue(r.hasBody());
         assertEquals("GET", r.getMethod());
         assertEquals("/foo/bar/baz", r.getUri());
@@ -160,7 +160,6 @@ public class HTTPParserTest
         // With chunking we may not be done yet
         r = parser.parse(buf);
         assertFalse(r.isError());
-        assertFalse(r.hasHeadersOrURI());
         assertTrue(r.isComplete());
     }
 
@@ -172,7 +171,7 @@ public class HTTPParserTest
         HTTPParsingMachine.Result r = parser.parse(buf);
         assertFalse(r.isError());
         assertTrue(r.isHeadersComplete());
-        assertTrue(r.hasHeadersOrURI());
+        assertTrue(r.hasHeaders());
         assertTrue(r.hasBody());
         assertEquals(200, r.getStatusCode());
         assertEquals("ok", Utils.bufferToString(r.getBody(), Charsets.ASCII));
@@ -184,6 +183,28 @@ public class HTTPParserTest
     }
 
     @Test
+    public void testCompleteChunkedResponseTrailers()
+    {
+        HTTPParsingMachine parser = new HTTPParsingMachine(HTTPParsingMachine.ParsingMode.RESPONSE);
+        ByteBuffer buf = Utils.stringToBuffer(COMPLETE_CHUNKED_RESPONSE_TRAILERS, Charsets.ASCII);
+        HTTPParsingMachine.Result r = parser.parse(buf);
+        assertFalse(r.isError());
+        assertTrue(r.isHeadersComplete());
+        assertTrue(r.hasHeaders());
+        assertTrue(r.hasBody());
+        assertEquals(200, r.getStatusCode());
+        assertEquals("ok", Utils.bufferToString(r.getBody(), Charsets.ASCII));
+
+        // With chunking we have to keep looping
+        r = parser.parse(buf);
+        assertFalse(r.isError());
+        assertTrue(r.isComplete());
+        assertTrue(r.hasTrailers());
+        assertEquals("Foo", getFirstTrailer(r, "Trailer1"));
+        assertEquals("Bar", getFirstTrailer(r, "Trailer2"));
+    }
+
+    @Test
     public void testCompleteChunkedChunks()
     {
         HTTPParsingMachine parser = new HTTPParsingMachine(HTTPParsingMachine.ParsingMode.REQUEST);
@@ -192,7 +213,6 @@ public class HTTPParserTest
         assertFalse(r.isError());
         assertFalse(r.isComplete());
         assertTrue(r.isHeadersComplete());
-        assertTrue(r.hasHeadersOrURI());
         assertTrue(r.hasBody());
         assertEquals("GET", r.getMethod());
         assertEquals("/foo/bar/baz", r.getUri());
@@ -204,14 +224,12 @@ public class HTTPParserTest
         r = parser.parse(buf);
         assertFalse(r.isError());
         assertTrue(r.hasBody());
-        assertFalse(r.hasHeadersOrURI());
         str.append(Utils.bufferToString(r.getBody(), Charsets.ASCII));
 
         // With chunking we may not be done yet
         r = parser.parse(buf);
         assertFalse(r.isError());
         assertTrue(r.isComplete());
-        assertFalse(r.hasHeadersOrURI());
 
         assertEquals("Hello, World! This is some chunked data.", str.toString());
     }
@@ -266,12 +284,73 @@ public class HTTPParserTest
         assertEquals("Hello, World!", Utils.bufferToString(r.getBody(), Charsets.ASCII));
     }
 
+    @Test
+    public void testCompleteRequestLengthSplit3()
+    {
+        ByteBuffer whole = Utils.stringToBuffer(COMPLETE_REQUEST_LENGTH, Charsets.ASCII);
+        HTTPParsingMachine parser = new HTTPParsingMachine(HTTPParsingMachine.ParsingMode.REQUEST);
+
+        // Split right down the middle of the request line
+        ByteBuffer split = splitBuffer(whole, 26);
+        HTTPParsingMachine.Result r = parser.parse(split);
+        assertFalse(r.isError());
+        assertFalse(r.isComplete());
+        assertFalse(r.isHeadersComplete());
+
+        // Process the rest of the message
+        r = parser.parse(whole);
+        assertFalse(r.isError());
+        assertTrue(r.isComplete());
+        assertTrue(r.isHeadersComplete());
+        assertEquals("GET", r.getMethod());
+        assertEquals("/foo/bar/baz", r.getUri());
+        assertEquals("Myself", getFirstHeader(r, "User-Agent"));
+        assertEquals("Hello, World!", Utils.bufferToString(r.getBody(), Charsets.ASCII));
+    }
+
+    @Test
+    public void testCompleteRequestLengthSplit4()
+    {
+        ByteBuffer whole = Utils.stringToBuffer(COMPLETE_REQUEST_LENGTH, Charsets.ASCII);
+        HTTPParsingMachine parser = new HTTPParsingMachine(HTTPParsingMachine.ParsingMode.REQUEST);
+
+        // Split right down the middle of the request line
+        ByteBuffer split = splitBuffer(whole, 27);
+        HTTPParsingMachine.Result r = parser.parse(split);
+        assertFalse(r.isError());
+        assertFalse(r.isComplete());
+        assertFalse(r.isHeadersComplete());
+
+        // Process the rest of the message
+        r = parser.parse(whole);
+        assertFalse(r.isError());
+        assertTrue(r.isComplete());
+        assertTrue(r.isHeadersComplete());
+        assertEquals("GET", r.getMethod());
+        assertEquals("/foo/bar/baz", r.getUri());
+        assertEquals("Myself", getFirstHeader(r, "User-Agent"));
+        assertEquals("Hello, World!", Utils.bufferToString(r.getBody(), Charsets.ASCII));
+    }
+
     private static String getFirstHeader(HTTPParsingMachine.Result r, String name)
     {
         if (r.getHeaders() == null) {
             return null;
         }
         for (Map.Entry<String, String> hdr : r.getHeaders()) {
+            if (hdr.getKey().equalsIgnoreCase(name)) {
+                return hdr.getValue();
+            }
+        }
+        return null;
+    }
+
+    private static String getFirstTrailer(HTTPParsingMachine.Result r, String name)
+    {
+        if (r.getTrailers() == null) {
+            return null;
+        }
+        for (Map.Entry<String, String> hdr : r.getTrailers()) {
             if (hdr.getKey().equalsIgnoreCase(name)) {
                 return hdr.getValue();
             }
@@ -342,6 +421,19 @@ public class HTTPParserTest
     "2\r\n" +
     "ok\r\n" +
     "0\r\n" +
+    "\r\n";
+
+    private static final String COMPLETE_CHUNKED_RESPONSE_TRAILERS =
+    "HTTP/1.1 200 OK\r\n" +
+    "Date: Wed, 27 Feb 2013 23:56:17 GMT\r\n" +
+    "Connection: keep-alive\r\n" +
+    "Transfer-Encoding: chunked\r\n" +
+    "\r\n" +
+    "2\r\n" +
+    "ok\r\n" +
+    "0\r\n" +
+    "Trailer1: Foo\r\n" +
+    "Trailer2: Bar\r\n" +
     "\r\n";
 
     private static final String COMPLETE_CHUNKED_CHUNKS =

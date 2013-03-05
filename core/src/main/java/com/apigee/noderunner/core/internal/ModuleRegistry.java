@@ -74,7 +74,7 @@ public class ModuleRegistry
         addCompiledModule("node_http", "com.apigee.noderunner.fromnode.http");
         addCompiledModule("node_https", "com.apigee.noderunner.fromnode.https");
         addCompiledModule("module", "com.apigee.noderunner.fromnode.module");
-        addCompiledModule("node_net", "com.apigee.noderunner.fromnode.net");
+        addCompiledModule("net", "com.apigee.noderunner.fromnode.net");
         addCompiledModule("os", "com.apigee.noderunner.fromnode.os");
         addCompiledModule("path", "com.apigee.noderunner.fromnode.path");
         addCompiledModule("punycode", "com.apigee.noderunner.fromnode.punycode");
@@ -90,7 +90,6 @@ public class ModuleRegistry
         addCompiledModule("http", "com.apigee.noderunner.scripts.adaptorhttp");
         addCompiledModule("https", "com.apigee.noderunner.scripts.adaptorhttps");
         addCompiledModule("noderunner_metrics", "com.apigee.noderunner.scripts.noderunner_metrics");
-        addCompiledModule("net", "com.apigee.noderunner.scripts.net");
         addCompiledModule("tls", "com.apigee.noderunner.scripts.tls");
         addCompiledModule("tls_checkidentity", "com.apigee.noderunner.scripts.tls_checkidentity");
     }

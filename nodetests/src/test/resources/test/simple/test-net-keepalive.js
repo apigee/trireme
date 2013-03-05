@@ -42,8 +42,8 @@ echoServer.on('listening', function() {
 
   setTimeout(function() {
     // make sure both connections are still open
-    //assert.equal(serverConnection.readyState, 'open');
-    //assert.equal(clientConnection.readyState, 'open');
+    assert.equal(serverConnection.readyState, 'open');
+    assert.equal(clientConnection.readyState, 'open');
     serverConnection.end();
     clientConnection.end();
     echoServer.close();

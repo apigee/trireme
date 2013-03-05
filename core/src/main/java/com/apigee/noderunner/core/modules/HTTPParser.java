@@ -20,6 +20,7 @@ import static com.apigee.noderunner.core.internal.ArgUtils.*;
 
 import java.lang.reflect.InvocationTargetException;
 import java.nio.ByteBuffer;
+import java.util.List;
 import java.util.Map;
 
 /**
@@ -185,23 +186,31 @@ public class HTTPParser
                 if (result.isError()) {
                     return Utils.makeErrorObject(cx, this, "HTTP parsing error");
                 }
-                if (!sentCompleteHeaders && result.hasHeadersOrURI()) {
-                    hadSomething = true;
-                    if (result.isHeadersComplete()) {
+                if (!sentCompleteHeaders) {
+                    if (result.isHeadersComplete() || result.isComplete()) {
+                        sentCompleteHeaders = true;
+                        hadSomething = true;
                         log.debug("Sending complete HTTP headers");
-                        if (sentPartialHeaders) {
+                        if (result.hasHeaders() && sentPartialHeaders) {
                             callOnHeaders(cx, result);
                         }
                         if (callOnHeadersComplete(cx, result)) {
                             // The JS code returns this when the request was a HEAD
                             parser.setIgnoreBody(true);
                         }
-                        sentCompleteHeaders = true;
-                    } else {
+                    } else if (result.hasHeaders()) {
+                        hadSomething = true;
                         log.debug("Sending partial HTTP headers");
                         sentPartialHeaders = true;
                         callOnHeaders(cx, result);
                     }
+                }
+                if (result.hasTrailers()) {
+                    hadSomething = true;
+                    if (log.isDebugEnabled()) {
+                        log.debug("Sending HTTP trailers");
+                    }
+                    callOnTrailers(cx, result);
                 }
                 if (result.hasBody()) {
                     hadSomething = true;
@@ -213,8 +222,8 @@ public class HTTPParser
                 if (result.isComplete()) {
                     log.debug("Sending HTTP request complete");
                     callOnComplete(cx);
-                    sentCompleteHeaders = false;
                     sentPartialHeaders = false;
+                    sentCompleteHeaders = false;
                     parser.reset();
                 }
             } while (hadSomething && !result.isComplete() && bBuf.hasRemaining());
@@ -230,8 +239,8 @@ public class HTTPParser
             if (!sentPartialHeaders) {
                 Scriptable headers = buildHeaders(cx, result);
                 info.put("headers", info, headers);
-                info.put("url", info, result.getUri());
             }
+            info.put("url", info, result.getUri());
             info.put("versionMajor", info, result.getMajor());
             info.put("versionMinor", info, result.getMinor());
             info.put("method", info, result.getMethod());
@@ -255,6 +264,15 @@ public class HTTPParser
             onHeaders.call(cx, onHeaders, this, new Object[] { headers, result.getUri() });
         }
 
+        private void callOnTrailers(Context cx, HTTPParsingMachine.Result result)
+        {
+            if (onHeaders == null) {
+                return;
+            }
+            Scriptable trailers = buildTrailers(cx, result);
+            onHeaders.call(cx, onHeaders, this, new Object[] { trailers, result.getUri() });
+        }
+
         private void callOnBody(Context cx, HTTPParsingMachine.Result result)
         {
             if (onBody == null) {
@@ -276,17 +294,26 @@ public class HTTPParser
 
         private Scriptable buildHeaders(Context cx, HTTPParsingMachine.Result result)
         {
-            if (result.getHeaders() == null) {
+            return buildMap(cx, result.getHeaders());
+        }
+
+        private Scriptable buildTrailers(Context cx, HTTPParsingMachine.Result result)
+        {
+            return buildMap(cx, result.getTrailers());
+        }
+
+        private Scriptable buildMap(Context cx, List<Map.Entry<String, String>> l)
+        {
+            if (l == null) {
                 return cx.newArray(this, 0);
-            } else {
-                Object[] headers = new Object[result.getHeaders().size() * 2];
-                int i = 0;
-                for (Map.Entry<String, String> hdr : result.getHeaders()) {
-                    headers[i++] = hdr.getKey();
-                    headers[i++] = hdr.getValue();
-                }
-                return cx.newArray(this, headers);
             }
+            Object[] headers = new Object[l.size() * 2];
+            int i = 0;
+            for (Map.Entry<String, String> hdr : l) {
+                headers[i++] = hdr.getKey();
+                headers[i++] = hdr.getValue();
+            }
+            return cx.newArray(this, headers);
         }
     }
 }

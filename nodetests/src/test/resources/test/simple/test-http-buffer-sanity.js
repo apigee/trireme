@@ -77,7 +77,6 @@ web.listen(common.PORT, function() {
     console.log('Got response');
     res.setEncoding('utf8');
     res.on('data', function(string) {
-      console.log('Got ' + string);
       assert.equal('thanks', string);
       gotThanks = true;
     });
@@ -87,7 +86,6 @@ web.listen(common.PORT, function() {
 
 
 process.on('exit', function() {
-  console.log('received :' + measuredSize);
   assert.equal(bufferSize, measuredSize);
   assert.ok(gotThanks);
 });

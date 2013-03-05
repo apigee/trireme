@@ -31,8 +31,7 @@ var server = net.createServer(function(s) {
 server.listen(common.PORT, function() {
   var c = net.createConnection(common.PORT);
   c.on('close', function() {
-    // INVALID internal stuff
-    //assert.strictEqual(c._handle, null);
+    assert.strictEqual(c._handle, null);
     closed = true;
     assert.doesNotThrow(function() {
       c.setNoDelay();

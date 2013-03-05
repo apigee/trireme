@@ -3,10 +3,13 @@ package com.apigee.noderunner.core.modules;
 import com.apigee.noderunner.core.internal.InternalNodeModule;
 import com.apigee.noderunner.core.internal.ScriptRunner;
 import org.mozilla.javascript.Context;
+import org.mozilla.javascript.Function;
 import org.mozilla.javascript.Scriptable;
 import org.mozilla.javascript.ScriptableObject;
 import org.mozilla.javascript.annotations.JSFunction;
 import sun.net.util.IPAddressUtil;
+
+import static com.apigee.noderunner.core.internal.ArgUtils.*;
 
 import java.lang.reflect.InvocationTargetException;
 
@@ -45,8 +48,9 @@ public class CaresWrap
         }
 
         @JSFunction
-        public int isIP(String addrStr)
+        public static int isIP(Context cx, Scriptable thisObj, Object[] args, Function func)
         {
+            String addrStr = stringArg(args, 0, null);
             if ((addrStr == null) || addrStr.isEmpty() || addrStr.equals("0")) {
                 return 0;
             }

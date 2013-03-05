@@ -32,7 +32,6 @@ var server = http.createServer(function(req, res) {
   req.setEncoding('utf8');
 
   req.on('data', function(chunk) {
-    console.log('server got ' + chunk);
     console.log('server got: ' + JSON.stringify(chunk));
     sent_body += chunk;
   });
@@ -58,7 +57,6 @@ server.on('listening', function() {
       console.log(chunk);
     });
     res.on('end', function() {
-      console.log('Client got end');
       client_res_complete = true;
       server.close();
     });

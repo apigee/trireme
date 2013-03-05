@@ -83,15 +83,19 @@ public class TimerWrap
         public static int start(Context cx, Scriptable thisObj, Object[] args, Function func)
         {
             int timeout = intArg(args, 0);
-            boolean repeat = booleanArg(args, 1);
+            int interval = intArg(args, 1, 0);
             TimerImpl timer = (TimerImpl)thisObj;
 
             if (log.isDebugEnabled()) {
-                log.debug("Starting timer for {} in {} repeating = {}",
-                          timer.onTimeout, timeout, repeat);
+                log.debug("Starting timer for {} in {} interval = {}",
+                          timer.onTimeout, timeout, interval);
             }
             timer.ref();
-            timer.activity = getRunner().createTimer(timeout, repeat, timer, timer);
+            if (interval > 0) {
+                timer.activity = getRunner().createTimer(timeout, true, interval, timer, timer);
+            } else {
+                timer.activity = getRunner().createTimer(timeout, false, 0L, timer, timer);
+            }
             return 0;
         }
 
@@ -110,7 +114,6 @@ public class TimerWrap
         @Override
         public void execute(Context cx, Scriptable scope)
         {
-            unref();
             if (onTimeout != null) {
                 onTimeout.call(cx, onTimeout, this, null);
             }

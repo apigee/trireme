@@ -50,7 +50,6 @@ server.listen(common.PORT, function() {
   var clientRequest = http.request(testURL);
   // since there is a little magic with the agent
   // make sure that an http request uses the http.Agent
-  // INVALID in this case
-  //assert.ok(clientRequest.agent instanceof http.Agent);
+  assert.ok(clientRequest.agent instanceof http.Agent);
   clientRequest.end();
 });

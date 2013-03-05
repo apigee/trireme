@@ -63,19 +63,29 @@ public class JavaScriptTest
     public static Collection<Object[]> enumerateTests()
     {
         String testFile = System.getProperty(TEST_FILE_NAME_PROP);
-        final Pattern namePattern = Pattern.compile(".*" + testFile + ".*");
+        Pattern namePattern;
+        if (testFile == null) {
+            namePattern = null;
+        } else {
+            if (isJs.matcher(testFile).matches()) {
+                namePattern = Pattern.compile(".*" + testFile + "$");
+            } else {
+                namePattern = Pattern.compile(".*" + testFile + ".*\\.js$");
+            }
+        }
 
         File baseDir = new File(BASE_DIR);
+        final Pattern np = namePattern;
         File[] files = baseDir.listFiles(new FilenameFilter()
         {
             @Override
             public boolean accept(File file, String s)
             {
-                if (namePattern == null) {
+                if (np == null) {
                     Matcher m = isJs.matcher(s);
                     return m.matches();
                 } else {
-                    Matcher m = namePattern.matcher(s);
+                    Matcher m = np.matcher(s);
                     return m.matches();
                 }
             }

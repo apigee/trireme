@@ -43,7 +43,7 @@ for (var i = 255; i >= 0; i--) {
 var echoServer = net.Server(function(connection) {
   connection.setEncoding('binary');
   connection.on('data', function(chunk) {
-    //common.error('recved: ' + JSON.stringify(chunk));
+    common.error('recved: ' + JSON.stringify(chunk));
     connection.write(chunk, 'binary');
   });
   connection.on('end', function() {

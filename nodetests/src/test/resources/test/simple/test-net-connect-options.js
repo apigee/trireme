@@ -27,13 +27,8 @@ var serverGotEnd = false;
 var clientGotEnd = false;
 
 var server = net.createServer({allowHalfOpen: true}, function(socket) {
-  console.log('Server connected');
   socket.on('end', function() {
-    console.log('Server got end');
     serverGotEnd = true;
-  });
-  socket.on('close', function() {
-    console.log('Server got close');
   });
   socket.end();
 });
@@ -43,10 +38,8 @@ server.listen(common.PORT, function() {
     host: '127.0.0.1',
     port: common.PORT,
     allowHalfOpen: true
-  }, function() { 
-    console.log('Client connected');
+  }, function() {
     client.on('end', function() {
-      console.log('Client got end');
       clientGotEnd = true;
       setTimeout(function() {
         assert(client.writable);
@@ -54,7 +47,6 @@ server.listen(common.PORT, function() {
       }, 10);
     });
     client.on('close', function() {
-      console.log('Client got close');
       server.close();
     });
   });

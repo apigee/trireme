@@ -26,7 +26,6 @@ var assert = require('assert');
 var timeoutCount = 0;
 
 var server = net.createServer(function(stream) {
-  console.log('Server got connection');
   stream.setTimeout(100);
 
   stream.on('timeout', function() {

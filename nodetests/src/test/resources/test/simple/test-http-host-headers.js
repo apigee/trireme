@@ -19,6 +19,9 @@
 // OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE
 // USE OR OTHER DEALINGS IN THE SOFTWARE.
 
+
+
+
 var http = require('http'),
     https = require('https'),
     fs = require('fs'),
@@ -71,50 +74,35 @@ function testHttp() {
 
     if (er) throw er;
 
-    http.get({
-      method: 'GET',
+    http.get({ method: 'GET',
       path: '/' + (counter++),
       host: 'localhost',
       //agent: false,
-      port: common.PORT,
-      rejectUnauthorized: false
-    }, cb).on('error', thrower);
+      port: common.PORT }, cb).on('error', thrower);
 
-    http.request({
-      method: 'GET',
+    http.request({ method: 'GET',
       path: '/' + (counter++),
       host: 'localhost',
       //agent: false,
-      port: common.PORT,
-      rejectUnauthorized: false
-    }, cb).on('error', thrower).end();
+      port: common.PORT }, cb).on('error', thrower).end();
 
-    http.request({
-      method: 'POST',
+    http.request({ method: 'POST',
       path: '/' + (counter++),
       host: 'localhost',
       //agent: false,
-      port: common.PORT,
-      rejectUnauthorized: false
-    }, cb).on('error', thrower).end();
+      port: common.PORT }, cb).on('error', thrower).end();
 
-    http.request({
-      method: 'PUT',
+    http.request({ method: 'PUT',
       path: '/' + (counter++),
       host: 'localhost',
       //agent: false,
-      port: common.PORT,
-      rejectUnauthorized: false
-    }, cb).on('error', thrower).end();
+      port: common.PORT }, cb).on('error', thrower).end();
 
-    http.request({
-      method: 'DELETE',
+    http.request({ method: 'DELETE',
       path: '/' + (counter++),
       host: 'localhost',
       //agent: false,
-      port: common.PORT,
-      rejectUnauthorized: false
-    }, cb).on('error', thrower).end();
+      port: common.PORT }, cb).on('error', thrower).end();
   });
 }
 
@@ -136,58 +124,40 @@ function testHttps() {
   httpsServer.listen(common.PORT, function(er) {
     if (er) throw er;
 
-    https.get({
-      method: 'GET',
+    https.get({ method: 'GET',
       path: '/' + (counter++),
       host: 'localhost',
       //agent: false,
-      port: common.PORT,
-      rejectUnauthorized: false
-    }, cb).on('error', thrower);
+      port: common.PORT }, cb).on('error', thrower);
 
-    https.request({
-      method: 'GET',
+    https.request({ method: 'GET',
       path: '/' + (counter++),
       host: 'localhost',
       //agent: false,
-      port: common.PORT,
-      rejectUnauthorized: false
-    }, cb).on('error', thrower).end();
+      port: common.PORT }, cb).on('error', thrower).end();
 
-    https.request({
-      method: 'POST',
+    https.request({ method: 'POST',
       path: '/' + (counter++),
       host: 'localhost',
       //agent: false,
-      port: common.PORT,
-      rejectUnauthorized: false
-    }, cb).on('error', thrower).end();
+      port: common.PORT }, cb).on('error', thrower).end();
 
-    https.request({
-      method: 'PUT',
+    https.request({ method: 'PUT',
       path: '/' + (counter++),
       host: 'localhost',
       //agent: false,
-      port: common.PORT,
-      rejectUnauthorized: false
-    }, cb).on('error', thrower).end();
+      port: common.PORT }, cb).on('error', thrower).end();
 
-    https.request({
-      method: 'DELETE',
+    https.request({ method: 'DELETE',
       path: '/' + (counter++),
       host: 'localhost',
       //agent: false,
-      port: common.PORT,
-      rejectUnauthorized: false
-    }, cb).on('error', thrower).end();
+      port: common.PORT }, cb).on('error', thrower).end();
 
-    https.get({
-      method: 'GET',
+    https.get({ method: 'GET',
       path: '/setHostFalse' + (counter++),
       host: 'localhost',
       setHost: false,
-      port: common.PORT,
-      rejectUnauthorized: false
-    }, cb).on('error', thrower).end();
+      port: common.PORT }, cb).on('error', thrower).end();
   });
 }

@@ -40,8 +40,6 @@ killers.forEach(function(killer) {
   var socket = net.createConnection(common.PORT, 'localhost');
 
   socket.setTimeout(T, function() {
-    console.log('Socket timeout: left = ' + left +
-                ' killer = ' + killer);
     socket.destroy();
     if (--left === 0) server.close();
     assert.ok(killer !== 0);
@@ -51,11 +49,8 @@ killers.forEach(function(killer) {
   socket.setTimeout(killer);
 
   var timeout = setTimeout(function() {
-    console.log('Timeout: left = ' + left +
-                ' killer = ' + killer);
     socket.destroy();
     if (--left === 0) server.close();
-    // TODO Greg I don't understand this assertion...
-    //assert.ok(killer === 0);
+    assert.ok(killer === 0);
   }, T * 2);
 });

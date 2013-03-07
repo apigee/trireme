@@ -56,11 +56,12 @@ var web = http.Server(function(req, res) {
     res.end();
     console.log('response with \'thanks\'');
   });
-
+/* Noderunner: There is no "connection.
+ * Furthermore, this is not called for a successful test.
   req.connection.on('error', function(e) {
     console.log('http server-side error: ' + e.message);
     process.exit(1);
-  });
+  }); */
 });
 
 var gotThanks = false;
@@ -77,6 +78,7 @@ web.listen(common.PORT, function() {
     console.log('Got response');
     res.setEncoding('utf8');
     res.on('data', function(string) {
+      console.log('Got response: \"' + string + '\"');
       assert.equal('thanks', string);
       gotThanks = true;
     });

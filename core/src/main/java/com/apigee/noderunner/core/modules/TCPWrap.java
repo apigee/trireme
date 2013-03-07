@@ -538,6 +538,9 @@ public class TCPWrap
 
         private void processReads(Context cx)
         {
+            if (!readStarted) {
+                return;
+            }
             int read;
             do {
                 try {
@@ -577,7 +580,7 @@ public class TCPWrap
                     }
                     return;
                 }
-            } while (read > 0);
+            } while (readStarted && (read > 0));
         }
 
         @JSFunction

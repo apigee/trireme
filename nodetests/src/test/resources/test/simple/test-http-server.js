@@ -88,7 +88,6 @@ server.on('listening', function() {
       c.write('POST /quit HTTP/1.1\r\n\r\n');
       requests_sent += 1;
     }
-
     if (requests_sent == 2) {
       c.write('GET / HTTP/1.1\r\nX-X: foo\r\n\r\n' +
               'GET / HTTP/1.1\r\nX-X: bar\r\n\r\n');
@@ -102,7 +101,6 @@ server.on('listening', function() {
       assert.equal(c.readyState, 'readOnly');
       requests_sent += 2;
     }
-
   });
 
   c.on('end', function() {

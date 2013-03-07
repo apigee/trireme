@@ -1,6 +1,7 @@
 package com.apigee.noderunner.container.netty;
 
 import com.apigee.noderunner.net.spi.HttpMessageAdapter;
+import io.netty.channel.socket.SocketChannel;
 import io.netty.handler.codec.http.HttpMessage;
 import io.netty.handler.codec.http.HttpVersion;
 import org.mozilla.javascript.Scriptable;
@@ -14,13 +15,16 @@ public abstract class NettyHttpMessage
     implements HttpMessageAdapter
 {
     protected final HttpMessage msg;
+    protected final SocketChannel channel;
+
     protected ByteBuffer data;
     protected boolean selfContained;
     protected Scriptable attachment;
 
-    protected NettyHttpMessage(HttpMessage msg)
+    protected NettyHttpMessage(HttpMessage msg, SocketChannel channel)
     {
         this.msg = msg;
+        this.channel = channel;
     }
 
     @Override
@@ -42,9 +46,9 @@ public abstract class NettyHttpMessage
     }
 
     @Override
-    public void setHeader(String name, String value)
+    public void addHeader(String name, String value)
     {
-        msg.headers().set(name, value);
+        msg.headers().add(name, value);
     }
 
     @Override
@@ -123,5 +127,10 @@ public abstract class NettyHttpMessage
     public Scriptable getAttachment()
     {
         return attachment;
+    }
+
+    protected boolean isOlderHttpVersion()
+    {
+        return (msg.getProtocolVersion().compareTo(HttpVersion.HTTP_1_1) < 0);
     }
 }

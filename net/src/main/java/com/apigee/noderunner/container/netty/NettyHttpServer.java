@@ -2,21 +2,25 @@ package com.apigee.noderunner.container.netty;
 
 import com.apigee.noderunner.net.spi.HttpServerAdapter;
 import com.apigee.noderunner.net.spi.HttpServerStub;
-import io.netty.buffer.Unpooled;
 import io.netty.channel.ChannelException;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.ChannelInboundMessageHandlerAdapter;
 import io.netty.channel.ChannelInitializer;
 import io.netty.channel.socket.SocketChannel;
+import io.netty.handler.codec.http.DefaultFullHttpResponse;
 import io.netty.handler.codec.http.DefaultHttpResponse;
+import io.netty.handler.codec.http.FullHttpResponse;
 import io.netty.handler.codec.http.HttpContent;
 import io.netty.handler.codec.http.HttpObject;
 import io.netty.handler.codec.http.HttpRequest;
 import io.netty.handler.codec.http.HttpRequestDecoder;
 import io.netty.handler.codec.http.HttpResponseEncoder;
 import io.netty.handler.codec.http.HttpResponseStatus;
+import io.netty.handler.codec.http.HttpVersion;
+import io.netty.handler.logging.ByteLoggingHandler;
 import io.netty.handler.logging.LogLevel;
 import io.netty.handler.logging.LoggingHandler;
+import io.netty.handler.logging.MessageLoggingHandler;
 import io.netty.handler.timeout.IdleStateHandler;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -45,7 +49,7 @@ public class NettyHttpServer
             log.debug("Listening on port {}", port);
         } catch (ChannelException ce) {
             stub.onError(ce.getMessage());
-            stub.onClose();
+            stub.onClose(null);
         }
     }
 
@@ -57,7 +61,7 @@ public class NettyHttpServer
             public void initChannel(SocketChannel c) throws Exception
             {
                 if (log.isTraceEnabled()) {
-                    c.pipeline().addFirst("logging", new LoggingHandler(LogLevel.INFO));
+                    c.pipeline().addFirst("loggingReq", new ByteLoggingHandler(LogLevel.DEBUG));
                 }
                 c.pipeline().addLast(new IdleStateHandler(
                                      IDLE_CONNECTION_SECONDS, IDLE_CONNECTION_SECONDS,
@@ -65,6 +69,9 @@ public class NettyHttpServer
                             .addLast(new HttpRequestDecoder())
                             .addLast(new Handler())
                             .addLast(new HttpResponseEncoder());
+                if (log.isTraceEnabled()) {
+                    c.pipeline().addLast("loggingResp", new ByteLoggingHandler(LogLevel.DEBUG));
+                }
             }
         };
     }
@@ -81,7 +88,7 @@ public class NettyHttpServer
     {
         log.debug("Closing HTTP server");
         server.close();
-        stub.onClose();
+        stub.onClose(null);
     }
 
     private final class Handler
@@ -113,23 +120,25 @@ public class NettyHttpServer
             if (log.isDebugEnabled()) {
                 log.debug("Closed server-side connection {}", ctx.channel());
             }
-            stub.onClose();
+            stub.onClose(curRequest);
         }
 
         @Override
-        public void messageReceived(ChannelHandlerContext channelHandlerContext, HttpObject httpObject)
+        public void messageReceived(ChannelHandlerContext ctx, HttpObject httpObject)
         {
             if (log.isDebugEnabled()) {
                 log.debug("Received HTTP message {}", httpObject);
             }
             if (httpObject instanceof HttpRequest) {
                 HttpRequest req = (HttpRequest)httpObject;
-                curRequest = new NettyHttpRequest(req);
+                SocketChannel channel = (SocketChannel)ctx.channel();
+                curRequest = new NettyHttpRequest(req, channel);
 
                 curResponse = new NettyHttpResponse(
                     new DefaultHttpResponse(req.getProtocolVersion(),
                                             HttpResponseStatus.OK),
-                    (SocketChannel)channelHandlerContext.channel());
+                    channel,
+                    curRequest.isKeepAlive());
                 stub.onRequest(curRequest, curResponse);
 
             } else if (httpObject instanceof HttpContent) {
@@ -138,11 +147,24 @@ public class NettyHttpServer
                     return;
                 }
                 NettyHttpChunk chunk = new NettyHttpChunk((HttpContent)httpObject);
-                stub.onData(curRequest, curResponse, chunk);
+                if (chunk.hasData() && !curRequest.hasContentLength() && !curRequest.isChunked()) {
+                    returnError(ctx, HttpResponseStatus.BAD_REQUEST);
+                } else {
+                    stub.onData(curRequest, curResponse, chunk);
+                }
 
             } else {
                 throw new AssertionError();
             }
+        }
+
+        private void returnError(ChannelHandlerContext ctx, HttpResponseStatus status)
+        {
+            if (log.isDebugEnabled()) {
+                log.debug("Returning an error on incoming message: {}", status);
+            }
+            FullHttpResponse response = new DefaultFullHttpResponse(HttpVersion.HTTP_1_1, status);
+            ctx.channel().write(response);
         }
     }
 }

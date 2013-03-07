@@ -22,6 +22,13 @@
 var events = require('events');
 var util = require('util');
 
+var debug;
+if (process.env.NODE_DEBUG && /stream/.test(process.env.NODE_DEBUG)) {
+  debug = function(x) { console.error('Stream: %s', x); };
+} else {
+  debug = function() { };
+}
+
 function Stream() {
   events.EventEmitter.call(this);
 }
@@ -31,11 +38,17 @@ module.exports = Stream;
 Stream.Stream = Stream;
 
 Stream.prototype.pipe = function(dest, options) {
+  debug('pipe(' + dest + ', ' + options + ')');
   var source = this;
 
   function ondata(chunk) {
+    debug('ondata dest.writable = ' + dest.writable);
+    if (chunk) {
+      debug('ondata(' + chunk.length + ')');
+    }
     if (dest.writable) {
       if (false === dest.write(chunk) && source.pause) {
+        debug('ondata pausing source');
         source.pause();
       }
     }
@@ -44,7 +57,9 @@ Stream.prototype.pipe = function(dest, options) {
   source.on('data', ondata);
 
   function ondrain() {
+    debug('ondrain source.readable = ' + source.readable);
     if (source.readable && source.resume) {
+      debug('ondrain resuming source');
       source.resume();
     }
   }

@@ -21,8 +21,14 @@ public interface HttpResponseAdapter
     HttpFuture sendChunk(ByteBuffer data, boolean lastChunk);
 
     /**
-     * Close the session for output, to indicate that we already sent all the data.
+     * Add a trailer -- only valid on a chunked message and sent on the last chunk.
      */
-    void shutdownOutput();
+    void setTrailer(String name, String value);
+
+    /**
+     * Destroy the request prematurely -- this is not required unless there is a problem on the
+     * response side.
+     */
+    void destroy();
 }
 

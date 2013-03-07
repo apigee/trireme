@@ -343,27 +343,26 @@ public class ScriptRunner
                 }
 
                 // Check for network I/O and also sleep if necessary
-                int selected;
                 if (pollTimeout > 0L) {
                     if (log.isDebugEnabled()) {
                         log.debug("mainLoop: sleeping for {} pinCount = {}", pollTimeout, pinCount.get());
                     }
-                    selected = selector.select(pollTimeout);
+                    selector.select(pollTimeout);
                 } else {
-                    selected = selector.selectNow();
+                    selector.selectNow();
                 }
 
                 // Fire any selected I/O functions
-                if (selected > 0) {
-                    Iterator<SelectionKey> keys = selector.selectedKeys().iterator();
-                    while (keys.hasNext()) {
-                        SelectionKey selKey = keys.next();
-                        ((SelectorHandler)selKey.attachment()).selected(selKey);
-                        keys.remove();
-                    }
+                // Don't rely on the returned "int" from "select" because we may have recovered from an exception
+                // and some selected keys are stuck there.
+                Iterator<SelectionKey> keys = selector.selectedKeys().iterator();
+                while (keys.hasNext()) {
+                    SelectionKey selKey = keys.next();
+                    ((SelectorHandler)selKey.attachment()).selected(selKey);
+                    keys.remove();
                 }
 
-                // Call tick functions but don't let them starve unless configured to do so
+                // Call tick functions but don't let everything else starve unless configured to do so
                 int tickCount = 0;
                 Activity nextCall = tickFunctions.poll();
                 while (nextCall != null) {
@@ -394,9 +393,17 @@ public class ScriptRunner
                 // This exception is thrown by process.exit()
                 return ne.getStatus();
             } catch (RhinoException re) {
-                boolean handled = handleRhinoException(re);
-                if (!handled) {
-                    return new ScriptStatus(re);
+                try {
+                    boolean handled = handleRhinoException(re);
+                    if (!handled) {
+                        return new ScriptStatus(re);
+                    }
+                } catch (NodeExitException ne2) {
+                    // Called process.exit from the uncaught exception
+                    return ne2.getStatus();
+                } catch (RhinoException re2) {
+                    // Exception from the exception handler
+                    return new ScriptStatus(re2);
                 }
             }
         }

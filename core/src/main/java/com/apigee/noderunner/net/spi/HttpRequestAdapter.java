@@ -8,4 +8,7 @@ public interface HttpRequestAdapter
 
     String getMethod();
     void setMethod(String method);
+
+    void pause();
+    void resume();
 }

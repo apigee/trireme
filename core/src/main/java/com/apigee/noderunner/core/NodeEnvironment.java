@@ -10,6 +10,7 @@ import org.mozilla.javascript.ScriptableObject;
 
 import java.io.File;
 import java.io.IOException;
+import java.util.HashSet;
 import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -244,10 +245,20 @@ public class NodeEnvironment
     private static final class OpaqueClassShutter
         implements ClassShutter
     {
+        private final HashSet<String> whitelist = new HashSet<String>();
+
+        OpaqueClassShutter()
+        {
+            whitelist.add("org.mozilla.javascript.EcmaError");
+            whitelist.add("org.mozilla.javascript.EvaluatorException");
+            whitelist.add("org.mozilla.javascript.JavaScriptException");
+            whitelist.add("java.lang.String");
+        }
+
         @Override
         public boolean visibleToScripts(String s)
         {
-            return false;
+            return (whitelist.contains(s));
         }
     }
 }

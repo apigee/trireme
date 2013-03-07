@@ -4,6 +4,7 @@ import com.apigee.noderunner.net.spi.HttpFuture;
 import io.netty.channel.ChannelFuture;
 import io.netty.channel.ChannelFutureListener;
 
+import java.nio.channels.ClosedChannelException;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
@@ -63,6 +64,11 @@ public class NettyHttpFuture
     @Override
     public void operationComplete(ChannelFuture future)
     {
-        invokeListener(future.isSuccess(), future.cause());
+        Throwable cause = future.cause();
+        if ((cause != null) || (cause instanceof ClosedChannelException)) {
+            invokeListener(false, true, cause);
+        } else {
+            invokeListener(future.isSuccess(), false, future.cause());
+        }
     }
 }

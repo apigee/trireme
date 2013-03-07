@@ -13,10 +13,10 @@ public abstract class HttpFuture
         listenerRegistered();
     }
 
-    protected void invokeListener(boolean success, Throwable cause)
+    protected void invokeListener(boolean success, boolean closed, Throwable cause)
     {
         if (listener != null) {
-            listener.onComplete(success, cause);
+            listener.onComplete(success, closed,  cause);
         }
     }
 
@@ -24,6 +24,11 @@ public abstract class HttpFuture
 
     public interface Listener
     {
-        void onComplete(boolean success, Throwable cause);
+        /**
+         * Implement this to be notified when an HTTP operation completes. Callers must set "closed" if
+         * the operation fails because the connection was closed -- the server may need to handle this
+         * differently than a client.
+         */
+        void onComplete(boolean success, boolean closed, Throwable cause);
     }
 }

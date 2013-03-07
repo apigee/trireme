@@ -15,6 +15,7 @@ import com.apigee.noderunner.net.spi.HttpServerStub;
 import org.mozilla.javascript.Context;
 import org.mozilla.javascript.EvaluatorException;
 import org.mozilla.javascript.Function;
+import org.mozilla.javascript.RhinoException;
 import org.mozilla.javascript.Scriptable;
 import org.mozilla.javascript.ScriptableObject;
 import org.mozilla.javascript.annotations.JSFunction;
@@ -25,8 +26,11 @@ import org.slf4j.LoggerFactory;
 
 import java.lang.reflect.InvocationTargetException;
 import java.nio.ByteBuffer;
+import java.text.SimpleDateFormat;
 import java.util.ArrayList;
+import java.util.Date;
 import java.util.Map;
+import java.util.TimeZone;
 import java.util.concurrent.atomic.AtomicInteger;
 
 /**
@@ -102,6 +106,7 @@ public class HTTPWrap
         private Function onHeaders;
         private Function onData;
         private Function onComplete;
+        private Function onClose;
         private Scriptable tlsParams;
 
         private final AtomicInteger connectionCount = new AtomicInteger();
@@ -176,23 +181,18 @@ public class HTTPWrap
                 @Override
                 public void execute(Context cx, Scriptable scope)
                 {
-                    Scriptable incoming = buildIncoming(cx, request, response);
-                    onHeaders.call(cx, onHeaders, ServerContainer.this, new Object[]{incoming});
+                    callOnHeaders(cx, request, response);
                 }
             });
             if (request.isSelfContained()) {
+                final ByteBuffer requestData =
+                    (request.hasData() ? request.getData() : null);
                 runner.enqueueTask(new ScriptTask()
                 {
                     @Override
                     public void execute(Context cx, Scriptable scope)
                     {
-                        Scriptable incoming = request.getAttachment();
-                        Buffer.BufferImpl buf = (Buffer.BufferImpl) cx.newObject(scope, Buffer.BUFFER_CLASS_NAME);
-                        if (request.getData() != null) {
-                            buf.initialize(request.getData(), false);
-                        }
-                        onData.call(cx, onData, ServerContainer.this,
-                                    new Object[]{incoming, buf});
+                        callOnData(cx, scope, request, response, requestData);
                     }
                 });
                 runner.enqueueTask(new ScriptTask()
@@ -200,31 +200,26 @@ public class HTTPWrap
                     @Override
                     public void execute(Context cx, Scriptable scope)
                     {
-                        Scriptable incoming = request.getAttachment();
-                        onComplete.call(cx, onComplete, ServerContainer.this,
-                                        new Object[] { incoming });
+                        callOnComplete(cx, request, response);
                     }
                 });
             }
         }
 
         @Override
-        public void onData(final HttpRequestAdapter request, HttpResponseAdapter response, final HttpDataAdapter data)
+        public void onData(final HttpRequestAdapter request, final HttpResponseAdapter response, HttpDataAdapter data)
         {
             if (log.isDebugEnabled()) {
                 log.debug("Received HTTP onData for {} with {}", request, data);
             }
+            final ByteBuffer requestData =
+                    (data.hasData() ? data.getData() : null);
             runner.enqueueTask(new ScriptTask()
             {
                 @Override
                 public void execute(Context cx, Scriptable scope)
                 {
-                    Scriptable incoming = request.getAttachment();
-                    Buffer.BufferImpl buf = (Buffer.BufferImpl)cx.newObject(scope, Buffer.BUFFER_CLASS_NAME);
-                    // TODO check if we really need to copy here
-                    buf.initialize(data.getData(), true);
-                    onData.call(cx, onData, ServerContainer.this,
-                                new Object[]{incoming, buf});
+                    callOnData(cx, scope, request, response, requestData);
                 }
             });
             if (data.isLastChunk()) {
@@ -233,11 +228,50 @@ public class HTTPWrap
                     @Override
                     public void execute(Context cx, Scriptable scope)
                     {
-                        Scriptable incoming = request.getAttachment();
-                        onComplete.call(cx, onComplete, ServerContainer.this,
-                                        new Object[] { incoming });
+                        callOnComplete(cx, request, response);
                     }
                 });
+            }
+        }
+
+        private void callOnHeaders(Context cx, HttpRequestAdapter request, HttpResponseAdapter response)
+        {
+            try {
+                Scriptable incoming = buildIncoming(cx, request, response);
+                onHeaders.call(cx, onHeaders, this, new Object[]{incoming});
+            } catch (Throwable t) {
+                response.destroy();
+                rethrow(t);
+            }
+        }
+
+        private void callOnComplete(Context cx, HttpRequestAdapter request, HttpResponseAdapter response)
+        {
+            try {
+                Scriptable incoming = request.getAttachment();
+                onComplete.call(cx, onComplete, this,
+                                new Object[] { incoming });
+            } catch (Throwable t) {
+                response.destroy();
+                rethrow(t);
+            }
+        }
+
+        private void callOnData(Context cx, Scriptable scope,
+                                HttpRequestAdapter request, HttpResponseAdapter response,
+                                ByteBuffer requestData)
+        {
+            try {
+                Scriptable incoming = request.getAttachment();
+                Buffer.BufferImpl buf = (Buffer.BufferImpl)cx.newObject(scope, Buffer.BUFFER_CLASS_NAME);
+                if (requestData != null) {
+                    buf.initialize(requestData, true);
+                }
+                onData.call(cx, onData, this,
+                            new Object[]{incoming, buf});
+            } catch (Throwable t) {
+                response.destroy();
+                rethrow(t);
             }
         }
 
@@ -248,11 +282,32 @@ public class HTTPWrap
         }
 
         @Override
-        public void onClose()
+        public void onClose(final HttpRequestAdapter request)
         {
+            if (request != null) {
+                runner.enqueueTask(new ScriptTask() {
+                    @Override
+                    public void execute(Context cx, Scriptable scope) {
+                        Scriptable incoming = request.getAttachment();
+                        onClose.call(cx, onClose, ServerContainer.this,
+                                     new Object[] { incoming });
+                    }
+                });
+            }
             int newCount = connectionCount.decrementAndGet();
             if ((newCount == 0) && closed) {
                 completeClose();
+            }
+        }
+
+        private void rethrow(Throwable t)
+        {
+            if (t instanceof RhinoException) {
+                throw (RhinoException)t;
+            } else {
+                EvaluatorException ee = new EvaluatorException(t.getMessage());
+                ee.initCause(t);
+                throw ee;
             }
         }
 
@@ -305,6 +360,18 @@ public class HTTPWrap
         {
             this.onComplete = onComplete;
         }
+
+        @JSGetter("onclose")
+        public Function getOnClose()
+        {
+            return onClose;
+        }
+
+        @JSSetter("onclose")
+        public void setOnClose(Function oc)
+        {
+            this.onClose = oc;
+        }
     }
 
     public static class AdapterRequest
@@ -316,6 +383,7 @@ public class HTTPWrap
         private HttpResponseAdapter response;
         private ScriptRunner runner;
         private Function onWriteComplete;
+        private Function onChannelClosed;
 
         @Override
         public String getClassName()
@@ -350,6 +418,30 @@ public class HTTPWrap
             return request.getMethod();
         }
 
+        @JSGetter("onwritecomplete")
+        public Function getOnWriteComplete()
+        {
+            return onWriteComplete;
+        }
+
+        @JSSetter("onwritecomplete")
+        public void setOnWriteComplete(Function onComplete)
+        {
+            this.onWriteComplete = onComplete;
+        }
+
+        @JSGetter("onchannelclosed")
+        public Function getOnChannelClosed()
+        {
+            return onChannelClosed;
+        }
+
+        @JSSetter("onchannelclosed")
+        public void setOnChannelClosed(Function cc)
+        {
+            this.onChannelClosed = cc;
+        }
+
         @JSFunction
         public static Scriptable getRequestHeaders(Context cx, Scriptable thisObj, Object[] args, Function func)
         {
@@ -362,12 +454,12 @@ public class HTTPWrap
             return cx.newArray(thisObj, headers.toArray());
         }
 
-        private ByteBuffer gatherData(Object data, String encoding)
+        private ByteBuffer gatherData(Object data, Object encoding)
         {
-            if (data == null) {
+            if ((data == null) || (data == Context.getUndefinedValue())) {
                 return null;
             }
-            if (encoding == null) {
+            if ((encoding == null) || (encoding == Context.getUndefinedValue())){
                 if (data instanceof String) {
                     return Utils.stringToBuffer((String)data, Charsets.get().getCharset(Charsets.DEFAULT_ENCODING));
                 } else {
@@ -375,17 +467,19 @@ public class HTTPWrap
                 }
             }
             String str = Context.toString(data);
-            return Utils.stringToBuffer(str, Charsets.get().getCharset(encoding));
+            String encStr = Context.toString(encoding);
+            return Utils.stringToBuffer(str, Charsets.get().getCharset(encStr));
         }
 
         @JSFunction
         public boolean send(int statusCode, boolean sendDate, Scriptable headers,
-                            Object data, String encoding, boolean last)
+                            Object data, Object encoding, Scriptable trailers, boolean last)
         {
             ByteBuffer buf = gatherData(data, encoding);
 
             response.setStatusCode(statusCode);
-            // TODO date
+
+            boolean hasDate = false;
             if (headers != null) {
                 int i = 0;
                 Object name;
@@ -394,15 +488,24 @@ public class HTTPWrap
                     name = headers.get(i++, headers);
                     value = headers.get(i++, headers);
                     if ((name != Scriptable.NOT_FOUND) && (value != Scriptable.NOT_FOUND)) {
-                        response.setHeader(Context.toString(name), Context.toString(value));
+                        String nameVal = Context.toString(name);
+                        if ("Date".equalsIgnoreCase(nameVal)) {
+                            hasDate = true;
+                        }
+                        response.addHeader(nameVal, Context.toString(value));
                     }
                 }
                 while ((name != Scriptable.NOT_FOUND) && (value != Scriptable.NOT_FOUND));
             }
 
+            if (sendDate && !hasDate) {
+                addDateHeader(response);
+            }
+
             HttpFuture future;
             if (last) {
                 // Send everything in one big message
+                addTrailers(trailers, response);
                 response.setData(buf);
                 future = response.send(true);
             } else {
@@ -417,50 +520,95 @@ public class HTTPWrap
         }
 
         @JSFunction
-        public boolean sendChunk(Object data, String encoding, boolean last)
+        public boolean sendChunk(Object data, Object encoding, Scriptable trailers, boolean last)
         {
             ByteBuffer buf = gatherData(data, encoding);
+            if (last) {
+                addTrailers(trailers, response);
+            }
             HttpFuture future = response.sendChunk(buf, last);
 
             setListener(future);
             return future.isDone();
         }
 
+        @JSFunction
+        public void destroy()
+        {
+            response.destroy();
+        }
+
+        @JSFunction
+        public void pause()
+        {
+            request.pause();
+        }
+
+        @JSFunction
+        public void resume()
+        {
+            request.resume();
+        }
+
+        private void addTrailers(Scriptable trailers, HttpResponseAdapter response)
+        {
+            if (trailers != null) {
+                int i = 0;
+                Object name;
+                Object value;
+                do {
+                    name = trailers.get(i++, trailers);
+                    value = trailers.get(i++, trailers);
+                    if ((name != Scriptable.NOT_FOUND) && (value != Scriptable.NOT_FOUND)) {
+                        response.setTrailer(Context.toString(name), Context.toString(value));
+                    }
+                }
+                while ((name != Scriptable.NOT_FOUND) && (value != Scriptable.NOT_FOUND));
+            }
+        }
+
+        private static final String RFC_1123_FORMAT = "EEE, dd MM yyyy HH:mm:ss zzz";
+
+        private void addDateHeader(HttpResponseAdapter response)
+        {
+            // TODO we can optimize this by attaching the formatter to the server adapter
+            SimpleDateFormat df = new SimpleDateFormat(RFC_1123_FORMAT);
+            df.setTimeZone(TimeZone.getTimeZone("GMT"));
+            String headerVal = df.format(new Date());
+            response.addHeader("Date", headerVal);
+        }
+
         private void setListener(HttpFuture future)
         {
             future.setListener(new HttpFuture.Listener() {
                 @Override
-                public void onComplete(final boolean success, final Throwable cause)
+                public void onComplete(final boolean success, final boolean closed, final Throwable cause)
                 {
+                    if (log.isDebugEnabled()) {
+                        log.debug("Write complete: success = {} closed = {} cause = {}", success, closed, cause);
+                    }
                     runner.enqueueTask(new ScriptTask()
                     {
                         @Override
                         public void execute(Context cx, Scriptable scope)
                         {
                             Scriptable err = null;
-                            if (!success) {
-                                err = Utils.makeErrorObject(cx, AdapterRequest.this,
-                                                            cause.toString());
-                            }
-                            AdapterRequest.this.onWriteComplete.call(cx, AdapterRequest.this.onWriteComplete,
+                            // on an HTTP response, no need to get all upset about a close
+                            if (closed) {
+                                AdapterRequest.this.onChannelClosed.call(cx, AdapterRequest.this.onChannelClosed,
+                                                                         AdapterRequest.this, null);
+                            } else {
+                                if (!success) {
+                                    err = Utils.makeErrorObject(cx, AdapterRequest.this, cause.toString());
+                                }
+                                AdapterRequest.this.onWriteComplete.call(cx, AdapterRequest.this.onWriteComplete,
                                                                      AdapterRequest.this,
                                                                      new Object[] { err });
+                            }
                         }
                     });
                 }
             });
-        }
-
-        @JSGetter("onwritecomplete")
-        public Function getOnWriteComplete()
-        {
-            return onWriteComplete;
-        }
-
-        @JSSetter("onwritecomplete")
-        public void setOnWriteComplete(Function onComplete)
-        {
-            this.onWriteComplete = onComplete;
         }
     }
 }

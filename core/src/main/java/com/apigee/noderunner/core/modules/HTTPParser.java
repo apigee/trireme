@@ -184,7 +184,9 @@ public class HTTPParser
                 hadSomething = false;
                 result = parser.parse(bBuf);
                 if (result.isError()) {
-                    return Utils.makeErrorObject(cx, this, "HTTP parsing error");
+                    Scriptable err = Utils.makeErrorObject(cx, this, "Parse Error");
+                    err.put("code", err, "HPE_INVALID_CONSTANT");
+                    return err;
                 }
                 if (!sentCompleteHeaders) {
                     if (result.isHeadersComplete() || result.isComplete()) {

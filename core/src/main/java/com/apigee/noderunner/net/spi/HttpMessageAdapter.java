@@ -16,7 +16,10 @@ public interface HttpMessageAdapter
     List<String> getHeaders(String name);
     String getHeader(String name);
 
-    void setHeader(String name, String value);
+    /** Add a header to the message -- may be called multiple times for same "name" */
+    void addHeader(String name, String value);
+
+    /** Replace all existing headers with this one. */
     void setHeader(String name, List<String> values);
 
     boolean containsHeader(String name);

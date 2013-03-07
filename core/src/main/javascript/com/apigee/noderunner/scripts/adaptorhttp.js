@@ -11,6 +11,7 @@ var util = require('util');
 var events = require('events');
 var NodeHttp = require('node_http');
 var HttpWrap = process.binding('http_wrap');
+var assert = require('assert');
 
 var debug;
 if (process.env.NODE_DEBUG && /http/.test(process.env.NODE_DEBUG)) {
@@ -40,12 +41,15 @@ exports.createClient = NodeHttp.createClient;
 if (HttpWrap.hasServerAdapter()) {
   debug('Using server adapter');
 
+  var END_OF_FILE = {};
+
   function ServerResponse(adapter) {
     if (!(this instanceof ServerResponse)) return new ServerResponse();
     events.EventEmitter.call(this);
 
     this.statusCode = 200;
     this.headersSent = false;
+    this.ended = false;
     this.sendDate = true;
     this._headers = {};
     this._adapter = adapter;
@@ -74,11 +78,10 @@ if (HttpWrap.hasServerAdapter()) {
     this.statusCode = statusCode;
 
     var obj = arguments[headerIndex];
+    headers = this._renderHeaders();
 
-    if (obj && this._headers) {
-      // Slow-case: when progressive API and header fields are passed.
+    if (obj) {
       headers = this._renderHeaders();
-
       if (Array.isArray(obj)) {
         // handle array case
         // TODO: remove when array is no longer accepted
@@ -99,15 +102,9 @@ if (HttpWrap.hasServerAdapter()) {
           if (k) headers[k] = obj[k];
         }
       }
-    } else if (this._headers) {
-      // only progressive api is used
-      headers = this._renderHeaders();
-    } else {
-      // only writeHead() called
-      headers = obj;
     }
 
-    this._savedHeaders = headers;
+    this._saveHeaders(headers);
   }
 
   ServerResponse.prototype.write = function(data, encoding) {
@@ -124,7 +121,7 @@ if (HttpWrap.hasServerAdapter()) {
     if (!this.headersSent) {
       // Just send one additional chunk of data
       debug('Sending http headers status = ' + this.statusCode);
-      this._adapter.send(this.statusCode, this.sendDate, this._savedHeaders, null, null, false);
+      this._adapter.send(this.statusCode, this.sendDate, this._savedHeaders, null, null, null, false);
       this.headersSent = true;
     }
     var result = this._adapter.sendChunk(data, encoding, false);
@@ -150,24 +147,132 @@ if (HttpWrap.hasServerAdapter()) {
 
     var result;
     if (this.headersSent) {
-      result = this._adapter.sendChunk(data, encoding, true);
+      result = this._adapter.sendChunk(data, encoding, this._trailers, true);
       debug('Sent last data result = ' + result);
     } else {
       result = this._adapter.send(this.statusCode, this.sendDate, this._savedHeaders,
-                                  data, encoding, true);
+                                  data, encoding, this._trailers, true);
       this.headersSent = true;
       debug('Sent single message result = ' + result);
     }
     if (!result) {
       this._outstanding++;
     }
+    this.ended = true;
     return result;
   }
+
+  ServerResponse.prototype._saveHeaders = function(headers) {
+    this._savedHeaders = [];
+    if (headers) {
+      var keys = Object.keys(headers);
+      var isArray = (Array.isArray(headers));
+      var field, value;
+
+      for (var i = 0, l = keys.length; i < l; i++) {
+        var key = keys[i];
+        if (isArray) {
+          field = headers[key][0];
+          value = headers[key][1];
+        } else {
+          field = key;
+          value = headers[key];
+        }
+
+        if (Array.isArray(value)) {
+          for (var j = 0; j < value.length; j++) {
+            this._savedHeaders.push(field);
+            this._savedHeaders.push(value[j]);
+          }
+        } else {
+          this._savedHeaders.push(field);
+          this._savedHeaders.push(value);
+        }
+      }
+    }
+  }
+
+  ServerResponse.prototype.addTrailers = function(headers) {
+    if (!this._trailers) {
+      this._trailers = [];
+    }
+    var keys = Object.keys(headers);
+    var isArray = (Array.isArray(headers));
+    var field, value;
+    for (var i = 0, l = keys.length; i < l; i++) {
+      var key = keys[i];
+      if (isArray) {
+        this._trailers.push(headers[key][0]);
+        this._trailers.push( headers[key][1]);
+      } else {
+        this._trailers.push(key);
+        this._trailers.push(headers[key]);
+      }
+    }
+  };
+
+  ServerResponse.prototype.destroy = function() {
+    debug('Destroy');
+    if (this._adapter) {
+      this._adapter.destroy();
+    }
+  };
 
   ServerResponse.prototype.setHeader = NodeHttp.OutgoingMessage.prototype.setHeader;
   ServerResponse.prototype.getHeader = NodeHttp.OutgoingMessage.prototype.getHeader;
   ServerResponse.prototype.removeHeader = NodeHttp.OutgoingMessage.prototype.removeHeader;
   ServerResponse.prototype._renderHeaders = NodeHttp.OutgoingMessage.prototype._renderHeaders;
+
+  function ServerRequest(adapter) {
+    if (!(this instanceof ServerRequest)) return new ServerRequest(adapter);
+    NodeHttp.IncomingMessage.call(this);
+
+    this._adapter = adapter;
+    this.httpVersionMajor = adapter.requestMajorVersion;
+    this.httpVersionMinor = adapter.requestMinorVersion;
+    this.httpVersion = adapter.requestMajorVersion + '.' + adapter.requestMinorVersion;
+    this.url = adapter.requestUrl;
+    this._paused = false;
+  }
+
+  util.inherits(ServerRequest, NodeHttp.IncomingMessage);
+
+  ServerRequest.prototype.pause = function() {
+    this._paused = true;
+    this._adapter.pause();
+  }
+
+  ServerRequest.prototype.resume = function() {
+    this._paused = false;
+    this._adapter.resume();
+    this._emitPending();
+  }
+
+  // Copied from http.js, because END_OF_FILE is not exported and we need it
+  ServerRequest.prototype._emitPending = function(callback) {
+  if (this._pendings.length) {
+    var self = this;
+    process.nextTick(function() {
+      while (!self._paused && self._pendings.length) {
+        var chunk = self._pendings.shift();
+        if (chunk !== END_OF_FILE) {
+          assert(Buffer.isBuffer(chunk));
+          self._emitData(chunk);
+        } else {
+          assert(self._pendings.length === 0);
+          self.readable = false;
+          self._emitEnd();
+        }
+      }
+
+      if (callback) {
+        callback();
+      }
+    });
+  } else if (callback) {
+    callback();
+  }
+};
 
   function Server(requestListener) {
     if (!(this instanceof Server)) return new Server(requestListener);
@@ -197,11 +302,8 @@ if (HttpWrap.hasServerAdapter()) {
     var headers = info.getRequestHeaders();
     var url = info.requestUrl;
 
-    info.incoming = new NodeHttp.IncomingMessage(null);
-    info.incoming.httpVersionMajor = info.requestMajorVersion;
-    info.incoming.httpVersionMinor = info.requestMinorVersion;
-    info.incoming.httpVersion = info.requestMajorVersion + '.' + info.requestMinorVersion;
-    info.incoming.url = url;
+    info.incoming = new ServerRequest(info);
+
 
     var n = headers.length;
 
@@ -219,6 +321,13 @@ if (HttpWrap.hasServerAdapter()) {
     info.incoming.method = info.requestMethod;
 
     info.outgoing = new ServerResponse(info);
+
+    info.onchannelclosed = function() {
+      debug('Server channel closed');
+      if (!info.outgoing.ended) {
+        info.outgoing.emit('close');
+      }
+    };
 
     info.onwritecomplete = function(err) {
       debug('write complete: ' + err + ' outstanding: ' + info.outgoing._outstanding);
@@ -250,7 +359,6 @@ if (HttpWrap.hasServerAdapter()) {
   function onMessageComplete(info) {
     debug('onMessageComplete');
     var incoming = info.incoming;
-    incoming.complete = true;
 
     // Emit any trailing headers.
     // TODO
@@ -278,6 +386,15 @@ if (HttpWrap.hasServerAdapter()) {
     }
   }
 
+  function onClose(info) {
+    debug('onClose outgoing.complete = ' + info.outgoing.complete);
+    if (!info.outgoing.ended) {
+      info.outgoing.ended = true;
+      info.incoming.emit('close');
+      info.outgoing.emit('close');
+    }
+  }
+
   function listen(self, address, port, addressType, backlog, fd) {
     self._adapter = HttpWrap.createServerAdapter();
     if (self.tlsParams) {
@@ -300,6 +417,7 @@ if (HttpWrap.hasServerAdapter()) {
     }
     self._adapter.ondata = onBody;
     self._adapter.oncomplete = onMessageComplete;
+    self._adapter.onclose = onClose;
 
     process.nextTick(function() {
       self.emit('listening');

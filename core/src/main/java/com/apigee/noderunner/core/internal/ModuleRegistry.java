@@ -63,7 +63,6 @@ public class ModuleRegistry
         // of noderunner.
         addCompiledModule("_linklist", "com.apigee.noderunner.fromnode._linklist");
         addCompiledModule("assert", "com.apigee.noderunner.fromnode.assert");
-        addCompiledModule("child_process", "com.apigee.noderunner.fromnode.child_process");
         addCompiledModule("cluster", "com.apigee.noderunner.fromnode.cluster");
         addCompiledModule("console", "com.apigee.noderunner.fromnode.console");
         addCompiledModule("constants", "com.apigee.noderunner.fromnode.constants");
@@ -89,6 +88,7 @@ public class ModuleRegistry
 
         addCompiledModule("http", "com.apigee.noderunner.scripts.adaptorhttp");
         addCompiledModule("https", "com.apigee.noderunner.scripts.adaptorhttps");
+        addCompiledModule("child_process", "com.apigee.noderunner.scripts.child_process");
         addCompiledModule("noderunner_metrics", "com.apigee.noderunner.scripts.noderunner_metrics");
         addCompiledModule("tls", "com.apigee.noderunner.scripts.tls");
         addCompiledModule("tls_checkidentity", "com.apigee.noderunner.scripts.tls_checkidentity");

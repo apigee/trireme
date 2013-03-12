@@ -19,6 +19,8 @@ import java.nio.charset.CharsetDecoder;
 import java.nio.charset.CharsetEncoder;
 import java.nio.charset.CoderResult;
 import java.nio.charset.CodingErrorAction;
+import java.util.ArrayList;
+import java.util.List;
 
 /**
  * A few utility functions.
@@ -172,5 +174,20 @@ public class Utils
         Scriptable err = cx.newObject(scope, "Error", new Object[] { e.getMessage() });
         err.put("code", err, e.getCode());
         return new JavaScriptException(err);
+    }
+
+    public static List<String> toStringList(Scriptable o)
+    {
+        ArrayList<String> ret = new ArrayList<String>();
+        for (Object id : o.getIds()) {
+            Object val;
+            if (id instanceof Integer) {
+                val = o.get((Integer)id, o);
+            } else {
+                val = o.get((String)id, o);
+            }
+            ret.add(Context.toString(val));
+        }
+        return ret;
     }
 }

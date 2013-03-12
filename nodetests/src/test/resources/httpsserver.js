@@ -1,6 +1,11 @@
-var http = require('http');
+var https = require('https');
 
-http.createServer(function (request, response) {
+var options = {
+  keystore: 'src/test/resources/test/fixtures/keys/agent1.jks',
+  passphrase: 'secure'
+};
+
+https.createServer(options, function (request, response) {
   console.log('Got HTTP request');
   response.writeHead(200, {'Content-Type': 'text/plain'});
   response.end('Hello World\n');

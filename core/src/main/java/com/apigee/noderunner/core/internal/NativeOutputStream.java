@@ -37,6 +37,7 @@ public class NativeOutputStream
 
         try {
             out.write(str.getBytes(charset));
+            out.flush();
         } catch (IOException e) {
             throw new EvaluatorException("Error on write: " + e.toString());
         }

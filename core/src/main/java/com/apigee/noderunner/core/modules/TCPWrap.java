@@ -658,10 +658,10 @@ public class TCPWrap
 
         private NetworkPolicy getNetworkPolicy()
         {
-            if (getRunner().getEnvironment().getSandbox() == null) {
+            if (getRunner().getSandbox() == null) {
                 return null;
             }
-            return getRunner().getEnvironment().getSandbox().getNetworkPolicy();
+            return getRunner().getSandbox().getNetworkPolicy();
         }
     }
 

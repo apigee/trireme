@@ -19,6 +19,7 @@ public class NodeScript
     private final String[] args;
     private ScriptRunner runner;
     private Object attachment;
+    private Sandbox sandbox;
 
     NodeScript(NodeEnvironment env, String scriptName, File script, String[] args)
     {
@@ -26,6 +27,7 @@ public class NodeScript
         this.scriptName = scriptName;
         this.scriptFile = script;
         this.args = args;
+        this.sandbox = env.getSandbox();
     }
 
     NodeScript(NodeEnvironment env, String scriptName, String script, String[] args)
@@ -34,6 +36,7 @@ public class NodeScript
         this.scriptName = scriptName;
         this.script = script;
         this.args = args;
+        this.sandbox = env.getSandbox();
     }
 
     /**
@@ -47,9 +50,9 @@ public class NodeScript
         throws NodeException
     {
         if (scriptFile == null) {
-            runner = new ScriptRunner(this, env, scriptName, script, args);
+            runner = new ScriptRunner(this, env, sandbox, scriptName, script, args);
         } else {
-            runner = new ScriptRunner(this, env, scriptName, scriptFile, args);
+            runner = new ScriptRunner(this, env, sandbox, scriptName, scriptFile, args);
         }
         ScriptFuture future = new ScriptFuture(runner);
         runner.setFuture(future);
@@ -69,7 +72,24 @@ public class NodeScript
     }
 
     /**
-     * Callers can use this method to attach objects to the script.
+     * Set up a restricted environment. The specified Sandbox object can specify restrictions on which files
+     * are opened, how standard input and output are handled, and what network I/O operations are allowed.
+     * The sandbox is checked when this call is made, so please set all parameters on the Sandbox object
+     * <i>before</i> calling this method. A Sandbox here overrides one set at the Environment level.
+     * By default, the sandbox for a script is the one that is set on the Environment that was used to
+     * create the script.
+     */
+    public void setSandbox(Sandbox box) {
+        this.sandbox = box;
+    }
+
+    public Sandbox getSandbox() {
+        return sandbox;
+    }
+
+    /**
+     * Callers can use this method to attach objects to the script. They are accessible to built-in modules and
+     * other built-in code.
      */
     public Object getAttachment()
     {

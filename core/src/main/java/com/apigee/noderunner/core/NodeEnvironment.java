@@ -1,7 +1,6 @@
 package com.apigee.noderunner.core;
 
 import com.apigee.noderunner.core.internal.ModuleRegistry;
-import com.apigee.noderunner.core.internal.PathTranslator;
 import com.apigee.noderunner.net.spi.HttpServerContainer;
 import org.mozilla.javascript.ClassShutter;
 import org.mozilla.javascript.Context;
@@ -9,7 +8,6 @@ import org.mozilla.javascript.RhinoException;
 import org.mozilla.javascript.ScriptableObject;
 
 import java.io.File;
-import java.io.IOException;
 import java.util.HashSet;
 import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.ExecutorService;
@@ -28,7 +26,7 @@ public class NodeEnvironment
     public static final int CORE_POOL_SIZE    = 1;
     public static final int MAX_POOL_SIZE     = 50;
     public static final int POOL_QUEUE_SIZE   = 8;
-    public static final int POOL_TIMEOUT_SECS = 60;
+    public static final long POOL_TIMEOUT_SECS = 60L;
 
     // TODO is this the best version to use for V8 compatibility?
     public static final int DEFAULT_JS_VERSION = Context.VERSION_1_8;
@@ -44,7 +42,6 @@ public class NodeEnvironment
     private ExecutorService     asyncPool;
     private ExecutorService     scriptPool;
     private HttpServerContainer httpContainer;
-    private PathTranslator      pathTranslator;
     private Sandbox             sandbox;
 
     /**
@@ -136,26 +133,6 @@ public class NodeEnvironment
         return scriptPool;
     }
 
-    /**
-     * Internal: Translate a path based on the root.
-     */
-    public File translatePath(String path)
-    {
-        if (pathTranslator == null) {
-            return new File(path);
-        }
-        return pathTranslator.translate(path);
-    }
-
-    public String reverseTranslatePath(String path)
-        throws IOException
-    {
-        if (pathTranslator == null) {
-            return path;
-        }
-        return pathTranslator.reverseTranslate(path);
-    }
-
     private void initialize()
         throws NodeException
     {
@@ -164,13 +141,6 @@ public class NodeEnvironment
         }
 
         if (sandbox != null) {
-            if (sandbox.getFilesystemRoot() != null) {
-                try {
-                    pathTranslator = new PathTranslator(sandbox.getFilesystemRoot());
-                } catch (IOException ioe) {
-                    throw new AssertionError("Unexpected I/O error setting filesystem root: " + ioe);
-                }
-            }
             if (sandbox.getAsyncThreadPool() != null) {
                 asyncPool = sandbox.getAsyncThreadPool();
             }
@@ -240,7 +210,9 @@ public class NodeEnvironment
     }
 
     /**
-     * Don't allow access to Java code at all from inside Node code.
+     * Don't allow access to Java code at all from inside Node code. However, Rhino seems to depend on access
+     * to certain internal classes, at least for error handing, so we will allow the code to have access
+     * to them.
      */
     private static final class OpaqueClassShutter
         implements ClassShutter

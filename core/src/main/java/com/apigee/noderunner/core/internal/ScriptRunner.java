@@ -5,6 +5,7 @@ import com.apigee.noderunner.core.NodeException;
 import com.apigee.noderunner.core.NodeModule;
 import com.apigee.noderunner.core.NodeScript;
 import com.apigee.noderunner.core.RunningScript;
+import com.apigee.noderunner.core.Sandbox;
 import com.apigee.noderunner.core.ScriptStatus;
 import com.apigee.noderunner.core.ScriptTask;
 import com.apigee.noderunner.core.modules.EventEmitter;
@@ -20,6 +21,8 @@ import org.slf4j.LoggerFactory;
 
 import java.io.File;
 import java.io.IOException;
+import java.io.InputStream;
+import java.io.OutputStream;
 import java.lang.reflect.InvocationTargetException;
 import java.nio.channels.SelectionKey;
 import java.nio.channels.Selector;
@@ -28,6 +31,7 @@ import java.util.Iterator;
 import java.util.Map;
 import java.util.PriorityQueue;
 import java.util.concurrent.Callable;
+import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Future;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -45,21 +49,24 @@ public class ScriptRunner
     private static final long DEFAULT_DELAY = 60000L;
     private static final int DEFAULT_TICK_DEPTH = 1000;
 
-    private        NodeEnvironment env;
+    private final  NodeEnvironment env;
     private        File            scriptFile;
     private        String          script;
     private final  NodeScript      scriptObject;
-    private        String[]        args;
-    private        String          scriptName;
+    private final  String[]        args;
+    private final  String          scriptName;
     private final  HashMap<String, Object> moduleCache = new HashMap<String, Object>();
     private final  HashMap<String, Object> nativeModuleCache = new HashMap<String, Object>();
-    private        Future<ScriptStatus> future;
+    private        Future<ScriptStatus>    future;
+    private final  Sandbox                 sandbox;
+    private final  PathTranslator          pathTranslator;
+    private final  ExecutorService         asyncPool;
 
     private final  LinkedBlockingQueue<Activity> tickFunctions = new LinkedBlockingQueue<Activity>();
     private final  PriorityQueue<Activity>       timerQueue    = new PriorityQueue<Activity>();
-    private        Selector                      selector;
+    private final  Selector                      selector;
     private        int                           timerSequence;
-    private        AtomicInteger                 pinCount      = new AtomicInteger(0);
+    private final  AtomicInteger                 pinCount      = new AtomicInteger(0);
     private        int                           maxTickDepth = DEFAULT_TICK_DEPTH;
 
     // Globals that are set up for the process
@@ -69,20 +76,58 @@ public class ScriptRunner
 
     private Scriptable scope;
 
-    public ScriptRunner(NodeScript so, NodeEnvironment env, String scriptName, File scriptFile,
+    public ScriptRunner(NodeScript so, NodeEnvironment env, Sandbox sandbox,
+                        String scriptName, File scriptFile,
                         String[] args)
     {
-        this.scriptObject = so;
+        this(so, env, sandbox, scriptName, args);
         this.scriptFile = scriptFile;
-        init(env, scriptName, args);
     }
 
-    public ScriptRunner(NodeScript so, NodeEnvironment env, String scriptName, String script,
+    public ScriptRunner(NodeScript so, NodeEnvironment env, Sandbox sandbox,
+                        String scriptName, String script,
                         String[] args)
     {
-        this.scriptObject = so;
+        this(so, env, sandbox, scriptName, args);
         this.script = script;
-        init(env, scriptName, args);
+    }
+
+    private ScriptRunner(NodeScript so, NodeEnvironment env, Sandbox sandbox, String scriptName,
+                         String[] args)
+    {
+        this.env = env;
+        this.scriptObject = so;
+        this.scriptName = scriptName;
+
+        this.args = args;
+        this.sandbox = sandbox;
+
+        ExecutorService ap = null;
+        PathTranslator pt = null;
+        if (sandbox != null) {
+            if (sandbox.getFilesystemRoot() != null) {
+                try {
+                    pt = new PathTranslator(sandbox.getFilesystemRoot());
+                } catch (IOException ioe) {
+                    throw new AssertionError("Unexpected I/O error setting filesystem root: " + ioe);
+                }
+            }
+            if (sandbox.getAsyncThreadPool() != null) {
+                ap = sandbox.getAsyncThreadPool();
+            }
+        }
+        if (ap == null) {
+            ap = env.getAsyncPool();
+        }
+
+        this.pathTranslator = pt;
+        this.asyncPool = ap;
+
+        try {
+            this.selector = Selector.open();
+        } catch (IOException ioe) {
+            throw new AssertionError(ioe);
+        }
     }
 
     public void close()
@@ -94,27 +139,16 @@ public class ScriptRunner
         }
     }
 
-    private void init(NodeEnvironment env, String scriptName,
-                      String[] args)
-    {
-        this.env = env;
-        this.scriptName = scriptName;
-
-        this.args = args;
-
-        try {
-            this.selector = Selector.open();
-        } catch (IOException ioe) {
-            throw new AssertionError(ioe);
-        }
-    }
-
     public void setFuture(Future<ScriptStatus> future) {
         this.future = future;
     }
 
     public NodeEnvironment getEnvironment() {
         return env;
+    }
+
+    public Sandbox getSandbox() {
+        return sandbox;
     }
 
     public NodeScript getScriptObject() {
@@ -129,10 +163,6 @@ public class ScriptRunner
         return nativeModule;
     }
 
-    public Map<String, Object> getModuleCache() {
-        return moduleCache;
-    }
-
     public Selector getSelector() {
         return selector;
     }
@@ -143,6 +173,38 @@ public class ScriptRunner
 
     public void setMaxTickDepth(int maxTickDepth) {
         this.maxTickDepth = maxTickDepth;
+    }
+
+    public InputStream getStdin() {
+        return ((sandbox != null) && (sandbox.getStdin() != null)) ? sandbox.getStdin() : System.in;
+    }
+
+    public OutputStream getStdout() {
+        return ((sandbox != null) && (sandbox.getStdout() != null)) ? sandbox.getStdout() : System.out;
+    }
+
+    public OutputStream getStderr() {
+        return ((sandbox != null) && (sandbox.getStderr() != null)) ? sandbox.getStderr() : System.err;
+    }
+
+    /**
+     * Translate a path based on the root.
+     */
+    public File translatePath(String path)
+    {
+        if (pathTranslator == null) {
+            return new File(path);
+        }
+        return pathTranslator.translate(path);
+    }
+
+    public String reverseTranslatePath(String path)
+        throws IOException
+    {
+        if (pathTranslator == null) {
+            return path;
+        }
+        return pathTranslator.reverseTranslate(path);
     }
 
     /**
@@ -257,6 +319,7 @@ public class ScriptRunner
                     // find the reference to "require" a different way, or wrap the module in a function.
                     // see node.js's "evalScript" function.
                     File scriptFile = new File(process.cwd(), scriptName);
+                    process.setArgv(1, scriptName);
                     Function ctor = (Function)mainModule.get("Module", mainModule);
                     Scriptable topModule = cx.newObject(scope);
                     ctor.call(cx, scope, topModule, new Object[]{scriptName});
@@ -276,7 +339,7 @@ public class ScriptRunner
                 } else {
                     // Again like the real node, delegate running the actual script to the module module.
                     String scriptPath = scriptFile.getPath();
-                    scriptPath = env.reverseTranslatePath(scriptPath);
+                    scriptPath = reverseTranslatePath(scriptPath);
                     if (!scriptFile.isAbsolute() && !scriptPath.startsWith("./")) {
                         // Add ./ before script path to un-confuse the module module if it's a local path
                         scriptPath = "./" + scriptPath;
@@ -435,16 +498,14 @@ public class ScriptRunner
             process =
                 (Process.ProcessImpl)registerModule("process", cx, scope);
             process.setMainModule(nativeMod);
-            process.setArgv(0, "node");
+            process.setArgv(0, Process.EXECUTABLE_NAME);
 
             if (args != null) {
-                int i = 1;
+                int i = 2;
                 for (String arg : args) {
                     process.setArgv(i, arg);
                     i++;
                 }
-            } else {
-                process.setArgv(1, scriptName);
             }
 
             // Need a little special handling for the "module" module, which does module loading
@@ -469,7 +530,7 @@ public class ScriptRunner
             copyProp(timers, scope, "setImmediate");
             copyProp(timers, scope, "clearImmediate");
 
-            // Set up metrics
+            // Set up metrics -- defining these lets us run internal Node projects
             Scriptable metrics = (Scriptable)nativeMod.internalRequire("noderunner_metrics", cx, this);
             copyProp(metrics, scope, "DTRACE_NET_SERVER_CONNECTION");
             copyProp(metrics, scope, "DTRACE_NET_STREAM_END");
@@ -490,16 +551,16 @@ public class ScriptRunner
                 if (scriptFile == null) {
                     scope.put("__filename", scope, scriptName);
                     scope.put("__dirname", scope,
-                              env.reverseTranslatePath("."));
+                              reverseTranslatePath("."));
                 } else {
                     scope.put("__filename", scope,
                               scriptFile.getPath());
                     if (scriptFile.getParentFile() == null) {
                         scope.put("__dirname", scope,
-                                  env.reverseTranslatePath("."));
+                                  reverseTranslatePath("."));
                     } else {
                         scope.put("__dirname", scope,
-                                  env.reverseTranslatePath(scriptFile.getParentFile().getPath()));
+                                  reverseTranslatePath(scriptFile.getParentFile().getPath()));
                     }
                 }
             } catch (IOException ioe) {
@@ -553,7 +614,6 @@ public class ScriptRunner
         if (log.isDebugEnabled()) {
             log.debug("Registered module {} export = {}", modName, exp);
         }
-        moduleCache.put(modName, exp);
         return exp;
     }
 
@@ -641,7 +701,8 @@ public class ScriptRunner
         {
             if (timeout < a.timeout) {
                 return -1;
-            } else if (timeout > a.timeout) {
+            }
+            if (timeout > a.timeout) {
                 return 1;
             }
             return 0;

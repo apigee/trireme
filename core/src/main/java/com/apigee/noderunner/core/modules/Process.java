@@ -34,9 +34,10 @@ import java.util.Map;
 public class Process
     implements NodeModule
 {
-    protected final static String OBJECT_NAME = "process";
+    protected static final String OBJECT_NAME = "process";
+    public static final String EXECUTABLE_NAME = "./node";
 
-    private static final   long   NANO = 1000000000L;
+    private static final   double NANO = 1000000000.0;
     protected static final Logger log  = LoggerFactory.getLogger(Process.class);
 
     @Override
@@ -63,36 +64,18 @@ public class Process
         NativeOutputStream stderr = (NativeOutputStream) cx.newObject(scope, NativeOutputStream.CLASS_NAME);
         NativeInputStream stdin = (NativeInputStream) cx.newObject(scope, NativeInputStream.CLASS_NAME);
 
-        Sandbox sb = runner.getEnvironment().getSandbox();
+        Sandbox sb = runner.getSandbox();
 
         // stdout
-        OutputStream stdoutStream;
-        if ((sb != null) && (sb.getStdout() != null)) {
-            stdoutStream = sb.getStdout();
-        } else {
-            stdoutStream = System.out;
-        }
-        stdout.initialize(stdoutStream);
+        stdout.initialize(runner.getStdout());
         exports.setStdout(stdout);
 
         // stderr
-        OutputStream stderrStream;
-        if ((sb != null) && (sb.getStderr() != null)) {
-            stderrStream = sb.getStderr();
-        } else {
-            stderrStream = System.err;
-        }
-        stderr.initialize(stderrStream);
+        stderr.initialize(runner.getStderr());
         exports.setStderr(stderr);
 
         // stdin
-        InputStream stdinStream;
-        if ((sb != null) && (sb.getStdin() != null)) {
-            stdinStream = sb.getStdin();
-        } else {
-            stdinStream = System.in;
-        }
-        stdin.initialize(runner, runner.getEnvironment().getAsyncPool(), stdinStream);
+        stdin.initialize(runner, runner.getEnvironment().getAsyncPool(), runner.getStdin());
         exports.setStdin(stdin);
 
         // env
@@ -108,7 +91,7 @@ public class Process
     public static class ProcessImpl
         extends EventEmitter.EventEmitterImpl
     {
-        protected final static String CLASS_NAME = "_processClass";
+        protected static final String CLASS_NAME = "_processClass";
 
         private Stream.WritableStream stdout;
         private Stream.WritableStream stderr;
@@ -223,8 +206,7 @@ public class Process
         @JSGetter("execPath")
         public String getExecPath()
         {
-            // TODO ??
-            return "./node";
+            return EXECUTABLE_NAME;
         }
 
         @JSFunction
@@ -240,7 +222,7 @@ public class Process
         public String cwd()
         {
             try {
-                return runner.getEnvironment().reverseTranslatePath(System.getProperty("user.dir"));
+                return runner.reverseTranslatePath(System.getProperty("user.dir"));
             } catch (IOException ioe) {
                 return ".";
             }
@@ -286,10 +268,10 @@ public class Process
         }
 
         @JSGetter("config")
-        public static Scriptable getConfig(Scriptable scope)
+        public Scriptable getConfig()
         {
-            Scriptable c = Context.getCurrentContext().newObject(scope);
-            Scriptable vars = Context.getCurrentContext().newObject(scope);
+            Scriptable c = Context.getCurrentContext().newObject(this);
+            Scriptable vars = Context.getCurrentContext().newObject(this);
             // TODO fill it in
             c.put("variables", c, vars);
             return c;
@@ -371,16 +353,22 @@ public class Process
         public static Object hrtime(Context cx, Scriptable thisObj, Object[] args, Function func)
         {
             long nanos = System.nanoTime();
-            if (args.length >= 2) {
-                int startSecs = intArg(args, 0);
-                int startNs = intArg(args, 1);
-                long startNanos = (startSecs * NANO) + startNs;
+            if (args.length == 1) {
+                Scriptable arg = ensureScriptable(args[0]);
+                if (!arg.has(0, arg) || !arg.has(1, arg)) {
+                    throw new EvaluatorException("Argument must be an array");
+                }
+                double startSecs = Context.toNumber(arg.get(0, arg));
+                double startNs = Context.toNumber(arg.get(1, arg));
+                long startNanos = (long)((startSecs * NANO) + startNs);
                 nanos -= startNanos;
+            } else if (args.length > 1) {
+                throw new EvaluatorException("Invalid arguments");
             }
 
             Object[] ret = new Object[2];
-            ret[0] = (int)(nanos / NANO);
-            ret[1] = (int)(nanos % NANO);
+            ret[0] = nanos / NANO;
+            ret[1] = nanos % NANO;
             return cx.newArray(thisObj, ret);
         }
 

@@ -21,6 +21,29 @@ public class Sandbox
     private NetworkPolicy   networkPolicy;
 
     /**
+     * Create a new sandbox that will not affect anything in any way.
+     */
+    public Sandbox()
+    {
+    }
+
+    /**
+     * Create a new sandbox that will copy the parameters from a parent. This allows a hierarchy of
+     * sandboxes.
+     */
+    public Sandbox(Sandbox parent)
+    {
+        if (parent != null) {
+            this.stdout = parent.stdout;
+            this.stdin = parent.stdin;
+            this.stderr = parent.stderr;
+            this.filesystemRoot = parent.filesystemRoot;
+            this.asyncPool = parent.asyncPool;
+            this.networkPolicy = parent.networkPolicy;
+        }
+    }
+
+    /**
      * Provide a "chroot"-like facility so that all filenames used by the "fs" module
      * (not all files used internally by
      * NodeRunner) must be treated as if the "root" is in a different location. Any files
@@ -29,9 +52,10 @@ public class Sandbox
      * under the root directory. Once this is set, then all filesystem calls must be specified
      * relative to this root.
      */
-    public void setFilesystemRoot(String root)
+    public Sandbox setFilesystemRoot(String root)
     {
         this.filesystemRoot = root;
+        return this;
     }
 
     public String getFilesystemRoot() {
@@ -42,8 +66,9 @@ public class Sandbox
      * Set the stream that scripts should use for standard output. By default, System.out will be used.
      * If this method is used to set the stream to non-null, then the corresponding stream will be used instead.
      */
-    public void setStdout(OutputStream s) {
+    public Sandbox setStdout(OutputStream s) {
         this.stdout = s;
+        return this;
     }
 
     public OutputStream getStdout() {
@@ -66,8 +91,9 @@ public class Sandbox
      * Set the stream that scripts should use for standard input. By default, System.in will be used.
      * If this method is used to set the stream to non-null, then the corresponding stream will be used instead.
      */
-    public void setStdin(InputStream s) {
+    public Sandbox setStdin(InputStream s) {
         this.stdin = s;
+        return this;
     }
 
     public InputStream getStdin() {
@@ -79,8 +105,9 @@ public class Sandbox
      * DNS lookups and asynchronous filesystem calls. If this is unset or set to null then a new thread pool
      * will be created.
      */
-    public void setAsyncThreadPool(ExecutorService exec) {
+    public Sandbox setAsyncThreadPool(ExecutorService exec) {
         this.asyncPool = exec;
+        return this;
     }
 
     public ExecutorService getAsyncThreadPool() {
@@ -94,8 +121,9 @@ public class Sandbox
      * HttpAdapter has been registered -- in that case the HttpAdapter itself is responsible for
      * restricting access.
      */
-    public void setNetworkPolicy(NetworkPolicy policy) {
+    public Sandbox setNetworkPolicy(NetworkPolicy policy) {
         this.networkPolicy = policy;
+        return this;
     }
 
     public NetworkPolicy getNetworkPolicy() {

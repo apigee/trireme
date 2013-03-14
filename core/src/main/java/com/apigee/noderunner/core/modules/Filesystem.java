@@ -129,7 +129,7 @@ public class Filesystem
         private File translatePath(String path)
             throws NodeOSException
         {
-            File trans = runner.getEnvironment().translatePath(path);
+            File trans = runner.translatePath(path);
             if (trans == null) {
                 throw new NodeOSException(Constants.ENOENT);
             }

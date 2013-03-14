@@ -6,7 +6,7 @@ var ProcessWrap = process.binding('noderunner_process_wrap');
 
 var debug;
 if (process.env.NODE_DEBUG && /child_process/.test(process.env.NODE_DEBUG)) {
-  debug = function(x) { console.error('HTTP: %s', x); };
+  debug = function(x) { console.error('child_process: %s', x); };
 } else {
   debug = function() { };
 }

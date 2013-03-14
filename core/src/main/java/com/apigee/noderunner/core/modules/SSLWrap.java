@@ -146,7 +146,7 @@ public class SSLWrap
         {
             char[] passphrase = p.toCharArray();
             try {
-                FileInputStream keyIn = new FileInputStream(runner.getEnvironment().translatePath(name));
+                FileInputStream keyIn = new FileInputStream(runner.translatePath(name));
                 try {
                     KeyStore keyStore = KeyStore.getInstance("JKS");
                     keyStore.load(keyIn, passphrase);
@@ -171,7 +171,7 @@ public class SSLWrap
         public void setTrustStore(String name)
         {
             try {
-                FileInputStream keyIn = new FileInputStream(runner.getEnvironment().translatePath(name));
+                FileInputStream keyIn = new FileInputStream(runner.translatePath(name));
                 try {
                     KeyStore trustStore = KeyStore.getInstance("JKS");
                     trustStore.load(keyIn, null);

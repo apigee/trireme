@@ -13,8 +13,9 @@ import org.slf4j.LoggerFactory;
 import java.lang.reflect.InvocationTargetException;
 
 /**
- * This implements the same "evals" module as regular Node. It's used by the VM and module scripts
- * to load and run code.
+ * This implements the same "evals" module as regular Node. It's now only used by the "module" module
+ * for compatibility with the original node code. The "vm" module is now implemented differently
+ * to make everything a lot simpler.
  */
 public class Evals
     implements InternalNodeModule

@@ -224,7 +224,19 @@ public class NodeEnvironment
             whitelist.add("org.mozilla.javascript.EcmaError");
             whitelist.add("org.mozilla.javascript.EvaluatorException");
             whitelist.add("org.mozilla.javascript.JavaScriptException");
+            whitelist.add("org.mozilla.javascript.RhinoException");
+            whitelist.add("java.lang.Byte");
+            whitelist.add("java.lang.Character");
+            whitelist.add("java.lang.Double");
+            whitelist.add("java.lang.Exception");
+            whitelist.add("java.lang.Float");
+            whitelist.add("java.lang.Integer");
+            whitelist.add("java.lang.Long");
+            whitelist.add("java.lang.Short");
+            whitelist.add("java.lang.Number");
             whitelist.add("java.lang.String");
+            whitelist.add("java.lang.Throwable");
+            whitelist.add("java.lang.Void");
         }
 
         @Override

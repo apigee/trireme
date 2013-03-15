@@ -53,6 +53,7 @@ try {
   Script.runInContext('throw new Error()', context, 'expected-filename.js');
 }
 catch (e) {
+  console.log('Error: ' + e.stack);
   gh1140Exception = e;
   assert.ok(/expected-filename/.test(e.stack),
             'expected appearance of filename in Error stack');

@@ -83,7 +83,6 @@ public class ModuleRegistry
         addCompiledModule("timers", "com.apigee.noderunner.fromnode.timers");
         addCompiledModule("url", "com.apigee.noderunner.fromnode.url");
         addCompiledModule("util", "com.apigee.noderunner.fromnode.util");
-        addCompiledModule("vm", "com.apigee.noderunner.fromnode.vm");
         addCompiledModule("zlib", "com.apigee.noderunner.fromnode.zlib");
 
         addCompiledModule("http", "com.apigee.noderunner.scripts.adaptorhttp");
@@ -92,6 +91,7 @@ public class ModuleRegistry
         addCompiledModule("noderunner_metrics", "com.apigee.noderunner.scripts.noderunner_metrics");
         addCompiledModule("tls", "com.apigee.noderunner.scripts.tls");
         addCompiledModule("tls_checkidentity", "com.apigee.noderunner.scripts.tls_checkidentity");
+        addCompiledModule("vm", "com.apigee.noderunner.scripts.vm");
     }
 
     private void compileAndAdd(Context cx, String name, String script)

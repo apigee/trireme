@@ -1,0 +1,22 @@
+<ExcludedTests>
+    <!-- This file contains a list of tests that, although they exist in the Node test suite, we have excluded
+         them. This lets us simply copy the Node test suite to ours rather than try to maintain a file synchronization,
+         but we can exclude them here. -->
+    <Excluded>
+        <Name>test-regression-object-prototype.js</Name>
+        <Reason>Relies on modifying the protype of "Object," which we wish to disable in our multi-tenant
+        environment.</Reason>
+    </Excluded>
+    <Excluded>
+        <Name>test-http-unix-socket.js</Name>
+        <Reason>UNIX sockets are not supported in Noderunner or in Java.</Reason>
+    </Excluded>
+    <Excluded>
+        <Name>test-pipe-address.js</Name>
+        <Reason>UNIX sockets are not supported in Noderunner or in Java.</Reason>
+    </Excluded>
+    <Excluded>
+        <Name>test-https-pfx.js</Name>
+        <Description>Depends on internal SSL errors and cert parsing code.</Description>
+    </Excluded>
+</ExcludedTests>

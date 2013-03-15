@@ -6,16 +6,26 @@ import org.junit.BeforeClass;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
+import org.w3c.dom.Document;
+import org.w3c.dom.Node;
+import org.xml.sax.SAXException;
+
+import javax.xml.parsers.DocumentBuilder;
+import javax.xml.parsers.DocumentBuilderFactory;
+import javax.xml.parsers.ParserConfigurationException;
 
 import static org.junit.Assert.*;
 
 import java.io.File;
+import java.io.FileInputStream;
 import java.io.FileOutputStream;
 import java.io.FilenameFilter;
 import java.io.IOException;
+import java.io.InputStream;
 import java.io.PrintWriter;
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.HashSet;
 import java.util.Map;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -33,7 +43,8 @@ public class JavaScriptTest
     public static final String NETTY_ADAPTER = "netty";
 
     private static final Pattern isJs = Pattern.compile(".+\\.js$");
-    private static final Pattern isHttp = Pattern.compile("^test-http-.+");
+    private static final Pattern isHttp = Pattern.compile("^test-http.+");
+    private static final DocumentBuilderFactory docFactory = DocumentBuilderFactory.newInstance();
 
     private final File fileName;
     private final String adapter;
@@ -60,8 +71,20 @@ public class JavaScriptTest
         resultWriter.close();
     }
 
+    /**
+     * Figure out what tests to run by enumerating all the tests in the specified test directories,
+     * then putting them on a list of tests to run using JUnit. That way we use the Node test suite but run it
+     * in JUnit so that we can track results. We do it like this:
+     * <ol>
+     *     <li>Enumerate the ".js" files in the directory, or use the "TestFile" property to override</li>
+     *     <li>Remove any tests that are on the excluded list, which is loaded from "excluded-tests.txt"</li>
+     *     <li>Run any HTTP tests twice, once with native Node HTTP and once with Netty</li>
+     * </ol>
+     */
+
     @Parameterized.Parameters(name="{index}: {0} ({1})")
     public static Collection<Object[]> enumerateTests()
+        throws IOException, SAXException, ParserConfigurationException
     {
         String testFile = System.getProperty(TEST_FILE_NAME_PROP);
         String adapter = System.getProperty(TEST_ADAPTER_PROP);
@@ -93,21 +116,75 @@ public class JavaScriptTest
             }
         });
 
+        HashSet<String> excluded = loadExclusions();
+
         ArrayList<Object[]> ret = new ArrayList<Object[]>();
         if (files == null) {
             return ret;
         }
         for (File f : files) {
-            if (adapter != null) {
-                ret.add(new Object[] { f, adapter });
+            if (excluded.contains(f.getName())) {
+                System.out.println("Skipping: " + f.getName());
             } else {
-                ret.add(new Object[] { f, DEFAULT_ADAPTER });
-                if (isHttp.matcher(f.getName()).matches()) {
-                    ret.add(new Object[] { f, NETTY_ADAPTER });
+                if (adapter != null) {
+                    ret.add(new Object[] { f, adapter });
+                } else {
+                    ret.add(new Object[] { f, DEFAULT_ADAPTER });
+                    if (isHttp.matcher(f.getName()).matches()) {
+                        ret.add(new Object[] { f, NETTY_ADAPTER });
+                    }
                 }
             }
         }
         return ret;
+    }
+
+    private static HashSet<String> loadExclusions()
+        throws IOException, SAXException, ParserConfigurationException
+    {
+        // Maybe by 2020 we can get JSON parsing built in to Java, but I am hesitant to pull in another dependency
+        InputStream exclusionFile =
+            JavaScriptTest.class.getResourceAsStream("/excluded-tests.xml");
+        if (exclusionFile == null) {
+            throw new AssertionError("Can't load test exclusions");
+        }
+        try {
+            DocumentBuilder builder = docFactory.newDocumentBuilder();
+            Document exclusions =
+                builder.parse(exclusionFile);
+
+            HashSet<String> ret = new HashSet<String>();
+            Node top = exclusions.getDocumentElement();
+            Node n = top.getFirstChild();
+            while (n != null) {
+                if ("Excluded".equals(n.getNodeName())) {
+                    Node c = n.getFirstChild();
+                    while (c != null) {
+                        if ("Name".equals(c.getNodeName())) {
+                            ret.add(getTextChildren(c));
+                        }
+                        c = c.getNextSibling();
+                    }
+                }
+                n = n.getNextSibling();
+            }
+            return ret;
+        } finally {
+            exclusionFile.close();
+        }
+    }
+
+    private static String getTextChildren(Node n)
+    {
+        StringBuilder s = new StringBuilder();
+        Node c = n.getFirstChild();
+        while (c != null) {
+            if ((c.getNodeType() == Node.TEXT_NODE) || (c.getNodeType() == Node.CDATA_SECTION_NODE)) {
+                s.append(c.getNodeValue());
+            }
+            c = c.getNextSibling();
+        }
+        return s.toString();
     }
 
     public JavaScriptTest(File fileName, String adapter)

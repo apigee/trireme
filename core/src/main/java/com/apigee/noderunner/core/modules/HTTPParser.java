@@ -247,8 +247,7 @@ public class HTTPParser
             info.put("versionMinor", info, result.getMinor());
             info.put("method", info, result.getMethod());
             info.put("statusCode", info, result.getStatusCode());
-            // TODO implement this!
-            info.put("upgrade", info, false);
+            info.put("upgrade", info, result.isUpgradeRequested());
             info.put("shouldKeepAlive", info, result.shouldKeepAlive());
             Object ret = onHeadersComplete.call(cx, onHeadersComplete, this, new Object[] { info });
             if ((ret == null) || (!(ret instanceof Boolean))) {

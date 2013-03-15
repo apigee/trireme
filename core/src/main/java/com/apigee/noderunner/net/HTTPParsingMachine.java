@@ -45,6 +45,8 @@ public class HTTPParsingMachine
     private int         statusCode;
     private String      reasonPhrase;
     private boolean     shouldKeepAlive;
+    private boolean     upgradeHeader;
+    private boolean     connectionUpgrade;
     private Map.Entry<String, String> lastHeader;
     private Map.Entry<String, String> lastTrailer;
     private int         contentLength;
@@ -128,6 +130,8 @@ public class HTTPParsingMachine
         statusCode = 0;
         reasonPhrase = null;
         shouldKeepAlive = false;
+        upgradeHeader = false;
+        connectionUpgrade = false;
         lastHeader = null;
         contentLength = 0;
         readLength = -1;
@@ -314,7 +318,11 @@ public class HTTPParsingMachine
                 shouldKeepAlive = false;
             } else if (value.equalsIgnoreCase("keep-alive")) {
                 shouldKeepAlive = true;
+            } else if (value.equalsIgnoreCase("upgrade")) {
+                connectionUpgrade = true;
             }
+        } else if (key.equalsIgnoreCase("Upgrade")) {
+            upgradeHeader = true;
         }
         return true;
     }
@@ -544,6 +552,11 @@ public class HTTPParsingMachine
         public boolean shouldKeepAlive()
         {
             return shouldKeepAlive;
+        }
+
+        public boolean isUpgradeRequested()
+        {
+            return (upgradeHeader && connectionUpgrade);
         }
 
         public String getUri()

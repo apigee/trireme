@@ -1,4 +1,5 @@
 var path = require('path'),
+    exec = require('child_process').exec,
     http = require('http');
 
 var port = parseInt(process.env.PORT || 8000);
@@ -95,13 +96,12 @@ var server = http.createServer(function (req, res) {
                             'Transfer-Encoding': 'chunked' });
     // send body in chunks
     var len = body.length;
-    var step = ~~(len / n_chunks) || len;
+    var step = Math.floor(len / n_chunks) || 1;
 
-    for (var i = 0; i < len; i += step) {
-      res.write(body.slice(i, i + step));
+    for (var i = 0, n = (n_chunks - 1); i < n; ++i) {
+      res.write(body.slice(i * step, i * step + step));
     }
-
-    res.end();
+    res.end(body.slice((n_chunks - 1) * step));
   } else {
     var content_length = body.length.toString();
 

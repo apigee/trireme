@@ -247,7 +247,8 @@ public class HTTPParser
             info.put("versionMinor", info, result.getMinor());
             info.put("method", info, result.getMethod());
             info.put("statusCode", info, result.getStatusCode());
-            info.put("upgrade", info, result.isUpgradeRequested());
+            // HTTP code requires this hint to handle upgrade and connect requests
+            info.put("upgrade", info, result.isUpgradeRequested() || ("connect".equalsIgnoreCase(result.getMethod())));
             info.put("shouldKeepAlive", info, result.shouldKeepAlive());
             Object ret = onHeadersComplete.call(cx, onHeadersComplete, this, new Object[] { info });
             if ((ret == null) || (!(ret instanceof Boolean))) {

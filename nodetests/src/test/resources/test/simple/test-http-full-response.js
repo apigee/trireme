@@ -47,6 +47,7 @@ var runs = 0;
 
 function runAb(opts, callback) {
   var command = 'ab ' + opts + ' http://127.0.0.1:' + common.PORT + '/';
+  console.log('Going to run ' + command);
   exec(command, function(err, stdout, stderr) {
     if (err) {
       if (/ab|apr/mi.test(stderr)) {
@@ -56,6 +57,9 @@ function runAb(opts, callback) {
       process.exit();
       return;
     }
+
+    console.log('ab stdout = ' + stdout);
+    console.log('ab stderr = ' + stderr);
 
     var m = /Document Length:\s*(\d+) bytes/mi.exec(stdout);
     var documentLength = parseInt(m[1]);

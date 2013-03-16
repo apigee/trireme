@@ -22,8 +22,6 @@ import org.slf4j.LoggerFactory;
 import static com.apigee.noderunner.core.internal.ArgUtils.*;
 
 import java.io.IOException;
-import java.io.InputStream;
-import java.io.OutputStream;
 import java.lang.reflect.InvocationTargetException;
 import java.util.HashMap;
 import java.util.Map;
@@ -197,6 +195,12 @@ public class Process
         public void setArgv(int index, String val)
         {
             argv.put(index, argv, val);
+        }
+
+        @JSGetter("execArgv")
+        public Object getExecArgv()
+        {
+            return Context.getCurrentContext().newArray(this, 0);
         }
 
         public void setEnv(EnvImpl env) {

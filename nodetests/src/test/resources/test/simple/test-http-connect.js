@@ -81,6 +81,7 @@ server.listen(common.PORT, function() {
 
     var data = firstBodyChunk.toString();
     socket.on('data', function(buf) {
+      console.log('Got data: ' + buf);
       data += buf.toString();
     });
     socket.on('end', function() {

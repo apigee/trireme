@@ -12,11 +12,32 @@
         <Reason>UNIX sockets are not supported in Noderunner or in Java.</Reason>
     </Excluded>
     <Excluded>
-        <Name>test-pipe-address.js</Name>
-        <Reason>UNIX sockets are not supported in Noderunner or in Java.</Reason>
+        <Name>test-http-client-pipe-end.js</Name>
+        <Description>Pipes are not supported in Noderunner or in Java.</Description>
+    </Excluded>
+    <Excluded>
+        <Name>test-http-client-response-domain.js</Name>
+        <Description>Pipes are not supported in Noderunner or in Java.</Description>
     </Excluded>
     <Excluded>
         <Name>test-https-pfx.js</Name>
         <Description>Depends on internal SSL errors and cert parsing code.</Description>
+    </Excluded>
+    <Excluded>
+        <Name>test-pipe-address.js</Name>
+        <Reason>UNIX sockets are not supported in Noderunner or in Java.</Reason>
+    </Excluded>
+
+    <Excluded>
+        <Name>test-net-listen-fd0.js</Name>
+        <Description>Listening on a file descriptor is not supported in Noderunner or Java.</Description>
+    </Excluded>
+    <Excluded>
+        <Name>test-net-pipe-connect-errors.js</Name>
+        <Description>No pipes in NR or Java.</Description>
+    </Excluded>
+    <Excluded>
+        <Name>test-eval-require.js</Name>
+        <Description>We don't support the same command-line params.</Description>
     </Excluded>
 </ExcludedTests>

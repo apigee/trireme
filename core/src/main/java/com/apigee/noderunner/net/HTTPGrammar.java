@@ -38,7 +38,7 @@ public interface HTTPGrammar
     public static final String HEADER =         "^(" + TOKENS_CL + "+):" + LWS_CL + "*(" + NOT_CTLS_CL + "*)" + LWS_CL + "*$";
     public static final String HEADER_CONTINUATION = '^' + LWS_CL + "+(" + NOT_CTLS_CL + "*)" + LWS_CL + "*$";
     public static final String REQUEST_LINE =   "^(" + TOKENS_CL + "+) (" + TEXTS_CL + "+) HTTP/(" + DIGITS_CL + ").(" + DIGITS_CL + ")$";
-    public static final String STATUS_LINE =    "^HTTP/(" + DIGITS_CL + ").(" + DIGITS_CL + ") (" + DIGITS_CL + "+) (" + TEXTS_CL + "+)$";
+    public static final String STATUS_LINE =    "^HTTP/(" + DIGITS_CL + ").(" + DIGITS_CL + ") (" + DIGITS_CL + "+)( " + TEXTS_CL + "+)?$";
 
     public static final Pattern HEADER_PATTERN =   Pattern.compile(HEADER);
     public static final Pattern HEADER_CONTINUATION_PATTERN = Pattern.compile(HEADER_CONTINUATION);

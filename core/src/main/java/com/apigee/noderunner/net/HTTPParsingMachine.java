@@ -30,6 +30,8 @@ public class HTTPParsingMachine
 
     private enum BodyMode { UNDELIMITED, LENGTH, CHUNKED }
 
+    public static final String CONNECT_METHOD = "CONNECT";
+
     private final ParsingMode     mode;
     private BodyMode              bodyMode;
     private Status                state;
@@ -182,7 +184,7 @@ public class HTTPParsingMachine
 
         case RESPONSE:
             m = HTTPGrammar.STATUS_LINE_PATTERN.matcher(startLine);
-            if (!m.matches() || (m.groupCount() != 4)) {
+            if (!m.matches() || (m.groupCount() < 4)) {
                 state = Status.ERROR;
                 return true;
             }
@@ -194,7 +196,9 @@ public class HTTPParsingMachine
                 state = Status.ERROR;
                 return true;
             }
-            reasonPhrase = m.group(4);
+            if (m.groupCount() > 4) {
+                reasonPhrase = m.group(4).trim();
+            }
             break;
         }
 
@@ -219,6 +223,10 @@ public class HTTPParsingMachine
         while (line != null) {
             if (line.isEmpty()) {
                 state = Status.BODY;
+                if ((upgradeHeader && connectionUpgrade) || CONNECT_METHOD.equalsIgnoreCase(method)) {
+                    // Stop processing data after headers on a CONNECT or Upgrade
+                    return false;
+                }
                 return true;
 
             } else {

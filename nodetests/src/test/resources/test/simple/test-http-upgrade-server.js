@@ -95,7 +95,6 @@ function test_upgrade_with_listener(_server) {
   });
 
   conn.on('data', function(data) {
-    console.log('Got back from server: ' + data);
     state++;
 
     assert.equal('string', typeof data);

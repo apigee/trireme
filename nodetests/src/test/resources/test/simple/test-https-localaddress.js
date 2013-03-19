@@ -24,16 +24,14 @@ var https = require('https'),
     fs = require('fs'),
     assert = require('assert');
 
-/*
 if (['linux', 'win32'].indexOf(process.platform) == -1) {
   console.log('Skipping platform-specific test.');
   process.exit();
 }
-*/
 
 var options = {
-  keystore: common.fixturesDir + '/keys/agent1.jks',
-  passphrase: 'secure'
+  key: fs.readFileSync(common.fixturesDir + '/keys/agent1-key.pem'),
+  cert: fs.readFileSync(common.fixturesDir + '/keys/agent1-cert.pem')
 };
 
 var server = https.createServer(options, function (req, res) {
@@ -44,6 +42,7 @@ var server = https.createServer(options, function (req, res) {
     res.writeHead(200, { 'Content-Type': 'text/plain' });
     res.end('You are from: ' + req.connection.remoteAddress);
   });
+  req.resume();
 });
 
 server.listen(common.PORT, "127.0.0.1", function() {
@@ -61,6 +60,7 @@ server.listen(common.PORT, "127.0.0.1", function() {
       server.close();
       process.exit();
     });
+    res.resume();
   });
   req.end();
 });

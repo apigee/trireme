@@ -30,8 +30,8 @@ var https = require('https');
 var fs = require('fs');
 
 var options = {
-  keystore: common.fixturesDir + '/keys/agent1.jks',
-  passphrase: 'secure'
+  key: fs.readFileSync(common.fixturesDir + '/keys/agent1-key.pem'),
+  cert: fs.readFileSync(common.fixturesDir + '/keys/agent1-cert.pem')
 };
 
 
@@ -54,6 +54,7 @@ server.listen(common.PORT, function() {
           port: common.PORT,
           rejectUnauthorized: false
         }, function(res) {
+          res.resume();
           console.log(res.statusCode);
           if (++responses == N * M) server.close();
         }).on('error', function(e) {

@@ -37,22 +37,22 @@ dns.lookup('127.0.0.1', function(error, result, addressType) {
   assert.equal(4, addressType);
 });
 
-/* TODO GREG IPv6 isn't in our test environment yet.
 dns.lookup('::1', function(error, result, addressType) {
-  console.log('::1 == ' + result);
   assert.equal('::1', result);
   assert.equal(6, addressType);
 });
-*/
+
+// Try calling resolve with an unsupported type.
+assert.throws(function() {
+  dns.resolve('www.google.com', 'HI');
+}, /Unknown type/);
 
 // Windows doesn't usually have an entry for localhost 127.0.0.1 in
 // C:\Windows\System32\drivers\etc\hosts
 // so we disable this test on Windows.
-/* TODO GREG haven't implemented resolve yet
 if (process.platform != 'win32') {
   dns.resolve('127.0.0.1', 'PTR', function(error, domains) {
     if (error) throw error;
     assert.ok(Array.isArray(domains));
   });
 }
-*/

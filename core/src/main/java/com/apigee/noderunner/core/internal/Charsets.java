@@ -11,6 +11,8 @@ public class Charsets
     public static final Charset UCS2 = Charset.forName("UTF-16LE");
     public static final Charset BASE64 = Charset.forName("Node-Base64");
     public static final Charset ASCII = Charset.forName("US-ASCII");
+    public static final Charset NODE_HEX = Charset.forName("Node-Hex");
+    public static final Charset NODE_BINARY = Charset.forName("Node-Binary");
     public static final Charset DEFAULT = UTF8;
 
     private static final Charsets charsets = new Charsets();
@@ -21,16 +23,23 @@ public class Charsets
     {
         encodings.put("undefined", DEFAULT);
         encodings.put("utf8", UTF8);
+        encodings.put("UTF8", UTF8);
         encodings.put("utf-8", UTF8);
+        encodings.put("UTF-8", UTF8);
         encodings.put("utf16le", UCS2);
+        encodings.put("UTF16LE", UCS2);
         encodings.put("utf-16le", UCS2);
+        encodings.put("UTF-16LE", UCS2);
         encodings.put("ucs2", UCS2);
+        encodings.put("UCS2", UCS2);
         encodings.put("ucs-2", UCS2);
+        encodings.put("UCS-2", UCS2);
         encodings.put("ascii", ASCII);
+        encodings.put("ASCII", ASCII);
         // These are implemented in NodeCharsetEncoder
-        encodings.put("binary", Charset.forName("Node-Binary"));
-        encodings.put("hex", Charset.forName("Node-Hex"));
-        encodings.put("base64", Charset.forName("Node-Base64"));
+        encodings.put("binary", NODE_BINARY);
+        encodings.put("hex", NODE_HEX);
+        encodings.put("base64", BASE64);
     }
 
     public static final Charsets get()

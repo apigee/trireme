@@ -32,7 +32,7 @@ var found, found2;
 
 fs.open(fn, 'w', 0644, function(err, fd) {
   if (err) throw err;
-  console.log('open done. Got ' + fd);
+  console.log('open done');
   fs.write(fd, '', 0, 'utf8', function(err, written) {
     assert.equal(0, written);
   });

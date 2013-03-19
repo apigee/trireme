@@ -31,8 +31,8 @@ var fs = require('fs');
 var path = require('path');
 
 var options = {
-  keystore: path.join(common.fixturesDir, 'test.jks'),
-  passphrase: 'secure'
+  key: fs.readFileSync(path.join(common.fixturesDir, 'test_key.pem')),
+  cert: fs.readFileSync(path.join(common.fixturesDir, 'test_cert.pem'))
 };
 
 var bufSize = 1024 * 1024;

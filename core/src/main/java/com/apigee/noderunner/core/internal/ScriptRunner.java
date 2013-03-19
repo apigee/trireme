@@ -282,6 +282,18 @@ public class ScriptRunner
         scope.put("errno", scope, 0);
     }
 
+    public Object getErrno()
+    {
+        if (scope.has("errno", scope)) {
+            Object errno = scope.get("errno", scope);
+            if (errno == null) {
+                return Context.getUndefinedValue();
+            }
+            return scope.get("errno", scope);
+        }
+        return Context.getUndefinedValue();
+    }
+
     private void setUpContext(Context cx)
     {
         env.setUpContext(cx);
@@ -421,15 +433,7 @@ public class ScriptRunner
                 }
 
                 // Call tick functions but don't let everything else starve unless configured to do so
-                int tickCount = 0;
-                Activity nextCall = tickFunctions.poll();
-                while (nextCall != null) {
-                    nextCall.execute(cx);
-                    if (++tickCount > maxTickDepth) {
-                        break;
-                    }
-                    nextCall = tickFunctions.poll();
-                }
+                executeTicks(cx);
 
                 // Check the timer queue for all expired timers
                 Activity timed = timerQueue.peek();
@@ -475,6 +479,20 @@ public class ScriptRunner
             process.fireEvent("uncaughtException", re);
         log.debug("  handled = {}", handled);
         return handled;
+    }
+
+    public void executeTicks(Context cx)
+        throws RhinoException
+    {
+        int tickCount = 0;
+        Activity nextCall = tickFunctions.poll();
+        while (nextCall != null) {
+            nextCall.execute(cx);
+            if (++tickCount > maxTickDepth) {
+                break;
+            }
+            nextCall = tickFunctions.poll();
+        }
     }
 
     /**
@@ -565,7 +583,7 @@ public class ScriptRunner
             // Set up the main native module
             mainModule = (Scriptable)require("module", cx);
 
-            // And finally the console needs to have all that other stuff available
+            // And finally the console needs to have all that other stuff available. Make this one lazy.
             scope.defineProperty("console", this,
                                  Utils.findMethod(ScriptRunner.class, "getConsole"),
                                  null, 0);

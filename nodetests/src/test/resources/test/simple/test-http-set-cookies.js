@@ -63,7 +63,6 @@ server.on('listening', function() {
   // two set-cookie headers
 
   http.get({ port: common.PORT, path: '/two' }, function(res) {
-    console.log('set-cookie = ' + res.headers['set-cookie']);
     assert.deepEqual(['A', 'B'], res.headers['set-cookie']);
     assert.equal('text/plain', res.headers['content-type']);
 

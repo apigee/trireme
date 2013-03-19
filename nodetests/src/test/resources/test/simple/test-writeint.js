@@ -22,8 +22,7 @@
 /*
  * Tests to verify we're writing signed integers correctly
  */
-//var SlowBuffer = process.binding('buffer').SlowBuffer;
-var SlowBuffer = require('buffer').SlowBuffer;
+var SlowBuffer = process.binding('buffer').SlowBuffer;
 var common = require('../common');
 var ASSERT = require('assert');
 

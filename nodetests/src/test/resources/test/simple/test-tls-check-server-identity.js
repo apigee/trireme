@@ -31,8 +31,13 @@ var tests = [
   { host: 'a.com', cert: { subject: { CN: 'b.com' } }, result: false },
   { host: 'a.com', cert: { subject: { CN: 'a.com.' } }, result: true },
 
-  // No wildcards in CN
-  { host: 'b.a.com', cert: { subject: { CN: '*.a.com' } }, result: false },
+  // Wildcards in CN
+  { host: 'b.a.com', cert: { subject: { CN: '*.a.com' } }, result: true },
+  { host: 'b.a.com', cert: {
+    subjectaltname: 'DNS:omg.com',
+    subject: { CN: '*.a.com' } },
+    result: false
+  },
 
   // Multiple CN fields
   {
@@ -69,7 +74,7 @@ var tests = [
       subjectaltname: 'DNS:*.a.com',
       subject: { CN: 'a.com' }
     },
-    result: true
+    result: false
   },
   {
     host: 'a.com', cert: {
@@ -193,14 +198,12 @@ var tests = [
       subjectaltname: 'DNS:a.com',
       subject: { CN: 'localhost' }
     },
-    result: true
+    result: false
   },
 ];
 
 tests.forEach(function(test, i) {
-  var result = tls.checkServerIdentity(test.host, test.cert);
-  console.log('Test# ' + i + ' result = ' + result +
-              ' expected = ' + test.result);
-  assert.ok((test.result === result),
+  assert.equal(tls.checkServerIdentity(test.host, test.cert),
+               test.result,
                'Test#' + i + ' failed: ' + util.inspect(test));
 });

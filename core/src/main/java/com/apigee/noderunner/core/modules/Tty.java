@@ -43,6 +43,10 @@ public class Tty
         @JSFunction
         public boolean isatty(int fd)
         {
+            if ((fd >= 0) && (fd <= 2)) {
+                // The presense of a Console object tells us that we are in fact a tty.
+                return (System.console() != null);
+            }
             return false;
         }
 

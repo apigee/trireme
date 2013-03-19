@@ -33,8 +33,8 @@ var join = require('path').join;
 var spawn = require('child_process').spawn;
 
 var options = {
-  keystore: join(common.fixturesDir, 'agent.jks'),
-  passphrase: 'secure'
+  key: fs.readFileSync(join(common.fixturesDir, 'agent.key')),
+  cert: fs.readFileSync(join(common.fixturesDir, 'alice.crt'))
 };
 var verified = false;
 
@@ -47,7 +47,7 @@ server.listen(common.PORT, function() {
     rejectUnauthorized: false
   }, function() {
     var peerCert = socket.getPeerCertificate();
-    common.log(util.inspect(peerCert));
+    common.debug(util.inspect(peerCert));
     assert.equal(peerCert.subject.subjectAltName,
         'uniformResourceIdentifier:http://localhost:8000/alice.foaf#me');
     verified = true;

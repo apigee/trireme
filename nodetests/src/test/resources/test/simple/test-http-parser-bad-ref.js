@@ -12,14 +12,13 @@ var messagesComplete = 0;
 
 function flushPool() {
   new Buffer(Buffer.poolSize - 1);
-  //Noderunner not implemented yet
-  //gc();
+  gc();
 }
 
 function demoBug(part1, part2) {
   flushPool();
 
-  var parser = new HTTPParser(HTTPParser.REQUEST);
+  var parser = new HTTPParser('REQUEST');
 
   parser.headers = [];
   parser.url = '';

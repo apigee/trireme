@@ -30,17 +30,14 @@ var serverConnected = false;
 var clientConnected = false;
 
 var options = {
-  keystore: path.join(common.fixturesDir, 'test.jks'),
-  passphrase: 'secure'
+  key: fs.readFileSync(path.join(common.fixturesDir, 'test_key.pem')),
+  cert: fs.readFileSync(path.join(common.fixturesDir, 'test_cert.pem'))
 };
 
 var server = tls.createServer(options, function(socket) {
-  console.log('Server connected');
   serverConnected = true;
   socket.end('Hello');
-  console.log('end sent');
-});
-server.listen(common.PORT, function() {
+}).listen(common.PORT, function() {
   var socket = net.connect({
     port: common.PORT,
     rejectUnauthorized: false
@@ -49,15 +46,12 @@ server.listen(common.PORT, function() {
       rejectUnauthorized: false,
       socket: socket
     }, function() {
-      console.log('Client connected');
       clientConnected = true;
       var data = '';
       client.on('data', function(chunk) {
-        console.log('Client got data');
         data += chunk.toString();
       });
       client.on('end', function() {
-        console.log('Client got end');
         assert.equal(data, 'Hello');
         server.close();
       });

@@ -34,8 +34,8 @@ var http = require('http');
 var https = require('https');
 
 var options = {
-  keystore: common.fixturesDir + '/keys/agent1.jks'),
-  passphrase: 'secure'
+  key: fs.readFileSync(common.fixturesDir + '/keys/agent1-key.pem'),
+  cert: fs.readFileSync(common.fixturesDir + '/keys/agent1-cert.pem')
 };
 
 var body = 'hello world\n';
@@ -55,6 +55,7 @@ server_http.listen(common.PORT, function() {
     rejectUnauthorized: false
   }, function(res) {
     server_http.close();
+    res.resume();
   });
   // These methods should exist on the request and get passed down to the socket
   req.setNoDelay(true);
@@ -77,6 +78,7 @@ server_https.listen(common.PORT+1, function() {
     rejectUnauthorized: false
   }, function(res) {
     server_https.close();
+    res.resume();
   });
   // These methods should exist on the request and get passed down to the socket
   req.setNoDelay(true);

@@ -30,7 +30,7 @@ fs.stat('.', function(err, stats) {
     got_error = true;
   } else {
     console.dir(stats);
-    //assert.ok(stats.mtime instanceof Date);
+    assert.ok(stats.mtime instanceof Date);
     success_count++;
   }
   assert(this === global);
@@ -48,10 +48,7 @@ fs.lstat('.', function(err, stats) {
 });
 
 // fstat
-// TODO Greg in Java directories can't be opened like files
-// We may choose to fix this in the future.
-// In the meantime, we will replace '.' here with __filename.
-fs.open(__filename, 'r', undefined, function(err, fd) {
+fs.open('.', 'r', undefined, function(err, fd) {
   assert.ok(!err);
   assert.ok(fd);
 
@@ -71,7 +68,7 @@ fs.open(__filename, 'r', undefined, function(err, fd) {
 });
 
 // fstatSync
-fs.open(__filename, 'r', undefined, function(err, fd) {
+fs.open('.', 'r', undefined, function(err, fd) {
   var stats;
   try {
     stats = fs.fstatSync(fd);
@@ -93,9 +90,6 @@ fs.stat(__filename, function(err, s) {
   } else {
     console.dir(s);
     success_count++;
-   
-    console.log('size: ' + s.size);
-    console.log('mtime: ' + s.mtime);
 
     console.log('isDirectory: ' + JSON.stringify(s.isDirectory()));
     assert.equal(false, s.isDirectory());

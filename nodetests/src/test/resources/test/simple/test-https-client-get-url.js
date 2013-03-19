@@ -35,8 +35,8 @@ var fs = require('fs');
 var seen_req = false;
 
 var options = {
-  keystore: common.fixturesDir + '/keys/agent1.jks',
-  passphrase: 'secure'
+  key: fs.readFileSync(common.fixturesDir + '/keys/agent1-key.pem'),
+  cert: fs.readFileSync(common.fixturesDir + '/keys/agent1-cert.pem')
 };
 
 var server = https.createServer(options, function(req, res) {

@@ -24,10 +24,11 @@ function NativeWritableStream(options, handle) {
   this.handle = handle;
 }
 util.inherits(NativeWritableStream, Writable);
+module.exports = NativeWritableStream;
 
 NativeWritableStream.prototype._write = function(chunk, encoding, callback) {
   this.handle.write(chunk, callback);
-}
+};
 
 NativeWritableStream.prototype.close = function() {
   if (!this.state.ended) {
@@ -35,6 +36,6 @@ NativeWritableStream.prototype.close = function() {
   }
   this.handle.close();
   this.emit('close');
-}
+};
 
-exports.NativeWritableStream = NativeWritableStream;
+

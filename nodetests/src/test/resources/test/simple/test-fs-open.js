@@ -31,7 +31,6 @@ try {
   fs.openSync('/path/to/file/that/does/not/exist', 'r');
 }
 catch (e) {
-  console.log('Got exception ' + e);
   assert.equal(e.code, 'ENOENT');
   caughtException = true;
 }
@@ -39,9 +38,6 @@ assert.ok(caughtException);
 
 var openFd;
 fs.open(__filename, 'r', function(err, fd) {
-  console.log('Open done for ' + __filename);
-  console.log('err = ' + err);
-  console.log('fd = ' + fd);
   if (err) {
     throw err;
   }

@@ -33,7 +33,8 @@ var path = require('path');
 // https://github.com/joyent/node/issues/1218
 // uncatchable exception on TLS connection error
 (function() {
-  var keys = path.join(common.fixturesDir, 'test.jks');
+  var cert = fs.readFileSync(path.join(common.fixturesDir, 'test_cert.pem'));
+  var key = fs.readFileSync(path.join(common.fixturesDir, 'test_key.pem'));
 
   var errorEmitted = false;
 
@@ -41,7 +42,7 @@ var path = require('path');
     assert.ok(errorEmitted);
   });
 
-  var conn = tls.connect({keystore: keys, passphrase: 'secure', port: common.PORT}, function() {
+  var conn = tls.connect({cert: cert, key: key, port: common.PORT}, function() {
     assert.ok(false); // callback should never be executed
   });
 

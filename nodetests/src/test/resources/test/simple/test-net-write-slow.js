@@ -32,8 +32,7 @@ buf.fill(0x61); // 'a'
 
 var server = net.createServer(function(socket) {
   socket.setNoDelay();
-  // Greg Noderunner this test doesn't complete in only one second...
-  socket.setTimeout(10000);
+  socket.setTimeout(1000);
   socket.on('timeout', function() {
     assert.fail('flushed: ' + flushed +
                 ', received: ' + received + '/' + SIZE * N);

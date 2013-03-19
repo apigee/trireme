@@ -22,7 +22,7 @@
 /*
  * Tests to verify we're reading in floats correctly
  */
-var SlowBuffer = require('buffer').SlowBuffer;
+var SlowBuffer = process.binding('buffer').SlowBuffer;
 var common = require('../common');
 var ASSERT = require('assert');
 
@@ -36,8 +36,7 @@ function test(clazz) {
   buffer[1] = 0;
   buffer[2] = 0x80;
   buffer[3] = 0x3f;
-  var val = 4.600602988224807e-41;
-  ASSERT.equal(val, buffer.readFloatBE(0));
+  ASSERT.equal(4.600602988224807e-41, buffer.readFloatBE(0));
   ASSERT.equal(1, buffer.readFloatLE(0));
 
   buffer[0] = 0;

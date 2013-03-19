@@ -31,9 +31,9 @@ if (process.platform === 'win32') {
 }
 
 var options = {
-  keystore: common.fixturesDir + '/keys/agent2.jks',
-  passphrase: 'secure',
-  ciphers: 'SSL_RSA_WITH_RC4_128_SHA'
+  key: fs.readFileSync(common.fixturesDir + '/keys/agent2-key.pem'),
+  cert: fs.readFileSync(common.fixturesDir + '/keys/agent2-cert.pem'),
+  ciphers: 'RC4-MD5'
 };
 
 var reply = 'I AM THE WALRUS'; // something recognizable

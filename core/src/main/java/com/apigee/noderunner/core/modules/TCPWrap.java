@@ -168,7 +168,15 @@ public class TCPWrap
             }
         }
         @JSFunction
-        public void close()
+        public static void close(Context cx, Scriptable thisObj, Object[] args, Function func)
+        {
+            Function callback = functionArg(args, 0, false);
+            TCPImpl self = (TCPImpl)thisObj;
+
+            self.doClose(cx, callback);
+        }
+
+        private void doClose(Context cx, Function callback)
         {
             super.close();
             try {
@@ -183,6 +191,10 @@ public class TCPWrap
                         log.debug("Closing server channel {}", svrChannel);
                     }
                     svrChannel.close();
+                }
+
+                if (callback != null) {
+                    getRunner().enqueueCallback(callback, this, null, new Object[] {});
                 }
             } catch (IOException ioe) {
                 log.debug("Uncaught exception in channel close: {}", ioe);

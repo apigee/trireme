@@ -25,7 +25,6 @@ import java.lang.reflect.InvocationTargetException;
 public class NativeOutputStreamAdapter
     implements InternalNodeModule
 {
-    public static final String WRITABLE_STREAM_CLASS = "NativeWritableStream";
     public static final String MODULE_NAME = "native_output_stream";
     public static final String WRITABLE_MODULE_NAME = "native_stream_writable";
 
@@ -43,9 +42,6 @@ public class NativeOutputStreamAdapter
     public Object registerExports(Context cx, Scriptable scope, ScriptRunner runner)
         throws InvocationTargetException, IllegalAccessException, InstantiationException
     {
-        // This module depends on the "native_stream_writable" module so load it.
-
-
         ScriptableObject.defineClass(scope, NativeOutputAdapterImpl.class);
         Scriptable exp = cx.newObject(scope);
         return exp;
@@ -59,9 +55,7 @@ public class NativeOutputStreamAdapter
     public static Scriptable createNativeStream(Context cx, Scriptable scope, ScriptRunner runner,
                                                 OutputStream out, boolean noClose)
     {
-        Scriptable nativeStreamModule = (Scriptable)runner.require(WRITABLE_MODULE_NAME, cx);
-        Function ctor =
-            (Function)nativeStreamModule.get(WRITABLE_STREAM_CLASS, nativeStreamModule);
+        Function ctor = (Function)runner.require(WRITABLE_MODULE_NAME, cx);
 
         NativeOutputAdapterImpl adapter =
             (NativeOutputAdapterImpl)cx.newObject(scope, NativeOutputAdapterImpl.CLASS_NAME);
@@ -112,10 +106,6 @@ public class NativeOutputStreamAdapter
                 buf = (Buffer.BufferImpl)chunk;
             } catch (ClassCastException cce) {
                 throw new EvaluatorException("Not a buffer");
-            }
-
-            if (log.isDebugEnabled()) {
-                log.debug("Writing {} to output stream {}", buf.getLength(), self.out);
             }
 
             try {

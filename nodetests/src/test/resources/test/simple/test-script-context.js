@@ -42,7 +42,6 @@ result = script.runInContext(context);
 assert.equal(3, context.foo);
 assert.equal('lala', context.thing);
 
-
 // Issue GH-227:
 Script.runInNewContext('', null, 'some.js');
 
@@ -53,7 +52,6 @@ try {
   Script.runInContext('throw new Error()', context, 'expected-filename.js');
 }
 catch (e) {
-  console.log('Error: ' + e.stack);
   gh1140Exception = e;
   assert.ok(/expected-filename/.test(e.stack),
             'expected appearance of filename in Error stack');
@@ -70,3 +68,10 @@ function isTypeError(o) {
   assert.throws(function() { script.runInContext(e); }, isTypeError);
   assert.throws(function() { vm.runInContext('', e); }, isTypeError);
 }));
+
+// Issue GH-693:
+common.debug('test RegExp as argument to assert.throws');
+script = vm.createScript('var assert = require(\'assert\'); assert.throws(' +
+                         'function() { throw "hello world"; }, /hello/);',
+                         'some.js');
+script.runInNewContext({ require : require });

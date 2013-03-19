@@ -28,14 +28,12 @@ var clientConnected = 0;
 var serverConnected = 0;
 
 var options = {
-  keystore: common.fixturesDir + '/keys/agent1.jks',
-  passphrase: 'secure',
+  key: fs.readFileSync(common.fixturesDir + '/keys/agent1-key.pem'),
+  cert: fs.readFileSync(common.fixturesDir + '/keys/agent1-cert.pem')
 };
 
 var server = tls.Server(options, function(socket) {
-  ++serverConnected;
-  console.log('Connected server ' + serverConnected);
-  if (serverConnected === 2) {
+  if (++serverConnected === 2) {
     server.close();
   }
 });
@@ -46,7 +44,6 @@ server.listen(common.PORT, function() {
     rejectUnauthorized: false
   }, function() {
     ++clientConnected;
-    console.log('Connected client1 ' + clientConnected);
     client1.end();
   });
 
@@ -56,7 +53,6 @@ server.listen(common.PORT, function() {
   });
   client2.on('secureConnect', function() {
     ++clientConnected;
-    console.log('Connected client2 ' + clientConnected);
     client2.end();
   });
 });

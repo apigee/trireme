@@ -47,12 +47,11 @@ server.on('listening', function() {
   });
 
   c.on('data', function(chunk) {
-    console.log(chunk);
+    //console.log(chunk);
     res_buffer += chunk;
   });
 
   c.on('end', function() {
-    console.log('Got end of HTTP/1.0 request');
     c.end();
     assert.ok(! /x-foo/.test(res_buffer), 'Trailer in HTTP/1.0 response.');
     outstanding_reqs--;
@@ -78,7 +77,7 @@ server.on('listening', function() {
   });
 
   c.on('data', function(chunk) {
-    console.log(chunk);
+    //console.log(chunk);
     res_buffer += chunk;
     if (/0\r\n/.test(res_buffer)) { // got the end.
       outstanding_reqs--;
@@ -99,7 +98,7 @@ server.on('listening', function() {
 server.on('listening', function() {
   http.get({ port: common.PORT, path: '/hello', headers: {} }, function(res) {
     res.on('end', function() {
-      console.log(res.trailers);
+      //console.log(res.trailers);
       assert.ok('x-foo' in res.trailers, 'Client doesn\'t see trailers.');
       outstanding_reqs--;
       if (outstanding_reqs == 0) {
@@ -107,6 +106,7 @@ server.on('listening', function() {
         process.exit();
       }
     });
+    res.resume();
   });
   outstanding_reqs++;
 });

@@ -36,8 +36,8 @@ var clientClosed = false;
 var clientSocketClosed = false;
 
 var options = {
-  keystore: path.join(common.fixturesDir, 'test.jks'),
-  passphrase: 'secure'
+  key: fs.readFileSync(path.join(common.fixturesDir, 'test_key.pem')),
+  cert: fs.readFileSync(path.join(common.fixturesDir, 'test_cert.pem'))
 };
 
 var server = tls.createServer(options, function(s) {

@@ -33,8 +33,7 @@ var join = require('path').join;
 var spawn = require('child_process').spawn;
 
 var options = {
-  keystore: join(common.fixturesDir, 'agent.jks'),
-  passphrase: 'secure',
+  key: fs.readFileSync(join(common.fixturesDir, 'agent.key')),
   cert: fs.readFileSync(join(common.fixturesDir, 'multi-alice.crt'))
 };
 var verified = false;

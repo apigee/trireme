@@ -91,9 +91,7 @@ var qsWeirdObjects = [
 ];
 // }}}
 
-// TODO this seems to be a pattern although not documented
-//var Script = require('vm').Script;
-var Script = require('vm');
+var Script = require('vm').Script;
 var foreignObject = Script.runInContext('({"foo": ["bar", "baz"]})',
                                         Script.createContext());
 

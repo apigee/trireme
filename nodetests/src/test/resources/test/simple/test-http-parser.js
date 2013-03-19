@@ -64,7 +64,6 @@ function mustCall(f, times) {
 
   process.setMaxListeners(256);
   process.on('exit', function() {
-    console.log('mustCall ' + f + ' actual = ' + actual + ' times = ' + times);
     assert.equal(actual, times || 1);
   });
 

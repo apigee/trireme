@@ -49,7 +49,6 @@ server.listen(common.PORT, function() {
     assert.equal(200, res.statusCode);
     res.setEncoding('ascii');
     res.on('data', function(chunk) {
-      console.log('Got chunk ' + chunk);
       response += chunk;
     });
     common.error('Got /hello response');

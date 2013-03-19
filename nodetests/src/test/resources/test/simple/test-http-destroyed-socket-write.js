@@ -35,11 +35,11 @@ var server = http.createServer(function(req, res) {
   // simulate a server that is in the process of crashing or something
   // it only crashes after the first request, but before the second,
   // which reuses the connection.
-  // Noderunner TODO: This usage isn't in the code or in the docs...
-  res.end('hallo wereld\n');
-  setTimeout(function() {
-    req.connection.destroy();
-  }, 100);
+  res.end('hallo wereld\n', function() {
+    setTimeout(function() {
+      req.connection.destroy();
+    }, 100);
+  });
 });
 
 var gotFirstResponse = false;

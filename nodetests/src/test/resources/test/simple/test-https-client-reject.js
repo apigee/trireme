@@ -31,8 +31,8 @@ var fs = require('fs');
 var path = require('path');
 
 var options = {
-  keystore: path.join(common.fixturesDir, 'test.jks'),
-  passphrase: 'secure'
+  key: fs.readFileSync(path.join(common.fixturesDir, 'test_key.pem')),
+  cert: fs.readFileSync(path.join(common.fixturesDir, 'test_cert.pem'))
 };
 
 var reqCount = 0;
@@ -41,6 +41,7 @@ var server = https.createServer(options, function(req, res) {
   ++reqCount;
   res.writeHead(200);
   res.end();
+  req.resume();
 }).listen(common.PORT, function() {
   unauthorized();
 });
@@ -51,6 +52,7 @@ function unauthorized() {
     rejectUnauthorized: false
   }, function(res) {
     assert(!req.socket.authorized);
+    res.resume();
     rejectUnauthorized();
   });
   req.on('error', function(err) {
@@ -80,6 +82,7 @@ function authorized() {
   };
   options.agent = new https.Agent(options);
   var req = https.request(options, function(res) {
+    res.resume();
     assert(req.socket.authorized);
     server.close();
   });

@@ -25,8 +25,8 @@ var https = require('https');
 var fs = require('fs');
 
 var options = {
-  keystore: common.fixturesDir + '/keys/agent1.jks',
-  passphrase: 'secure',
+  key: fs.readFileSync(common.fixturesDir + '/keys/agent1-key.pem'),
+  cert: fs.readFileSync(common.fixturesDir + '/keys/agent1-cert.pem')
 };
 
 var invalidLocalAddress = '1.2.3.4';
@@ -39,6 +39,7 @@ var server = https.createServer(options, function(req, res) {
     res.writeHead(200, { 'Content-Type': 'text/plain' });
     res.end('You are from: ' + req.connection.remoteAddress);
   });
+  req.resume();
 });
 
 server.listen(common.PORT, "127.0.0.1", function() {

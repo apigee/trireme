@@ -30,8 +30,7 @@ var listeners_new_listener_emited = [];
 var times_hello_emited = 0;
 
 // sanity check
-// INVALID not valid in Java
-//assert.equal(e.addListener, e.on);
+assert.equal(e.addListener, e.on);
 
 e.on('newListener', function(event, listener) {
   console.log('newListener: ' + event);

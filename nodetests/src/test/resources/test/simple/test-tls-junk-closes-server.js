@@ -30,8 +30,8 @@ var fs = require('fs');
 var net = require('net');
 
 var options = {
-  keystore: common.fixturesDir + '/keys/agent2.jks',
-  passphrase: 'secure'
+  key: fs.readFileSync(common.fixturesDir + '/keys/agent2-key.pem'),
+  cert: fs.readFileSync(common.fixturesDir + '/keys/agent2-cert.pem')
 };
 
 var server = tls.createServer(options, function(s) {

@@ -31,8 +31,8 @@ var tls = require('tls');
 
 assert.throws(function() {
   tls.createServer({ /* empty */}).listen(0);
-}, /missing.+keystore/i);
+}, /missing.+certificate/i);
 
 assert.throws(function() {
   https.createServer({ /* empty */}).listen(0);
-}, /missing.+keystore/i);
+}, /missing.+certificate/i);

@@ -35,7 +35,6 @@ var image = fs.readFileSync(common.fixturesDir + '/person.jpg');
 console.log('image.length = ' + image.length);
 
 var total = 100;
-//var total = 1;
 var requests = 0, responses = 0;
 
 var server = http.Server(function(req, res) {
@@ -90,14 +89,12 @@ var checkedFiles = false;
 function checkFiles() {
   // Should see 1.jpg, 2.jpg, ..., 100.jpg in tmpDir
   var files = fs.readdirSync(common.tmpDir);
-  console.log('We have ' + files.length + ' files');
   assert(total <= files.length);
 
   for (var i = 0; i < total; i++) {
     var fn = i + '.jpg';
     assert.ok(files.indexOf(fn) >= 0, "couldn't find '" + fn + "'");
     var stat = fs.statSync(common.tmpDir + '/' + fn);
-    console.log('Length of ' + fn + ' is ' + stat.size);
     assert.equal(image.length, stat.size,
                  "size doesn't match on '" + fn +
                  "'. Got " + stat.size + ' bytes');

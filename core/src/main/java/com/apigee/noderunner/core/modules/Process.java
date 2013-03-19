@@ -58,11 +58,6 @@ public class Process
 
         ScriptableObject.defineClass(scope, NativeOutputStream.class, false, true);
         ScriptableObject.defineClass(scope, NativeInputStream.class, false, true);
-        NativeInputStream stdin = (NativeInputStream) cx.newObject(scope, NativeInputStream.CLASS_NAME);
-
-        // stdin
-        stdin.initialize(runner, runner.getEnvironment().getAsyncPool(), runner.getStdin());
-        exports.setStdin(stdin);
 
         // env
         EnvImpl env = (EnvImpl) cx.newObject(scope, EnvImpl.CLASS_NAME);
@@ -81,7 +76,7 @@ public class Process
 
         private Scriptable stdout;
         private Scriptable stderr;
-        private Stream.ReadableStream stdin;
+        private Scriptable stdin;
         private Scriptable argv;
         private Scriptable env;
         private long startTime;
@@ -184,12 +179,17 @@ public class Process
         }
 
         @JSGetter("stdin")
-        public Object getStdin() {
+        public Object getStdin()
+        {
+            if (stdin == null) {
+                Context cx = Context.getCurrentContext();
+                runner.requireInternal(NativeInputStreamAdapter.MODULE_NAME, cx);
+                stdin =
+                    NativeInputStreamAdapter.createNativeStream(cx,
+                                                                runner.getScriptScope(), runner,
+                                                                runner.getStdin(), true);
+            }
             return stdin;
-        }
-
-        public void setStdin(Stream.ReadableStream stdin) {
-            this.stdin = stdin;
         }
 
         @JSGetter("argv")
@@ -297,6 +297,12 @@ public class Process
             return "noderunner";
         }
 
+        @JSSetter("title")
+        public void setTitle(String title)
+        {
+            // You can't set it
+        }
+
         @JSGetter("arch")
         public String getArch()
         {
@@ -310,6 +316,20 @@ public class Process
             }
 
             return arch;
+        }
+
+        @JSGetter("pid")
+        public int getPid()
+        {
+            // Java doesn't give us the OS pid. However this is used for debug to show different Node scripts
+            // on the same machine, so return a value that uniquely identifies this ScriptRunner.
+            return System.identityHashCode(runner) % 65536;
+        }
+
+        @JSGetter("_errno")
+        public Object getErrno()
+        {
+            return runner.getErrno();
         }
 
         @JSGetter("platform")
@@ -333,6 +353,13 @@ public class Process
             Function f = functionArg(args, 0, true);
             ProcessImpl proc = (ProcessImpl)thisObj;
             proc.runner.enqueueCallback(f, f, thisObj, new Object[0]);
+        }
+
+        @JSFunction
+        public static void _tickCallback(Context cx, Scriptable thisObj, Object[] args, Function func)
+        {
+            ProcessImpl proc = (ProcessImpl)thisObj;
+            proc.runner.executeTicks(cx);
         }
 
         @JSGetter("maxTickDepth")

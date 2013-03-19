@@ -66,9 +66,6 @@ inputs.forEach(function(value, index) {
 process.on('exit', function() {
   // assert that all timers have run
   inputs.forEach(function(value, index) {
-    console.log('[' + index + '] fired = ' +
-                timeouts[index] + ' interval = ' +
-                intervals[index]);
     assert.equal(true, timeouts[index]);
     assert.equal(true, intervals[index]);
   });

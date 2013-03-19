@@ -79,7 +79,6 @@ public class ModuleRegistry
         addCompiledModule("constants", "com.apigee.noderunner.fromnode.constants");
         addCompiledModule("crypto", "com.apigee.noderunner.fromnode.crypto");
         addCompiledModule("dgram", "com.apigee.noderunner.fromnode.dgram");
-        addCompiledModule("dns", "com.apigee.noderunner.fromnode.dns");
         addCompiledModule("domain", "com.apigee.noderunner.fromnode.domain");
         addCompiledModule("events", "com.apigee.noderunner.fromnode.events");
         addCompiledModule("freelist", "com.apigee.noderunner.fromnode.freelist");
@@ -103,6 +102,7 @@ public class ModuleRegistry
         addCompiledModule("http", "com.apigee.noderunner.scripts.adaptorhttp");
         addCompiledModule("https", "com.apigee.noderunner.scripts.adaptorhttps");
         addCompiledModule("child_process", "com.apigee.noderunner.scripts.child_process");
+        addCompiledModule("native_stream_readable", "com.apigee.noderunner.scripts.native_stream_readable");
         addCompiledModule("native_stream_writable", "com.apigee.noderunner.scripts.native_stream_writable");
         addCompiledModule("noderunner_metrics", "com.apigee.noderunner.scripts.noderunner_metrics");
         addCompiledModule("tls", "com.apigee.noderunner.scripts.tls");

@@ -31,8 +31,8 @@ var fs = require('fs');
 var path = require('path');
 
 var options = {
-  keystore: path.join(common.fixturesDir, 'test.jks'),
-  passphrase: 'secure'
+  key: fs.readFileSync(path.join(common.fixturesDir, 'test_key.pem')),
+  cert: fs.readFileSync(path.join(common.fixturesDir, 'test_cert.pem'))
 };
 
 var connectCount = 0;
@@ -43,15 +43,16 @@ var server = tls.createServer(options, function(socket) {
     common.debug(data.toString());
     assert.equal(data, 'ok');
   });
-});
-server.listen(common.PORT, function() {
+}).listen(common.PORT, function() {
   unauthorized();
 });
 
 function unauthorized() {
-  var socket = tls.connect(common.PORT, function() {
-    // TODO Noderunner we don't work the same way right now...
-    //assert(!socket.authorized);
+  var socket = tls.connect({
+    port: common.PORT,
+    rejectUnauthorized: false
+  }, function() {
+    assert(!socket.authorized);
     socket.end();
     rejectUnauthorized();
   });
@@ -62,9 +63,7 @@ function unauthorized() {
 }
 
 function rejectUnauthorized() {
-  var socket = tls.connect(common.PORT, {
-    rejectUnauthorized: true
-  }, function() {
+  var socket = tls.connect(common.PORT, function() {
     assert(false);
   });
   socket.on('error', function(err) {
@@ -76,8 +75,7 @@ function rejectUnauthorized() {
 
 function authorized() {
   var socket = tls.connect(common.PORT, {
-    truststore: path.join(common.fixturesDir, 'test_certs.jks'),
-    rejectUnauthorized: true
+    ca: [fs.readFileSync(path.join(common.fixturesDir, 'test_cert.pem'))]
   }, function() {
     assert(socket.authorized);
     socket.end();

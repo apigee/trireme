@@ -58,6 +58,7 @@ var server = http.Server(function(req, res) {
     res.end();
     responses_sent += 1;
   });
+  req.resume();
 
   //assert.equal('127.0.0.1', res.connection.remoteAddress);
 });
@@ -74,10 +75,7 @@ server.on('listening', function() {
     assert.equal(200, res.statusCode);
     responses_recvd += 1;
     res.setEncoding('utf8');
-    res.on('data', function(chunk) { 
-      console.log('Got chunk ' + chunk);
-      body0 += chunk; 
-    });
+    res.on('data', function(chunk) { body0 += chunk; });
     common.debug('Got /hello response');
   });
 
@@ -91,15 +89,11 @@ server.on('listening', function() {
       assert.equal(200, res.statusCode);
       responses_recvd += 1;
       res.setEncoding('utf8');
-      res.on('data', function(chunk) { 
-        console.log('Got chunk ' + chunk);
-        body1 += chunk; 
-     });
+      res.on('data', function(chunk) { body1 += chunk; });
       common.debug('Got /world response');
     });
     req.end();
-  }, 100);
-// TODO GREG requests are coming on two sockets...
+  }, 1);
 });
 
 process.on('exit', function() {
@@ -109,9 +103,7 @@ process.on('exit', function() {
   common.debug('responses_sent: ' + responses_sent);
   assert.equal(2, responses_sent);
 
-  console.log('body0 = ' + body0);
   assert.equal('The path was /hello', body0);
-  console.log('body1 = ' + body1);
   assert.equal('The path was /world', body1);
 });
 

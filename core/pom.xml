@@ -53,7 +53,7 @@
         <version>${project.version}</version>
         <configuration>
           <!-- When precompiling, wrap native module code in a function as the Node code expects. -->
-          <codePrefix>(function (exports, module, require, __filename, __dirname) { </codePrefix>
+          <codePrefix>(function (exports, require, module, __filename, __dirname) { </codePrefix>
           <codePostfix>});</codePostfix>
           <generateSource>false</generateSource>
           <optimizationLevel>1</optimizationLevel>

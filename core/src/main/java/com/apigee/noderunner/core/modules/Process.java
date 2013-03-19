@@ -1,12 +1,13 @@
 package com.apigee.noderunner.core.modules;
 
 import com.apigee.noderunner.core.NodeModule;
-import com.apigee.noderunner.core.Sandbox;
 import com.apigee.noderunner.core.internal.NativeInputStream;
 import com.apigee.noderunner.core.internal.NativeOutputStream;
 import com.apigee.noderunner.core.internal.NodeExitException;
+import com.apigee.noderunner.core.internal.PathTranslator;
 import com.apigee.noderunner.core.internal.ScriptRunner;
 import com.apigee.noderunner.core.internal.Version;
+import com.sun.xml.internal.ws.util.xml.ContentHandlerToXMLStreamWriter;
 import org.mozilla.javascript.Context;
 import org.mozilla.javascript.EvaluatorException;
 import org.mozilla.javascript.Function;
@@ -21,9 +22,7 @@ import org.slf4j.LoggerFactory;
 
 import static com.apigee.noderunner.core.internal.ArgUtils.*;
 
-import java.io.IOException;
 import java.lang.reflect.InvocationTargetException;
-import java.util.HashMap;
 import java.util.Map;
 
 /**
@@ -33,6 +32,7 @@ public class Process
     implements NodeModule
 {
     protected static final String OBJECT_NAME = "process";
+    public static final String MODULE_NAME = "process";
     public static final String EXECUTABLE_NAME = "./node";
 
     private static final   double NANO = 1000000000.0;
@@ -41,7 +41,7 @@ public class Process
     @Override
     public String getModuleName()
     {
-        return "process";
+        return MODULE_NAME;
     }
 
     @Override
@@ -58,19 +58,7 @@ public class Process
 
         ScriptableObject.defineClass(scope, NativeOutputStream.class, false, true);
         ScriptableObject.defineClass(scope, NativeInputStream.class, false, true);
-        NativeOutputStream stdout = (NativeOutputStream) cx.newObject(scope, NativeOutputStream.CLASS_NAME);
-        NativeOutputStream stderr = (NativeOutputStream) cx.newObject(scope, NativeOutputStream.CLASS_NAME);
         NativeInputStream stdin = (NativeInputStream) cx.newObject(scope, NativeInputStream.CLASS_NAME);
-
-        Sandbox sb = runner.getSandbox();
-
-        // stdout
-        stdout.initialize(runner.getStdout());
-        exports.setStdout(stdout);
-
-        // stderr
-        stderr.initialize(runner.getStderr());
-        exports.setStderr(stderr);
 
         // stdin
         stdin.initialize(runner, runner.getEnvironment().getAsyncPool(), runner.getStdin());
@@ -91,14 +79,13 @@ public class Process
     {
         protected static final String CLASS_NAME = "_processClass";
 
-        private Stream.WritableStream stdout;
-        private Stream.WritableStream stderr;
+        private Scriptable stdout;
+        private Scriptable stderr;
         private Stream.ReadableStream stdin;
         private Scriptable argv;
         private Scriptable env;
         private long startTime;
         private ScriptRunner runner;
-        private final HashMap<String, Object> internalModuleCache = new HashMap<String, Object>();
         private Object mainModule;
 
         @JSConstructor
@@ -129,16 +116,25 @@ public class Process
             this.mainModule = m;
         }
 
+        /**
+         * Implement process.binding. This works like the rest of the module loading but uses a different
+         * namespace and a different cache. These types of modules must be implemented in Java.
+         */
         @JSFunction
         public static Object binding(Context cx, Scriptable thisObj, Object[] args, Function func)
         {
             String name = stringArg(args, 0);
             ProcessImpl proc = (ProcessImpl)thisObj;
 
-            Object mod = proc.internalModuleCache.get(name);
+            return proc.getInternalModule(name, cx);
+        }
+
+        public Object getInternalModule(String name, Context cx)
+        {
+            Object mod = runner.getCachedInternalModule(name);
             if (mod == null) {
                 try {
-                    mod = proc.runner.initializeModule(name, true, cx, proc.runner.getScriptScope());
+                    mod = runner.initializeModule(name, true, cx, runner.getScriptScope());
                     if (log.isDebugEnabled()) {
                         log.debug("Creating new instance {} of internal module {}",
                                   System.identityHashCode(mod), name);
@@ -151,7 +147,7 @@ public class Process
                  } catch (IllegalAccessException e) {
                     throw new EvaluatorException("Error initializing module: " + e.toString());
                 }
-                proc.internalModuleCache.put(name, mod);
+                runner.cacheInternalModule(name, mod);
             } else if (log.isDebugEnabled()) {
                 log.debug("Returning cached copy {} of internal module {}",
                           System.identityHashCode(mod), name);
@@ -160,21 +156,31 @@ public class Process
         }
 
         @JSGetter("stdout")
-        public Object getStdout() {
+        public Object getStdout()
+        {
+            if (stdout == null) {
+                Context cx = Context.getCurrentContext();
+                runner.requireInternal(NativeOutputStreamAdapter.MODULE_NAME, cx);
+                stdout =
+                    NativeOutputStreamAdapter.createNativeStream(cx,
+                                                                 runner.getScriptScope(), runner,
+                                                                 runner.getStdout(), true);
+            }
             return stdout;
         }
 
-        public void setStdout(Stream.WritableStream stdout) {
-            this.stdout = stdout;
-        }
-
         @JSGetter("stderr")
-        public Object getStderr() {
+        public Object getStderr()
+        {
+            if (stderr == null) {
+                Context cx = Context.getCurrentContext();
+                runner.requireInternal(NativeOutputStreamAdapter.MODULE_NAME, cx);
+                stderr =
+                    NativeOutputStreamAdapter.createNativeStream(cx,
+                                                                 runner.getScriptScope(), runner,
+                                                                 runner.getStderr(), true);
+            }
             return stderr;
-        }
-
-        public void setStderr(Stream.WritableStream stderr) {
-            this.stderr = stderr;
         }
 
         @JSGetter("stdin")
@@ -225,10 +231,11 @@ public class Process
         @JSFunction
         public String cwd()
         {
-            try {
-                return runner.reverseTranslatePath(System.getProperty("user.dir"));
-            } catch (IOException ioe) {
-                return ".";
+            PathTranslator trans = runner.getPathTranslator();
+            if (trans == null) {
+                return System.getProperty("user.dir");
+            } else {
+                return trans.getRoot();
             }
         }
 

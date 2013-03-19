@@ -19,39 +19,23 @@
 // OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE
 // USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-var binding = process.binding('os');
+// a passthrough stream.
+// basically just the most minimal sort of Transform stream.
+// Every written chunk gets output as-is.
+
+module.exports = PassThrough;
+
+var Transform = require('_stream_transform');
 var util = require('util');
+util.inherits(PassThrough, Transform);
 
-exports.endianness = binding.getEndianness;
-exports.hostname = binding.getHostname;
-exports.loadavg = binding.getLoadAvg;
-exports.uptime = binding.getUptime;
-exports.freemem = binding.getFreeMem;
-exports.totalmem = binding.getTotalMem;
-exports.cpus = binding.getCPUs;
-exports.type = binding.getOSType;
-exports.release = binding.getOSRelease;
-exports.networkInterfaces = binding.getInterfaceAddresses;
+function PassThrough(options) {
+  if (!(this instanceof PassThrough))
+    return new PassThrough(options);
 
-exports.arch = function() {
-  return process.arch;
+  Transform.call(this, options);
+}
+
+PassThrough.prototype._transform = function(chunk, encoding, cb) {
+  cb(null, chunk);
 };
-
-exports.platform = function() {
-  return process.platform;
-};
-
-exports.tmpdir = function() {
-  return process.env.TMPDIR ||
-         process.env.TMP ||
-         process.env.TEMP ||
-         (process.platform === 'win32' ? 'c:\\windows\\temp' : '/tmp');
-};
-
-exports.tmpDir = exports.tmpdir;
-
-exports.getNetworkInterfaces = util.deprecate(function() {
-  return exports.networkInterfaces();
-}, 'getNetworkInterfaces is now called `os.networkInterfaces`.');
-
-exports.EOL = process.platform === 'win32' ? '\r\n' : '\n';

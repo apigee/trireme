@@ -16,14 +16,18 @@ import java.util.ServiceLoader;
  * </p>
  * <ol>
  *     <li>Native modules are built in Java. They are loaded using the ServiceLoader, which means that
- *     these modules must implement NodeModule and must be listed in META-INF/services/c.a.n.r.NodeModule</li>
- *     <li>Internal modules are also built in Java but are loaded using process.binding, not "require."
- *     This way they aren't in the namespace for ordinary users.</li>
- *     <li>Compiled script modules are written in JavaScript -- their source lives in src/main/javascript and
- *     is pre-compiled using Rhino (we have a plugin for this)</li>
+ *     these modules must implement NodeModule and must be listed in META-INF/services/c.a.n.r.NodeModule.</li>
+ *     <li>Compiled native modules are built in JavaScript. A Java stub that uses ServiceLoader and implements
+ *     NodeScriptModule is used to pull in the JavaScript source, which is then compiled and loaded.</li>
+ *     <li>Internal native modules are also built in Java and are also loaded using the ServiceLoader.
+ *     However they are loaded using process.binding, not "require" and are intended for internal use only.
+ *     This way they aren't in the namespace for ordinary users. They implement InternalNodeModule.</li>
+ *     <li>Internal script modules are written in JavaScript -- their source lives in src/main/javascript and
+ *     is pre-compiled using Rhino (we have a plugin for this). They are then loaded directly by this
+ *     class. These modules may only reside within this Maven module.</li>
  * </ol>
  * <p>
- *     The constructor for this class manually defines all the script and compiled script modules. All the rest
+ *     The constructor for this class manually defines all compiled script modules. All the rest
  *     are loaded using the ServiceLoader, which means that new modules can add new scripts.
  * </p>
  */
@@ -34,7 +38,8 @@ public class ModuleRegistry
     /**
      * Add this prefix to internal module code before compiling -- it makes them behave as they expect and as
      * internal modules from "normal" Node behave. This same code must also be included by the Rhino
-     * compiler, so it is repeated in pom.xml and must be changed there if it's changed here.
+     * compiler, so it is repeated in pom.xml and must be changed there if it's changed here. This makes these
+     * modules be loaded exactly as they would be in traditional Node.
      */
     private static final String CODE_PREFIX = "(function (exports, module, require, __filename, __dirname) {";
     private static final String CODE_POSTFIX = "});";
@@ -61,11 +66,20 @@ public class ModuleRegistry
 
         // These classes are compiled using the "Rhino Compiler" module, which is a Maven plug-in that's part
         // of noderunner.
+        addCompiledModule("_debugger", "com.apigee.noderunner.fromnode._debugger");
         addCompiledModule("_linklist", "com.apigee.noderunner.fromnode._linklist");
+        addCompiledModule("_stream_duplex", "com.apigee.noderunner.fromnode._stream_duplex");
+        addCompiledModule("_stream_passthrough", "com.apigee.noderunner.fromnode._stream_passthrough");
+        addCompiledModule("_stream_readable", "com.apigee.noderunner.fromnode._stream_readable");
+        addCompiledModule("_stream_transform", "com.apigee.noderunner.fromnode._stream_transform");
+        addCompiledModule("_stream_writable", "com.apigee.noderunner.fromnode._stream_writable");
         addCompiledModule("assert", "com.apigee.noderunner.fromnode.assert");
         addCompiledModule("cluster", "com.apigee.noderunner.fromnode.cluster");
         addCompiledModule("console", "com.apigee.noderunner.fromnode.console");
         addCompiledModule("constants", "com.apigee.noderunner.fromnode.constants");
+        addCompiledModule("crypto", "com.apigee.noderunner.fromnode.crypto");
+        addCompiledModule("dgram", "com.apigee.noderunner.fromnode.dgram");
+        addCompiledModule("dns", "com.apigee.noderunner.fromnode.dns");
         addCompiledModule("domain", "com.apigee.noderunner.fromnode.domain");
         addCompiledModule("events", "com.apigee.noderunner.fromnode.events");
         addCompiledModule("freelist", "com.apigee.noderunner.fromnode.freelist");
@@ -80,6 +94,7 @@ public class ModuleRegistry
         addCompiledModule("querystring", "com.apigee.noderunner.fromnode.querystring");
         addCompiledModule("stream", "com.apigee.noderunner.fromnode.stream");
         addCompiledModule("string_decoder", "com.apigee.noderunner.fromnode.string_decoder");
+        addCompiledModule("sys", "com.apigee.noderunner.fromnode.sys");
         addCompiledModule("timers", "com.apigee.noderunner.fromnode.timers");
         addCompiledModule("url", "com.apigee.noderunner.fromnode.url");
         addCompiledModule("util", "com.apigee.noderunner.fromnode.util");
@@ -88,6 +103,7 @@ public class ModuleRegistry
         addCompiledModule("http", "com.apigee.noderunner.scripts.adaptorhttp");
         addCompiledModule("https", "com.apigee.noderunner.scripts.adaptorhttps");
         addCompiledModule("child_process", "com.apigee.noderunner.scripts.child_process");
+        addCompiledModule("native_stream_writable", "com.apigee.noderunner.scripts.native_stream_writable");
         addCompiledModule("noderunner_metrics", "com.apigee.noderunner.scripts.noderunner_metrics");
         addCompiledModule("tls", "com.apigee.noderunner.scripts.tls");
         addCompiledModule("tls_checkidentity", "com.apigee.noderunner.scripts.tls_checkidentity");

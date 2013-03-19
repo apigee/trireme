@@ -8,14 +8,15 @@ import com.apigee.noderunner.core.RunningScript;
 import com.apigee.noderunner.core.Sandbox;
 import com.apigee.noderunner.core.ScriptStatus;
 import com.apigee.noderunner.core.ScriptTask;
-import com.apigee.noderunner.core.modules.EventEmitter;
 import com.apigee.noderunner.core.modules.NativeModule;
 import com.apigee.noderunner.core.modules.Process;
 import com.apigee.noderunner.net.SelectorHandler;
 import org.mozilla.javascript.Context;
+import org.mozilla.javascript.EvaluatorException;
 import org.mozilla.javascript.Function;
 import org.mozilla.javascript.RhinoException;
 import org.mozilla.javascript.Scriptable;
+import org.mozilla.javascript.ScriptableObject;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -28,7 +29,6 @@ import java.nio.channels.SelectionKey;
 import java.nio.channels.Selector;
 import java.util.HashMap;
 import java.util.Iterator;
-import java.util.Map;
 import java.util.PriorityQueue;
 import java.util.concurrent.Callable;
 import java.util.concurrent.ExecutorService;
@@ -55,8 +55,8 @@ public class ScriptRunner
     private final  NodeScript      scriptObject;
     private final  String[]        args;
     private final  String          scriptName;
-    private final  HashMap<String, Object> moduleCache = new HashMap<String, Object>();
-    private final  HashMap<String, Object> nativeModuleCache = new HashMap<String, Object>();
+    private final  HashMap<String, NativeModule.ModuleImpl> moduleCache = new HashMap<String, NativeModule.ModuleImpl>();
+    private final  HashMap<String, Object> internalModuleCache = new HashMap<String, Object>();
     private        Future<ScriptStatus>    future;
     private final  Sandbox                 sandbox;
     private final  PathTranslator          pathTranslator;
@@ -73,8 +73,9 @@ public class ScriptRunner
     private NativeModule.NativeImpl nativeModule;
     private Process.ProcessImpl process;
     private Scriptable          mainModule;
+    private Object              console;
 
-    private Scriptable scope;
+    private ScriptableObject    scope;
 
     public ScriptRunner(NodeScript so, NodeEnvironment env, Sandbox sandbox,
                         String scriptName, File scriptFile,
@@ -207,22 +208,17 @@ public class ScriptRunner
         return pathTranslator.reverseTranslate(path);
     }
 
+    public PathTranslator getPathTranslator()
+    {
+        return pathTranslator;
+    }
+
     /**
      * This method uses a concurrent queue so it may be called from any thread.
      */
     public void enqueueCallback(Function f, Scriptable scope, Scriptable thisObj, Object[] args)
     {
         tickFunctions.offer(new Callback(f, scope, thisObj, args));
-        selector.wakeup();
-    }
-
-    /**
-     * This method uses a concurrent queue so it may be called from any thread.
-     */
-    public void enqueueEvent(EventEmitter.EventEmitterImpl emitter,
-                             String name, Object[] args)
-    {
-        tickFunctions.offer(new Event(emitter, name, args));
         selector.wakeup();
     }
 
@@ -307,7 +303,7 @@ public class ScriptRunner
 
             try {
                 // Re-use the global scope from before, but make it top-level so that there are no shared variables
-                scope = cx.newObject(env.getScope());
+                scope = (ScriptableObject)cx.newObject(env.getScope());
                 scope.setPrototype(env.getScope());
                 scope.setParentScope(null);
 
@@ -385,8 +381,7 @@ public class ScriptRunner
     private ScriptStatus mainLoop(Context cx)
         throws IOException
     {
-        // Node scripts don't exit unless exit is called -- they keep on trucking.
-        // The JS code inside will throw NodeExitException when it's time to exit
+        // Exit if there's no work do to but only if we're not pinned by a module.
         while (!tickFunctions.isEmpty() || (pinCount.get() > 0)) {
             try {
                 if ((future != null) && future.isCancelled()) {
@@ -489,14 +484,18 @@ public class ScriptRunner
         throws NodeException
     {
         try {
-            // Need the "native module" before we can do anything
+            // Need to bootstrap the "native module" before we can do anything
             NativeModule.NativeImpl nativeMod =
-              (NativeModule.NativeImpl)initializeModule("native_module", false, cx, scope);
+              (NativeModule.NativeImpl)initializeModule(NativeModule.MODULE_NAME, false, cx, scope);
             this.nativeModule = nativeMod;
+            NativeModule.ModuleImpl nativeModMod = NativeModule.ModuleImpl.newModule(cx, scope,
+                                                                                     NativeModule.MODULE_NAME, NativeModule.MODULE_NAME);
+            nativeModMod.setLoaded(true);
+            nativeModMod.setExports(nativeMod);
+            cacheModule(NativeModule.MODULE_NAME, nativeModMod);
 
-            // "process" is expected to be initialized by the runtime too
-            process =
-                (Process.ProcessImpl)registerModule("process", cx, scope);
+            // Next we need "process" which takes a bit more care
+            process = (Process.ProcessImpl)require(Process.MODULE_NAME, cx);
             process.setMainModule(nativeMod);
             process.setArgv(0, Process.EXECUTABLE_NAME);
 
@@ -508,18 +507,14 @@ public class ScriptRunner
                 }
             }
 
-            // Need a little special handling for the "module" module, which does module loading
-            //Object moduleModule = nativeMod.internalRequire("module", cx, this);
-
             // Set up the global modules that are set up for all script evaluations
-            scope.put("process", scope, process);
             scope.put("global", scope, scope);
             scope.put("GLOBAL", scope, scope);
             scope.put("root", scope, scope);
-            registerModule("buffer", cx, scope);
-            Scriptable timers = (Scriptable)nativeMod.internalRequire("timers", cx, this);
+            require("buffer", cx);
+            Scriptable timers = (Scriptable)require("timers", cx);
             scope.put("timers", scope, timers);
-            scope.put("console", scope, nativeMod.internalRequire("console", cx, this));
+            scope.put("domain", scope, null);
             clearErrno();
 
             // Set up the global timer functions
@@ -531,7 +526,7 @@ public class ScriptRunner
             copyProp(timers, scope, "clearImmediate");
 
             // Set up metrics -- defining these lets us run internal Node projects
-            Scriptable metrics = (Scriptable)nativeMod.internalRequire("noderunner_metrics", cx, this);
+            Scriptable metrics = (Scriptable)nativeMod.internalRequire("noderunner_metrics", cx);
             copyProp(metrics, scope, "DTRACE_NET_SERVER_CONNECTION");
             copyProp(metrics, scope, "DTRACE_NET_STREAM_END");
             copyProp(metrics, scope, "COUNTER_NET_SERVER_CONNECTION");
@@ -568,7 +563,12 @@ public class ScriptRunner
             }
 
             // Set up the main native module
-            mainModule = (Scriptable)nativeMod.internalRequire("module", cx, this);
+            mainModule = (Scriptable)require("module", cx);
+
+            // And finally the console needs to have all that other stuff available
+            scope.defineProperty("console", this,
+                                 Utils.findMethod(ScriptRunner.class, "getConsole"),
+                                 null, 0);
 
         } catch (InvocationTargetException e) {
             throw new NodeException(e);
@@ -579,11 +579,22 @@ public class ScriptRunner
         }
     }
 
+    public Object getConsole(Scriptable s)
+    {
+        if (console == null) {
+            console = require("console", Context.getCurrentContext());
+        }
+        return console;
+    }
+
     private static void copyProp(Scriptable src, Scriptable dest, String name)
     {
         dest.put(name, dest, src.get(name, src));
     }
 
+    /**
+     * Initialize a native module implemented in Java code.
+     */
     public Object initializeModule(String modName, boolean internal,
                                    Context cx, Scriptable scope)
         throws InvocationTargetException, InstantiationException, IllegalAccessException
@@ -604,26 +615,25 @@ public class ScriptRunner
         return exp;
     }
 
-    public Object registerModule(String modName, Context cx, Scriptable scope)
-        throws InvocationTargetException, InstantiationException, IllegalAccessException
-    {
-        Object exp = initializeModule(modName, false, cx, scope);
-        if (exp == null) {
-            throw new AssertionError("Module " + modName + " not found");
-        }
-        if (log.isDebugEnabled()) {
-            log.debug("Registered module {} export = {}", modName, exp);
-        }
-        return exp;
-    }
-
     /**
      * This is used internally when one native module depends on another.
      */
-    public Object require(String modName, Context cx, Scriptable scope)
-        throws InvocationTargetException, InstantiationException, IllegalAccessException
+    public Object require(String modName, Context cx)
     {
-        return nativeModule.internalRequire(modName, cx, this);
+        try {
+            return nativeModule.internalRequire(modName, cx);
+        } catch (InstantiationException e) {
+            throw new EvaluatorException(e.toString());
+        } catch (IllegalAccessException e) {
+            throw new EvaluatorException(e.toString());
+        } catch (InvocationTargetException e) {
+            throw new EvaluatorException(e.toString());
+        }
+    }
+
+    public Object requireInternal(String modName, Context cx)
+    {
+        return process.getInternalModule(modName, cx);
     }
 
     /**
@@ -635,14 +645,30 @@ public class ScriptRunner
                (env.getRegistry().getCompiledModule(name) != null);
     }
 
-    public Object getCachedNativeModule(String name)
+    /**
+     * Return a module that was created implicitly or by the "native module"
+     */
+    public NativeModule.ModuleImpl getCachedModule(String name)
     {
-        return nativeModuleCache.get(name);
+        return moduleCache.get(name);
     }
 
-    public void cacheNativeModule(String name, Object module)
+    public void cacheModule(String name, NativeModule.ModuleImpl module)
     {
-        nativeModuleCache.put(name, module);
+        moduleCache.put(name, module);
+    }
+
+    /**
+     * Return a module that is used internally and exposed by "process.binding".
+     */
+    public Object getCachedInternalModule(String name)
+    {
+        return internalModuleCache.get(name);
+    }
+
+    public void cacheInternalModule(String name, Object module)
+    {
+        internalModuleCache.put(name, module);
     }
 
     public abstract static class Activity
@@ -729,27 +755,6 @@ public class ScriptRunner
         void execute(Context cx)
         {
             function.call(cx, scope, thisObj, args);
-        }
-    }
-
-    private static final class Event
-        extends Activity
-    {
-        private EventEmitter.EventEmitterImpl emitter;
-        private String name;
-        private Object[] args;
-
-        Event(EventEmitter.EventEmitterImpl emitter, String name, Object[] args)
-        {
-            this.emitter = emitter;
-            this.name = name;
-            this.args = args;
-        }
-
-        @Override
-        void execute(Context cx)
-        {
-            emitter.fireEvent(name, args);
         }
     }
 

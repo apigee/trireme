@@ -9,6 +9,7 @@ com.apigee.noderunner.core.modules.Filesystem
 com.apigee.noderunner.core.modules.HTTPParser
 com.apigee.noderunner.core.modules.HTTPWrap
 com.apigee.noderunner.core.modules.NativeModule
+com.apigee.noderunner.core.modules.NativeOutputStreamAdapter
 com.apigee.noderunner.core.modules.NoderunnerEvals
 com.apigee.noderunner.core.modules.OS
 com.apigee.noderunner.core.modules.Process

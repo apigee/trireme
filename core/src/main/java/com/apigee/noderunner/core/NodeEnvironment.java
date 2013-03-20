@@ -23,8 +23,8 @@ import java.util.concurrent.TimeUnit;
  */
 public class NodeEnvironment
 {
-    public static final int CORE_POOL_SIZE    = 1;
-    public static final int MAX_POOL_SIZE     = 50;
+    public static final int CORE_POOL_SIZE    = 50;
+    public static final int MAX_POOL_SIZE     = 1000;
     public static final int POOL_QUEUE_SIZE   = 8;
     public static final long POOL_TIMEOUT_SECS = 60L;
 
@@ -149,10 +149,13 @@ public class NodeEnvironment
         if (asyncPool == null) {
             // This pool is used for operations that must appear async to JavaScript but are synchronous
             // in Java. Right now this means file I/O, at least in Java 6.
-            asyncPool = new ThreadPoolExecutor(CORE_POOL_SIZE, MAX_POOL_SIZE, POOL_TIMEOUT_SECS, TimeUnit.SECONDS,
+            ThreadPoolExecutor pool =
+                new ThreadPoolExecutor(CORE_POOL_SIZE, MAX_POOL_SIZE, POOL_TIMEOUT_SECS, TimeUnit.SECONDS,
                                                new ArrayBlockingQueue<Runnable>(POOL_QUEUE_SIZE),
                                                new PoolNameFactory("NodeRunner Async Pool"),
                                                new ThreadPoolExecutor.AbortPolicy());
+            pool.allowCoreThreadTimeOut(true);
+            asyncPool = pool;
         }
 
         // This pool is used to run scripts. As a cached thread pool it will grow as necessary and shrink

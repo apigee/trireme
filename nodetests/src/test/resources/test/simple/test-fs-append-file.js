@@ -109,7 +109,7 @@ fs.appendFile(filename4, n, { mode: m }, function(e) {
   common.error('appended to file4');
 
   // windows permissions aren't unix
-  if (process.platform !== 'win32') {
+  if (process.platform !== 'java') {
     var st = fs.statSync(filename4);
     assert.equal(st.mode & 0700, m);
   }

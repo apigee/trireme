@@ -2,7 +2,11 @@ var http = require('http');
 
 var svr = http.createServer(function(req, resp) {
   console.log('Got an HTTP request');
+  req.on('data', function(chunk) {
+    console.log('Server got data: ' + chunk);
+  });
   req.on('end', function() {
+    console.log('Server got end');
     resp.end('Hello, World!');
   });
 });
@@ -15,6 +19,12 @@ svr.listen(33333, function() {
     if (resp.statusCode != 200) {
       process.exit(1);
     }
-    svr.close();
+    resp.on('data', function(chunk) {
+      console.log(chunk);
+    });
+    resp.on('end', function() {
+      console.log('Got the whole response');
+      svr.close();
+    });
   });
 });

@@ -77,7 +77,6 @@ public class BasicTest
         runTest("buffertest.js");
     }
 
-    /*
     @Test
     public void testCancellation()
         throws InterruptedException, ExecutionException, NodeException
@@ -216,18 +215,14 @@ public class BasicTest
         ScriptStatus stat = script.execute().get();
         assertEquals(0, stat.getExitCode());
     }
-    */
 
-    /*
     @Test
     public void testBasicHttp()
         throws InterruptedException, ExecutionException, NodeException, IOException
     {
         runTest("basichttptest.js");
     }
-    */
 
-    /*
     @Test
     public void testHttpPolicy()
         throws InterruptedException, ExecutionException, NodeException, IOException
@@ -257,7 +252,6 @@ public class BasicTest
         ScriptStatus status = script.execute().get();
         assertEquals(0, status.getExitCode());
     }
-        */
 
     @Test
     public void testJavaCode()

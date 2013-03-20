@@ -29,7 +29,7 @@ NativeReadableStream.prototype._read = function(n) {
   });
 };
 
-NativeReadableStream.prototype.close = function() {
+NativeReadableStream.prototype.destroy = function() {
   this.handle.close();
   this.emit('closed');
 };

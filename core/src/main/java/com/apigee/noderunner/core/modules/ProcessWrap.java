@@ -61,6 +61,9 @@ public class ProcessWrap
     public Object registerExports(Context cx, Scriptable scope, ScriptRunner runner)
         throws InvocationTargetException, IllegalAccessException, InstantiationException
     {
+        runner.requireInternal(NativeInputStreamAdapter.MODULE_NAME, cx);
+        runner.requireInternal(NativeOutputStreamAdapter.MODULE_NAME, cx);
+
         ScriptableObject.defineClass(scope, ProcessImpl.class, false, true);
         ScriptableObject.defineClass(scope, ProcessModuleImpl.class);
 
@@ -266,8 +269,9 @@ public class ProcessWrap
                 if (log.isDebugEnabled()) {
                     log.debug("Setting fd {} to output stream {}", arg, out);
                 }
-                NativeOutputStream os = (NativeOutputStream)cx.newObject(parent, NativeOutputStream.CLASS_NAME);
-                os.setOutput(out);
+                Scriptable os =
+                    NativeOutputStreamAdapter.createNativeStream(cx, parent, parent.runner,
+                                                                 out, false);
                 opts.put("socket", opts, os);
                 // TODO support numbers "0, 1, 2" and ignore (implement using /dev/null or the equivalent)
                 // TODO support ipc
@@ -285,9 +289,9 @@ public class ProcessWrap
                 if (log.isDebugEnabled()) {
                     log.debug("Setting fd {} to input stream {}", arg, in);
                 }
-                NativeInputStream is = (NativeInputStream)cx.newObject(parent, NativeInputStream.CLASS_NAME);
-                is.initialize(parent.runner, parent.runner.getEnvironment().getAsyncPool(), in);
-                is.resume();
+                Scriptable is =
+                    NativeInputStreamAdapter.createNativeStream(cx, parent, parent.runner,
+                                                                in, false);
                 opts.put("socket", opts, is);
                 // TODO support numbers "0, 1, 2" and ignore
                 // TODO support ipc
@@ -322,7 +326,7 @@ public class ProcessWrap
                 log.debug("Starting {}", proc);
             }
             // Java doesn't return the actual OS PID
-            options.put("pid", options, System.identityHashCode(proc));
+            options.put("pid", options, System.identityHashCode(proc) % 65536);
 
             if (!options.has("stdio", options)) {
                 throw new EvaluatorException("Missing stdio in options");
@@ -332,7 +336,7 @@ public class ProcessWrap
             createOutputStream(cx, stdio, 1, proc.getInputStream());
             createOutputStream(cx, stdio, 2, proc.getErrorStream());
 
-            parent.runner.getEnvironment().getAsyncPool().submit(new Runnable()
+            parent.runner.getAsyncPool().submit(new Runnable()
             {
                 @Override
                 public void run()

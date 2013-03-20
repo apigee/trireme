@@ -235,7 +235,7 @@ public class Process
             if (trans == null) {
                 return System.getProperty("user.dir");
             } else {
-                return trans.getRoot();
+                return "/";
             }
         }
 

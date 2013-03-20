@@ -30,8 +30,8 @@ NativeWritableStream.prototype._write = function(chunk, encoding, callback) {
   this.handle.write(chunk, callback);
 };
 
-NativeWritableStream.prototype.close = function() {
-  if (!this.state.ended) {
+NativeWritableStream.prototype.destroy = function() {
+  if (!this._writableState.ended) {
     this.end();
   }
   this.handle.close();

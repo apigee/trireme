@@ -49,12 +49,7 @@ public class PathTranslator
             return null;
         }
 
-        File realPath;
-        if (path.startsWith("./")) {
-            realPath = new File(root, path);
-        } else {
-            realPath = new File(root, "./" + path);
-        }
+        File realPath = new File(root, path);
         if (log.isDebugEnabled()) {
             log.debug("PathTranslator: {} -> {}", path, realPath.getPath());
         }

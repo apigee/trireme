@@ -168,6 +168,10 @@ public class ScriptRunner
         return selector;
     }
 
+    public ExecutorService getAsyncPool() {
+        return asyncPool;
+    }
+
     public int getMaxTickDepth() {
         return maxTickDepth;
     }
@@ -350,7 +354,7 @@ public class ScriptRunner
                     scriptPath = reverseTranslatePath(scriptPath);
                     if (!scriptFile.isAbsolute() && !scriptPath.startsWith("./")) {
                         // Add ./ before script path to un-confuse the module module if it's a local path
-                        scriptPath = "./" + scriptPath;
+                        scriptPath = new File("./", scriptPath).getPath();
                     }
 
                     if (log.isDebugEnabled()) {

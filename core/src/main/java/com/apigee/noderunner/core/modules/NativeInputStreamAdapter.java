@@ -4,7 +4,6 @@ import com.apigee.noderunner.core.ScriptTask;
 import com.apigee.noderunner.core.internal.InternalNodeModule;
 import com.apigee.noderunner.core.internal.ScriptRunner;
 import com.apigee.noderunner.core.internal.Utils;
-import com.sun.xml.internal.ws.util.UtilException;
 import org.mozilla.javascript.Context;
 import org.mozilla.javascript.Function;
 import org.mozilla.javascript.Scriptable;
@@ -30,7 +29,7 @@ public class NativeInputStreamAdapter
     public static final String MODULE_NAME = "native_input_stream";
     public static final String READABLE_MODULE_NAME = "native_stream_readable";
 
-    private static final int MAX_READ_SIZE = 8192;
+    private static final int MAX_READ_SIZE = 65536;
 
     protected static final Logger log = LoggerFactory.getLogger(NativeInputAdapterImpl.class);
 
@@ -95,10 +94,14 @@ public class NativeInputStreamAdapter
             self.fireRead(maxLen, callback);
         }
 
-        private void fireRead(int maxLen, final Function callback)
+        private void fireRead(final int maxLen, final Function callback)
         {
             final int readLen = Math.max(maxLen, MAX_READ_SIZE);
-            runner.getEnvironment().getAsyncPool().execute(new Runnable()
+            if (log.isDebugEnabled()) {
+                log.debug("Going to read {} from {}", readLen, in);
+            }
+
+            runner.getUnboundedPool().execute(new Runnable()
             {
                 @Override
                 public void run()
@@ -113,7 +116,9 @@ public class NativeInputStreamAdapter
                             log.debug("Read {} from {}", bytesRead, in);
                         }
                         if (bytesRead > 0) {
-                            fireData(callback, buf, bytesRead);
+                            fireData(callback, buf, bytesRead, maxLen);
+                        } else if (bytesRead < 0) {
+                            fireData(callback, null, 0, maxLen);
                         }
                     } catch (IOException ioe) {
                         if (log.isDebugEnabled()) {
@@ -138,18 +143,29 @@ public class NativeInputStreamAdapter
             });
         }
 
-        private void fireData(final Function callback, final byte[] buf, final int len)
+        private void fireData(final Function callback, final byte[] buf, final int len, final int maxLen)
         {
             runner.enqueueTask(new ScriptTask()
             {
                 @Override
                 public void execute(Context cx, Scriptable scope)
                 {
-                    Buffer.BufferImpl jsBuf =
-                        (Buffer.BufferImpl)cx.newObject(scope, Buffer.BUFFER_CLASS_NAME);
-                    jsBuf.initialize(ByteBuffer.wrap(buf, 0, len), false);
-                    callback.call(cx, scope, null,
-                                  new Object[] { Context.getUndefinedValue(), jsBuf });
+                    if (log.isDebugEnabled()) {
+                        log.debug("Firing read callback with {} bytes", len);
+                    }
+                    Buffer.BufferImpl jsBuf;
+                    if (buf == null) {
+                        // A null buffer stands for end of stream
+                        jsBuf = null;
+                    } else {
+                        jsBuf = (Buffer.BufferImpl)cx.newObject(scope, Buffer.BUFFER_CLASS_NAME);
+                        jsBuf.initialize(ByteBuffer.wrap(buf, 0, len), false);
+                    }
+                    Object ret = callback.call(cx, scope, null,
+                                               new Object[] { Context.getUndefinedValue(), jsBuf });
+                    if (Context.toBoolean(ret)) {
+                        fireRead(maxLen, callback);
+                    }
                 }
             });
         }

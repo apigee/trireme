@@ -12,8 +12,8 @@ rm ${CP}
 if [ $1 == "-d" ]
 then
   ARGS="-Xdebug -Xrunjdwp:server=y,suspend=y,transport=dt_socket,address=localhost:14000"
-  java ${ARGS} com.apigee.noderunner.test.TestRunner $2 $3
+  java ${ARGS} com.apigee.noderunner.test.TestRunner $2 $3 $4 $5 $6 $7
 
 else 
-  java ${ARGS} com.apigee.noderunner.test.TestRunner $1 $2
+  java ${ARGS} com.apigee.noderunner.test.TestRunner $1 $2 $3 $4 $5 $6
 fi

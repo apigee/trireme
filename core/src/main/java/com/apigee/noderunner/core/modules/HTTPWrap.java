@@ -157,8 +157,10 @@ public class HTTPWrap
         private void completeClose()
         {
             log.debug("Closing HTTP server adapter completely");
-            adapter.close();
-            adapter = null;
+            if (adapter != null) {
+                adapter.close();
+                adapter = null;
+            }
             runner.unPin();
         }
 
@@ -468,7 +470,7 @@ public class HTTPWrap
             }
             String str = Context.toString(data);
             String encStr = Context.toString(encoding);
-            return Utils.stringToBuffer(str, Charsets.get().getCharset(encStr));
+            return Utils.stringToBuffer(str, Charsets.get().resolveCharset(encStr));
         }
 
         @JSFunction

@@ -172,6 +172,10 @@ public class ScriptRunner
         return asyncPool;
     }
 
+    public ExecutorService getUnboundedPool() {
+        return env.getScriptPool();
+    }
+
     public int getMaxTickDepth() {
         return maxTickDepth;
     }
@@ -190,6 +194,18 @@ public class ScriptRunner
 
     public OutputStream getStderr() {
         return ((sandbox != null) && (sandbox.getStderr() != null)) ? sandbox.getStderr() : System.err;
+    }
+
+    public Scriptable getStdinStream() {
+        return (Scriptable)process.getStdin();
+    }
+
+    public Scriptable getStdoutStream() {
+        return (Scriptable)process.getStdout();
+    }
+
+    public Scriptable getStderrStream() {
+        return (Scriptable)process.getStderr();
     }
 
     /**
@@ -520,6 +536,15 @@ public class ScriptRunner
             process = (Process.ProcessImpl)require(Process.MODULE_NAME, cx);
             process.setMainModule(nativeMod);
             process.setArgv(0, Process.EXECUTABLE_NAME);
+            if ((sandbox != null) && (sandbox.getStdinStream() != null)) {
+                process.setStdin(sandbox.getStdinStream());
+            }
+            if ((sandbox != null) && (sandbox.getStdoutStream() != null)) {
+                process.setStdout(sandbox.getStdoutStream());
+            }
+            if ((sandbox != null) && (sandbox.getStderrStream() != null)) {
+                process.setStderr(sandbox.getStderrStream());
+            }
 
             if (args != null) {
                 int i = 2;

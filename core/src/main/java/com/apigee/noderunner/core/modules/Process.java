@@ -164,6 +164,11 @@ public class Process
             return stdout;
         }
 
+        public void setStdout(Scriptable s)
+        {
+            this.stdout = s;
+        }
+
         @JSGetter("stderr")
         public Object getStderr()
         {
@@ -178,6 +183,11 @@ public class Process
             return stderr;
         }
 
+        public void setStderr(Scriptable s)
+        {
+            this.stderr = s;
+        }
+
         @JSGetter("stdin")
         public Object getStdin()
         {
@@ -190,6 +200,11 @@ public class Process
                                                                 runner.getStdin(), true);
             }
             return stdin;
+        }
+
+        public void setStdin(Scriptable s)
+        {
+            this.stdin = s;
         }
 
         @JSGetter("argv")
@@ -255,6 +270,14 @@ public class Process
             } else {
                 throw new NodeExitException(false, 0);
             }
+        }
+
+        @JSFunction
+        public static Object reallyExit(Context cx, Scriptable thisObj, Object[] args, Function func)
+            throws NodeExitException
+        {
+            // In regular node this calls the "exit" system call but we are run inside a bigger context so no.
+            return exit(cx, thisObj, args, func);
         }
 
         // TODO getgid

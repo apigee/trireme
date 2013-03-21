@@ -172,6 +172,9 @@ public class HTTPParser
             if (log.isDebugEnabled()) {
                 log.debug("Parser.execute: start = {} len = {}", offset, length);
             }
+            if (log.isTraceEnabled()) {
+                log.trace("buffer: " + bufObj.getString("utf8"));
+            }
 
             ByteBuffer bBuf = bufObj.getBuffer();
             int startPos = bBuf.position();
@@ -180,8 +183,10 @@ public class HTTPParser
 
             HTTPParsingMachine.Result result;
             boolean hadSomething;
+            boolean wasComplete;
             do {
                 hadSomething = false;
+                wasComplete = false;
                 result = parser.parse(bBuf);
                 if (result.isError()) {
                     Scriptable err = Utils.makeErrorObject(cx, this, "Parse Error");
@@ -223,12 +228,15 @@ public class HTTPParser
                 }
                 if (result.isComplete()) {
                     log.debug("Sending HTTP request complete");
+                    wasComplete = true;
                     callOnComplete(cx);
                     sentPartialHeaders = false;
                     sentCompleteHeaders = false;
                     parser.reset();
                 }
-            } while (hadSomething && !result.isComplete() && bBuf.hasRemaining());
+                log.debug("hadSomething = {} result.isComplete = {} remaining = {} ret = {}",
+                          hadSomething, wasComplete, bBuf.remaining(), bBuf.position() - startPos);
+            } while (hadSomething && !wasComplete && bBuf.hasRemaining());
             return bBuf.position() - startPos;
         }
 

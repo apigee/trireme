@@ -80,6 +80,7 @@ public class TCPWrap
         private ArrayDeque<QueuedWrite> writeQueue;
         private ByteBuffer              readBuffer;
         private PendingOp               pendingConnect;
+        private boolean                 writeReady;
 
         @JSConstructor
         public static Object newTCPImpl(Context cx, Object[] args, Function ctorObj, boolean inNewExpr)
@@ -103,7 +104,7 @@ public class TCPWrap
         {
             this.clientChannel = clientChannel;
             clientInit();
-            selKey = clientChannel.register(getRunner().getSelector(), 0,
+            selKey = clientChannel.register(getRunner().getSelector(), SelectionKey.OP_WRITE,
                                             new SelectorHandler()
                                             {
                                                 @Override
@@ -314,7 +315,7 @@ public class TCPWrap
             ByteBuffer bbuf = buf.getBuffer();
             qw.initialize(bbuf);
             tcp.byteCount += bbuf.remaining();
-            tcp.offerWrite(qw);
+            tcp.offerWrite(qw, cx);
             return qw;
         }
 
@@ -346,7 +347,7 @@ public class TCPWrap
             ByteBuffer bbuf = com.apigee.noderunner.core.internal.Utils.stringToBuffer(s, cs);
             qw.initialize(bbuf);
             byteCount += bbuf.remaining();
-            offerWrite(qw);
+            offerWrite(qw, cx);
             return qw;
         }
 
@@ -358,15 +359,41 @@ public class TCPWrap
             clearErrno();
             QueuedWrite qw = (QueuedWrite)cx.newObject(thisObj, QueuedWrite.CLASS_NAME);
             qw.shutdown = true;
-            tcp.offerWrite(qw);
+            tcp.offerWrite(qw, cx);
             return qw;
         }
 
-        private void offerWrite(QueuedWrite qw)
+        private void offerWrite(QueuedWrite qw, Context cx)
         {
-            if (writeQueue.isEmpty()) {
-                addInterest(SelectionKey.OP_WRITE);
+            if (writeQueue.isEmpty() && !qw.shutdown) {
+                int written;
+                try {
+                    written = clientChannel.write(qw.buf);
+                } catch (IOException ioe) {
+                    // Hacky? We failed the immediate write, but the callback isn't set yet,
+                    // so go back and do it later
+                    queueWrite(qw);
+                    return;
+                }
+                if (log.isDebugEnabled()) {
+                    log.debug("Wrote {} to {}", written, clientChannel);
+                }
+                if (qw.buf.hasRemaining()) {
+                    // We didn't write the whole thing.
+                    writeReady = false;
+                    queueWrite(qw);
+                } else if (qw.onComplete != null) {
+                    qw.onComplete.call(cx, qw.onComplete, this,
+                                       new Object[] { 0, this, qw });
+                }
+            } else {
+                queueWrite(qw);
             }
+        }
+
+        private void queueWrite(QueuedWrite qw)
+        {
+            addInterest(SelectionKey.OP_WRITE);
             writeQueue.offer(qw);
         }
 
@@ -454,7 +481,7 @@ public class TCPWrap
             if (key.isValid() && key.isConnectable()) {
                 processConnect(cx);
             }
-            if (key.isValid() && key.isWritable()) {
+            if (key.isValid() && (key.isWritable() || writeReady)) {
                 processWrites(cx);
             }
             if (key.isValid() && key.isReadable()) {
@@ -466,6 +493,7 @@ public class TCPWrap
         {
             try {
                 removeInterest(SelectionKey.OP_CONNECT);
+                addInterest(SelectionKey.OP_WRITE);
                 clientChannel.finishConnect();
                 if (log.isDebugEnabled()) {
                     log.debug("Client {} connected", clientChannel);
@@ -502,6 +530,8 @@ public class TCPWrap
 
         private void processWrites(Context cx)
         {
+            writeReady = true;
+            removeInterest(SelectionKey.OP_WRITE);
             QueuedWrite qw = writeQueue.peek();
             while (qw != null) {
                 try {
@@ -520,12 +550,13 @@ public class TCPWrap
                         if (log.isDebugEnabled()) {
                             log.debug("Wrote {} to {}", written, clientChannel);
                         }
+                        writeQueue.poll();
                         if (qw.buf.hasRemaining()) {
                             // We didn't write the whole thing.
+                            writeReady = false;
+                            addInterest(SelectionKey.OP_WRITE);
                             break;
-                        }
-                        writeQueue.poll();
-                        if (qw.onComplete != null) {
+                        } else if (qw.onComplete != null) {
                             qw.onComplete.call(cx, qw.onComplete, this,
                                                new Object[] { 0, this, qw });
                         }
@@ -542,9 +573,6 @@ public class TCPWrap
                     }
                 }
                 qw = writeQueue.peek();
-            }
-            if (writeQueue.isEmpty() && selKey.isValid()) {
-                removeInterest(SelectionKey.OP_WRITE);
             }
         }
 

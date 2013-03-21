@@ -1,6 +1,7 @@
 package com.apigee.noderunner.core;
 
 import com.apigee.noderunner.NetworkPolicy;
+import org.mozilla.javascript.Scriptable;
 
 import java.io.InputStream;
 import java.io.OutputStream;
@@ -16,6 +17,9 @@ public class Sandbox
     private OutputStream    stdout;
     private InputStream     stdin;
     private OutputStream    stderr;
+    private Scriptable      stdoutStream;
+    private Scriptable      stdinStream;
+    private Scriptable      stderrStream;
     private String          filesystemRoot;
     private ExecutorService asyncPool;
     private NetworkPolicy   networkPolicy;
@@ -37,6 +41,9 @@ public class Sandbox
             this.stdout = parent.stdout;
             this.stdin = parent.stdin;
             this.stderr = parent.stderr;
+            this.stdoutStream = parent.stdoutStream;
+            this.stdinStream = parent.stdinStream;
+            this.stderrStream = parent.stderrStream;
             this.filesystemRoot = parent.filesystemRoot;
             this.asyncPool = parent.asyncPool;
             this.networkPolicy = parent.networkPolicy;
@@ -98,6 +105,45 @@ public class Sandbox
 
     public InputStream getStdin() {
         return stdin;
+    }
+
+    /**
+     * Replace stdout with a Javascript object that implements the stream.Writable interface. This will take
+     * precedence over setStdout.
+     */
+    public Sandbox setStdoutStream(Scriptable s) {
+        this.stdoutStream = s;
+        return this;
+    }
+
+    public Scriptable getStdoutStream() {
+        return stdoutStream;
+    }
+
+    /**
+     * Replace stdin with a Javascript object that implements the stream.Readable interface. This will take
+     * precedence over setStdin.
+     */
+    public Sandbox setStdinStream(Scriptable s) {
+        this.stdinStream = s;
+        return this;
+    }
+
+    public Scriptable getStdinStream() {
+        return stdinStream;
+    }
+
+    /**
+     * Replace stderr with a Javascript object that implements the stream.Writable interface. This will take
+     * precedence over setStderr.
+     */
+    public Sandbox setStderrStream(Scriptable s) {
+        this.stderrStream = s;
+        return this;
+    }
+
+    public Scriptable getStderrStream() {
+        return stderrStream;
     }
 
     /**

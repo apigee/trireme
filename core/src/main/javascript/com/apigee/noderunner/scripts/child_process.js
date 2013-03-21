@@ -226,6 +226,7 @@ function ChildProcess() {
   this._handle.owner = this;
 
   this._handle.onexit = function(exitCode, signalCode) {
+    debug('onexit(' + exitCode + ', ' + signalCode + ')');
     //
     // follow 0.4.x behaviour:
     //
@@ -238,7 +239,7 @@ function ChildProcess() {
       self.exitCode = exitCode;
     }
 
-    if (self.stdin) {
+    if (self.stdin && (self.stdin.destroy)) {
       self.stdin.destroy();
     }
 
@@ -247,10 +248,34 @@ function ChildProcess() {
 
     self.emit('exit', self.exitCode, self.signalCode);
 
-    maybeClose(self);
+    // if any of the stdio streams have not been touched,
+    // then pull all the data through so that it can get the
+    // eof and emit a 'close' event.
+    // Do it on nextTick so that the user has one last chance
+    // to consume the output, if for example they only want to
+    // start reading the data once the process exits.
+    process.nextTick(function() {
+      flushStdio(self);
+    });
+
+    // The various background I/O tasks in Noderunner (not necessarily the same in Node)
+    // put tasks on the queue to drain the I/O. Don't emit a close until these are done.
+    process.nextTick(function() {
+      maybeClose(self);
+    });
   };
 }
 util.inherits(ChildProcess, EventEmitter);
+
+function flushStdio(subprocess) {
+  subprocess.stdio.forEach(function(stream, fd, stdio) {
+    if (!stream || !stream.readable || stream._consuming ||
+        stream._readableState.flowing)
+      return;
+    debug('Resuming stream ' + fd);
+    stream.resume();
+  });
+}
 
 function maybeClose(subprocess) {
   subprocess._closesGot++;
@@ -416,8 +441,6 @@ ChildProcess.prototype.spawn = function(options) {
   this.stdio = stdio.map(function(stdio) {
     return stdio.socket === undefined ? null : stdio.socket;
   });
-
-  debug('stdio after spawn: ' + JSON.stringify(stdio));
 
   // Add .send() method and start listening for IPC data
   if (ipc !== undefined) setupChannel(this, ipc);

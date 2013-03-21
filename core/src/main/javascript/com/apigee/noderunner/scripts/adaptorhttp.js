@@ -61,9 +61,8 @@ if (HttpWrap.hasServerAdapter()) {
   exports.ServerResponse = ServerResponse;
 
   ServerResponse.prototype.writeContinue = function() {
-    debug('writeContinue not implemented!');
-    // TODO!
-  }
+    throw Error('writeContinue not implemented');
+  };
 
   ServerResponse.prototype.writeHead = function(statusCode) {
     debug('writeHead');
@@ -105,7 +104,7 @@ if (HttpWrap.hasServerAdapter()) {
     }
 
     this._saveHeaders(headers);
-  }
+  };
 
   ServerResponse.prototype.write = function(data, encoding) {
     if (!this._savedHeaders) {
@@ -130,11 +129,11 @@ if (HttpWrap.hasServerAdapter()) {
       this._outstanding++;
     }
     return result;
-  }
+  };
 
   ServerResponse.prototype._send = function() {
     // Nothing to do here -- included for test compatibility
-  }
+  };
 
   ServerResponse.prototype.end = function(data, encoding) {
     if (!this._savedHeaders) {
@@ -160,7 +159,7 @@ if (HttpWrap.hasServerAdapter()) {
     }
     this.ended = true;
     return result;
-  }
+  };
 
   ServerResponse.prototype._saveHeaders = function(headers) {
     this._savedHeaders = [];
@@ -190,7 +189,7 @@ if (HttpWrap.hasServerAdapter()) {
         }
       }
     }
-  }
+  };
 
   ServerResponse.prototype.addTrailers = function(headers) {
     if (!this._trailers) {
@@ -228,51 +227,40 @@ if (HttpWrap.hasServerAdapter()) {
     NodeHttp.IncomingMessage.call(this);
 
     this._adapter = adapter;
+    this._pendings = [];
     this.httpVersionMajor = adapter.requestMajorVersion;
     this.httpVersionMinor = adapter.requestMinorVersion;
     this.httpVersion = adapter.requestMajorVersion + '.' + adapter.requestMinorVersion;
     this.url = adapter.requestUrl;
-    this._paused = false;
   }
 
   util.inherits(ServerRequest, NodeHttp.IncomingMessage);
 
-  ServerRequest.prototype.pause = function() {
-    this._paused = true;
-    this._adapter.pause();
+  ServerRequest.prototype._addPending = function(chunk) {
+    if (this._readPending && !this._pendings.length) {
+      this._readPending = pushChunk(this, chunk);
+    } else {
+      debug('Adding ' + chunk.length + ' bytes to the push queue');
+      this._pendings.push(chunk);
+    }
+  };
+
+  function pushChunk(self, chunk) {
+    debug('Pushing ' + chunk.length + ' bytes directly');
+    if (chunk === END_OF_FILE) {
+      return self.push(null);
+    } else {
+      return self.push(chunk);
+    }
   }
 
-  ServerRequest.prototype.resume = function() {
-    this._paused = false;
-    this._adapter.resume();
-    this._emitPending();
-  }
-
-  // Copied from http.js, because END_OF_FILE is not exported and we need it
-  ServerRequest.prototype._emitPending = function(callback) {
-  if (this._pendings.length) {
-    var self = this;
-    process.nextTick(function() {
-      while (!self._paused && self._pendings.length) {
-        var chunk = self._pendings.shift();
-        if (chunk !== END_OF_FILE) {
-          assert(Buffer.isBuffer(chunk));
-          self._emitData(chunk);
-        } else {
-          assert(self._pendings.length === 0);
-          self.readable = false;
-          self._emitEnd();
-        }
-      }
-
-      if (callback) {
-        callback();
-      }
-    });
-  } else if (callback) {
-    callback();
-  }
-};
+  ServerRequest.prototype._read = function(maxLen) {
+    this._readPending = true;
+    while (this._readPending && this._pendings.length) {
+      var chunk = this._pendings.shift();
+      this._readPending = pushChunk(this, chunk);
+    }
+  };
 
   function Server(requestListener) {
     if (!(this instanceof Server)) return new Server(requestListener);
@@ -297,6 +285,9 @@ if (HttpWrap.hasServerAdapter()) {
     return new Server(requestListener);
   };
 
+  /*
+   * Called directly by the adapter when a message arrives and all the headers have been received.
+   */
   Server.prototype._onHeaders = function(info) {
     debug('onHeadersComplete');
     var headers = info.getRequestHeaders();
@@ -334,28 +325,22 @@ if (HttpWrap.hasServerAdapter()) {
       if (err) {
         info.outgoing.emit('error', err);
       }
-      if (info.outgoing._outstanding > 0) {
-        if (--info.outgoing._outstanding == 0) {
-          if (!err) {
-            info.outgoing.emit('drain');
-          }
-        }
-      }
     };
 
     this.emit('request', info.incoming, info.outgoing);
-  }
+  };
 
+  /*
+   * This is called directly by the adapter when data is received for the message body.
+   */
   function onBody(info, b) {
     debug('onBody len = ' + b.length);
-    var incoming = info.incoming;
-    if (incoming._paused || incoming._pendings.length) {
-      incoming._pendings.push(b);
-    } else {
-      incoming._emitData(b);
-    }
+    info.incoming._addPending(b);
   }
 
+  /*
+   * This is called directly by the adapter when the complete message has been received.
+   */
   function onMessageComplete(info) {
     debug('onMessageComplete');
     var incoming = info.incoming;
@@ -376,13 +361,7 @@ if (HttpWrap.hasServerAdapter()) {
     */
 
     if (!incoming.upgrade) {
-      // For upgraded connections, also emit this after parser.execute
-      if (incoming._paused || incoming._pendings.length) {
-        incoming._pendings.push(END_OF_FILE);
-      } else {
-        incoming.readable = false;
-        incoming._emitEnd();
-      }
+      incoming._addPending(END_OF_FILE);
     }
   }
 
@@ -414,7 +393,7 @@ if (HttpWrap.hasServerAdapter()) {
 
     self._adapter.onheaders = function(info) {
       self._onHeaders(info);
-    }
+    };
     self._adapter.ondata = onBody;
     self._adapter.oncomplete = onMessageComplete;
     self._adapter.onclose = onClose;

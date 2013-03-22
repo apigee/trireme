@@ -24,6 +24,7 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.PrintWriter;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collection;
 import java.util.HashSet;
 import java.util.Map;
@@ -33,7 +34,9 @@ import java.util.regex.Pattern;
 @RunWith(Parameterized.class)
 public class JavaScriptTest
 {
-    public static final String BASE_DIR = "target/test-classes/test/simple";
+    public static final String[] BASE_DIRS =
+        new String[] { "target/test-classes/test/simple",
+                       "target/test-classes/test/noderunner" };
     public static final String TEMP_DIR = "target/test-classes/test/tmp";
     public static final String RESULT_FILE = "target/results.out";
     public static final String TEST_FILE_NAME_PROP = "TestFile";
@@ -99,61 +102,70 @@ public class JavaScriptTest
             }
         }
 
-        File baseDir = new File(BASE_DIR);
-        final Pattern np = namePattern;
-        File[] files = baseDir.listFiles(new FilenameFilter()
-        {
-            @Override
-            public boolean accept(File file, String s)
+        ArrayList<File> files = new ArrayList<File>();
+        for (String bd : BASE_DIRS) {
+            File baseDir = new File(bd);
+            final Collection<Pattern> excluded = loadExclusions(baseDir);
+            final Pattern np = namePattern;
+            File[] theseFiles = baseDir.listFiles(new FilenameFilter()
             {
-                if (np == null) {
-                    Matcher m = isJs.matcher(s);
-                    return m.matches();
-                } else {
-                    Matcher m = np.matcher(s);
-                    return m.matches();
+                @Override
+                public boolean accept(File file, String s)
+                {
+                    for (Pattern ep : excluded) {
+                        // Yes, this is O(N*M). But for the number of exclusions it's fine.
+                        if (ep.matcher(s).matches()) {
+                            System.out.println("Skipping: " + s);
+                            return false;
+                        }
+                    }
+                    if (np == null) {
+                        Matcher m = isJs.matcher(s);
+                        return m.matches();
+                    } else {
+                        Matcher m = np.matcher(s);
+                        return m.matches();
+                    }
                 }
+            });
+            if (theseFiles != null) {
+                files.addAll(Arrays.asList(theseFiles));
             }
-        });
-
-        HashSet<String> excluded = loadExclusions();
+        }
 
         ArrayList<Object[]> ret = new ArrayList<Object[]>();
         if (files == null) {
             return ret;
         }
         for (File f : files) {
-            if (excluded.contains(f.getName())) {
-                System.out.println("Skipping: " + f.getName());
+            if (adapter != null) {
+                ret.add(new Object[] { f, adapter });
             } else {
-                if (adapter != null) {
-                    ret.add(new Object[] { f, adapter });
-                } else {
-                    ret.add(new Object[] { f, DEFAULT_ADAPTER });
-                    if (isHttp.matcher(f.getName()).matches()) {
-                        ret.add(new Object[] { f, NETTY_ADAPTER });
-                    }
+                ret.add(new Object[] { f, DEFAULT_ADAPTER });
+                if (isHttp.matcher(f.getName()).matches()) {
+                    ret.add(new Object[] { f, NETTY_ADAPTER });
                 }
             }
         }
         return ret;
     }
 
-    private static HashSet<String> loadExclusions()
+    private static Collection<Pattern> loadExclusions(File baseDir)
         throws IOException, SAXException, ParserConfigurationException
     {
+        ArrayList<Pattern> ret = new ArrayList<Pattern>();
         // Maybe by 2020 we can get JSON parsing built in to Java, but I am hesitant to pull in another dependency
-        InputStream exclusionFile =
-            JavaScriptTest.class.getResourceAsStream("/excluded-tests.xml");
-        if (exclusionFile == null) {
-            throw new AssertionError("Can't load test exclusions");
+        File ef = new File(baseDir, "excluded-tests.xml");
+        if (!ef.exists()) {
+            return ret;
         }
+
+        FileInputStream exclusionFile = new FileInputStream(ef);
         try {
             DocumentBuilder builder = docFactory.newDocumentBuilder();
             Document exclusions =
                 builder.parse(exclusionFile);
 
-            HashSet<String> ret = new HashSet<String>();
             Node top = exclusions.getDocumentElement();
             Node n = top.getFirstChild();
             while (n != null) {
@@ -161,7 +173,7 @@ public class JavaScriptTest
                     Node c = n.getFirstChild();
                     while (c != null) {
                         if ("Name".equals(c.getNodeName())) {
-                            ret.add(getTextChildren(c));
+                            ret.add(Pattern.compile(getTextChildren(c)));
                         }
                         c = c.getNextSibling();
                     }

@@ -19,6 +19,12 @@
 // OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE
 // USE OR OTHER DEALINGS IN THE SOFTWARE.
 
+/*
+ * Modified this version for NodeRunner SSL: The "authorized"
+ * option is not available, and it uses a Java keystore and 
+ * trust store.
+ */
+
 if (!process.versions.openssl) {
   console.error('Skipping because node compiled without OpenSSL.');
   process.exit(0);
@@ -49,9 +55,11 @@ server.listen(common.PORT, function() {
 });
 
 function unauthorized() {
-  var socket = tls.connect(common.PORT, function() {
-    // TODO Noderunner we don't work the same way right now...
-    //assert(!socket.authorized);
+  var socket = tls.connect({
+    port: common.PORT,
+    rejectUnauthorized: false
+  }, function() {
+    console.log('Succeeded correctly with rejectUnauthorized = true');
     socket.end();
     rejectUnauthorized();
   });
@@ -62,12 +70,11 @@ function unauthorized() {
 }
 
 function rejectUnauthorized() {
-  var socket = tls.connect(common.PORT, {
-    rejectUnauthorized: true
-  }, function() {
+  var socket = tls.connect(common.PORT, function() {
     assert(false);
   });
   socket.on('error', function(err) {
+    console.log('Failed as expected with defaults');
     common.debug(err);
     authorized();
   });
@@ -76,10 +83,10 @@ function rejectUnauthorized() {
 
 function authorized() {
   var socket = tls.connect(common.PORT, {
-    truststore: path.join(common.fixturesDir, 'test_certs.jks'),
-    rejectUnauthorized: true
+    truststore: path.join(common.fixturesDir, 'test.jks'),
+    passphrase: 'secure'
   }, function() {
-    assert(socket.authorized);
+    console.log('Succeeded as expected using truststore');
     socket.end();
     server.close();
   });
@@ -90,5 +97,6 @@ function authorized() {
 }
 
 process.on('exit', function() {
-  assert.equal(connectCount, 3);
+  // The failed handshake doesn't count as a connect in NR
+  assert.equal(connectCount, 2);
 });

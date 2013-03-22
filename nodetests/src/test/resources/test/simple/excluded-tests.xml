@@ -40,4 +40,16 @@
         <Name>test-eval-require.js</Name>
         <Description>We don't support the same command-line params.</Description>
     </Excluded>
+    <Excluded>
+        <Name>test-tls-.+\.js</Name>
+        <Description>All TLS tests are run from the "noderunner" directory because they
+                     use a different keystore format.
+        </Description>
+    </Excluded>
+    <Excluded>
+        <Name>test-https-.+\.js</Name>
+        <Description>All HTTPS tests are run from the "noderunner" directory because they
+                     use a different keystore format.
+        </Description>
+    </Excluded>
 </ExcludedTests>

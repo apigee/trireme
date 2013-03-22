@@ -10,8 +10,6 @@ var assert = require('assert');
 var util = require('util');
 var net = require('net');
 var Stream = require('stream');
-var nodetls = require('node_tls');
-var StringDecoder = require('string_decoder').StringDecoder;
 var wrap = process.binding('ssl_wrap');
 var EventEmitter = require('events').EventEmitter;
 var tlscheckidentity = require('tls_checkidentity');
@@ -24,6 +22,7 @@ if (process.env.NODE_DEBUG && /tls/.test(process.env.NODE_DEBUG)) {
 }
 
 var END_SENTINEL = {};
+var DEFAULT_REJECT_UNAUTHORIZED = true;
 
 function Server() {
   var options, listener;
@@ -61,7 +60,6 @@ function Server() {
       throw 'Invalid cipher list: ' + options.ciphers;
     }
   }
-
 
   self.netServer = net.createServer(options, function(connection) {
     var engine = self.context.createEngine(false);
@@ -148,7 +146,7 @@ exports.connect = function() {
 
   var rejectUnauthorized = options.rejectUnauthorized;
   if (rejectUnauthorized === undefined) {
-    rejectUnauthorized: '0' !== process.env.NODE_TLS_REJECT_UNAUTHORIZED
+    rejectUnauthorized = DEFAULT_REJECT_UNAUTHORIZED;
   }
   var hostname = options.servername || options.host || 'localhost';
   options.host = hostname;
@@ -240,9 +238,11 @@ Server.prototype.address = function() {
 var counter = 0;
 
 function CleartextStream() {
+  var options = { decodeStrings: true, encoding: null };
+  Stream.Duplex.call(this, options);
   this.id = ++counter;
 }
-util.inherits(CleartextStream, net.Socket);
+util.inherits(CleartextStream, Stream.Duplex);
 
 CleartextStream.prototype.init = function(serverMode, server, connection, engine) {
   var self = this;
@@ -255,14 +255,18 @@ CleartextStream.prototype.init = function(serverMode, server, connection, engine
   self.remoteAddress = self.socket.remoteAddress;
   self.remotePort = self.socket.remotePort;
   self.encrypted = true;
-  connection.ondata = function(data, offset, end) {
-    debug(self.id + ' onData');
-    readCiphertext(self, data, offset, end);
-  };
-  connection.onend = function() {
+  self.readQueue = [];
+
+  connection.on('readable', function() {
+    debug(self.id + ' onReadable');
+    var data = connection.read();
+    readCiphertext(self, data);
+  });
+  connection.on('end', function() {
     debug(self.id + ' onEnd');
     handleEnd(self);
-  };
+  });
+
   connection.on('error', function(err) {
     debug(self.id + ' onError');
     self.emit('error', err);
@@ -277,83 +281,47 @@ CleartextStream.prototype.init = function(serverMode, server, connection, engine
     debug(self.id + ' onTimeout');
     self.emit('timeout');
   });
-  connection.on('drain', function() {
-    debug(self.id + ' onDrain');
-    self.emit('drain');
-  });
 };
 
-function doClose(self) {
+function doClose(self, err) {
   self.closed = true;
   self.socket.destroy();
-  self.emit('close', false);
+  self.emit('close', err ? true : false);
 }
 
 CleartextStream.prototype.address = function() {
   return this.socket.address();
 };
 
-CleartextStream.prototype.pause = function() {
-  debug('pause');
-  this.socket.pause();
-}
-
-CleartextStream.prototype.resume = function() {
-  debug('resume');
-  this.socket.resume();
-}
-
-CleartextStream.prototype.write = function(data, arg1, arg2) {
+CleartextStream.prototype._write = function(data, encoding, cb) {
   debug(this.id + ' write(' + (data ? data.length : 0) + ')');
-  var encoding, cb;
-
-  // parse arguments
-  if (arg1) {
-    if (typeof arg1 === 'string') {
-      encoding = arg1;
-      cb = arg2;
-    } else if (typeof arg1 === 'function') {
-      cb = arg1;
-    } else {
-      throw new Error('bad arg');
-    }
-  }
-
-  if (typeof data === 'string') {
-    encoding = (encoding || 'utf8').toLowerCase();
-    data = new Buffer(data, encoding);
-  } else if (!Buffer.isBuffer(data)) {
-    throw new TypeError('First argument must be a buffer or a string.');
-  }
 
   if (!this.handshakeComplete) {
-    addToWriteQueue(this, data);
-    return false;
+    addToWriteQueue(this, data, cb);
+    return;
   }
 
-  var remaining = (data ? data.length : 0);
-  var complete;
-  var writeData = data;
-  do {
-    complete = false;
-    remaining -= writeCleartext(this, writeData, function() {
-      if (remaining === 0) {
-        complete = true
-        if (cb !== undefined) {
-          cb();
-        }
-      }
-    });
-    writeData = undefined;
-  } while (remaining > 0);
-
-  return complete;
+  writeData(this, data, 0, cb);
 };
 
-CleartextStream.prototype.end = function(data, encoding) {
+function writeData(self, data, offset, cb) {
+  var chunk = offset ? data.slice(offset) : data;
+  writeCleartext(self, chunk, function(written) {
+    var newOffset = offset + written;
+    if (newOffset < data.length) {
+      writeData(self, data, newOffset, cb);
+    } else {
+      if (cb != undefined) {
+        cb();
+      }
+    }
+  });
+}
+
+CleartextStream.prototype.end = function(data, encoding, cb) {
   debug(this.id + ' end');
   if (data) {
-    this.write(data, encoding);
+    this.write(data, encoding, cb);
   }
   if (!this.handshakeComplete) {
     addToWriteQueue(this, END_SENTINEL);
@@ -367,6 +335,29 @@ CleartextStream.prototype.end = function(data, encoding) {
   }
 };
 
+CleartextStream.prototype._read = function(maxLen) {
+  debug('_read');
+  var wasPending = this.readPending;
+  this.readPending = true;
+  while (this.readPending && (this.readQueue.length)) {
+    var chunk = this.readQueue.shift();
+    debug('Pushing ' + chunk.length);
+    this.readPending = this.push(chunk);
+  }
+  if (this.readPending && wasPending) {
+    this.socket._read(maxLen);
+  }
+};
+
+function pushRead(self, d) {
+  var chunk = (d === END_SENTINEL) ? null : d;
+  if (self.readPending) {
+    self.readPending = self.push(chunk);
+  } else {
+    self.readQueue.push(chunk);
+  }
+}
+
 // Got an end from the network
 function handleEnd(self) {
   if (!self.closed) {
@@ -376,17 +367,20 @@ function handleEnd(self) {
       doClose(self);
     } else {
       debug(self.id + ' Closing SSL inbound without a close from the client');
-      self.ended = true;
       /* TODO assess if we need this.
       self.engine.closeInbound();
       while (!self.engine.isInboundDone()) {
         writeCleartext(self);
       }
       */
-      self.emit('end');
+      pushRead(self, END_SENTINEL);
       doClose(self);
     }
   }
+}
+
+CleartextStream.prototype.setTimeout = function(timeout) {
+  this.socket.setTimeout(timeout);
 }
 
 CleartextStream.prototype.destroy = function() {
@@ -404,10 +398,10 @@ CleartextStream.prototype.justHandshaked = function() {
   if (this.writeQueue) {
     var nextWrite = this.writeQueue.shift();
     while (nextWrite) {
-      if (nextWrite === END_SENTINEL) {
-        this.end();
+      if (nextWrite.item === END_SENTINEL) {
+        this.end(nextWrite.cb);
       } else {
-        this.write(nextWrite);
+        this.write(nextWrite.item, nextWrite.cb);
       }
       nextWrite = this.writeQueue.shift();
     }
@@ -425,6 +419,7 @@ CleartextStream.prototype.handleSSLError = function(err) {
         this.handshakeComplete + '): ' + err);
   if (this.handshakeComplete) {
     this.emit('error', err);
+    doClose(this, true);
   } else {
     if (this.serverMode) {
       // On the server -- just emit and close
@@ -434,20 +429,17 @@ CleartextStream.prototype.handleSSLError = function(err) {
       this.authorized = false;
       this.authorizationError = err;
       this.emit('error', err);
+      doClose(this, true);
     }
   }
 }
 
-function addToWriteQueue(self, item) {
+function addToWriteQueue(self, item, cb) {
   if (!self.writeQueue) {
     self.writeQueue = [];
   }
   debug(self.id + ' Adding item to write queue');
-  self.writeQueue.push(item);
-}
-
-CleartextStream.prototype.setEncoding = function(encoding) {
-  this.decoder = new StringDecoder(encoding);
+  self.writeQueue.push({ item: item, cb: cb });
 }
 
 CleartextStream.prototype.address = function() {
@@ -472,8 +464,13 @@ CleartextStream.prototype.getPeerCertificate = function() {
   return cert;
 };
 
-// TODO offset and end
-function readCiphertext(self, data) {
+function readCiphertext(self, d, offset, end) {
+  var data;
+  if (offset || end) {
+    data = d.slice(offset, end);
+  } else {
+    data = d;
+  }
   var sslResult = self.engine.unwrap(data);
   debug(self.id + ' readCiphertext(' + (data ? data.length : 0) + '): SSL status ' + sslResult.status +
         ' consumed ' + sslResult.consumed + ' produced ' + (sslResult.data ? sslResult.data.length : 0));
@@ -499,7 +496,7 @@ function readCiphertext(self, data) {
       break;
     case self.engine.OK:
       if (sslResult.data) {
-        emitRawData(self, sslResult.data);
+        pushRead(self, sslResult.data);
       }
       if (sslResult.remaining > 0) {
         // Once handshaking is done, we might need to unwrap again with the same data
@@ -532,7 +529,12 @@ function writeCleartext(self, data, cb) {
 
   if (sslResult.data) {
     debug(self.id + ' Writing ' + sslResult.data.length);
-    self.socket.write(sslResult.data, cb);
+    self.socket.write(sslResult.data, function() {
+      debug(self.id + ' Write complete');
+      if (cb) {
+        cb(sslResult.data.length);
+      }
+    });
   }
   if (sslResult.justHandshaked) {
     self.justHandshaked();
@@ -547,7 +549,7 @@ function writeCleartext(self, data, cb) {
       break;
     case self.engine.NEED_TASK:
       self.engine.runTask(function() {
-        writeCiphertext(self);
+        writeCleartext(self);
       });
       break;
     case self.engine.UNDERFLOW:
@@ -571,24 +573,3 @@ function writeCleartext(self, data, cb) {
   }
   return bytesConsumed;
 }
-
-function emitRawData(self, data) {
-  debug(self.id + ' emitBuffer: ' + data.length);
-  if (self.decoder) {
-    var decoded = self.decoder.write(data);
-    if (decoded) {
-      debug(self.id + ' emitBuffer: decoded string ' + decoded.length);
-      emitBuffer(self, decoded);
-    }
-  } else {
-    emitBuffer(self, data);
-  }
-}
-
-function emitBuffer(self, buf) {
-  self.emit('data', buf);
-  if (self.ondata) {
-    self.ondata(buf, 0, buf.length);
-  }
-}
-

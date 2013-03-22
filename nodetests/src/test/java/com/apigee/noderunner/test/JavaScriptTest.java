@@ -36,7 +36,8 @@ public class JavaScriptTest
 {
     public static final String[] BASE_DIRS =
         new String[] { "target/test-classes/test/simple",
-                       "target/test-classes/test/noderunner" };
+                       "target/test-classes/test/noderunner",
+                       "target/test-classes/test/pummel" };
     public static final String TEMP_DIR = "target/test-classes/test/tmp";
     public static final String RESULT_FILE = "target/results.out";
     public static final String TEST_FILE_NAME_PROP = "TestFile";

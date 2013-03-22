@@ -265,10 +265,7 @@ public class HTTPWrap
         {
             try {
                 Scriptable incoming = request.getAttachment();
-                Buffer.BufferImpl buf = (Buffer.BufferImpl)cx.newObject(scope, Buffer.BUFFER_CLASS_NAME);
-                if (requestData != null) {
-                    buf.initialize(requestData, true);
-                }
+                Buffer.BufferImpl buf = Buffer.BufferImpl.newBuffer(cx, scope, requestData, true);
                 onData.call(cx, onData, this,
                             new Object[]{incoming, buf});
             } catch (Throwable t) {

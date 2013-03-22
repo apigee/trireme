@@ -176,6 +176,19 @@ public class Utils
         return new JavaScriptException(err);
     }
 
+    public static RhinoException makeRangeError(Context cx, Scriptable scope, String message)
+    {
+        Scriptable err = cx.newObject(scope, "RangeError", new Object[] { message });
+        return new JavaScriptException(err);
+    }
+
+    public static RhinoException makeTypeError(Context cx, Scriptable scope, String message)
+    {
+        Scriptable err = cx.newObject(scope, "TypeError", new Object[] { message });
+        return new JavaScriptException(err);
+    }
+
+
     public static List<String> toStringList(Scriptable o)
     {
         ArrayList<String> ret = new ArrayList<String>();

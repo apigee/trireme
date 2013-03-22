@@ -134,6 +134,10 @@ public class Process
                         log.debug("Creating new instance {} of internal module {}",
                                   System.identityHashCode(mod), name);
                     }
+                    // Special handling of "buffer" which is available in more than one context
+                    if ((mod == null) && Buffer.MODULE_NAME.equals(name)) {
+                        return runner.require(name, cx);
+                    }
 
                 } catch (InvocationTargetException e) {
                     throw new EvaluatorException("Error initializing module: " + e.toString());

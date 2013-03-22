@@ -8,6 +8,7 @@ import com.apigee.noderunner.core.RunningScript;
 import com.apigee.noderunner.core.Sandbox;
 import com.apigee.noderunner.core.ScriptStatus;
 import com.apigee.noderunner.core.ScriptTask;
+import com.apigee.noderunner.core.modules.Buffer;
 import com.apigee.noderunner.core.modules.NativeModule;
 import com.apigee.noderunner.core.modules.Process;
 import com.apigee.noderunner.net.SelectorHandler;
@@ -72,6 +73,7 @@ public class ScriptRunner
     // Globals that are set up for the process
     private NativeModule.NativeImpl nativeModule;
     private Process.ProcessImpl process;
+    private Buffer.BufferModuleImpl buffer;
     private Scriptable          mainModule;
     private Object              console;
 
@@ -162,6 +164,10 @@ public class ScriptRunner
 
     public NativeModule.NativeImpl getNativeModule() {
         return nativeModule;
+    }
+
+    public Buffer.BufferModuleImpl getBufferModule() {
+        return buffer;
     }
 
     public Selector getSelector() {
@@ -558,7 +564,8 @@ public class ScriptRunner
             scope.put("global", scope, scope);
             scope.put("GLOBAL", scope, scope);
             scope.put("root", scope, scope);
-            require("buffer", cx);
+            buffer = (Buffer.BufferModuleImpl)require("buffer", cx);
+            scope.put("Buffer", scope, buffer.get("Buffer", buffer));
             Scriptable timers = (Scriptable)require("timers", cx);
             scope.put("timers", scope, timers);
             scope.put("domain", scope, null);

@@ -1,0 +1,9 @@
+<ExcludedTests>
+    <!-- This file contains a list of tests that, although they exist in the Node test suite, we have excluded
+         them. This lets us simply copy the Node test suite to ours rather than try to maintain a file synchronization,
+         but we can exclude them here. -->
+    <Excluded>
+        <Name>test-buffer-big.js</Name>
+        <Description>Relies on internal V8 and Node classes.</Description>
+    </Excluded>
+</ExcludedTests>

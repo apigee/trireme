@@ -15,9 +15,12 @@ import org.mozilla.javascript.Undefined;
 import org.mozilla.javascript.annotations.JSConstructor;
 import org.mozilla.javascript.annotations.JSFunction;
 import org.mozilla.javascript.annotations.JSGetter;
+import org.mozilla.javascript.annotations.JSSetter;
+import org.mozilla.javascript.annotations.JSStaticFunction;
 
 import static com.apigee.noderunner.core.internal.ArgUtils.*;
 
+import java.io.IOException;
 import java.lang.reflect.InvocationTargetException;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
@@ -31,36 +34,34 @@ import java.util.Arrays;
 public class Buffer
     implements NodeModule
 {
-    public static final String BUFFER_CLASS_NAME = "_bufferClass";
-    protected static final String EXPORT_CLASS_NAME = "_bufferModule";
-    public static final String EXPORT_NAME = "Buffer";
-
     private static final String DEFAULT_ENCODING = "utf8";
+    public static final String MODULE_NAME = "buffer";
+
+    /** Not documented but node tests for a RangeError over this size. */
+    public static final int MAX_LENGTH = 0x3fffffff;
 
     @Override
     public String getModuleName() {
-        return "buffer";
+        return MODULE_NAME;
     }
 
     @Override
     public Object registerExports(Context cx, Scriptable scope, ScriptRunner runner)
         throws InvocationTargetException, IllegalAccessException, InstantiationException
     {
-        ScriptableObject.defineClass(scope, BufferImpl.class, false, true);
-        ScriptableObject.defineClass(scope, BufferModuleImpl.class, false, true);
-        BufferModuleImpl export = (BufferModuleImpl)cx.newObject(scope, EXPORT_CLASS_NAME);
-        export.bindFunctions(cx, scope, export);
-        return export;
-    }
+        ScriptableObject.defineClass(scope, BufferModuleImpl.class);
+        BufferModuleImpl export = (BufferModuleImpl)cx.newObject(scope, BufferModuleImpl.CLASS_NAME);
+        ScriptableObject.defineClass(export, BufferImpl.class, false, true);
 
-    protected static Charset resolveEncoding(Object[] args, int pos)
-    {
-        String encArg = stringArg(args, pos, DEFAULT_ENCODING);
-        Charset charset = Charsets.get().getCharset(encArg);
-        if (charset == null) {
-            throw new EvaluatorException("Unknown encoding: " + encArg);
-        }
-        return charset;
+        // This property is weird -- it's a property of the Buffer class, which Rhino doesn't
+        // handle through annotations. But we are multi-tenant so it can't be a static. So, the
+        // "exported" object, which is a singleton per script, will hold it and we'll use a thread-local to find it.
+        ScriptableObject buf = (ScriptableObject)export.get(BufferImpl.CLASS_NAME, export);
+        buf.defineProperty("_charsWritten", export, Utils.findMethod(BufferModuleImpl.class, "getCharsWritten"),
+                           null, 0);
+        // In our implementation, SlowBuffer is exactly the same as buffer
+        export.put("SlowBuffer", export, buf);
+        return export;
     }
 
     /**
@@ -70,132 +71,30 @@ public class Buffer
     public static class BufferModuleImpl
         extends ScriptableObject
     {
+        public static final String CLASS_NAME = "_bufferModule";
+
         private int inspectMaxBytes = 50;
         private int charsWritten;
 
         @Override
         public String getClassName() {
-            return EXPORT_CLASS_NAME;
-        }
-
-        public void bindFunctions(Context cx, Scriptable globalScope, Scriptable export)
-        {
-            FunctionObject buffer = new FunctionObject("Buffer",
-                                                       Utils.findMethod(BufferModuleImpl.class, "Buffer"),
-                                                       export);
-            export.put("Buffer", export, buffer);
-            globalScope.put("Buffer", globalScope, buffer);
-            buffer.associateValue("_module", this);
-
-            FunctionObject slowBuffer = new FunctionObject("SlowBuffer",
-                                                       Utils.findMethod(BufferModuleImpl.class, "SlowBuffer"),
-                                                       export);
-            export.put("SlowBuffer", export, slowBuffer);
-            buffer.associateValue("_module", this);
-
-            buffer.defineProperty("_charsWritten", this,
-                                  Utils.findMethod(BufferModuleImpl.class, "getCharsWritten"),
-                                  Utils.findMethod(BufferModuleImpl.class, "setCharsWritten"), 0);
-
-            putFunction(buffer, "isEncoding", BufferModuleImpl.class);
-            putFunction(buffer, "isBuffer", BufferModuleImpl.class);
-            putFunction(buffer, "byteLength", BufferModuleImpl.class);
-            putFunction(buffer, "concat", BufferModuleImpl.class);
-        }
-
-        private void putFunction(Scriptable scope, String name, Class<?> klass)
-        {
-            FunctionObject func = new FunctionObject(name,
-                                                     Utils.findMethod(klass, name),
-                                                     scope);
-            scope.put(name, scope, func);
-        }
-
-        public static Scriptable Buffer(Context cx, Scriptable thisObj, Object[] args, Function func)
-        {
-            BufferImpl buf = (BufferImpl)cx.newObject(thisObj, BUFFER_CLASS_NAME, args);
-            buf.setParentModule((BufferModuleImpl)(((ScriptableObject)func).getAssociatedValue("_module")));
-            return buf;
-        }
-
-        public static Scriptable SlowBuffer(Context cx, Scriptable thisObj, Object[] args, Function func)
-        {
-            return Buffer(cx, thisObj, args, func);
-        }
-
-        public static boolean isEncoding(Context cx, Scriptable thisObj, Object[] args, Function func)
-        {
-            String enc = stringArg(args, 0);
-            return (Charsets.get().getCharset(enc) != null);
-        }
-
-        public static boolean isBuffer(Context cx, Scriptable thisObj, Object[] args, Function func)
-        {
-            return ((args.length > 0) && (args[0] instanceof BufferImpl));
-        }
-
-        public static int byteLength(Context cx, Scriptable thisObj, Object[] args, Function func)
-        {
-            String data = stringArg(args, 0);
-            Charset charset = resolveEncoding(args, 1);
-            CharsetEncoder encoder = charset.newEncoder();
-            encoder.onUnmappableCharacter(CodingErrorAction.REPLACE);
-
-            // Encode into a small temporary buffer to make counting easiest.
-            // I don't know of a better way.
-            CharBuffer chars = CharBuffer.wrap(data);
-            ByteBuffer tmp = ByteBuffer.allocate(256);
-            int total = 0;
-            CoderResult result;
-            do {
-                tmp.clear();
-                result = encoder.encode(chars, tmp, true);
-                total += tmp.position();
-            } while (result == CoderResult.OVERFLOW);
-            return total;
-        }
-
-        public static Object concat(Context cx, Scriptable thisObj, Object[] args, Function func)
-        {
-            NativeArray bufs = objArg(args, 0, NativeArray.class, true);
-            int totalLen = intArg(args, 1, -1);
-
-            if (bufs.getLength() == 0) {
-                return cx.newObject(thisObj, BUFFER_CLASS_NAME, new Object[] { 0 });
-            } else if (bufs.getLength() == 1) {
-                return bufs.get(0);
-            }
-
-            if (totalLen < 0) {
-                totalLen = 0;
-                for (Integer i : bufs.getIndexIds()) {
-                    BufferImpl buf = (BufferImpl) bufs.get(i);
-                    totalLen += buf.bufLength;
-                }
-            }
-
-            int pos = 0;
-            BufferImpl ret = (BufferImpl) cx.newObject(thisObj, BUFFER_CLASS_NAME, new Object[] { totalLen });
-            for (Integer i : bufs.getIndexIds()) {
-                BufferImpl from = (BufferImpl) bufs.get(i);
-                System.arraycopy(from.buf, from.bufOffset, ret.buf, pos, from.bufLength);
-                pos += from.bufLength;
-            }
-            return ret;
+            return CLASS_NAME;
         }
 
         public int getCharsWritten(Scriptable obj) {
             return charsWritten;
         }
 
-        public void setCharsWritten(Scriptable obj, int cw) {
+        void setCharsWritten(int cw) {
             charsWritten = cw;
         }
 
+        @JSGetter("INSPECT_MAX_BYTES")
         public int getInspectMaxBytes() {
             return inspectMaxBytes;
         }
 
+        @JSSetter("INSPECT_MAX_BYTES")
         public void setInspectMaxBytes(int i) {
             this.inspectMaxBytes = i;
         }
@@ -207,43 +106,45 @@ public class Buffer
     public static class BufferImpl
         extends ScriptableObject
     {
+        public static final String CLASS_NAME = "Buffer";
         private byte[] buf;
         private int bufOffset;
         private int bufLength;
-        private BufferModuleImpl parentModule;
-
-        public BufferImpl()
-        {
-        }
-
-        public void setParentModule(BufferModuleImpl mod)
-        {
-            this.parentModule = mod;
-        }
 
         /**
          * Read the bytes from the corresponding buffer into this one. If "copy" is true then
          * make a new copy.
          */
-        public void initialize(ByteBuffer bb, boolean copy)
+        public static BufferImpl newBuffer(Context cx, Scriptable scope,
+                                           ByteBuffer bb, boolean copy)
         {
-            if (bb.hasArray() && !copy) {
-                buf = bb.array();
-                bufOffset = bb.arrayOffset() + bb.position();
-                bufLength = bb.remaining();
-            } else {
-                buf = new byte[bb.remaining()];
-                bb.get(buf);
-                bufOffset = 0;
-                bufLength = buf.length;
+            BufferImpl buf = (BufferImpl)cx.newObject(scope, CLASS_NAME);
+            if (bb == null) {
+                return buf;
             }
+            if (bb.hasArray() && !copy) {
+                buf.buf = bb.array();
+                buf.bufOffset = bb.arrayOffset() + bb.position();
+                buf.bufLength = bb.remaining();
+            } else {
+                buf.buf = new byte[bb.remaining()];
+                bb.get(buf.buf);
+                buf.bufOffset = 0;
+                buf.bufLength = buf.buf.length;
+            }
+            return buf;
         }
 
-        public void initialize(byte[] buf)
+        public static BufferImpl newBuffer(Context cx, Scriptable scope, byte[] bb)
         {
-            this.buf = buf;
-            bufOffset = 0;
-            bufLength = buf.length;
+            BufferImpl buf = (BufferImpl)cx.newObject(scope, CLASS_NAME);
+            if (bb == null) {
+                return buf;
+            }
+            buf.buf = bb;
+            buf.bufOffset = 0;
+            buf.bufLength = buf.buf.length;
+            return buf;
         }
 
         public ByteBuffer getBuffer()
@@ -267,16 +168,21 @@ public class Buffer
 
         @Override
         public String getClassName() {
-            return BUFFER_CLASS_NAME;
+            return CLASS_NAME;
         }
 
         @Override
         public Object get(int index, Scriptable start)
         {
             if (index < bufLength) {
-                return (int)buf[index + bufOffset] & 0xff;
+                return get(index);
             }
             return Undefined.instance;
+        }
+
+        public int get(int index)
+        {
+            return (int)buf[index + bufOffset] & 0xff;
         }
 
         @Override
@@ -304,30 +210,52 @@ public class Buffer
         }
 
         @JSConstructor
-        public static Object newBuffer(Context cx, Object[] args, Function ctorObj, boolean inNewExpr)
+        public static Object bufferConstructor(Context cx, Object[] args, Function ctorObj, boolean inNewExpr)
         {
-            BufferImpl ret = new BufferImpl();
+            BufferImpl ret;
+            if (inNewExpr) {
+                ret = new BufferImpl();
+            } else {
+                ret = (BufferImpl)cx.newObject(ctorObj, CLASS_NAME);
+            }
+            initializeBuffer(ret, cx, args, ctorObj);
+            return ret;
+        }
+
+        static void initializeBuffer(BufferImpl buf, Context cx, Object[] args, Function ctorObj)
+        {
             if (args.length == 0) {
-                return ret;
+                return;
             }
             if (args[0] instanceof String) {
                 // If a string, encode and create -- this is in the docs
                 Charset encoding = resolveEncoding(args, 1);
-                ret.fromStringInternal(((String)args[0]), encoding);
+                buf.fromStringInternal(((String)args[0]), encoding);
 
             } else if (args[0] instanceof Number) {
                 // If a non-negative integer, use that, otherwise 0 -- from the tests and docs
                 int len = parseUnsignedIntForgiveably(args[0]);
-                ret.buf = new byte[len];
-                ret.bufOffset = 0;
-                ret.bufLength = len;
+                if ((len < 0) || (len > MAX_LENGTH)) {
+                    throw Utils.makeRangeError(cx, ctorObj, "Length out of range");
+                }
+                buf.buf = new byte[len];
+                buf.bufOffset = 0;
+                buf.bufLength = len;
+
+            } else if (args[0] instanceof BufferImpl) {
+                // Copy constructor -- undocumented but in the tests. Let's copy it.
+                BufferImpl src = (BufferImpl)args[0];
+                buf.buf = new byte[src.bufLength];
+                buf.bufOffset = 0;
+                buf.bufLength = src.bufLength;
+                System.arraycopy(src.buf, src.bufOffset, buf.buf, 0, buf.bufLength);
 
             } else if (args[0] instanceof Scriptable) {
                 Scriptable s = (Scriptable)args[0];
-                if (s.getPrototype() == ScriptableObject.getArrayPrototype(ctorObj)) {
-                    // An array of integers -- use that, from the tests
+                if (s.getPrototype().equals(ScriptableObject.getArrayPrototype(ctorObj))) {
+                    // An array of integers -- use that, from the docs
                     Object[] ids = s.getIds();
-                    ret.buf = new byte[ids.length];
+                    buf.buf = new byte[ids.length];
                     int pos = 0;
                     for (Object id : ids) {
                         Object e;
@@ -336,40 +264,41 @@ public class Buffer
                         } else if (id instanceof String) {
                             e = s.get(((String)id), s);
                         } else {
-                            throw new EvaluatorException("Invalid argument type in array");
+                            throw Utils.makeTypeError(cx, ctorObj, "Invalid argument type in array");
                         }
                         if (isIntArg(e)) {
-                            ret.putByte(pos++, (Integer)Context.jsToJava(e, Integer.class));
+                            buf.putByte(pos++, (Integer)Context.jsToJava(e, Integer.class));
                         } else {
-                            throw new EvaluatorException("Invalid argument type in array");
+                            throw Utils.makeTypeError(cx, ctorObj, "Invalid argument type in array");
                         }
                     }
                 } else {
-                    // An object with the field "length" -- use that, from the tests
+                    // An object with the field "length" -- use that, from the tests but not the docs
                     if (s.has("length", s)) {
                         int len = parseUnsignedIntForgiveably(s.get("length", s));
-                        ret.buf = new byte[len];
+                        if ((len < 0) || (len > MAX_LENGTH)) {
+                            throw Utils.makeRangeError(cx, ctorObj, "Length out of range");
+                        }
+                        buf.buf = new byte[len];
                         for (Object id : s.getIds()) {
                             if (id instanceof Number) {
                                 int iid = ((Number)id).intValue();
                                 Object v = s.get(iid, s);
                                 if (iid < len) {
                                     int val = (Integer)Context.jsToJava(v, Integer.class);
-                                    ret.buf[iid] = (byte)(val & 0xff);
+                                    buf.buf[iid] = (byte)(val & 0xff);
                                 }
                             }
                         }
                     } else {
-                        ret.buf = new byte[0];
+                        buf.buf = new byte[0];
                     }
                 }
-                ret.bufOffset = 0;
-                ret.bufLength = ret.buf.length;
+                buf.bufOffset = 0;
+                buf.bufLength = buf.buf.length;
             } else {
-                throw new EvaluatorException("Invalid argument type");
+                throw Utils.makeTypeError(cx, ctorObj, "Invalid argument type");
             }
-
-            return ret;
         }
 
         @JSFunction
@@ -413,7 +342,7 @@ public class Buffer
                         length = intArg(args, 3);
                         hasLength = true;
                     } else {
-                        throw new EvaluatorException("Invalid arguments");
+                        throw Utils.makeRangeError(cx, thisObj,  "Invalid arguments");
                     }
                 }
             }
@@ -427,7 +356,7 @@ public class Buffer
             CharsetEncoder encoder = charset.newEncoder();
 
             if (offset < 0) {
-                throw new EvaluatorException("offset out of bounds");
+                throw Utils.makeRangeError(cx, thisObj, "offset out of bounds");
             }
 
             // Set up a buffer with the right offset and limit
@@ -443,9 +372,8 @@ public class Buffer
             // Encode as much as we can and move the buffer's positions forward
             CharBuffer chars = CharBuffer.wrap(data);
             encoder.encode(chars, writeBuf, true);
-            if (b.parentModule != null) {
-                b.parentModule.setCharsWritten(b, chars.position());
-            }
+            b.setCharsWritten(chars.position());
+
             return writeBuf.position() - offset - b.bufOffset;
         }
 
@@ -484,39 +412,52 @@ public class Buffer
             bufLength = writeBuf.remaining();
         }
 
+        /**
+         * From Node's buffer.js -- be very, very forgiving of an index.
+         */
+        private static int clamp(int i, int l)
+        {
+            if (i >= l) {
+                return l;
+            }
+            if (i >= 0) {
+                return i;
+            }
+            i += l;
+            if (i >= 0) {
+                return i;
+            }
+            return 0;
+        }
+
         @JSFunction
         public static BufferImpl slice(Context cx, Scriptable thisObj, Object[] args, Function func)
         {
             BufferImpl b = (BufferImpl)thisObj;
 
-            int start = intArg(args, 0, 0);
-            int end = intArg(args, 1, b.bufLength);
+            int start = clamp(intArg(args, 0, 0), b.bufLength);
+            int end = clamp(intArg(args, 1, b.bufLength), b.bufLength);
 
-            if (start < 0) {
-                throw new EvaluatorException("Invalid start");
-            }
-            if (end < 0) {
-                throw new EvaluatorException("Invalid end");
-            }
-            if (end < start) {
-                throw new EvaluatorException("end < start");
-            }
-
-            BufferImpl s = (BufferImpl)cx.newObject(thisObj, BUFFER_CLASS_NAME);
+            BufferImpl s = (BufferImpl)cx.newObject(thisObj, CLASS_NAME);
             s.buf = b.buf;
-            s.bufOffset = start + b.bufOffset;
-            s.bufLength = end - start;
+            if (start > end) {
+                s.bufOffset = 0;
+                s.bufLength = 0;
+            } else {
+                s.bufOffset = start + b.bufOffset;
+                s.bufLength = end - start;
+            }
             return s;
         }
-
-        // TODO toJSON -- not 100 percent sure what it's supposed to do...
-
-
 
         @JSGetter("length")
         public int getLength()
         {
             return bufLength;
+        }
+
+        private void setCharsWritten(int cw) {
+            getRunner(Context.getCurrentContext()).getBufferModule().setCharsWritten(cw);
         }
 
         @JSFunction
@@ -529,30 +470,27 @@ public class Buffer
             int sourceStart = intArg(args, 2, 0);
             int sourceEnd = intArg(args, 3, b.bufLength);
 
+            if ((sourceStart == sourceEnd) ||
+                (t.bufLength == 0) ||
+                (b.bufLength == 0) ||
+                (sourceStart > b.bufLength)) {
+                return 0;
+            }
+
             if (sourceEnd < sourceStart) {
-                throw new EvaluatorException("sourceEnd < sourceStart");
+                throw Utils.makeRangeError(cx, thisObj, "sourceEnd < sourceStart");
             }
-            if (sourceEnd == sourceStart) {
-                return 0;
+
+            if (targetStart >= t.bufLength) {
+                throw Utils.makeRangeError(cx, thisObj, "targetStart out of bounds");
             }
-            if ((t.bufLength == 0) || (b.bufLength == 0)) {
-                return 0;
-            }
-            if ((targetStart < 0) || (targetStart >= t.bufLength)) {
-                throw new EvaluatorException("targetStart out of bounds");
-            }
-            if ((sourceStart < 0) || (sourceStart >= b.bufLength)) {
-                throw new EvaluatorException("sourceStart out of bounds");
-            }
-            if ((sourceEnd < 0) || (sourceEnd > b.bufLength)) {
-                throw new EvaluatorException("sourceEnd out of bounds");
+
+            if ((t.bufLength - targetStart) < (sourceEnd - sourceStart)) {
+                sourceEnd = t.bufLength - targetStart + sourceStart;
             }
 
             int len = Math.min(Math.min(sourceEnd - sourceStart, t.bufLength - targetStart),
-                    b.bufLength - sourceStart);
-            if (len <= 0) {
-                return 0;
-            }
+                                        b.bufLength - sourceStart);
             System.arraycopy(b.buf, sourceStart + b.bufOffset, t.buf,
                              targetStart + t.bufOffset, len);
             return len;
@@ -567,10 +505,10 @@ public class Buffer
             int end = intArg(args, 2, b.bufLength);
 
             if ((offset < 0) || (offset >= b.bufLength)) {
-                throw new EvaluatorException("offset out of bounds");
+                throw Utils.makeRangeError(cx, thisObj, "offset out of bounds");
             }
             if (end < 0) {
-                throw new EvaluatorException("end out of bounds");
+                throw Utils.makeRangeError(cx, thisObj, "end out of bounds");
             }
             if (offset == end) {
                 return;
@@ -587,7 +525,7 @@ public class Buffer
                 Arrays.fill(b.buf, b.bufOffset + offset, b.bufOffset + realEnd,
                             (byte)(((String)args[0]).charAt(0)));
             } else {
-                throw new EvaluatorException("Invalid value argument");
+                throw Utils.makeTypeError(cx, thisObj, "Invalid value argument");
             }
         }
 
@@ -598,7 +536,7 @@ public class Buffer
             boolean noAssert = booleanArg(args, 1, false);
 
             BufferImpl b = (BufferImpl)thisObj;
-            if (b.inBounds(offset, noAssert)) {
+            if (b.inBounds(offset, offset, noAssert)) {
                 return b.buf[offset + b.bufOffset];
             }
             return 0;
@@ -640,7 +578,7 @@ public class Buffer
             boolean noAssert = booleanArg(args, 1, false);
 
             BufferImpl b = (BufferImpl)thisObj;
-            if (b.inBounds(offset + 1, noAssert)) {
+            if (b.inBounds(offset, offset + 1, noAssert)) {
                 if (order == ByteOrder.BIG_ENDIAN) {
                     return (short)((((int)b.buf[b.bufOffset +offset] & 0xff) << 8) |
                             ((int)b.buf[b.bufOffset +offset + 1] & 0xff));
@@ -682,7 +620,7 @@ public class Buffer
             boolean noAssert = booleanArg(args, 1, false);
 
             BufferImpl b = (BufferImpl)thisObj;
-            if (b.inBounds(offset + 3, noAssert)) {
+            if (b.inBounds(offset, offset + 3, noAssert)) {
                 if (order == ByteOrder.BIG_ENDIAN) {
                     return (((int)b.buf[b.bufOffset +offset] & 0xff) << 24) |
                            (((int)b.buf[b.bufOffset +offset + 1] & 0xff) << 16) |
@@ -704,7 +642,7 @@ public class Buffer
             boolean noAssert = booleanArg(args, 1, false);
 
             BufferImpl b = (BufferImpl)thisObj;
-            if (b.inBounds(offset + 7, noAssert)) {
+            if (b.inBounds(offset, offset + 7, noAssert)) {
                 if (order == ByteOrder.BIG_ENDIAN) {
                     return (((long)b.buf[b.bufOffset +offset] & 0xffL) << 56L) |
                            (((long)b.buf[b.bufOffset +offset + 1] & 0xffL) << 48L) |
@@ -761,6 +699,9 @@ public class Buffer
         {
             BufferImpl b = (BufferImpl)thisObj;
             int value = intArg(args, 0);
+            if ((value > Byte.MAX_VALUE) || (value < Byte.MIN_VALUE)) {
+                throw Utils.makeRangeError(cx, thisObj, "out of range");
+            }
             b.writeInt8Internal(args, value);
         }
 
@@ -768,7 +709,11 @@ public class Buffer
         public static void writeUInt8(Context cx, Scriptable thisObj, Object[] args, Function func)
         {
             BufferImpl b = (BufferImpl)thisObj;
-            int value = intArg(args, 0) & 0xff;
+            int value = intArg(args, 0);
+            if ((value > 0xff) || (value < 0)) {
+                throw Utils.makeRangeError(cx, thisObj, "out of range");
+            }
+            value &= 0xff;
             b.writeInt8Internal(args, value);
         }
 
@@ -777,7 +722,7 @@ public class Buffer
             int offset = intArg(args, 1);
             boolean noAssert = booleanArg(args, 2, false);
 
-            if (inBounds(offset, noAssert)) {
+            if (inBounds(offset, offset, noAssert)) {
                 buf[bufOffset +offset] = (byte)value;
             }
         }
@@ -786,6 +731,9 @@ public class Buffer
         public static void writeInt16LE(Context cx, Scriptable thisObj, Object[] args, Function func)
         {
             int value = intArg(args, 0);
+            if ((value > Short.MAX_VALUE) || (value < Short.MIN_VALUE)) {
+                throw Utils.makeRangeError(cx, thisObj, "out of range");
+            }
             writeInt16(cx, thisObj, args, func, ByteOrder.LITTLE_ENDIAN, value);
         }
 
@@ -793,6 +741,9 @@ public class Buffer
         public static void writeInt16BE(Context cx, Scriptable thisObj, Object[] args, Function func)
         {
             int value = intArg(args, 0);
+            if ((value > Short.MAX_VALUE) || (value < Short.MIN_VALUE)) {
+                throw Utils.makeRangeError(cx, thisObj, "out of range");
+            }
             writeInt16(cx, thisObj, args, func, ByteOrder.BIG_ENDIAN, value);
         }
 
@@ -800,6 +751,9 @@ public class Buffer
         public static void writeUInt16LE(Context cx, Scriptable thisObj, Object[] args, Function func)
         {
             int value = intArg(args, 0);
+            if ((value > 0xffff) || (value < 0)) {
+                throw Utils.makeRangeError(cx, thisObj, "out of range");
+            }
             writeInt16(cx, thisObj, args, func, ByteOrder.LITTLE_ENDIAN, value & 0xffff);
         }
 
@@ -807,6 +761,9 @@ public class Buffer
         public static void writeUInt16BE(Context cx, Scriptable thisObj, Object[] args, Function func)
         {
             int value = intArg(args, 0);
+            if ((value > 0xffff) || (value < 0)) {
+                throw Utils.makeRangeError(cx, thisObj, "out of range");
+            }
             writeInt16(cx, thisObj, args, func, ByteOrder.BIG_ENDIAN, value & 0xffff);
         }
 
@@ -817,7 +774,7 @@ public class Buffer
             boolean noAssert = booleanArg(args, 2, false);
 
             BufferImpl b = (BufferImpl)thisObj;
-            if (b.inBounds(offset + 1, noAssert)) {
+            if (b.inBounds(offset, offset + 1, noAssert)) {
                 if (order == ByteOrder.BIG_ENDIAN) {
                     b.buf[b.bufOffset + offset] = (byte)((value >>> 8) & 0xff);
                     b.buf[b.bufOffset +offset + 1] = (byte)(value & 0xff);
@@ -831,14 +788,20 @@ public class Buffer
         @JSFunction
         public static void writeInt32LE(Context cx, Scriptable thisObj, Object[] args, Function func)
         {
-            int value = intArg(args, 0);
+            long value = longArg(args, 0);
+            if ((value > Integer.MAX_VALUE) || (value < Integer.MIN_VALUE)) {
+                throw Utils.makeRangeError(cx, thisObj, "out of range");
+            }
             writeInt32(cx, thisObj, args, func, ByteOrder.LITTLE_ENDIAN, value);
         }
 
         @JSFunction
         public static void writeInt32BE(Context cx, Scriptable thisObj, Object[] args, Function func)
         {
-            int value = intArg(args, 0);
+            long value = longArg(args, 0);
+            if ((value > Integer.MAX_VALUE) || (value < Integer.MIN_VALUE)) {
+                throw Utils.makeRangeError(cx, thisObj, "out of range");
+            }
             writeInt32(cx, thisObj, args, func, ByteOrder.BIG_ENDIAN, value);
         }
 
@@ -846,6 +809,9 @@ public class Buffer
         public static void writeUInt32LE(Context cx, Scriptable thisObj, Object[] args, Function func)
         {
             long value = longArg(args, 0);
+            if ((value > 0xffffffffL) || (value < 0)) {
+                throw Utils.makeRangeError(cx, thisObj, "out of range");
+            }
             writeInt32(cx, thisObj, args, func, ByteOrder.LITTLE_ENDIAN, value & 0xffffffffL);
         }
 
@@ -853,6 +819,9 @@ public class Buffer
         public static void writeUInt32BE(Context cx, Scriptable thisObj, Object[] args, Function func)
         {
             long value = longArg(args, 0);
+            if ((value > 0xffffffffL) || (value < 0)) {
+                throw Utils.makeRangeError(cx, thisObj, "out of range");
+            }
             writeInt32(cx, thisObj, args, func, ByteOrder.BIG_ENDIAN, value & 0xffffffffL);
         }
 
@@ -868,7 +837,7 @@ public class Buffer
 
         private void writeInt32(int offset, long value, boolean noAssert, ByteOrder order)
         {
-            if (inBounds(offset + 3, noAssert)) {
+            if (inBounds(offset, offset + 3, noAssert)) {
                 if (order == ByteOrder.BIG_ENDIAN) {
                     buf[bufOffset +offset] = (byte)((value >>> 24L) & 0xffL);
                     buf[bufOffset +offset + 1] = (byte)((value >>> 16L) & 0xffL);
@@ -885,7 +854,7 @@ public class Buffer
 
         private void writeInt64(int offset, long value, boolean noAssert, ByteOrder order)
         {
-            if (inBounds(offset + 7, noAssert)) {
+            if (inBounds(offset, offset + 7, noAssert)) {
                 if (order == ByteOrder.BIG_ENDIAN) {
                     buf[bufOffset + offset] = (byte)((value >>> 56L) & 0xffL);
                     buf[bufOffset +offset + 1] = (byte)((value >>> 48L) & 0xffL);
@@ -911,68 +880,195 @@ public class Buffer
         @JSFunction
         public static void writeFloatLE(Context cx, Scriptable thisObj, Object[] args, Function func)
         {
-            float value = floatArg(args, 0);
+            ensureArg(args, 0);
+            float value = (float)Context.toNumber(args[0]);
             int offset = intArg(args, 1);
             boolean noAssert = booleanArg(args, 2, false);
 
             BufferImpl b = (BufferImpl)thisObj;
-            int iVal = Float.floatToRawIntBits(value);
+            int iVal = Float.floatToIntBits(value);
             b.writeInt32(offset, iVal, noAssert, ByteOrder.LITTLE_ENDIAN);
         }
 
         @JSFunction
         public static void writeFloatBE(Context cx, Scriptable thisObj, Object[] args, Function func)
         {
-            float value = floatArg(args, 0);
+            ensureArg(args, 0);
+            float value = (float)Context.toNumber(args[0]);
             int offset = intArg(args, 1);
             boolean noAssert = booleanArg(args, 2, false);
 
             BufferImpl b = (BufferImpl)thisObj;
-            int iVal = Float.floatToRawIntBits(value);
+            int iVal = Float.floatToIntBits(value);
             b.writeInt32(offset, iVal, noAssert, ByteOrder.BIG_ENDIAN);
         }
 
         @JSFunction
         public static void writeDoubleLE(Context cx, Scriptable thisObj, Object[] args, Function func)
         {
-            double value = doubleArg(args, 0);
+            ensureArg(args, 0);
+            double value = Context.toNumber(args[0]);
             int offset = intArg(args, 1);
             boolean noAssert = booleanArg(args, 2, false);
 
             BufferImpl b = (BufferImpl)thisObj;
-            long lVal = Double.doubleToRawLongBits(value);
+            long lVal = Double.doubleToLongBits(value);
             b.writeInt64(offset, lVal, noAssert, ByteOrder.LITTLE_ENDIAN);
         }
 
         @JSFunction
         public static void writeDoubleBE(Context cx, Scriptable thisObj, Object[] args, Function func)
         {
-            double value = doubleArg(args, 0);
+            ensureArg(args, 0);
+            double value = Context.toNumber(args[0]);
             int offset = intArg(args, 1);
             boolean noAssert = booleanArg(args, 2, false);
 
             BufferImpl b = (BufferImpl)thisObj;
-            long lVal = Double.doubleToRawLongBits(value);
+            long lVal = Double.doubleToLongBits(value);
             b.writeInt64(offset, lVal, noAssert, ByteOrder.BIG_ENDIAN);
         }
 
-        // TODO unsigned integers
-
-        private boolean inBounds(int position, boolean noAssert)
+        private boolean inBounds(int offset, int position, boolean noAssert)
         {
+            if (offset < 0) {
+                if (!noAssert) {
+                    throw Utils.makeRangeError(Context.getCurrentContext(), this,
+                                               "offset is not uint");
+                }
+            }
             if (position >= bufLength) {
                 if (!noAssert) {
-                    throw new EvaluatorException("Index " + position + " out of bounds.");
+                    throw Utils.makeRangeError(Context.getCurrentContext(), this,
+                                               "Trying to access beyond buffer length");
                 }
                 return false;
             }
             return true;
         }
 
+        @JSStaticFunction
+        public static boolean isEncoding(Context cx, Scriptable thisObj, Object[] args, Function func)
+        {
+            String enc = stringArg(args, 0);
+            return (Charsets.get().getCharset(enc) != null);
+        }
+
+        @JSStaticFunction
+        public static boolean isBuffer(Context cx, Scriptable thisObj, Object[] args, Function func)
+        {
+            return ((args.length > 0) && (args[0] instanceof BufferImpl));
+        }
+
+        @JSStaticFunction
+        public static int byteLength(Context cx, Scriptable thisObj, Object[] args, Function func)
+        {
+            String data = stringArg(args, 0);
+            Charset charset = resolveEncoding(args, 1);
+            CharsetEncoder encoder = charset.newEncoder();
+            encoder.onUnmappableCharacter(CodingErrorAction.REPLACE);
+
+            // Encode into a small temporary buffer to make counting easiest.
+            // I don't know of a better way.
+            CharBuffer chars = CharBuffer.wrap(data);
+            ByteBuffer tmp = ByteBuffer.allocate(256);
+            int total = 0;
+            CoderResult result;
+            do {
+                tmp.clear();
+                result = encoder.encode(chars, tmp, true);
+                total += tmp.position();
+            } while (result == CoderResult.OVERFLOW);
+            return total;
+        }
+
+        @JSStaticFunction
+        public static Object concat(Context cx, Scriptable thisObj, Object[] args, Function func)
+        {
+            NativeArray bufs = objArg(args, 0, NativeArray.class, true);
+            int totalLen = intArg(args, 1, -1);
+
+            if (bufs.getLength() == 0) {
+                return cx.newObject(thisObj, CLASS_NAME, new Object[] { 0 });
+            } else if (bufs.getLength() == 1) {
+                return bufs.get(0);
+            }
+
+            if (totalLen < 0) {
+                totalLen = 0;
+                for (Integer i : bufs.getIndexIds()) {
+                    BufferImpl buf = (BufferImpl) bufs.get(i);
+                    totalLen += buf.bufLength;
+                }
+            }
+
+            int pos = 0;
+            BufferImpl ret = (BufferImpl) cx.newObject(thisObj, CLASS_NAME, new Object[] { totalLen });
+            for (Integer i : bufs.getIndexIds()) {
+                BufferImpl from = (BufferImpl) bufs.get(i);
+                System.arraycopy(from.buf, from.bufOffset, ret.buf, pos, from.bufLength);
+                pos += from.bufLength;
+            }
+            return ret;
+        }
+
+        @JSStaticFunction
+        public static void makeFastBuffer(Context cx, Scriptable thisObj, Object[] args, Function func)
+        {
+            // No difference in this implementation
+        }
+
+        @JSFunction
+        public String inspect()
+        {
+            StringBuilder s = new StringBuilder();
+            s.append("<Buffer ");
+            boolean once = false;
+            for (int i = 0; i < bufLength; i++) {
+                if (once) {
+                    s.append(' ');
+                } else {
+                    once = true;
+                }
+                int v = get(i);
+                if (v < 16) {
+                    s.append('0');
+                }
+                s.append(Integer.toHexString(v));
+            }
+            s.append('>');
+            return s.toString();
+        }
+
+        @JSFunction
+        public Object toJSON()
+        {
+            Object[] elts = new Object[bufLength];
+            for (int i = 0; i < bufLength; i++) {
+                elts[i] = get(i);
+            }
+            return Context.getCurrentContext().newArray(this, elts);
+        }
+
         public String toString()
         {
             return "Buffer[length=" + buf.length + ", offset=" + bufOffset +
                     ", bufLength=" + bufLength + ']';
+        }
+
+        private static Charset resolveEncoding(Object[] args, int pos)
+        {
+            String encArg = stringArg(args, pos, DEFAULT_ENCODING);
+            Charset charset = Charsets.get().getCharset(encArg);
+            if (charset == null) {
+                throw new EvaluatorException("Unknown encoding: " + encArg);
+            }
+            return charset;
+        }
+
+        private static ScriptRunner getRunner(Context cx)
+        {
+            return (ScriptRunner)cx.getThreadLocal(ScriptRunner.RUNNER);
         }
     }
 }

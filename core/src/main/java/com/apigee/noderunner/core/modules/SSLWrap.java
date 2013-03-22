@@ -412,10 +412,8 @@ public class SSLWrap
             }
 
             if (outBuf.position() > 0) {
-                Buffer.BufferImpl resultBuf =
-                    (Buffer.BufferImpl)cx.newObject(this, Buffer.BUFFER_CLASS_NAME);
                 outBuf.flip();
-                resultBuf.initialize(outBuf, true);
+                Buffer.BufferImpl resultBuf = Buffer.BufferImpl.newBuffer(cx, this, outBuf, true);
                 outBuf.clear();
                 result.put("data", result, resultBuf);
             }

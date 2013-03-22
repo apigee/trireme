@@ -288,8 +288,7 @@ public class HTTPParser
             if (onBody == null) {
                 return;
             }
-            Buffer.BufferImpl buf = (Buffer.BufferImpl)cx.newObject(this, Buffer.BUFFER_CLASS_NAME);
-            buf.initialize(result.getBody(), false);
+            Buffer.BufferImpl buf = Buffer.BufferImpl.newBuffer(cx, this, result.getBody(), false);
             onBody.call(cx, onBody, this,
                         new Object[] { buf, 0, buf.getLength() });
         }

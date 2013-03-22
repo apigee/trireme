@@ -594,9 +594,8 @@ public class TCPWrap
                         log.debug("Read {} bytes from {} into {}", read, clientChannel, readBuffer);
                     }
                     if (read > 0) {
-                        Buffer.BufferImpl buf = (Buffer.BufferImpl)cx.newObject(this, Buffer.BUFFER_CLASS_NAME);
                         readBuffer.flip();
-                        buf.initialize(readBuffer, true);
+                        Buffer.BufferImpl buf = Buffer.BufferImpl.newBuffer(cx, this, readBuffer, true);
                         readBuffer.clear();
 
                         if (onRead != null) {

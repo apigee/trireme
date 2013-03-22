@@ -158,8 +158,7 @@ public class NativeInputStreamAdapter
                         // A null buffer stands for end of stream
                         jsBuf = null;
                     } else {
-                        jsBuf = (Buffer.BufferImpl)cx.newObject(scope, Buffer.BUFFER_CLASS_NAME);
-                        jsBuf.initialize(ByteBuffer.wrap(buf, 0, len), false);
+                        jsBuf = Buffer.BufferImpl.newBuffer(cx, scope, ByteBuffer.wrap(buf, 0, len), false);
                     }
                     Object ret = callback.call(cx, scope, null,
                                                new Object[] { Context.getUndefinedValue(), jsBuf });

@@ -41,6 +41,16 @@
         <Description>We don't support the same command-line params.</Description>
     </Excluded>
     <Excluded>
+        <Name>test-buffer.js</Name>
+        <Description>Relies on internal details of Node buffer implementation, like negative "sourceStart"
+                     in copy. Copy in noderunner test dir.</Description>
+    </Excluded>
+    <Excluded>
+        <Name>test-buffer-ascii.js</Name>
+        <Description>Relies on Node's way of converting non-8-bit ASCII by stripping the high
+                     bits. Java does it differently unless we custom code it.</Description>
+    </Excluded>
+    <Excluded>
         <Name>test-tls-.+\.js</Name>
         <Description>All TLS tests are run from the "noderunner" directory because they
                      use a different keystore format.

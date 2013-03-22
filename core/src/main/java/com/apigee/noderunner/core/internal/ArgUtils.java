@@ -173,6 +173,7 @@ public class ArgUtils
      *   If an integer, return either a positive integer or zero.
      *   If a double, return either a positive integer rounded up, or zero
      *   If a string, parse to an integer or double and re-do the last two steps.
+     *   This method returns -1 if the value is greater than MAX_VALUE for an int.
      */
     public static int parseUnsignedIntForgiveably(Object o)
     {
@@ -191,14 +192,19 @@ public class ArgUtils
             } if (dVal.isInfinite()) {
                 return Integer.MAX_VALUE;
             }
+            if (dVal > (double)Integer.MAX_VALUE) {
+                return -1;
+            }
             return (int)Math.ceil(dVal);
         }
         if (val instanceof Number) {
-            int iVal = ((Number)val).intValue();
-            if (iVal < 0) {
+            Number num = (Number)val;
+            if (num.longValue() > Integer.MAX_VALUE) {
+                return -1;
+            } else if (num.longValue() < 0) {
                 return 0;
             }
-            return iVal;
+            return num.intValue();
         }
         return 0;
     }

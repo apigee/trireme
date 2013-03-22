@@ -156,9 +156,7 @@ public class Stream
         {
             log.debug("Got {}", buf);
             if (encoding == null) {
-                Buffer.BufferImpl jsBuf =
-                    (Buffer.BufferImpl)cx.newObject(scope, Buffer.BUFFER_CLASS_NAME);
-                jsBuf.initialize(buf, copy);
+                Buffer.BufferImpl jsBuf = Buffer.BufferImpl.newBuffer(cx, scope, buf, copy);
                 fireEvent("data", jsBuf);
 
             } else {

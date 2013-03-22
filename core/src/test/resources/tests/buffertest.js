@@ -1,8 +1,16 @@
 var assert = require('assert');
 var util = require('util');
+var SlowBuffer = require('buffer').SlowBuffer;
 
 var buf1 = Buffer(1024);
 assert.equal(buf1.length, 1024);
+var buf1a = new Buffer(1024);
+assert.equal(buf1a.length, 1024);
+
+var slowBuf1 = SlowBuffer(1024);
+assert.equal(slowBuf1.length, 1024);
+var slowBuf1a = new SlowBuffer(1024);
+assert.equal(slowBuf1a.length, 1024);
 
 var str2 = 'Foo the bar';
 var buf2 = new Buffer(str2, 'ascii');

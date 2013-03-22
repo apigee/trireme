@@ -337,24 +337,31 @@ CleartextStream.prototype.end = function(data, encoding, cb) {
 
 CleartextStream.prototype._read = function(maxLen) {
   debug('_read');
-  var wasPending = this.readPending;
   this.readPending = true;
   while (this.readPending && (this.readQueue.length)) {
     var chunk = this.readQueue.shift();
-    debug('Pushing ' + chunk.length);
-    this.readPending = this.push(chunk);
-  }
-  if (this.readPending && wasPending) {
-    this.socket._read(maxLen);
+    pushRead(this, chunk);
   }
 };
 
 function pushRead(self, d) {
-  var chunk = (d === END_SENTINEL) ? null : d;
-  if (self.readPending) {
-    self.readPending = self.push(chunk);
+  debug('Pushing ' + d.length + ' readPending = ' + self.readPending);
+  if (d === END_SENTINEL) {
+    if (self.onend) {
+      self.onend();
+    } else if (self.readPending) {
+      self.push(null);
+    } else {
+      self.readQueue.push(null);
+    }
   } else {
-    self.readQueue.push(chunk);
+    if (self.ondata) {
+      self.ondata(d, 0, d.length);
+    } else if (self.readPending) {
+      self.readPending = self.push(d);
+    } else {
+      self.readQueue.push(null);
+    }
   }
 }
 
@@ -423,7 +430,7 @@ CleartextStream.prototype.handleSSLError = function(err) {
   } else {
     if (this.serverMode) {
       // On the server -- just emit and close
-      this.server.emit('clientError', err);
+      this.server.emit('clientError', err, this);
       this.destroy();
     } else {
       this.authorized = false;

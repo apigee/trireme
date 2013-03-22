@@ -8,7 +8,7 @@ var HttpWrap = process.binding('http_wrap');
 
 var debug;
 if (process.env.NODE_DEBUG && /https/.test(process.env.NODE_DEBUG)) {
-  debug = function(x) { console.error('HTTP: %s', x); };
+  debug = function(x) { console.error('HTTPS: %s', x); };
 } else {
   debug = function() { };
 }

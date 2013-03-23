@@ -33,6 +33,7 @@ public class NodeEnvironment
     // Testing has not shown that 9 is any faster and it is theoretically riskier.
     // Re-test later with better workloads.
     public static final int DEFAULT_OPT_LEVEL = 1;
+    public static final boolean DEFAULT_SEAL_ROOT = true;
 
     private static final OpaqueClassShutter CLASS_SHUTTER = new OpaqueClassShutter();
 
@@ -43,6 +44,9 @@ public class NodeEnvironment
     private ExecutorService     scriptPool;
     private HttpServerContainer httpContainer;
     private Sandbox             sandbox;
+
+    private int                 optLevel = DEFAULT_OPT_LEVEL;
+    private boolean             sealRoot = DEFAULT_SEAL_ROOT;
 
     /**
      * Create a new NodeEnvironment with all the defaults.
@@ -103,6 +107,35 @@ public class NodeEnvironment
 
     public HttpServerContainer getHttpContainer() {
         return httpContainer;
+    }
+
+    public int getOptLevel()
+    {
+        return optLevel;
+    }
+
+    /**
+     * Set the Rhino optimization level for all new scripts that are run. -1 means interpreted mode,
+     * 0 means no optimization, 1 or greater means some optimization. Default is 1.
+     */
+    public void setOptLevel(int optLevel)
+    {
+        this.optLevel = optLevel;
+    }
+
+    public boolean isSealRoot()
+    {
+        return sealRoot;
+    }
+
+    /**
+     * Seal the root context, meaning that prototypes of language-level objects such as Object, Date, etc
+     * cannot be modified. Since all scripts inside the JVM use the same top-level context, it is very
+     * important that this be left alone in any multi-tenant VM -- but some test environments require it...
+     */
+    public void setSealRoot(boolean sealRoot)
+    {
+        this.sealRoot = sealRoot;
     }
 
     /**
@@ -171,8 +204,10 @@ public class NodeEnvironment
             registry.load(cx);
             // The standard objects, which are slow to create, are shared between scripts. Seal them so that
             // one script can't modify another's.
-            rootScope = cx.initStandardObjects(null, true);
-            rootScope.sealObject();
+            rootScope = cx.initStandardObjects(null, sealRoot);
+            if (sealRoot) {
+                rootScope.sealObject();
+            }
         } catch (RhinoException re) {
             throw new NodeException(re);
         } finally {
@@ -189,7 +224,7 @@ public class NodeEnvironment
     public void setUpContext(Context cx)
     {
         cx.setLanguageVersion(DEFAULT_JS_VERSION);
-        cx.setOptimizationLevel(DEFAULT_OPT_LEVEL);
+        cx.setOptimizationLevel(optLevel);
         cx.setClassShutter(CLASS_SHUTTER);
     }
 

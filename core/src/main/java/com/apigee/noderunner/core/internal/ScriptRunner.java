@@ -353,7 +353,7 @@ public class ScriptRunner
                     // find the reference to "require" a different way, or wrap the module in a function.
                     // see node.js's "evalScript" function.
                     File scriptFile = new File(process.cwd(), scriptName);
-                    process.setArgv(1, scriptName);
+                    setArgv(scriptName);
                     Function ctor = (Function)mainModule.get("Module", mainModule);
                     Scriptable topModule = cx.newObject(scope);
                     ctor.call(cx, scope, topModule, new Object[]{scriptName});
@@ -382,7 +382,7 @@ public class ScriptRunner
                     if (log.isDebugEnabled()) {
                         log.debug("Launching module.runMain({})", scriptPath);
                     }
-                    process.setArgv(1, scriptPath);
+                    setArgv(scriptPath);
                     Function load = (Function)mainModule.get("runMain", mainModule);
                     enqueueCallback(load, mainModule, mainModule, null);
                 }
@@ -414,6 +414,17 @@ public class ScriptRunner
         } finally {
             Context.exit();
         }
+    }
+
+    private void setArgv(String scriptName)
+    {
+        String[] argv = new String[args == null ? 2 : args.length + 2];
+        argv[0] = Process.EXECUTABLE_NAME;
+        argv[1] = scriptName;
+        if (args != null) {
+            System.arraycopy(args, 0, argv, 2, args.length);
+        }
+        process.setArgv(argv);
     }
 
     private ScriptStatus mainLoop(Context cx)
@@ -541,7 +552,6 @@ public class ScriptRunner
             // Next we need "process" which takes a bit more care
             process = (Process.ProcessImpl)require(Process.MODULE_NAME, cx);
             process.setMainModule(nativeMod);
-            process.setArgv(0, Process.EXECUTABLE_NAME);
             if ((sandbox != null) && (sandbox.getStdinStream() != null)) {
                 process.setStdin(sandbox.getStdinStream());
             }
@@ -550,14 +560,6 @@ public class ScriptRunner
             }
             if ((sandbox != null) && (sandbox.getStderrStream() != null)) {
                 process.setStderr(sandbox.getStderrStream());
-            }
-
-            if (args != null) {
-                int i = 2;
-                for (String arg : args) {
-                    process.setArgv(i, arg);
-                    i++;
-                }
             }
 
             // Set up the global modules that are set up for all script evaluations

@@ -22,14 +22,18 @@ public class Main
 {
     private static final Logger log = LoggerFactory.getLogger(Main.class);
 
+    public static final String ADAPTER_PROP = "HttpAdapter";
+    public static final String OPT_PROP = "OptLevel";
+    public static final String SEAL_PROP = "SealRoot";
+
     private static void printUsage()
     {
-        System.err.println("Usage: Main <script> [container]");
+        System.err.println("Usage: Main <script> [args ...]]");
     }
 
     public static void main(String[] args)
     {
-        if ((args.length < 1) || (args.length > 2)) {
+        if (args.length < 1) {
             printUsage();
             System.exit(2);
             return;
@@ -37,17 +41,31 @@ public class Main
 
         String scriptName = args[0];
         File script = new File(scriptName);
-        String containerName = null;
-        if (args.length > 1) {
-            containerName = args[1];
-        }
+        String containerName = System.getProperty(ADAPTER_PROP);
 
         NodeEnvironment env = new NodeEnvironment();
+        String opt = System.getProperty(SEAL_PROP);
+        if (opt != null) {
+            env.setSealRoot(Boolean.valueOf(opt));
+        }
+        opt = System.getProperty(OPT_PROP);
+        if (opt != null) {
+            env.setOptLevel(Integer.parseInt(opt));
+        }
+
         try {
             if ((containerName != null) && "netty".equals(containerName)) {
                 env.setHttpContainer(new NettyHttpContainer());
             }
-            NodeScript ns = env.createScript(scriptName, script, args);
+
+            String[] scriptArgs;
+            if (args.length > 1) {
+                scriptArgs = new String[args.length - 1];
+                System.arraycopy(args, 1, scriptArgs, 0, scriptArgs.length);
+            } else {
+                scriptArgs = null;
+            }
+            NodeScript ns = env.createScript(scriptName, script, scriptArgs);
 
             ScriptStatus status;
             try {
@@ -58,29 +76,37 @@ public class Main
             }
 
             if (status.hasCause()) {
-                Throwable cause = status.getCause();
-
-                if (cause instanceof JavaScriptException) {
-                    Object value = ((JavaScriptException) cause).getValue();
-                    Context cx = Context.enter();
-                    System.err.println(Context.toString(value));
-                    Context.exit();
-                } else if (cause instanceof RhinoException) {
-                    System.err.println(((RhinoException) cause).getScriptStackTrace());
-                }
-                cause.printStackTrace(System.err);
+                printException(status.getCause());
             }
 
             System.exit(status.getExitCode());
         } catch (NodeException ne) {
             ne.printStackTrace(System.err);
-            System.exit(5);
+            System.exit(99);
         } catch (InterruptedException ie) {
-            System.exit(6);
+            System.exit(99);
         } catch (ExecutionException ee) {
-            ee.getCause().printStackTrace(System.err);
+            printException(ee.getCause());
         } finally {
             env.close();
+        }
+    }
+
+    private static void printException(Throwable ee)
+    {
+        if (ee instanceof JavaScriptException) {
+            Object value = ((JavaScriptException)ee).getValue();
+            Context.enter();
+            System.err.println(Context.toString(value));
+            Context.exit();
+        }
+        if (ee instanceof RhinoException) {
+            RhinoException re = (RhinoException)ee;
+            System.err.println(re.details());
+            System.err.println(re.getScriptStackTrace());
+        } else {
+            System.err.println(ee.getMessage());
+            ee.printStackTrace(System.err);
         }
     }
 }

@@ -88,7 +88,6 @@ public class Process
         {
             ProcessImpl ret = new ProcessImpl();
             ret.startTime = System.currentTimeMillis();
-            ret.argv = cx.newObject(ret);
             return ret;
         }
 
@@ -217,9 +216,13 @@ public class Process
             return argv;
         }
 
-        public void setArgv(int index, String val)
+        public void setArgv(String[] args)
         {
-            argv.put(index, argv, val);
+            Object[] argvArgs = new Object[args.length];
+            for (int i = 0; i < args.length; i++) {
+                argvArgs[i] = args[i];
+            }
+            argv = Context.getCurrentContext().newArray(this, argvArgs);
         }
 
         @JSGetter("execArgv")

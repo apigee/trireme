@@ -7,7 +7,6 @@ import com.apigee.noderunner.core.internal.NodeExitException;
 import com.apigee.noderunner.core.internal.PathTranslator;
 import com.apigee.noderunner.core.internal.ScriptRunner;
 import com.apigee.noderunner.core.internal.Version;
-import com.sun.xml.internal.ws.util.xml.ContentHandlerToXMLStreamWriter;
 import org.mozilla.javascript.Context;
 import org.mozilla.javascript.EvaluatorException;
 import org.mozilla.javascript.Function;

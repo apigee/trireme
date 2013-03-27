@@ -1,6 +1,5 @@
 package com.apigee.noderunner.core.internal;
 
-import com.apigee.noderunner.core.modules.Constants;
 import org.mozilla.javascript.EvaluatorException;
 
 /**

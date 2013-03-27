@@ -1,8 +1,6 @@
 package com.apigee.noderunner.core.modules;
 
 import com.apigee.noderunner.core.NodeModule;
-import com.apigee.noderunner.core.internal.NativeInputStream;
-import com.apigee.noderunner.core.internal.NativeOutputStream;
 import com.apigee.noderunner.core.internal.NodeExitException;
 import com.apigee.noderunner.core.internal.PathTranslator;
 import com.apigee.noderunner.core.internal.ScriptRunner;
@@ -54,9 +52,6 @@ public class Process
 
         ProcessImpl exports = (ProcessImpl) cx.newObject(scope, ProcessImpl.CLASS_NAME);
         exports.setRunner(runner);
-
-        ScriptableObject.defineClass(scope, NativeOutputStream.class, false, true);
-        ScriptableObject.defineClass(scope, NativeInputStream.class, false, true);
 
         // env
         EnvImpl env = (EnvImpl) cx.newObject(scope, EnvImpl.CLASS_NAME);

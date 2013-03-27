@@ -157,6 +157,9 @@ public class Process
                     NativeOutputStreamAdapter.createNativeStream(cx,
                                                                  runner.getScriptScope(), runner,
                                                                  runner.getStdout(), true);
+
+                // node "legacy API" -- use POSIX file descriptor number
+                stdout.put("fd", stdout, 1);
             }
             return stdout;
         }
@@ -176,6 +179,9 @@ public class Process
                     NativeOutputStreamAdapter.createNativeStream(cx,
                                                                  runner.getScriptScope(), runner,
                                                                  runner.getStderr(), true);
+
+                // node "legacy API" -- use POSIX file descriptor number
+                stderr.put("fd", stderr, 2);
             }
             return stderr;
         }
@@ -195,6 +201,9 @@ public class Process
                     NativeInputStreamAdapter.createNativeStream(cx,
                                                                 runner.getScriptScope(), runner,
                                                                 runner.getStdin(), true);
+
+                // node "legacy API" -- use POSIX file descriptor number
+                stdin.put("fd", stdin, 0);
             }
             return stdin;
         }

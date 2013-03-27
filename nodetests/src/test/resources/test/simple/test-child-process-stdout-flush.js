@@ -31,6 +31,7 @@ var sub = path.join(common.fixturesDir, 'print-chars.js');
 var n = 500000;
 
 var child = spawn(process.argv[0], [sub, n]);
+
 var count = 0;
 
 child.stderr.setEncoding('utf8');
@@ -41,7 +42,6 @@ child.stderr.on('data', function(data) {
 
 child.stdout.setEncoding('utf8');
 child.stdout.on('data', function(data) {
-  console.log(data);
   count += data.length;
   console.log(count);
 });

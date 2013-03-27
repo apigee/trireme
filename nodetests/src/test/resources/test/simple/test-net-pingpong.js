@@ -131,13 +131,13 @@ function pingPongTest(port, host) {
 }
 
 /* All are run at once, so run on different ports */
-//console.log(common.PIPE);
-//pingPongTest(common.PIPE);
+console.log(common.PIPE);
+pingPongTest(common.PIPE);
 pingPongTest(common.PORT);
 pingPongTest(common.PORT + 1, 'localhost');
-//pingPongTest(common.PORT + 2, '::1');
+pingPongTest(common.PORT + 2, '::1');
 
 process.on('exit', function() {
-  assert.equal(2, tests_run);
+  assert.equal(4, tests_run);
   console.log('done');
 });

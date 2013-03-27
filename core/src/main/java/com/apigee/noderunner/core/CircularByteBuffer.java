@@ -167,7 +167,7 @@ public class CircularByteBuffer
         if (writePos >= readPos) {
             return writePos - readPos;
         }
-        return buf.length - (writePos - readPos);
+        return buf.length - (readPos - writePos);
     }
 
     public int totalCapacity()

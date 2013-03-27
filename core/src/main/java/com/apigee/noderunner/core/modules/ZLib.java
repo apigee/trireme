@@ -78,6 +78,7 @@ public class ZLib
     public static final int Z_NULL = 0;
 
     // mode
+    public static final int NONE       = (-1);
     public static final int DEFLATE    = 1;
     public static final int INFLATE    = 2;
     public static final int GZIP       = 3;
@@ -387,6 +388,8 @@ public class ZLib
                 case INFLATE:
                 case UNZIP:
                     return thisClass.writeInflate(flush, in, inOff, inLen, out, outOff, outLen);
+                case NONE:
+                    throw Utils.makeError(cx, thisObj, "write after close");
                 default:
                     throw Utils.makeError(cx, thisObj, "bad mode");
             }
@@ -435,10 +438,10 @@ public class ZLib
 
                             deflaterOutputStream.write(inBuffered, 0, writtenBuffered);
 
-                            if (in == null && flush != Z_NO_FLUSH) {
+                            if (in == null && flush == Z_FINISH) {
                                 deflaterOutputStream.finish();
                             }
-                        } else {
+                        } else if (flush == Z_FINISH) {
                             deflaterOutputStream.finish();
                         }
                     } catch (IOException e) {
@@ -561,6 +564,25 @@ public class ZLib
         public void clear()
         {
             // TODO: nothing? this is used in the JS module to ask to free stuff when (de)compression ends
+        }
+
+        @JSFunction
+        public void close()
+                throws IOException
+        {
+            if (!initialized) {
+                throw Utils.makeError(Context.getCurrentContext(), this, "close before init");
+            }
+
+            if (initializedDeflate) {
+                deflaterOutputStream.close();
+            } else if (initializedInflate) {
+                inflaterInputStream.close();
+            }
+
+            dictionary = null;
+
+            mode = NONE;
         }
 
         @JSGetter("onerror")

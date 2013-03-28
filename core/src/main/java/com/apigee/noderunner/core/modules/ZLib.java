@@ -293,7 +293,10 @@ public class ZLib
 
             if (mode == GZIP) {
                 // this will probably write the gzip header to the buffer on construction
-                deflaterOutputStream = new ConfigurableGZIPOutputStream(outBuffer.getOutputStream(), deflater);
+                ConfigurableFlushableGZIPOutputStream os = new ConfigurableFlushableGZIPOutputStream(
+                        outBuffer.getOutputStream(), deflater);
+                os.setLevel(level);
+                deflaterOutputStream = os;
 
                 // HACK: set the gzip OS field (byte 9) to UNIX (0x03) which is what node uses (regardless of platform?)
                 int outBufferAvailable = outBuffer.available();
@@ -304,7 +307,10 @@ public class ZLib
                     outBuffer.write(header, 0, read);
                 }
             } else {
-                deflaterOutputStream = new DeflaterOutputStream(outBuffer.getOutputStream(), deflater);
+                FlushableDeflaterOutputStream os = new FlushableDeflaterOutputStream(
+                        outBuffer.getOutputStream(), deflater);
+                os.setLevel(level);
+                deflaterOutputStream = os;
             }
 
             return true;
@@ -437,12 +443,12 @@ public class ZLib
                             int writtenBuffered = inBuffer.read(inBuffered, 0, inBufferAvailable);
 
                             deflaterOutputStream.write(inBuffered, 0, writtenBuffered);
+                        }
 
-                            if (in == null && flush == Z_FINISH) {
-                                deflaterOutputStream.finish();
-                            }
-                        } else if (flush == Z_FINISH) {
+                        if (flush == Z_FINISH) {
                             deflaterOutputStream.finish();
+                        } else if (flush == Z_SYNC_FLUSH || flush == Z_FULL_FLUSH) {
+                            deflaterOutputStream.flush();
                         }
                     } catch (IOException e) {
                         parentModule.runner.enqueueCallback(onError, onError, ZLibObjImpl.this,
@@ -642,6 +648,10 @@ public class ZLib
         }
     }
 
+    /**
+     * An ConfigurableGZIPInputStream that can use an UnblockableInputStream and not have its
+     * CRC calculation choke on the "unblock" error value signal, using UnblockableCRC32
+     */
     private static class ConfigurableUnblockableGZIPInputStream
         extends GZIPInputStream
     {
@@ -674,33 +684,295 @@ public class ZLib
         }
     }
 
-    private static class ConfigurableGZIPOutputStream
-            extends GZIPOutputStream
+    /**
+     * A FlushableGZIPOutputStream (nicked from Tomcat) that can have a custom Deflater and that resets
+     * its compression level back to a configurable value
+     * see also: http://svn.apache.org/viewvc/tomcat/tc7.0.x/trunk/java/org/apache/coyote/http11/filters/FlushableGZIPOutputStream.java?revision=1378408&view=markup&pathrev=1378408
+     */
+    // TODO: combine flushable code with FlushableDeflaterOutputStream
+    private static class ConfigurableFlushableGZIPOutputStream
+        extends GZIPOutputStream
     {
-        public ConfigurableGZIPOutputStream(OutputStream outputStream)
+        private byte[] lastByte = new byte[1];
+        private boolean hasLastByte = false;
+        private boolean flagReenableCompression = false;
+        private int level = Deflater.DEFAULT_COMPRESSION;
+
+        public ConfigurableFlushableGZIPOutputStream(OutputStream outputStream)
                 throws IOException
         {
             super(outputStream);
         }
 
-        public ConfigurableGZIPOutputStream(OutputStream outputStream, int i)
+        public ConfigurableFlushableGZIPOutputStream(OutputStream outputStream, int i)
                 throws IOException
         {
             super(outputStream, i);
         }
 
-        public ConfigurableGZIPOutputStream(OutputStream outputStream, Deflater deflater)
+        public ConfigurableFlushableGZIPOutputStream(OutputStream outputStream, Deflater deflater)
                 throws IOException
         {
             super(outputStream);
             this.def = deflater;
         }
 
-        public ConfigurableGZIPOutputStream(OutputStream outputStream, int i, Deflater deflater)
+        public ConfigurableFlushableGZIPOutputStream(OutputStream outputStream, int i, Deflater deflater)
                 throws IOException
         {
             super(outputStream, i);
             this.def = deflater;
+        }
+
+        public void setLevel(int level) {
+            this.level = level;
+        }
+
+        @Override
+        public void write(byte[] bytes) throws IOException {
+            write(bytes, 0, bytes.length);
+        }
+
+        @Override
+        public synchronized void write(byte[] bytes, int offset, int length)
+                throws IOException {
+            if (length > 0) {
+                flushLastByte();
+                if (length > 1) {
+                    reenableCompression();
+                    super.write(bytes, offset, length - 1);
+                }
+                rememberLastByte(bytes[offset + length - 1]);
+            }
+        }
+
+        @Override
+        public synchronized void write(int i) throws IOException {
+            flushLastByte();
+            rememberLastByte((byte) i);
+        }
+
+        @Override
+        public synchronized void finish() throws IOException {
+            try {
+                flushLastByte();
+            } catch (IOException ignore) {
+                // If our write failed, then trailer write in finish() will fail
+                // with IOException as well, but it will leave Deflater in more
+                // consistent state.
+            }
+            super.finish();
+        }
+
+        @Override
+        public synchronized void close() throws IOException {
+            try {
+                flushLastByte();
+            } catch (IOException ignored) {
+                // Ignore. As OutputStream#close() says, the contract of close()
+                // is to close the stream. It does not matter much if the
+                // stream is not writable any more.
+            }
+            super.close();
+        }
+
+        private void reenableCompression() {
+            if (flagReenableCompression && !def.finished()) {
+                flagReenableCompression = false;
+                def.setLevel(level);
+            }
+        }
+
+        private void rememberLastByte(byte b) {
+            lastByte[0] = b;
+            hasLastByte = true;
+        }
+
+        private void flushLastByte() throws IOException {
+            if (hasLastByte) {
+                reenableCompression();
+                // Clear the flag first, because write() may fail
+                hasLastByte = false;
+                super.write(lastByte, 0, 1);
+            }
+        }
+
+        @Override
+        public synchronized void flush() throws IOException {
+            if (hasLastByte) {
+                // - do not allow the gzip header to be flushed on its own
+                // - do not do anything if there is no data to send
+
+                // trick the deflater to flush
+                /**
+                 * Now this is tricky: We force the Deflater to flush its data by
+                 * switching compression level. As yet, a perplexingly simple workaround
+                 * for
+                 * http://developer.java.sun.com/developer/bugParade/bugs/4255743.html
+                 */
+                if (!def.finished()) {
+                    def.setLevel(Deflater.NO_COMPRESSION);
+                    flushLastByte();
+                    flagReenableCompression = true;
+                }
+            }
+            out.flush();
+        }
+
+        /*
+         * Keep on calling deflate until it runs dry. The default implementation
+         * only does it once and can therefore hold onto data when they need to be
+         * flushed out.
+         */
+        @Override
+        protected void deflate() throws IOException {
+            int len;
+            do {
+                len = def.deflate(buf, 0, buf.length);
+                if (len > 0) {
+                    out.write(buf, 0, len);
+                }
+            } while (len != 0);
+        }
+
+    }
+
+    /**
+     * Adapted from FlushableGZIPOutputStream; can to reset its compression level back to a configurable value
+     */
+    // TODO: combine flushable code with ConfigurableFlushableGZIPOutputStream
+    private static class FlushableDeflaterOutputStream
+            extends DeflaterOutputStream
+    {
+        private byte[] lastByte = new byte[1];
+        private boolean hasLastByte = false;
+        private boolean flagReenableCompression = false;
+        private int level = Deflater.DEFAULT_COMPRESSION;
+
+        private FlushableDeflaterOutputStream(OutputStream outputStream)
+        {
+            super(outputStream);
+        }
+
+        private FlushableDeflaterOutputStream(OutputStream outputStream, Deflater deflater)
+        {
+            super(outputStream, deflater);
+        }
+
+        private FlushableDeflaterOutputStream(OutputStream outputStream, Deflater deflater, int i)
+        {
+            super(outputStream, deflater, i);
+        }
+
+        public void setLevel(int level) {
+            this.level = level;
+        }
+
+        @Override
+        public void write(byte[] bytes) throws IOException {
+            write(bytes, 0, bytes.length);
+        }
+
+        @Override
+        public synchronized void write(byte[] bytes, int offset, int length)
+                throws IOException {
+            if (length > 0) {
+                flushLastByte();
+                if (length > 1) {
+                    reenableCompression();
+                    super.write(bytes, offset, length - 1);
+                }
+                rememberLastByte(bytes[offset + length - 1]);
+            }
+        }
+
+        @Override
+        public synchronized void write(int i) throws IOException {
+            flushLastByte();
+            rememberLastByte((byte) i);
+        }
+
+        @Override
+        public synchronized void finish() throws IOException {
+            try {
+                flushLastByte();
+            } catch (IOException ignore) {
+                // If our write failed, then trailer write in finish() will fail
+                // with IOException as well, but it will leave Deflater in more
+                // consistent state.
+            }
+            super.finish();
+        }
+
+        @Override
+        public synchronized void close() throws IOException {
+            try {
+                flushLastByte();
+            } catch (IOException ignored) {
+                // Ignore. As OutputStream#close() says, the contract of close()
+                // is to close the stream. It does not matter much if the
+                // stream is not writable any more.
+            }
+            super.close();
+        }
+
+        private void reenableCompression() {
+            if (flagReenableCompression && !def.finished()) {
+                flagReenableCompression = false;
+                def.setLevel(level);
+            }
+        }
+
+        private void rememberLastByte(byte b) {
+            lastByte[0] = b;
+            hasLastByte = true;
+        }
+
+        private void flushLastByte() throws IOException {
+            if (hasLastByte) {
+                reenableCompression();
+                // Clear the flag first, because write() may fail
+                hasLastByte = false;
+                super.write(lastByte, 0, 1);
+            }
+        }
+
+        @Override
+        public synchronized void flush() throws IOException {
+            if (hasLastByte) {
+                // - do not allow the gzip header to be flushed on its own
+                // - do not do anything if there is no data to send
+
+                // trick the deflater to flush
+                /**
+                 * Now this is tricky: We force the Deflater to flush its data by
+                 * switching compression level. As yet, a perplexingly simple workaround
+                 * for
+                 * http://developer.java.sun.com/developer/bugParade/bugs/4255743.html
+                 */
+                if (!def.finished()) {
+                    def.setLevel(Deflater.NO_COMPRESSION);
+                    flushLastByte();
+                    flagReenableCompression = true;
+                }
+            }
+            out.flush();
+        }
+
+        /*
+         * Keep on calling deflate until it runs dry. The default implementation
+         * only does it once and can therefore hold onto data when they need to be
+         * flushed out.
+         */
+        @Override
+        protected void deflate() throws IOException {
+            int len;
+            do {
+                len = def.deflate(buf, 0, buf.length);
+                if (len > 0) {
+                    out.write(buf, 0, len);
+                }
+            } while (len != 0);
         }
     }
 
@@ -708,7 +980,7 @@ public class ZLib
      * An UnblockableInflater that automatically loads a known dictionary
      */
     private static class DictionaryAwareUnblockableInflater
-            extends UnblockableInflater
+        extends UnblockableInflater
     {
         private byte[] dictBuf = null;
         private int dictOffset;
@@ -761,7 +1033,7 @@ public class ZLib
      * it sees there is nothing left to be read (setInput called with length 0).
      */
     private static class UnblockableDeflater
-            extends Deflater
+        extends Deflater
     {
         private boolean unblock = false;
 
@@ -871,8 +1143,11 @@ public class ZLib
         }
     }
 
+    /**
+     * A CRC32 implementation that doesn't choke on the "unblock" error value signal when updating
+     */
     private static class UnblockableCRC32
-            extends CRC32
+        extends CRC32
     {
         @Override
         public void update(byte[] b, int off, int len)

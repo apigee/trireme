@@ -1,9 +1,12 @@
 package com.apigee.noderunner.core.modules;
 
 import com.apigee.noderunner.core.internal.InternalNodeModule;
+import com.apigee.noderunner.core.internal.NodeExitException;
 import com.apigee.noderunner.core.internal.ScriptRunner;
+import com.apigee.noderunner.core.internal.Utils;
 import org.mozilla.javascript.Context;
 import org.mozilla.javascript.EvaluatorException;
+import org.mozilla.javascript.RhinoException;
 import org.mozilla.javascript.Script;
 import org.mozilla.javascript.Scriptable;
 import org.mozilla.javascript.ScriptableObject;
@@ -61,7 +64,12 @@ public class NoderunnerEvals
         {
             Context cx = Context.getCurrentContext();
             String fn = ((fileName != null) && (fileName != Context.getUndefinedValue())) ? fileName : "";
-            Script compiled = cx.compileString(code, fn, 1, null);
+            Script compiled;
+            try {
+                compiled = cx.compileString(code, fn, 1, null);
+            } catch (RhinoException re) {
+                throw checkSyntax(cx, re);
+            }
             ScriptableObject ret = (ScriptableObject)cx.newObject(this);
             ret.associateValue(CODE_KEY, compiled);
             return ret;
@@ -70,12 +78,25 @@ public class NoderunnerEvals
         @JSFunction
         public Object run(Scriptable context, Scriptable compiled)
         {
+            Context cx = Context.getCurrentContext();
             ScriptableObject comp = ScriptableObject.ensureScriptableObject(compiled);
             Script code = (Script)comp.getAssociatedValue(CODE_KEY);
             if (code == null) {
                 throw new EvaluatorException("Invalid compiled script argument");
             }
-            return code.exec(Context.getCurrentContext(), context);
+            return code.exec(cx, context);
+        }
+
+        @JSFunction
+        public Object compileAndRun(String code, String fileName, Scriptable context)
+        {
+            Context cx = Context.getCurrentContext();
+            String fn = ((fileName != null) && (fileName != Context.getUndefinedValue())) ? fileName : "";
+            try {
+                return cx.evaluateString(context, code, fn, 1, null);
+            } catch (RhinoException re) {
+                throw checkSyntax(cx, re);
+            }
         }
 
         @JSFunction
@@ -91,6 +112,13 @@ public class NoderunnerEvals
         public Scriptable getGlobalContext()
         {
             return globalScope;
+        }
+
+        private RhinoException checkSyntax(Context cx, RhinoException re)
+        {
+            // Here is where we might re-write syntax errors into something that repl can understand.
+            // it depends on getting lots of syntax errors and recognizing them.
+            return re;
         }
     }
 }

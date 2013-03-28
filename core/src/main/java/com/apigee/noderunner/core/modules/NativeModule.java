@@ -6,6 +6,7 @@ import com.apigee.noderunner.core.internal.Utils;
 import org.mozilla.javascript.Context;
 import org.mozilla.javascript.Function;
 import org.mozilla.javascript.FunctionObject;
+import org.mozilla.javascript.NativeFunction;
 import org.mozilla.javascript.Script;
 import org.mozilla.javascript.Scriptable;
 import org.mozilla.javascript.ScriptableObject;
@@ -17,6 +18,8 @@ import org.slf4j.LoggerFactory;
 
 import static com.apigee.noderunner.core.internal.ArgUtils.*;
 
+import java.io.IOException;
+import java.io.InputStream;
 import java.lang.reflect.InvocationTargetException;
 
 /**
@@ -30,6 +33,8 @@ public class NativeModule
     protected static final Logger log = LoggerFactory.getLogger(NativeModule.class);
 
     public static final String MODULE_NAME = "native_module";
+    public static final String SCRIPT_BASE = "/com/apigee/noderunner/scripts/";
+    public static final String SCRIPT_SUFFIX = ".js";
 
     @Override
     public String getModuleName()
@@ -44,7 +49,7 @@ public class NativeModule
         ScriptableObject.defineClass(scope, NativeImpl.class);
         ScriptableObject.defineClass(scope, ModuleImpl.class);
         NativeImpl nat = (NativeImpl)cx.newObject(scope, NativeImpl.CLASS_NAME);
-        nat.initialize(runner);
+        nat.initialize(cx, runner);
         return nat;
     }
 
@@ -68,10 +73,12 @@ public class NativeModule
         private String     id;
         private Scriptable exports;
         private boolean    loaded;
+        private Scriptable cache;
 
-        void initialize(ScriptRunner runner)
+        void initialize(Context cx, ScriptRunner runner)
         {
             this.runner = runner;
+            this.cache = cx.newObject(this);
         }
 
         @Override
@@ -103,6 +110,11 @@ public class NativeModule
         @JSSetter("exports")
         public void setExports(Scriptable s) {
             this.exports = s;
+        }
+
+        @JSGetter("_cache")
+        public Scriptable getCache() {
+            return cache;
         }
 
         @JSFunction
@@ -192,7 +204,8 @@ public class NativeModule
         {
             String name = stringArg(args, 0);
             NativeImpl self = (NativeImpl)thisObj;
-            return self.runner.isNativeModule(name);
+            return self.runner.isNativeModule(name) ||
+                   (NativeImpl.class.getResource(SCRIPT_BASE + name + SCRIPT_SUFFIX) != null);
         }
 
         @JSFunction
@@ -201,12 +214,38 @@ public class NativeModule
             return WRAP_PREFIX + source + WRAP_POSTFIX;
         }
 
+        @JSFunction
+        public static Object getSource(Context cx, Scriptable thisObj, Object[] args, Function func)
+        {
+            String name = stringArg(args, 0);
+
+            InputStream in = NativeImpl.class.getResourceAsStream(SCRIPT_BASE + name + SCRIPT_SUFFIX);
+            if (in == null) {
+                return Context.getUndefinedValue();
+            }
+
+            try {
+                try {
+                    return Utils.readStream(in);
+                } catch (IOException ioe) {
+                    log.debug("Error reading native code stream: {}", ioe);
+                    return Context.getUndefinedValue();
+                }
+            } finally {
+                try {
+                    in.close();
+                } catch (IOException ioe) {
+                    log.debug("Error closing stream {}", ioe);
+                }
+            }
+        }
+
         @JSGetter("wrapper")
         public Object getWrapper()
         {
             Object[] wrap = new Object[2];
-            wrap[0] = "(function (exports, require, module, __filename, __dirname) { ";
-            wrap[1] = "\n});";
+            wrap[0] = WRAP_PREFIX;
+            wrap[1] = WRAP_POSTFIX;
             return Context.getCurrentContext().newArray(this, wrap);
         }
     }

@@ -91,6 +91,7 @@ public class ModuleRegistry
         addCompiledModule("path", "com.apigee.noderunner.fromnode.path");
         addCompiledModule("punycode", "com.apigee.noderunner.fromnode.punycode");
         addCompiledModule("querystring", "com.apigee.noderunner.fromnode.querystring");
+        addCompiledModule("readline", "com.apigee.noderunner.fromnode.readline");
         addCompiledModule("stream", "com.apigee.noderunner.fromnode.stream");
         addCompiledModule("string_decoder", "com.apigee.noderunner.fromnode.string_decoder");
         addCompiledModule("sys", "com.apigee.noderunner.fromnode.sys");
@@ -99,6 +100,7 @@ public class ModuleRegistry
         addCompiledModule("util", "com.apigee.noderunner.fromnode.util");
         addCompiledModule("zlib", "com.apigee.noderunner.fromnode.zlib");
 
+        addCompiledModule("bootstrap", "com.apigee.noderunner.scripts.bootstrap");
         addCompiledModule("http", "com.apigee.noderunner.scripts.adaptorhttp");
         addCompiledModule("https", "com.apigee.noderunner.scripts.adaptorhttps");
         addCompiledModule("child_process", "com.apigee.noderunner.scripts.child_process");

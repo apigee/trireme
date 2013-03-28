@@ -29,8 +29,9 @@ Script.createScript = function(code, ctx, name) {
 };
 
 Script.runInThisContext = function(code, filename) {
-  var compiled = binding.compile(code, filename);
-  return binding.run(binding.globalContext, compiled);
+  //var compiled = binding.compile(code, filename);
+  //return binding.run(binding.globalContext, compiled);
+  return binding.compileAndRun(code, filename, binding.globalContext);
 }
 
 Script.runInNewContext = function (code, sandbox, filename) {
@@ -43,8 +44,9 @@ Script.runInNewContext = function (code, sandbox, filename) {
 };
 
 Script.runInContext = function(code, context, filename) {
-  var compiled = binding.compile(code, filename);
-  return binding.run(context, compiled);
+  //var compiled = binding.compile(code, filename);
+  //return binding.run(context, compiled);
+  return binding.compileAndRun(code, filename, context);
 };
 
 Script.createContext = function(sandbox) {

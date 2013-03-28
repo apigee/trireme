@@ -20,6 +20,7 @@ public class NodeScript
     private ScriptRunner runner;
     private Object attachment;
     private Sandbox sandbox;
+    private boolean pin;
 
     NodeScript(NodeEnvironment env, String scriptName, File script, String[] args)
     {
@@ -56,6 +57,9 @@ public class NodeScript
         }
         ScriptFuture future = new ScriptFuture(runner);
         runner.setFuture(future);
+        if (pin) {
+            runner.pin();
+        }
 
         env.getScriptPool().execute(future);
         return future;
@@ -102,6 +106,20 @@ public class NodeScript
     public void setAttachment(Object attachment)
     {
         this.attachment = attachment;
+    }
+
+    /**
+     * Pin the script before running it -- this ensures that the script will never exit unless process.exit
+     * is called or the future is explicitly cancelled. Used to run the "repl".
+     */
+    public void setPinned(boolean p)
+    {
+        this.pin = p;
+    }
+
+    public boolean isPinned()
+    {
+        return pin;
     }
 }
 

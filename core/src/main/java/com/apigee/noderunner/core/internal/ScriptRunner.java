@@ -348,27 +348,10 @@ public class ScriptRunner
                 initGlobals(cx);
 
                 if (scriptFile == null) {
-                    // Set up the script with a dummy main module like node.js does
-                    // TODO this isn't actually correct -- we need to either create a new "module" and
-                    // find the reference to "require" a different way, or wrap the module in a function.
-                    // see node.js's "evalScript" function.
-                    File scriptFile = new File(process.cwd(), scriptName);
-                    setArgv(scriptName);
-                    Function ctor = (Function)mainModule.get("Module", mainModule);
-                    Scriptable topModule = cx.newObject(scope);
-                    ctor.call(cx, scope, topModule, new Object[]{scriptName});
-                    topModule.put("filename", topModule, scriptFile.getPath());
-                    scope.put("exports", scope, topModule.get("exports", topModule));
-                    scope.put("module", scope, topModule);
-                    scope.put("require", scope, topModule.get("require", topModule));
-                    enqueueTask(new ScriptTask()
-                    {
-                        @Override
-                        public void execute(Context cx, Scriptable scope)
-                        {
-                            cx.evaluateString(scope, script, scriptName, 1, null);
-                        }
-                    });
+                    Scriptable bootstrap = (Scriptable)require("bootstrap", cx);
+                    Function eval = (Function)bootstrap.get("evalScript", bootstrap);
+                    enqueueCallback(eval, mainModule, mainModule,
+                                    new Object[] { scriptName, script });
 
                 } else {
                     // Again like the real node, delegate running the actual script to the module module.

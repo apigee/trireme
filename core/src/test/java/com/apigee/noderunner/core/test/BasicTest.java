@@ -53,22 +53,19 @@ public class BasicTest
         runTest("moduletest.js");
     }
 
-    /*
-     * TODO This test doesn't work -- "require" method is not defined.
     @Test
     public void testModuleLoadFromString()
         throws InterruptedException, ExecutionException, NodeException, IOException
     {
-        InputStream modIn = this.getClass().getResourceAsStream("/tests/moduletest.js");
+        InputStream modIn = this.getClass().getResourceAsStream("/tests/moduleteststring.js");
         assertNotNull(modIn);
         String source = Utils.readStream(modIn);
-        NodeScript script = env.createScript("moduletest.js",
+        NodeScript script = env.createScript("moduleteststring.js",
                                              source,
                                              null);
         ScriptStatus stat = script.execute().get();
         assertEquals(0, stat.getExitCode());
     }
-    */
 
     @Test
     public void testBuffer()

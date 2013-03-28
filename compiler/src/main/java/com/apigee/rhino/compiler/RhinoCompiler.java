@@ -115,8 +115,6 @@ public class RhinoCompiler
                     } catch (IOException ioe) {
                         throw new MojoExecutionException("Error reading or writing file: " + ioe, ioe);
                     }
-                } else {
-                    log.info(fn + " is up to date");
                 }
             }
         } else {

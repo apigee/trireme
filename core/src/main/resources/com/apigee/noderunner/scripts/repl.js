@@ -240,6 +240,7 @@ function REPLServer(prompt, stream, eval_, useGlobal, ignoreUndefined) {
                 self.context,
                 'repl',
                 function(e, ret) {
+
             if (e && !isSyntaxError(e)) return finish(e);
 
             if (typeof ret === 'function' &&

@@ -374,9 +374,11 @@ public class Process
         @JSFunction
         public static Object memoryUsage(Context cx, Scriptable thisObj, Object[] args, Function func)
         {
+            Runtime r = Runtime.getRuntime();
             Scriptable mem = cx.newObject(thisObj);
-            mem.put("heapTotal", thisObj, Runtime.getRuntime().maxMemory());
-            mem.put("heapUsed", thisObj,  Runtime.getRuntime().totalMemory());
+            mem.put("rss", mem, r.totalMemory());
+            mem.put("heapTotal", mem, r.maxMemory());
+            mem.put("heapUsed", mem,  r.totalMemory());
             return mem;
         }
 

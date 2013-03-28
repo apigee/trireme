@@ -1,8 +1,6 @@
 package com.apigee.noderunner.core.modules;
 
 import com.apigee.noderunner.core.NodeModule;
-import com.apigee.noderunner.core.internal.NativeInputStream;
-import com.apigee.noderunner.core.internal.NativeOutputStream;
 import com.apigee.noderunner.core.internal.NodeExitException;
 import com.apigee.noderunner.core.internal.PathTranslator;
 import com.apigee.noderunner.core.internal.ScriptRunner;
@@ -54,9 +52,6 @@ public class Process
 
         ProcessImpl exports = (ProcessImpl) cx.newObject(scope, ProcessImpl.CLASS_NAME);
         exports.setRunner(runner);
-
-        ScriptableObject.defineClass(scope, NativeOutputStream.class, false, true);
-        ScriptableObject.defineClass(scope, NativeInputStream.class, false, true);
 
         // env
         EnvImpl env = (EnvImpl) cx.newObject(scope, EnvImpl.CLASS_NAME);
@@ -162,6 +157,9 @@ public class Process
                     NativeOutputStreamAdapter.createNativeStream(cx,
                                                                  runner.getScriptScope(), runner,
                                                                  runner.getStdout(), true);
+
+                // node "legacy API" -- use POSIX file descriptor number
+                stdout.put("fd", stdout, 1);
             }
             return stdout;
         }
@@ -181,6 +179,9 @@ public class Process
                     NativeOutputStreamAdapter.createNativeStream(cx,
                                                                  runner.getScriptScope(), runner,
                                                                  runner.getStderr(), true);
+
+                // node "legacy API" -- use POSIX file descriptor number
+                stderr.put("fd", stderr, 2);
             }
             return stderr;
         }
@@ -200,6 +201,9 @@ public class Process
                     NativeInputStreamAdapter.createNativeStream(cx,
                                                                 runner.getScriptScope(), runner,
                                                                 runner.getStdin(), true);
+
+                // node "legacy API" -- use POSIX file descriptor number
+                stdin.put("fd", stdin, 0);
             }
             return stdin;
         }
@@ -370,9 +374,11 @@ public class Process
         @JSFunction
         public static Object memoryUsage(Context cx, Scriptable thisObj, Object[] args, Function func)
         {
+            Runtime r = Runtime.getRuntime();
             Scriptable mem = cx.newObject(thisObj);
-            mem.put("heapTotal", thisObj, Runtime.getRuntime().maxMemory());
-            mem.put("heapUsed", thisObj,  Runtime.getRuntime().totalMemory());
+            mem.put("rss", mem, r.totalMemory());
+            mem.put("heapTotal", mem, r.maxMemory());
+            mem.put("heapUsed", mem,  r.totalMemory());
             return mem;
         }
 

@@ -1,7 +1,5 @@
 package com.apigee.noderunner.core;
 
-import org.mozilla.javascript.RhinoException;
-
 /**
  * The base exception class.
  */

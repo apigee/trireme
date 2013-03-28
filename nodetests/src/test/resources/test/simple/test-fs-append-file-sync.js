@@ -80,8 +80,8 @@ var m = 0600;
 fs.appendFileSync(filename4, num, { mode: m });
 
 // windows permissions aren't unix
-if (process.platform !== 'java') {
-  console.log('File mode is ' + st.mode);
+if (process.platform !== 'win32') {
+  var st = fs.statSync(filename4);
   assert.equal(st.mode & 0700, m);
 }
 

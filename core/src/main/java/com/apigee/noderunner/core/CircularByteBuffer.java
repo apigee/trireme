@@ -1,4 +1,6 @@
-package com.apigee.noderunner.core;import java.io.IOException;
+package com.apigee.noderunner.core;
+
+import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
 
@@ -165,7 +167,7 @@ public class CircularByteBuffer
         if (writePos >= readPos) {
             return writePos - readPos;
         }
-        return buf.length - (writePos - readPos);
+        return buf.length - (readPos - writePos);
     }
 
     public int totalCapacity()

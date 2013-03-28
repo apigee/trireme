@@ -7,7 +7,6 @@ import com.apigee.noderunner.core.internal.Utils;
 import org.mozilla.javascript.Context;
 import org.mozilla.javascript.EvaluatorException;
 import org.mozilla.javascript.Function;
-import org.mozilla.javascript.FunctionObject;
 import org.mozilla.javascript.NativeArray;
 import org.mozilla.javascript.Scriptable;
 import org.mozilla.javascript.ScriptableObject;
@@ -20,7 +19,6 @@ import org.mozilla.javascript.annotations.JSStaticFunction;
 
 import static com.apigee.noderunner.core.internal.ArgUtils.*;
 
-import java.io.IOException;
 import java.lang.reflect.InvocationTargetException;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;

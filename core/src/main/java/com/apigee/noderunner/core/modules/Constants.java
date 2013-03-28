@@ -6,7 +6,6 @@ import org.mozilla.javascript.Context;
 import org.mozilla.javascript.Scriptable;
 
 import java.lang.reflect.InvocationTargetException;
-import java.util.HashMap;
 
 /**
  * Includes all the constants from the built-in "constants" module in Node.

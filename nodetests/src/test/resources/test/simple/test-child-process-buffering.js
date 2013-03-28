@@ -45,7 +45,6 @@ function pwd(callback) {
   });
 
   child.on('close', function () {
-    console.log('close');
     callback(output);
     pwd_called = true;
     childClosed = true;

@@ -6,4 +6,16 @@
         <Name>test-buffer-big.js</Name>
         <Description>Relies on internal V8 and Node classes.</Description>
     </Excluded>
+    <Excluded>
+        <Name>test-dtrace-jsstack.js</Name>
+        <Description>Relies on internal V8 and Node classes.</Description>
+    </Excluded>
+    <Excluded>
+        <Name>test-postmortem-findjsobjects.js</Name>
+        <Description>Relies on internal V8 and Node classes.</Description>
+    </Excluded>
+    <Excluded>
+        <Name>test-postmortem-jsstack.js</Name>
+        <Description>Relies on internal V8 and Node classes.</Description>
+    </Excluded>
 </ExcludedTests>

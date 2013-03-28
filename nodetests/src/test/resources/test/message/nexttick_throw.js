@@ -19,34 +19,15 @@
 // OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE
 // USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-
-
-
 var common = require('../common');
 var assert = require('assert');
 
-var net = require('net');
-var util = require('util');
-var x = path.join(common.fixturesDir, 'x.txt');
-var expected = 'xyz';
-
-var server = net.createServer(function(socket) {
-  socket.on('receive', function(data) {
-    found = data;
-    client.close();
-    socket.close();
-    server.close();
-    assert.equal(expected, found);
-  });
-});
-server.listen(common.PORT);
-
-var client = net.createConnection(common.PORT);
-client.on('connect', function() {
-  fs.open(x, 'r').addCallback(function(fd) {
-    fs.sendfile(client.fd, fd, 0, expected.length)
-      .addCallback(function(size) {
-          assert.equal(expected.length, size);
-        });
+process.nextTick(function() {
+  process.nextTick(function() {
+    process.nextTick(function() {
+      process.nextTick(function() {
+        undefined_reference_error_maker;
+      });
+    });
   });
 });

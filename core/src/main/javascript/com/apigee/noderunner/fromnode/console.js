@@ -91,8 +91,10 @@ Console.prototype.trace = function() {
   var err = new Error;
   err.name = 'Trace';
   err.message = util.format.apply(this, arguments);
-  Error.captureStackTrace(err, arguments.callee);
-  this.error(err.stack);
+  // FIXME noderunner: Rhino Error object does not have captureStackTrace
+  //Error.captureStackTrace(err, arguments.callee);
+  //this.error(err.stack);
+  this.error(err.name + ': ' + err.message);
 };
 
 

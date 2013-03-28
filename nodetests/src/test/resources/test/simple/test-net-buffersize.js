@@ -39,7 +39,6 @@ server.listen(common.PORT, function() {
   var client = net.connect(common.PORT);
 
   client.on('finish', function() {
-    console.log('client.bufferSize = ' + client.bufferSize);
     assert.strictEqual(client.bufferSize, 0);
   });
 

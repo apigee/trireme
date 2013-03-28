@@ -51,6 +51,11 @@
                      bits. Java does it differently unless we custom code it.</Description>
     </Excluded>
     <Excluded>
+        <Name>test-require-json.js</Name>
+        <Reason>Checks against an error message when trying to parse JSON; Rhino and v8 generate different ones</Reason>
+    </Excluded>
+
+    <Excluded>
         <Name>test-tls-.+\.js</Name>
         <Description>All TLS tests are run from the "noderunner" directory because they
                      use a different keystore format.

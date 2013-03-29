@@ -1,8 +1,8 @@
 package com.apigee.noderunner.core.modules;
 
+import com.apigee.noderunner.core.NodeRuntime;
 import com.apigee.noderunner.core.internal.InternalNodeModule;
 import com.apigee.noderunner.core.internal.NodeOSException;
-import com.apigee.noderunner.core.internal.ScriptRunner;
 import com.apigee.noderunner.core.internal.Utils;
 import org.mozilla.javascript.Context;
 import org.mozilla.javascript.Function;
@@ -41,14 +41,14 @@ public class Filesystem
     }
 
     @Override
-    public Object registerExports(Context cx, Scriptable scope, ScriptRunner runner)
+    public Scriptable registerExports(Context cx, Scriptable scope, NodeRuntime runner)
         throws InvocationTargetException, IllegalAccessException, InstantiationException
     {
         ScriptableObject.defineClass(scope, FSImpl.class, false, true);
         ScriptableObject.defineClass(scope, StatsImpl.class, false, true);
 
         FSImpl fs = (FSImpl) cx.newObject(scope, FSImpl.CLASS_NAME);
-        fs.initialize(runner, runner.getEnvironment().getAsyncPool());
+        fs.initialize(runner, runner.getAsyncPool());
         ScriptableObject.defineClass(fs, StatsImpl.class, false, true);
         return fs;
     }
@@ -58,7 +58,7 @@ public class Filesystem
     {
         public static final String CLASS_NAME = "_fsClass";
 
-        protected ScriptRunner runner;
+        protected NodeRuntime runner;
         protected Executor pool;
 
         @Override
@@ -66,7 +66,7 @@ public class Filesystem
             return CLASS_NAME;
         }
 
-        protected void initialize(ScriptRunner runner, Executor fsPool)
+        protected void initialize(NodeRuntime runner, Executor fsPool)
         {
             this.runner = runner;
             this.pool = fsPool;

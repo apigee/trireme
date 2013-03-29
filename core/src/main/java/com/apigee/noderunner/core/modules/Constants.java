@@ -1,7 +1,7 @@
 package com.apigee.noderunner.core.modules;
 
+import com.apigee.noderunner.core.NodeRuntime;
 import com.apigee.noderunner.core.internal.InternalNodeModule;
-import com.apigee.noderunner.core.internal.ScriptRunner;
 import org.mozilla.javascript.Context;
 import org.mozilla.javascript.Scriptable;
 
@@ -46,6 +46,7 @@ public class Constants
     public static final String ENOENT = "ENOENT";
     public static final String ENOTDIR = "ENOTDIR";
     public static final String EOF = "EOF";
+    public static final String EPERM = "EPERM";
 
     public static final int S_IRUSR = 0000400;    /* R for owner */
     public static final int S_IWUSR = 0000200;    /* W for owner */
@@ -65,7 +66,7 @@ public class Constants
     }
 
     @Override
-    public Object registerExports(Context cx, Scriptable scope, ScriptRunner runner)
+    public Scriptable registerExports(Context cx, Scriptable scope, NodeRuntime runner)
         throws InvocationTargetException, IllegalAccessException, InstantiationException
     {
         Scriptable exports = cx.newObject(scope);

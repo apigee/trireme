@@ -1,7 +1,7 @@
 package com.apigee.noderunner.core.modules;
 
+import com.apigee.noderunner.core.NodeRuntime;
 import com.apigee.noderunner.core.internal.InternalNodeModule;
-import com.apigee.noderunner.core.internal.ScriptRunner;
 import org.mozilla.javascript.Context;
 import org.mozilla.javascript.Function;
 import org.mozilla.javascript.Scriptable;
@@ -29,7 +29,7 @@ public class Evals
     }
 
     @Override
-    public Object registerExports(Context cx, Scriptable scope, ScriptRunner runner) throws
+    public Scriptable registerExports(Context cx, Scriptable scope, NodeRuntime runner) throws
                                                                                      InvocationTargetException,
                                                                                      IllegalAccessException,
                                                                                      InstantiationException

@@ -1,7 +1,7 @@
 package com.apigee.noderunner.core.modules;
 
+import com.apigee.noderunner.core.NodeRuntime;
 import com.apigee.noderunner.core.internal.InternalNodeModule;
-import com.apigee.noderunner.core.internal.ScriptRunner;
 import org.mozilla.javascript.Context;
 import org.mozilla.javascript.EvaluatorException;
 import org.mozilla.javascript.Function;
@@ -64,7 +64,8 @@ public class SSLWrap
     }
 
     @Override
-    public Object registerExports(Context cx, Scriptable scope, ScriptRunner runner) throws InvocationTargetException, IllegalAccessException, InstantiationException
+    public Scriptable registerExports(Context cx, Scriptable scope, NodeRuntime runner)
+        throws InvocationTargetException, IllegalAccessException, InstantiationException
     {
         ScriptableObject.defineClass(scope, WrapperImpl.class);
         ScriptableObject.defineClass(scope, EngineImpl.class);
@@ -79,7 +80,7 @@ public class SSLWrap
     {
         public static final String CLASS_NAME = "_sslWrapper";
 
-        private ScriptRunner runner;
+        private NodeRuntime runner;
 
         @Override
         public String getClassName()
@@ -87,7 +88,7 @@ public class SSLWrap
             return CLASS_NAME;
         }
 
-        void init(ScriptRunner runner)
+        void init(NodeRuntime runner)
         {
             this.runner = runner;
         }
@@ -117,7 +118,7 @@ public class SSLWrap
         public static final String CLASS_NAME = "_sslContextClass";
 
         private SSLContext context;
-        private ScriptRunner runner;
+        private NodeRuntime runner;
 
         private KeyManager[] keyManagers;
         private TrustManager[] trustManagers;
@@ -126,7 +127,7 @@ public class SSLWrap
             return CLASS_NAME;
         }
 
-        void init(ScriptRunner runner)
+        void init(NodeRuntime runner)
         {
             this.runner = runner;
             try {
@@ -200,7 +201,7 @@ public class SSLWrap
             trustManagers = new TrustManager[] { AllTrustingManager.INSTANCE };
         }
 
-        void initDefault(ScriptRunner runner)
+        void initDefault(NodeRuntime runner)
         {
             this.runner = runner;
             try {
@@ -238,7 +239,7 @@ public class SSLWrap
         private static final int DEFAULT_BUFFER_SIZE = 8192;
 
         private SSLEngine engine;
-        private ScriptRunner runner;
+        private NodeRuntime runner;
         private ByteBuffer toWrap;
         private ByteBuffer fromWrap;
         private ByteBuffer toUnwrap;
@@ -249,7 +250,7 @@ public class SSLWrap
             return CLASS_NAME;
         }
 
-        void init(ScriptRunner runner, SSLContext ctx, boolean clientMode)
+        void init(NodeRuntime runner, SSLContext ctx, boolean clientMode)
         {
             this.runner = runner;
             engine = ctx.createSSLEngine();
@@ -428,7 +429,7 @@ public class SSLWrap
             if (task == null) {
                 fireFunction(callback);
             } else {
-                runner.getEnvironment().getAsyncPool().execute(new Runnable()
+                runner.getAsyncPool().execute(new Runnable()
                 {
                     @Override
                     public void run()

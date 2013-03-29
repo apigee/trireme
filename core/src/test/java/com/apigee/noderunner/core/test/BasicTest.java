@@ -1,17 +1,18 @@
 package com.apigee.noderunner.core.test;
 
-import com.apigee.noderunner.NetworkPolicy;
+import com.apigee.noderunner.core.NetworkPolicy;
 import com.apigee.noderunner.core.NodeEnvironment;
 import com.apigee.noderunner.core.NodeException;
 import com.apigee.noderunner.core.NodeScript;
 import com.apigee.noderunner.core.Sandbox;
-import com.apigee.noderunner.core.ScriptCancelledException;
 import com.apigee.noderunner.core.ScriptFuture;
 import com.apigee.noderunner.core.ScriptStatus;
 import com.apigee.noderunner.core.ScriptStatusListener;
+import com.apigee.noderunner.core.SubprocessPolicy;
 import com.apigee.noderunner.core.internal.Utils;
 import org.junit.Before;
 import org.junit.Test;
+import org.mozilla.javascript.JavaScriptException;
 
 import static org.junit.Assert.*;
 
@@ -19,11 +20,10 @@ import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
 import java.net.InetSocketAddress;
+import java.util.List;
 import java.util.concurrent.CancellationException;
 import java.util.concurrent.ExecutionException;
-import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
-import java.util.concurrent.TimeoutException;
 
 public class BasicTest
 {
@@ -264,6 +264,42 @@ public class BasicTest
         runTest("rootsealtest.js");
     }
 
+    @Test
+    public void testSpawnSuccess()
+        throws InterruptedException, ExecutionException, NodeException
+    {
+        runTest("spawntest.js");
+    }
+
+    @Test
+    public void testSpawnBlocked()
+        throws InterruptedException, ExecutionException, NodeException
+    {
+        NodeEnvironment localEnv = new NodeEnvironment();
+        Sandbox sb = new Sandbox();
+        sb.setSubprocessPolicy(new NoEchoPolicy());
+        localEnv.setSandbox(sb);
+        NodeScript script = localEnv.createScript("spawntest.js",
+                                             new File("./target/test-classes/tests/spawntest.js"),
+                                             null);
+        try {
+            script.execute().get();
+            assertTrue("Script should have thrown exception", false);
+        } catch (ExecutionException jse) {
+            // GOOD.
+        }
+    }
+
+    private void runTest(String name)
+        throws InterruptedException, ExecutionException, NodeException
+    {
+        NodeScript script = env.createScript(name,
+                                             new File("./target/test-classes/tests/" + name),
+                                             null);
+        ScriptStatus status = script.execute().get();
+        assertEquals(0, status.getExitCode());
+    }
+
     private static final class RejectInPolicy
         implements NetworkPolicy
     {
@@ -280,16 +316,6 @@ public class BasicTest
         }
     }
 
-    private void runTest(String name)
-        throws InterruptedException, ExecutionException, NodeException
-    {
-        NodeScript script = env.createScript(name,
-                                             new File("./target/test-classes/tests/" + name),
-                                             null);
-        ScriptStatus status = script.execute().get();
-        assertEquals(0, status.getExitCode());
-    }
-
     private static final class RejectOutPolicy
         implements NetworkPolicy
     {
@@ -303,6 +329,16 @@ public class BasicTest
         public boolean allowListening(InetSocketAddress addrPort)
         {
             return true;
+        }
+    }
+
+    private static final class NoEchoPolicy
+        implements SubprocessPolicy
+    {
+        @Override
+        public boolean allowSubprocess(List<String> args)
+        {
+            return !("echo".equals(args.get(0)));
         }
     }
 }

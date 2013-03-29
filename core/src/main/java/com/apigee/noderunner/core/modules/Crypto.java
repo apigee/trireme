@@ -1,7 +1,7 @@
 package com.apigee.noderunner.core.modules;
 
 import com.apigee.noderunner.core.NodeModule;
-import com.apigee.noderunner.core.internal.ScriptRunner;
+import com.apigee.noderunner.core.NodeRuntime;
 import org.mozilla.javascript.Context;
 import org.mozilla.javascript.EvaluatorException;
 import org.mozilla.javascript.Function;
@@ -23,7 +23,7 @@ public class Crypto
     }
 
     @Override
-    public Object registerExports(Context cx, Scriptable scope, ScriptRunner runner)
+    public Scriptable registerExports(Context cx, Scriptable scope, NodeRuntime runner)
         throws InvocationTargetException, IllegalAccessException, InstantiationException
     {
         ScriptableObject.defineClass(scope, CryptoImpl.class);

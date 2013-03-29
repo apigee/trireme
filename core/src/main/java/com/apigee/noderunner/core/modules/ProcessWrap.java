@@ -1,12 +1,14 @@
 package com.apigee.noderunner.core.modules;
 
 import com.apigee.noderunner.core.NodeException;
+import com.apigee.noderunner.core.NodeRuntime;
 import com.apigee.noderunner.core.NodeScript;
 import com.apigee.noderunner.core.Sandbox;
 import com.apigee.noderunner.core.ScriptFuture;
 import com.apigee.noderunner.core.ScriptStatus;
 import com.apigee.noderunner.core.ScriptStatusListener;
 import com.apigee.noderunner.core.ScriptTask;
+import com.apigee.noderunner.core.SubprocessPolicy;
 import com.apigee.noderunner.core.internal.BitBucketOutputStream;
 import com.apigee.noderunner.core.internal.InternalNodeModule;
 import com.apigee.noderunner.core.internal.ScriptRunner;
@@ -55,18 +57,19 @@ public class ProcessWrap
     }
 
     @Override
-    public Object registerExports(Context cx, Scriptable scope, ScriptRunner runner)
+    public Scriptable registerExports(Context cx, Scriptable scope, NodeRuntime runner)
         throws InvocationTargetException, IllegalAccessException, InstantiationException
     {
-        runner.requireInternal(NativeInputStreamAdapter.MODULE_NAME, cx);
-        runner.requireInternal(NativeOutputStreamAdapter.MODULE_NAME, cx);
-        runner.require("stream", cx);
+        ScriptRunner internalRunner = (ScriptRunner)runner;
+        internalRunner.requireInternal(NativeInputStreamAdapter.MODULE_NAME, cx);
+        internalRunner.requireInternal(NativeOutputStreamAdapter.MODULE_NAME, cx);
+        internalRunner.require("stream", cx);
 
         ScriptableObject.defineClass(scope, ProcessImpl.class, false, true);
         ScriptableObject.defineClass(scope, ProcessModuleImpl.class);
 
         ProcessModuleImpl exports = (ProcessModuleImpl)cx.newObject(scope, ProcessModuleImpl.CLASS_NAME);
-        exports.initialize(runner);
+        exports.initialize(internalRunner);
         return exports;
     }
 
@@ -142,6 +145,13 @@ public class ProcessWrap
             List<String> execArgs = Utils.toStringList((Scriptable)options.get("args", options));
             if (execArgs.isEmpty()) {
                 throw new EvaluatorException("Invalid to execute script with no argument 0");
+            }
+
+            if (self.runner.getSandbox() != null) {
+                SubprocessPolicy policy = self.runner.getSandbox().getSubprocessPolicy();
+                if ((policy != null) && !policy.allowSubprocess(execArgs)) {
+                    throw Utils.makeError(cx, thisObj, "Permission denied", Constants.EPERM);
+                }
             }
 
             String procName = execArgs.get(0);

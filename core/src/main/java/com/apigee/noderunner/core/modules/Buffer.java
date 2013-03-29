@@ -1,6 +1,7 @@
 package com.apigee.noderunner.core.modules;
 
 import com.apigee.noderunner.core.NodeModule;
+import com.apigee.noderunner.core.NodeRuntime;
 import com.apigee.noderunner.core.internal.Charsets;
 import com.apigee.noderunner.core.internal.ScriptRunner;
 import com.apigee.noderunner.core.internal.Utils;
@@ -44,7 +45,7 @@ public class Buffer
     }
 
     @Override
-    public Object registerExports(Context cx, Scriptable scope, ScriptRunner runner)
+    public Scriptable registerExports(Context cx, Scriptable scope, NodeRuntime runner)
         throws InvocationTargetException, IllegalAccessException, InstantiationException
     {
         ScriptableObject.defineClass(scope, BufferModuleImpl.class);

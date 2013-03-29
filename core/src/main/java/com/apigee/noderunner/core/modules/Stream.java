@@ -1,8 +1,8 @@
 package com.apigee.noderunner.core.modules;
 
 import com.apigee.noderunner.core.NodeModule;
+import com.apigee.noderunner.core.NodeRuntime;
 import com.apigee.noderunner.core.internal.Charsets;
-import com.apigee.noderunner.core.internal.ScriptRunner;
 import com.apigee.noderunner.core.internal.ScriptableUtils;
 import com.apigee.noderunner.core.internal.Utils;
 import org.mozilla.javascript.Context;
@@ -33,14 +33,15 @@ public class Stream
     }
 
     @Override
-    public Object registerExports(Context cx, Scriptable scope, ScriptRunner runner) throws InvocationTargetException, IllegalAccessException, InstantiationException
+    public Scriptable registerExports(Context cx, Scriptable scope, NodeRuntime runner)
+        throws InvocationTargetException, IllegalAccessException, InstantiationException
     {
         ScriptableObject.defineClass(scope, StreamImpl.class, false, true);
         ScriptableObject.defineClass(scope, ReadableStream.class, false, true);
         ScriptableObject.defineClass(scope, WritableStream.class, false, true);
         ScriptableObject.defineClass(scope, BidirectionalStream.class, false, true);
 
-        Object exports = cx.newObject(scope);
+        Scriptable exports = cx.newObject(scope);
         return exports;
     }
 

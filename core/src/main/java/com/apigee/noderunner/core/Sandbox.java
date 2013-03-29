@@ -1,6 +1,5 @@
 package com.apigee.noderunner.core;
 
-import com.apigee.noderunner.NetworkPolicy;
 import org.mozilla.javascript.Scriptable;
 
 import java.io.InputStream;
@@ -23,6 +22,7 @@ public class Sandbox
     private String          filesystemRoot;
     private ExecutorService asyncPool;
     private NetworkPolicy   networkPolicy;
+    private SubprocessPolicy processPolicy;
 
     /**
      * Create a new sandbox that will not affect anything in any way.
@@ -47,6 +47,7 @@ public class Sandbox
             this.filesystemRoot = parent.filesystemRoot;
             this.asyncPool = parent.asyncPool;
             this.networkPolicy = parent.networkPolicy;
+            this.processPolicy = parent.processPolicy;
         }
     }
 
@@ -174,5 +175,18 @@ public class Sandbox
 
     public NetworkPolicy getNetworkPolicy() {
         return networkPolicy;
+    }
+
+    /**
+     * Attach an object that will be called every time the process tries to invoke a sub process, including
+     * "node" itself. If it returns false, then the process will not be launched.
+     */
+    public Sandbox setSubprocessPolicy(SubprocessPolicy policy) {
+        this.processPolicy = policy;
+        return this;
+    }
+
+    public SubprocessPolicy getSubprocessPolicy() {
+        return processPolicy;
     }
 }

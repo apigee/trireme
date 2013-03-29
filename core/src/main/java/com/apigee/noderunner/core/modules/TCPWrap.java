@@ -1,9 +1,9 @@
 package com.apigee.noderunner.core.modules;
 
-import com.apigee.noderunner.NetworkPolicy;
+import com.apigee.noderunner.core.NetworkPolicy;
+import com.apigee.noderunner.core.NodeRuntime;
 import com.apigee.noderunner.core.internal.Charsets;
 import com.apigee.noderunner.core.internal.InternalNodeModule;
-import com.apigee.noderunner.core.internal.ScriptRunner;
 import com.apigee.noderunner.net.SelectorHandler;
 import com.apigee.noderunner.net.NetUtils;
 import org.mozilla.javascript.Context;
@@ -48,7 +48,7 @@ public class TCPWrap
     }
 
     @Override
-    public Object registerExports(Context cx, Scriptable scope, ScriptRunner runner)
+    public Scriptable registerExports(Context cx, Scriptable scope, NodeRuntime runner)
         throws InvocationTargetException, IllegalAccessException, InstantiationException
     {
         ScriptableObject exports = (ScriptableObject)cx.newObject(scope);

@@ -1,7 +1,7 @@
 package com.apigee.noderunner.core.modules;
 
 import com.apigee.noderunner.core.NodeModule;
-import com.apigee.noderunner.core.internal.ScriptRunner;
+import com.apigee.noderunner.core.NodeRuntime;
 import com.apigee.noderunner.core.internal.Utils;
 import org.mozilla.javascript.Context;
 import org.mozilla.javascript.Function;
@@ -32,7 +32,7 @@ public class DNS
     }
 
     @Override
-    public Object registerExports(Context cx, Scriptable scope, ScriptRunner runner)
+    public Scriptable registerExports(Context cx, Scriptable scope, NodeRuntime runner)
         throws InvocationTargetException, IllegalAccessException, InstantiationException
     {
         ScriptableObject.defineClass(scope, DNSImpl.class);
@@ -46,7 +46,7 @@ public class DNS
     {
         public static final String CLASS_NAME = "_dnsClass";
 
-        private ScriptRunner runner;
+        private NodeRuntime runner;
 
         @Override
         public String getClassName()
@@ -54,7 +54,7 @@ public class DNS
             return CLASS_NAME;
         }
 
-        void initialize(ScriptRunner runner)
+        void initialize(NodeRuntime runner)
         {
             this.runner = runner;
         }
@@ -85,7 +85,7 @@ public class DNS
             // TO prevent many, many tests from exiting, we have to "pin" the main script runner thread
             // before we go off into another thread, so it doesn't exit.
             runner.pin();
-            runner.getEnvironment().getAsyncPool().execute(new Runnable()
+            runner.getAsyncPool().execute(new Runnable()
             {
                 @Override
                 public void run()

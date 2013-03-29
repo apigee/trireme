@@ -1,4 +1,4 @@
-package com.apigee.noderunner;
+package com.apigee.noderunner.core;
 
 import java.net.InetSocketAddress;
 

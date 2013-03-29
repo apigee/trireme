@@ -1,9 +1,9 @@
 package com.apigee.noderunner.core.modules;
 
+import com.apigee.noderunner.core.NodeRuntime;
 import com.apigee.noderunner.core.ScriptTask;
 import com.apigee.noderunner.core.internal.Charsets;
 import com.apigee.noderunner.core.internal.InternalNodeModule;
-import com.apigee.noderunner.core.internal.ScriptRunner;
 import com.apigee.noderunner.core.internal.Utils;
 import com.apigee.noderunner.net.spi.HttpDataAdapter;
 import com.apigee.noderunner.net.spi.HttpFuture;
@@ -49,7 +49,7 @@ public class HTTPWrap
     }
 
     @Override
-    public Object registerExports(Context cx, Scriptable scope, ScriptRunner runner)
+    public Scriptable registerExports(Context cx, Scriptable scope, NodeRuntime runner)
         throws InvocationTargetException, IllegalAccessException, InstantiationException
     {
         ScriptableObject.defineClass(scope, HttpImpl.class);
@@ -65,7 +65,7 @@ public class HTTPWrap
     {
         public static final String CLASS_NAME = "_httpWrapperClass";
 
-        private ScriptRunner runner;
+        private NodeRuntime runner;
 
         @Override
         public String getClassName()
@@ -73,7 +73,7 @@ public class HTTPWrap
             return CLASS_NAME;
         }
 
-        void init(ScriptRunner runner)
+        void init(NodeRuntime runner)
         {
             this.runner = runner;
         }
@@ -100,7 +100,7 @@ public class HTTPWrap
     {
         public static final String CLASS_NAME = "_httpServerWrapperClass";
 
-        private ScriptRunner      runner;
+        private NodeRuntime       runner;
         private HttpServerAdapter adapter;
 
         private Function onHeaders;
@@ -118,7 +118,7 @@ public class HTTPWrap
             return CLASS_NAME;
         }
 
-        void init(ScriptRunner runner, HttpServerContainer container)
+        void init(NodeRuntime runner, HttpServerContainer container)
         {
             this.runner = runner;
             this.adapter = container.newServer(runner.getScriptObject(), this);
@@ -380,7 +380,7 @@ public class HTTPWrap
 
         private HttpRequestAdapter request;
         private HttpResponseAdapter response;
-        private ScriptRunner runner;
+        private NodeRuntime runner;
         private Function onWriteComplete;
         private Function onChannelClosed;
 
@@ -390,7 +390,7 @@ public class HTTPWrap
             return CLASS_NAME;
         }
 
-        void init(HttpRequestAdapter request, HttpResponseAdapter response, ScriptRunner runner)
+        void init(HttpRequestAdapter request, HttpResponseAdapter response, NodeRuntime runner)
         {
             this.request = request;
             this.response = response;

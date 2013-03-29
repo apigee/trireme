@@ -1,6 +1,7 @@
 package com.apigee.noderunner.core.modules;
 
 import com.apigee.noderunner.core.NodeModule;
+import com.apigee.noderunner.core.NodeRuntime;
 import com.apigee.noderunner.core.internal.NodeExitException;
 import com.apigee.noderunner.core.internal.PathTranslator;
 import com.apigee.noderunner.core.internal.ScriptRunner;
@@ -42,7 +43,7 @@ public class Process
     }
 
     @Override
-    public Object registerExports(Context cx, Scriptable scope, ScriptRunner runner)
+    public Scriptable registerExports(Context cx, Scriptable scope, NodeRuntime runner)
         throws InvocationTargetException, IllegalAccessException, InstantiationException
     {
         ScriptableObject.defineClass(scope, EventEmitter.EventEmitterImpl.class, false, true);
@@ -90,8 +91,10 @@ public class Process
             return CLASS_NAME;
         }
 
-        public void setRunner(ScriptRunner runner) {
-            this.runner = runner;
+        public void setRunner(NodeRuntime runner)
+        {
+            // This is a low-level module and it's OK to access low-level stuff
+            this.runner = (ScriptRunner)runner;
         }
 
         @JSGetter("mainModule")

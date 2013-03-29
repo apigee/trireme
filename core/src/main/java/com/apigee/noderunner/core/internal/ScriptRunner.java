@@ -3,6 +3,7 @@ package com.apigee.noderunner.core.internal;
 import com.apigee.noderunner.core.NodeEnvironment;
 import com.apigee.noderunner.core.NodeException;
 import com.apigee.noderunner.core.NodeModule;
+import com.apigee.noderunner.core.NodeRuntime;
 import com.apigee.noderunner.core.NodeScript;
 import com.apigee.noderunner.core.RunningScript;
 import com.apigee.noderunner.core.Sandbox;
@@ -41,7 +42,7 @@ import java.util.concurrent.atomic.AtomicInteger;
  * This class actually runs the script.
  */
 public class ScriptRunner
-    implements RunningScript, Callable<ScriptStatus>
+    implements NodeRuntime, RunningScript, Callable<ScriptStatus>
 {
     public static final String RUNNER = "runner";
 
@@ -150,10 +151,12 @@ public class ScriptRunner
         return env;
     }
 
+    @Override
     public Sandbox getSandbox() {
         return sandbox;
     }
 
+    @Override
     public NodeScript getScriptObject() {
         return scriptObject;
     }
@@ -174,10 +177,12 @@ public class ScriptRunner
         return selector;
     }
 
+    @Override
     public ExecutorService getAsyncPool() {
         return asyncPool;
     }
 
+    @Override
     public ExecutorService getUnboundedPool() {
         return env.getScriptPool();
     }
@@ -217,6 +222,7 @@ public class ScriptRunner
     /**
      * Translate a path based on the root.
      */
+    @Override
     public File translatePath(String path)
     {
         if (pathTranslator == null) {
@@ -225,6 +231,7 @@ public class ScriptRunner
         return pathTranslator.translate(path);
     }
 
+    @Override
     public String reverseTranslatePath(String path)
         throws IOException
     {
@@ -242,6 +249,7 @@ public class ScriptRunner
     /**
      * This method uses a concurrent queue so it may be called from any thread.
      */
+    @Override
     public void enqueueCallback(Function f, Scriptable scope, Scriptable thisObj, Object[] args)
     {
         tickFunctions.offer(new Callback(f, scope, thisObj, args));
@@ -251,6 +259,7 @@ public class ScriptRunner
     /**
      * This method uses a concurrent queue so it may be called from any thread.
      */
+    @Override
     public void enqueueTask(ScriptTask task)
     {
         tickFunctions.offer(new Task(task, scope));
@@ -279,12 +288,14 @@ public class ScriptRunner
         return t;
     }
 
+    @Override
     public void pin()
     {
         int currentPinCount = pinCount.incrementAndGet();
         log.debug("Pin count is now {}", currentPinCount);
     }
 
+    @Override
     public void unPin()
     {
         int currentPinCount = pinCount.decrementAndGet();
@@ -657,6 +668,7 @@ public class ScriptRunner
     /**
      * This is used internally when one native module depends on another.
      */
+    @Override
     public Object require(String modName, Context cx)
     {
         try {

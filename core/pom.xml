@@ -55,7 +55,7 @@
           <!-- When precompiling, wrap native module code in a function as the Node code expects. -->
           <codePrefix>(function (exports, require, module, __filename, __dirname) { </codePrefix>
           <codePostfix>});</codePostfix>
-          <generateSource>true</generateSource>
+          <generateSource>false</generateSource>
           <optimizationLevel>1</optimizationLevel>
           <debugInfo>true</debugInfo>
         </configuration>

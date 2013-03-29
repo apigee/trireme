@@ -9,5 +9,12 @@ import org.mozilla.javascript.Scriptable;
  */
 public interface ScriptTask
 {
+    /**
+     * Actually run the task. This method is guaranteed to only run in the script thread, so it may assume
+     * it can access any state of the script without locks.
+     *
+     * @param cx the current Rhino context
+     * @param scope the current global scope
+     */
     void execute(Context cx, Scriptable scope);
 }

@@ -1,9 +1,9 @@
 package com.apigee.noderunner.core.modules;
 
 import com.apigee.noderunner.core.CircularByteBuffer;
+import com.apigee.noderunner.core.NodeRuntime;
 import com.apigee.noderunner.core.ScriptTask;
 import com.apigee.noderunner.core.internal.InternalNodeModule;
-import com.apigee.noderunner.core.internal.ScriptRunner;
 import com.apigee.noderunner.core.internal.Utils;
 import org.mozilla.javascript.Context;
 import org.mozilla.javascript.Function;
@@ -22,6 +22,7 @@ import java.io.InputStream;
 import java.io.OutputStream;
 import java.lang.reflect.InvocationTargetException;
 import java.util.concurrent.Executor;
+import java.util.concurrent.ExecutorService;
 import java.util.zip.CRC32;
 import java.util.zip.DataFormatException;
 import java.util.zip.Deflater;
@@ -96,7 +97,7 @@ public class ZLib
     }
 
     @Override
-    public Object registerExports(Context cx, Scriptable scope, ScriptRunner runner)
+    public Scriptable registerExports(Context cx, Scriptable scope, NodeRuntime runner)
             throws InvocationTargetException, IllegalAccessException, InstantiationException
     {
         ScriptableObject.defineClass(scope, ZLibImpl.class);
@@ -104,7 +105,7 @@ public class ZLib
         ScriptableObject.defineClass(scope, ZLibHandleImpl.class);
 
         ZLibImpl zlib = (ZLibImpl) cx.newObject(scope, ZLibImpl.CLASS_NAME);
-        zlib.initialize(runner, runner.getEnvironment().getAsyncPool());
+        zlib.initialize(runner, runner.getAsyncPool());
         zlib.bindFunctions(cx, zlib);
         return zlib;
     }
@@ -114,7 +115,7 @@ public class ZLib
     {
         public static final String CLASS_NAME = "_zlibClass";
 
-        protected ScriptRunner runner;
+        protected NodeRuntime runner;
         protected Executor pool;
 
         @Override
@@ -175,7 +176,7 @@ public class ZLib
             this.put("UNZIP", this, UNZIP);
         }
 
-        protected void initialize(ScriptRunner runner, Executor fsPool)
+        protected void initialize(NodeRuntime runner, ExecutorService fsPool)
         {
             this.runner = runner;
             this.pool = fsPool;

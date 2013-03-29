@@ -1,8 +1,8 @@
 package com.apigee.noderunner.core.modules;
 
+import com.apigee.noderunner.core.NodeRuntime;
 import com.apigee.noderunner.core.ScriptTask;
 import com.apigee.noderunner.core.internal.InternalNodeModule;
-import com.apigee.noderunner.core.internal.ScriptRunner;
 import com.apigee.noderunner.core.internal.Utils;
 import org.mozilla.javascript.Context;
 import org.mozilla.javascript.Function;
@@ -40,7 +40,7 @@ public class NativeInputStreamAdapter
     }
 
     @Override
-    public Object registerExports(Context cx, Scriptable scope, ScriptRunner runner)
+    public Scriptable registerExports(Context cx, Scriptable scope, NodeRuntime runner)
         throws InvocationTargetException, IllegalAccessException, InstantiationException
     {
         ScriptableObject.defineClass(scope, NativeInputAdapterImpl.class);
@@ -48,7 +48,7 @@ public class NativeInputStreamAdapter
         return exports;
     }
 
-    public static Scriptable  createNativeStream(Context cx, Scriptable scope, ScriptRunner runner,
+    public static Scriptable  createNativeStream(Context cx, Scriptable scope, NodeRuntime runner,
                                                  InputStream in, boolean noClose)
     {
         Function ctor = (Function)runner.require(READABLE_MODULE_NAME, cx);
@@ -68,7 +68,7 @@ public class NativeInputStreamAdapter
     {
         public static final String CLASS_NAME = "_nativeInputStreamAdapter";
 
-        private ScriptRunner runner;
+        private NodeRuntime runner;
         private InputStream in;
         private boolean noClose;
 
@@ -78,7 +78,7 @@ public class NativeInputStreamAdapter
             return CLASS_NAME;
         }
 
-        void initialize(ScriptRunner runner, InputStream in, boolean noClose)
+        void initialize(NodeRuntime runner, InputStream in, boolean noClose)
         {
             this.runner = runner;
             this.in = in;

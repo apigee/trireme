@@ -45,12 +45,12 @@ public class Referenceable
 
     protected static void setErrno(String err)
     {
-        getRunner().setErrno(err);
+        ((ScriptRunner)getRunner()).setErrno(err);
     }
 
     protected static void clearErrno()
     {
-        getRunner().clearErrno();
+        ((ScriptRunner)getRunner()).clearErrno();
     }
 
     protected static ScriptRunner getRunner(Context cx)

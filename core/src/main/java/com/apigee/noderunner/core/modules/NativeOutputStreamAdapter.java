@@ -1,7 +1,7 @@
 package com.apigee.noderunner.core.modules;
 
+import com.apigee.noderunner.core.NodeRuntime;
 import com.apigee.noderunner.core.internal.InternalNodeModule;
-import com.apigee.noderunner.core.internal.ScriptRunner;
 import com.apigee.noderunner.core.internal.Utils;
 import org.mozilla.javascript.Context;
 import org.mozilla.javascript.EvaluatorException;
@@ -39,7 +39,7 @@ public class NativeOutputStreamAdapter
     }
 
     @Override
-    public Object registerExports(Context cx, Scriptable scope, ScriptRunner runner)
+    public Scriptable registerExports(Context cx, Scriptable scope, NodeRuntime runner)
         throws InvocationTargetException, IllegalAccessException, InstantiationException
     {
         ScriptableObject.defineClass(scope, NativeOutputAdapterImpl.class);
@@ -52,7 +52,7 @@ public class NativeOutputStreamAdapter
      * and writes to the specified OutputStream using an instance of the adapter defined here.
      * This object may be used directly to support process.stdout and elsewhere.
      */
-    public static Scriptable createNativeStream(Context cx, Scriptable scope, ScriptRunner runner,
+    public static Scriptable createNativeStream(Context cx, Scriptable scope, NodeRuntime runner,
                                                 OutputStream out, boolean noClose)
     {
         Function ctor = (Function)runner.require(WRITABLE_MODULE_NAME, cx);
@@ -73,7 +73,7 @@ public class NativeOutputStreamAdapter
         public static final String CLASS_NAME = "_nativeOutputStreamAdapter";
 
         private OutputStream out;
-        private ScriptRunner runner;
+        private NodeRuntime runner;
         private boolean noClose;
 
         @Override
@@ -82,7 +82,7 @@ public class NativeOutputStreamAdapter
             return CLASS_NAME;
         }
 
-        public void initialize(ScriptRunner runner, OutputStream out, boolean noClose)
+        public void initialize(NodeRuntime runner, OutputStream out, boolean noClose)
         {
             this.runner = runner;
             this.out = out;

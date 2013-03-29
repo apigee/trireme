@@ -1,12 +1,12 @@
 package com.apigee.noderunner.core.modules;
 
 import com.apigee.noderunner.core.NodeModule;
+import com.apigee.noderunner.core.NodeRuntime;
 import com.apigee.noderunner.core.internal.ScriptRunner;
 import com.apigee.noderunner.core.internal.Utils;
 import org.mozilla.javascript.Context;
 import org.mozilla.javascript.Function;
 import org.mozilla.javascript.FunctionObject;
-import org.mozilla.javascript.NativeFunction;
 import org.mozilla.javascript.Script;
 import org.mozilla.javascript.Scriptable;
 import org.mozilla.javascript.ScriptableObject;
@@ -43,7 +43,7 @@ public class NativeModule
     }
 
     @Override
-    public Object registerExports(Context cx, Scriptable scope, ScriptRunner runner)
+    public Scriptable registerExports(Context cx, Scriptable scope, NodeRuntime runner)
         throws InvocationTargetException, IllegalAccessException, InstantiationException
     {
         ScriptableObject.defineClass(scope, NativeImpl.class);
@@ -75,9 +75,10 @@ public class NativeModule
         private boolean    loaded;
         private Scriptable cache;
 
-        void initialize(Context cx, ScriptRunner runner)
+        void initialize(Context cx, NodeRuntime runner)
         {
-            this.runner = runner;
+            // This is an internal-only module and it's OK to use the internal interface here.
+            this.runner = (ScriptRunner)runner;
             this.cache = cx.newObject(this);
         }
 

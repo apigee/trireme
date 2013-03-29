@@ -706,12 +706,16 @@ public class ScriptRunner
     {
         try {
             return nativeModule.internalRequire(modName, cx);
-        } catch (InstantiationException e) {
-            throw new EvaluatorException(e.toString());
-        } catch (IllegalAccessException e) {
-            throw new EvaluatorException(e.toString());
         } catch (InvocationTargetException e) {
-            throw new EvaluatorException(e.toString());
+            Throwable targetException = e.getTargetException();
+            throw new EvaluatorException("Error initializing module: " +
+                    ((targetException != null) ?
+                            e.toString() + ": " + targetException.toString() :
+                            e.toString()));
+        } catch (InstantiationException e) {
+            throw new EvaluatorException("Error initializing module: " + e.toString());
+        } catch (IllegalAccessException e) {
+            throw new EvaluatorException("Error initializing module: " + e.toString());
         }
     }
 

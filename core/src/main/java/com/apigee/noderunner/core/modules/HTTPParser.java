@@ -65,6 +65,7 @@ public class HTTPParser
         private HTTPParsingMachine parser;
         private boolean sentPartialHeaders;
         private boolean sentCompleteHeaders;
+        private boolean sentComplete;
 
         private Function onHeaders;
         private Function onHeadersComplete;
@@ -146,9 +147,19 @@ public class HTTPParser
         }
 
         @JSFunction
-        public void finish()
+        public static void finish(Context cx, Scriptable thisObj, Object[] args, Function ctorObj)
         {
-            log.debug("HTTP parser finished");
+            log.debug("HTTP parser finished with input");
+            ((ParserImpl)thisObj).finish(cx);
+        }
+
+        private void finish(Context cx)
+        {
+            HTTPParsingMachine.Result result = parser.parse(null);
+            if (!sentComplete && result.isComplete()) {
+                callOnComplete(cx);
+                sentComplete = true;
+            }
             parser = null;
         }
 
@@ -173,6 +184,13 @@ public class HTTPParser
             }
             if (log.isTraceEnabled()) {
                 log.trace("buffer: " + bufObj.getString("utf8"));
+            }
+
+            if (sentComplete) {
+                sentComplete = false;
+                sentPartialHeaders = false;
+                sentCompleteHeaders = false;
+                parser.reset();
             }
 
             ByteBuffer bBuf = bufObj.getBuffer();
@@ -229,9 +247,7 @@ public class HTTPParser
                     log.debug("Sending HTTP request complete");
                     wasComplete = true;
                     callOnComplete(cx);
-                    sentPartialHeaders = false;
-                    sentCompleteHeaders = false;
-                    parser.reset();
+                    sentComplete = true;
                 }
                 log.debug("hadSomething = {} result.isComplete = {} remaining = {} ret = {}",
                           hadSomething, wasComplete, bBuf.remaining(), bBuf.position() - startPos);

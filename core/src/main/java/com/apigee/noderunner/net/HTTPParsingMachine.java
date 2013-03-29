@@ -64,7 +64,8 @@ public class HTTPParsingMachine
      * Parse the current buffer and return a result that may contain headers, a body, both, or neither.
      * The parser will try to maintain as little state as possible but it may keep some of the buffer
      * for incomplete processing. "buf" is not copied --  the body data retained may contain a slice of
-     * "buf," so the caller must not modify "buf" after making this call.
+     * "buf," so the caller must not modify "buf" after making this call. "buf" may be null in which case
+     * we assume that there is no more input coming.
      */
     public Result parse(ByteBuffer buf)
     {
@@ -341,11 +342,17 @@ public class HTTPParsingMachine
      */
     private boolean processBody(ByteBuffer buf, Result r)
     {
+        if ((mode == ParsingMode.REQUEST) && (bodyMode == BodyMode.UNDELIMITED)) {
+            // A request with no content length and no content-length has length zero.
+            // But in the case of a response we read until EOF.
+            contentLength = 0;
+            bodyMode = BodyMode.LENGTH;
+        }
+
         switch (bodyMode) {
         case UNDELIMITED:
             // No content length -- assume that the length is zero
-            state = Status.COMPLETE;
-            return true;
+            return processUndelimitedBody(buf, r);
         case LENGTH:
             return processLengthBody(buf, r);
         case CHUNKED:
@@ -358,8 +365,15 @@ public class HTTPParsingMachine
 
     private boolean processUndelimitedBody(ByteBuffer buf, Result r)
     {
+        if (buf == null) {
+            // In this special case we have reached the end of the input
+            state = Status.COMPLETE;
+            return true;
+        }
         if (buf.hasRemaining()) {
-            r.setBody(buf);
+            ByteBuffer chunk = buf.duplicate();
+            r.setBody(chunk);
+            buf.position(buf.limit());
         }
         // Always return the body at this point.
         return false;
@@ -454,6 +468,9 @@ public class HTTPParsingMachine
         if (remaining == 0) {
             return true;
         }
+        if (buf == null) {
+            return false;
+        }
         if (!buf.hasRemaining()) {
             return false;
         }
@@ -484,6 +501,9 @@ public class HTTPParsingMachine
      */
     private String readLine(ByteBuffer buf)
     {
+        if (buf == null) {
+            return null;
+        }
         int p = buf.position();
         while (p < buf.limit()) {
             // Search for the first CRLF pair before end of buffer
@@ -524,6 +544,9 @@ public class HTTPParsingMachine
      */
     private void storeRemaining(ByteBuffer buf)
     {
+        if (buf == null) {
+            return;
+        }
         // TODO should we slice the buffer instead and make a list of buffers?
         if (oddData == null) {
             oddData = ByteBuffer.allocate(buf.remaining());

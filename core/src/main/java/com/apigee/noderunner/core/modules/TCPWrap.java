@@ -65,7 +65,7 @@ public class TCPWrap
         extends Referenceable
     {
         public static final String CLASS_NAME       = "TCP";
-        public static final int    READ_BUFFER_SIZE = 8192;
+        public static final int    READ_BUFFER_SIZE = 65536;
 
         private InetSocketAddress boundAddress;
         private Function          onConnection;
@@ -404,7 +404,7 @@ public class TCPWrap
                     return;
                 }
                 if (log.isDebugEnabled()) {
-                    log.debug("Wrote {} to {}", written, clientChannel);
+                    log.debug("Wrote {} to {} from {}", written, clientChannel, qw.buf);
                 }
                 if (qw.buf.hasRemaining()) {
                     // We didn't write the whole thing.
@@ -590,17 +590,19 @@ public class TCPWrap
                     } else {
                         int written = clientChannel.write(qw.buf);
                         if (log.isDebugEnabled()) {
-                            log.debug("Wrote {} to {}", written, clientChannel);
+                            log.debug("Wrote {} to {} from {}", written, clientChannel, qw.buf);
                         }
-                        writeQueue.poll();
                         if (qw.buf.hasRemaining()) {
                             // We didn't write the whole thing.
                             writeReady = false;
                             addInterest(SelectionKey.OP_WRITE);
                             break;
-                        } else if (qw.onComplete != null) {
-                            qw.onComplete.call(cx, qw.onComplete, this,
-                                               new Object[] { 0, this, qw });
+                        } else {
+                            writeQueue.poll();
+                            if (qw.onComplete != null) {
+                                qw.onComplete.call(cx, qw.onComplete, this,
+                                                   new Object[] { 0, this, qw });
+                            }
                         }
                     }
 

@@ -29,6 +29,7 @@ public class HTTPParserTest
         assertEquals("/foo/bar/baz", r.getUri());
         assertEquals("Myself", getFirstHeader(r, "User-Agent"));
         assertEquals("Hello, World!", Utils.bufferToString(r.getBody(), Charsets.ASCII));
+        parser.parse(null);
     }
 
     @Test
@@ -49,6 +50,7 @@ public class HTTPParserTest
             assertEquals("/foo/bar/baz", r.getUri());
             assertEquals("Myself", getFirstHeader(r, "User-Agent"));
             assertEquals("Hello, World!", Utils.bufferToString(r.getBody(), Charsets.ASCII));
+            parser.parse(null);
             parser.reset();
         }
     }
@@ -69,6 +71,7 @@ public class HTTPParserTest
         assertEquals("GET", r.getMethod());
         assertEquals("/foo/bar/baz", r.getUri());
         assertEquals("Myself", getFirstHeader(r, "User-Agent"));
+        parser.parse(null);
     }
 
     @Test
@@ -87,6 +90,7 @@ public class HTTPParserTest
         assertEquals(200, r.getStatusCode());
         assertEquals("Myself", getFirstHeader(r, "Server"));
         assertEquals("Hello, World!", Utils.bufferToString(r.getBody(), Charsets.ASCII));
+        parser.parse(null);
     }
 
     @Test
@@ -105,6 +109,7 @@ public class HTTPParserTest
         assertEquals(200, r.getStatusCode());
         assertEquals("Myself", getFirstHeader(r, "Server"));
         assertEquals("Hello, World!", Utils.bufferToString(r.getBody(), Charsets.ASCII));
+        parser.parse(null);
     }
 
     @Test
@@ -127,6 +132,7 @@ public class HTTPParserTest
         r = parser.parse(buf);
         assertFalse(r.isError());
         assertTrue(r.isComplete());
+        parser.parse(null);
     }
 
     @Test
@@ -143,6 +149,7 @@ public class HTTPParserTest
         assertEquals(200, r.getStatusCode());
         assertEquals("Myself", getFirstHeader(r, "Server"));
         assertNull(r.getBody());
+        parser.parse(null);
     }
 
     @Test
@@ -151,6 +158,15 @@ public class HTTPParserTest
         HTTPParsingMachine parser = new HTTPParsingMachine(HTTPParsingMachine.ParsingMode.RESPONSE);
         HTTPParsingMachine.Result r =
             parser.parse(Utils.stringToBuffer(COMPLETE_RESPONSE_EMPTIEST, Charsets.ASCII));
+        assertFalse(r.isError());
+        assertFalse(r.isComplete());
+        assertTrue(r.isHeadersComplete());
+        assertFalse(r.hasHeaders());
+        assertFalse(r.hasBody());
+        assertEquals(200, r.getStatusCode());
+        assertNull(r.getBody());
+
+        parser.parse(null);
         assertFalse(r.isError());
         assertTrue(r.isComplete());
         assertTrue(r.isHeadersComplete());
@@ -179,6 +195,7 @@ public class HTTPParserTest
         r = parser.parse(buf);
         assertFalse(r.isError());
         assertTrue(r.isComplete());
+        parser.parse(null);
     }
 
     @Test
@@ -198,6 +215,7 @@ public class HTTPParserTest
         r = parser.parse(buf);
         assertFalse(r.isError());
         assertTrue(r.isComplete());
+        parser.parse(null);
     }
 
     @Test
@@ -220,6 +238,7 @@ public class HTTPParserTest
         assertTrue(r.hasTrailers());
         assertEquals("Foo", getFirstTrailer(r, "Trailer1"));
         assertEquals("Bar", getFirstTrailer(r, "Trailer2"));
+        parser.parse(null);
     }
 
     @Test
@@ -250,6 +269,7 @@ public class HTTPParserTest
         assertTrue(r.isComplete());
 
         assertEquals("Hello, World! This is some chunked data.", str.toString());
+        parser.parse(null);
     }
 
     @Test
@@ -276,6 +296,7 @@ public class HTTPParserTest
         assertEquals("GET", r.getMethod());
         assertEquals("Myself", getFirstHeader(r, "User-Agent"));
         assertEquals("Hello, World!", Utils.bufferToString(r.getBody(), Charsets.ASCII));
+        parser.parse(null);
     }
 
     @Test
@@ -300,6 +321,7 @@ public class HTTPParserTest
         assertEquals("/foo/bar/baz", r.getUri());
         assertEquals("Myself", getFirstHeader(r, "User-Agent"));
         assertEquals("Hello, World!", Utils.bufferToString(r.getBody(), Charsets.ASCII));
+        parser.parse(null);
     }
 
     @Test
@@ -324,6 +346,7 @@ public class HTTPParserTest
         assertEquals("/foo/bar/baz", r.getUri());
         assertEquals("Myself", getFirstHeader(r, "User-Agent"));
         assertEquals("Hello, World!", Utils.bufferToString(r.getBody(), Charsets.ASCII));
+        parser.parse(null);
     }
 
     @Test
@@ -348,6 +371,7 @@ public class HTTPParserTest
         assertEquals("/foo/bar/baz", r.getUri());
         assertEquals("Myself", getFirstHeader(r, "User-Agent"));
         assertEquals("Hello, World!", Utils.bufferToString(r.getBody(), Charsets.ASCII));
+        parser.parse(null);
     }
 
     private static String getFirstHeader(HTTPParsingMachine.Result r, String name)

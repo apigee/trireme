@@ -136,7 +136,11 @@ public class Process
                     }
 
                 } catch (InvocationTargetException e) {
-                    throw new EvaluatorException("Error initializing module: " + e.toString());
+                    Throwable targetException = e.getTargetException();
+                    throw new EvaluatorException("Error initializing module: " +
+                            ((targetException != null) ?
+                                    e.toString() + ": " + targetException.toString() :
+                                    e.toString()));
                 } catch (InstantiationException e) {
                     throw new EvaluatorException("Error initializing module: " + e.toString());
                  } catch (IllegalAccessException e) {

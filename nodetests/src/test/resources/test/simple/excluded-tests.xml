@@ -33,6 +33,10 @@
         <Description>Listening on a file descriptor is not supported in Noderunner or Java.</Description>
     </Excluded>
     <Excluded>
+        <Name>test-net-pingpong.js</Name>
+        <Description>Listening on a file descriptor is not supported in Noderunner or Java.</Description>
+    </Excluded>
+    <Excluded>
         <Name>test-net-pipe-connect-errors.js</Name>
         <Description>No pipes in NR or Java.</Description>
     </Excluded>

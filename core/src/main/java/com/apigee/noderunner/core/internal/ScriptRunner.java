@@ -5,7 +5,6 @@ import com.apigee.noderunner.core.NodeException;
 import com.apigee.noderunner.core.NodeModule;
 import com.apigee.noderunner.core.NodeRuntime;
 import com.apigee.noderunner.core.NodeScript;
-import com.apigee.noderunner.core.RunningScript;
 import com.apigee.noderunner.core.Sandbox;
 import com.apigee.noderunner.core.ScriptStatus;
 import com.apigee.noderunner.core.ScriptTask;
@@ -22,6 +21,7 @@ import org.mozilla.javascript.ScriptableObject;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.io.Closeable;
 import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
@@ -30,6 +30,7 @@ import java.lang.reflect.InvocationTargetException;
 import java.nio.channels.SelectionKey;
 import java.nio.channels.Selector;
 import java.util.HashMap;
+import java.util.IdentityHashMap;
 import java.util.Iterator;
 import java.util.PriorityQueue;
 import java.util.concurrent.Callable;
@@ -42,7 +43,7 @@ import java.util.concurrent.atomic.AtomicInteger;
  * This class actually runs the script.
  */
 public class ScriptRunner
-    implements NodeRuntime, RunningScript, Callable<ScriptStatus>
+    implements NodeRuntime, Callable<ScriptStatus>
 {
     public static final String RUNNER = "runner";
 
@@ -63,6 +64,8 @@ public class ScriptRunner
     private final  Sandbox                 sandbox;
     private final  PathTranslator          pathTranslator;
     private final  ExecutorService         asyncPool;
+    private final IdentityHashMap<Closeable, Closeable> openHandles =
+        new IdentityHashMap<Closeable, Closeable>();
 
     private final  LinkedBlockingQueue<Activity> tickFunctions = new LinkedBlockingQueue<Activity>();
     private final  PriorityQueue<Activity>       timerQueue    = new PriorityQueue<Activity>();
@@ -331,6 +334,34 @@ public class ScriptRunner
         return Context.getUndefinedValue();
     }
 
+    @Override
+    public void registerCloseable(Closeable c)
+    {
+        openHandles.put(c, c);
+    }
+
+    @Override
+    public void unregisterCloseable(Closeable c)
+    {
+        openHandles.remove(c);
+    }
+
+    private void closeCloseables()
+    {
+        for (Closeable c: openHandles.values()) {
+            if (log.isDebugEnabled()) {
+                log.debug("Closing leaked handle {}", c);
+            }
+            try {
+                c.close();
+            } catch (IOException ioe) {
+                if (log.isDebugEnabled()) {
+                    log.debug("Error closing leaked handle: {}", ioe);
+                }
+            }
+        }
+    }
+
     private void setUpContext(Context cx)
     {
         env.setUpContext(cx);
@@ -402,6 +433,8 @@ public class ScriptRunner
                     status = new ScriptStatus(re);
                 }
             }
+
+            closeCloseables();
 
             return status;
 

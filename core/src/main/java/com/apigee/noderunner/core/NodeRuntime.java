@@ -4,6 +4,7 @@ import org.mozilla.javascript.Context;
 import org.mozilla.javascript.Function;
 import org.mozilla.javascript.Scriptable;
 
+import java.io.Closeable;
 import java.io.File;
 import java.io.IOException;
 import java.util.concurrent.ExecutorService;
@@ -99,4 +100,16 @@ public interface NodeRuntime
      */
     String reverseTranslatePath(String path)
         throws IOException;
+
+    /**
+     * Put an object on a list of handles that will be automatically closed when the script exits.
+     * This prevents resource leaks in multi-tenant script environments. Like many other things this
+     * method is not thread-safe and must be called from inside the main script thread.
+     */
+    void registerCloseable(Closeable c);
+
+    /**
+     * Remove the object from the list of handles that will be closed.
+     */
+    void unregisterCloseable(Closeable c);
 }

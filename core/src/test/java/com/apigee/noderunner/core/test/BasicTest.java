@@ -12,7 +12,6 @@ import com.apigee.noderunner.core.SubprocessPolicy;
 import com.apigee.noderunner.core.internal.Utils;
 import org.junit.Before;
 import org.junit.Test;
-import org.mozilla.javascript.JavaScriptException;
 
 import static org.junit.Assert.*;
 

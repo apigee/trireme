@@ -70,7 +70,6 @@ public class TCPWrap
         private InetSocketAddress boundAddress;
         private Function          onConnection;
         private Function          onRead;
-        private Function          onComplete;
         private int               byteCount;
 
         private ServerSocketChannel     svrChannel;
@@ -186,12 +185,14 @@ public class TCPWrap
                         log.debug("Closing client channel {}", clientChannel);
                     }
                     clientChannel.close();
+                    getRunner().unregisterCloseable(clientChannel);
                 }
                 if (svrChannel != null) {
                     if (log.isDebugEnabled()) {
                         log.debug("Closing server channel {}", svrChannel);
                     }
                     svrChannel.close();
+                    getRunner().unregisterCloseable(svrChannel);
                 }
 
                 if (callback != null) {
@@ -240,8 +241,11 @@ public class TCPWrap
                 log.debug("Server listening on {} with backlog {} onconnection {}",
                           boundAddress, backlog, onConnection);
             }
+
+            boolean success = false;
             try {
                 svrChannel = ServerSocketChannel.open();
+                getRunner().registerCloseable(svrChannel);
                 svrChannel.configureBlocking(false);
                 svrChannel.socket().setReuseAddress(true);
                 svrChannel.socket().bind(boundAddress, backlog);
@@ -254,6 +258,7 @@ public class TCPWrap
                                             serverSelected(key);
                                         }
                                     });
+                success = true;
                 return null;
 
             } catch (BindException be) {
@@ -264,6 +269,15 @@ public class TCPWrap
                 log.debug("Error listening: {}", ioe);
                 setErrno(Constants.EIO);
                 return Constants.EIO;
+            } finally {
+                if (!success && (svrChannel != null)) {
+                    getRunner().unregisterCloseable(svrChannel);
+                    try {
+                        svrChannel.close();
+                    } catch (IOException ioe) {
+                        log.debug("Error closing channel that might be closed: {}", ioe);
+                    }
+                }
             }
         }
 
@@ -287,10 +301,24 @@ public class TCPWrap
                                 log.debug("Accepted new socket {}", child);
                             }
 
-                            TCPImpl sock = (TCPImpl)cx.newObject(this, CLASS_NAME);
-                            sock.initializeClient(child);
-                            if (onConnection != null) {
-                                onConnection.call(cx, onConnection, this, new Object[] { sock });
+                            boolean success = false;
+                            try {
+                                getRunner().registerCloseable(child);
+                                TCPImpl sock = (TCPImpl)cx.newObject(this, CLASS_NAME);
+                                sock.initializeClient(child);
+                                if (onConnection != null) {
+                                    onConnection.call(cx, onConnection, this, new Object[] { sock });
+                                }
+                                success = true;
+                            } finally {
+                                if (!success) {
+                                    getRunner().unregisterCloseable(child);
+                                    try {
+                                        child.close();
+                                    } catch (IOException ioe) {
+                                        log.debug("Error closing channel that might be closed: {}", ioe);
+                                    }
+                                }
                             }
                         }
                     } catch (ClosedChannelException cce) {
@@ -424,6 +452,8 @@ public class TCPWrap
             String host = stringArg(args, 0);
             int port = intArg(args, 1);
 
+            boolean success = false;
+            SocketChannel newChannel = null;
             try {
                 InetSocketAddress targetAddress = new InetSocketAddress(host, port);
                 NetworkPolicy netPolicy = tcp.getNetworkPolicy();
@@ -438,10 +468,12 @@ public class TCPWrap
                 }
                 clearErrno();
                 if (tcp.boundAddress == null) {
-                    tcp.clientChannel = SocketChannel.open();
+                    newChannel = SocketChannel.open();
                 } else {
-                    tcp.clientChannel = SocketChannel.open(tcp.boundAddress);
+                    newChannel = SocketChannel.open(tcp.boundAddress);
                 }
+                tcp.clientChannel = newChannel;
+                getRunner().registerCloseable(newChannel);
                 tcp.clientInit();
                 tcp.clientChannel.connect(targetAddress);
                 tcp.selKey = tcp.clientChannel.register(getRunner().getSelector(),
@@ -456,12 +488,22 @@ public class TCPWrap
                                                         });
 
                 tcp.pendingConnect = (PendingOp)cx.newObject(thisObj, PendingOp.CLASS_NAME);
+                success = true;
                 return tcp.pendingConnect;
 
             } catch (IOException ioe) {
                 log.debug("Error on connect: {}", ioe);
                 setErrno(Constants.EIO);
                 return null;
+            } finally {
+                if (!success && (newChannel != null)) {
+                    getRunner().unregisterCloseable(newChannel);
+                    try {
+                        newChannel.close();
+                    } catch (IOException ioe) {
+                        log.debug("Error closing channel that might be closed: {}", ioe);
+                    }
+                }
             }
         }
 

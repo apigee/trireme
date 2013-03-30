@@ -367,12 +367,6 @@ public class Process
             return System.identityHashCode(runner) % 65536;
         }
 
-        @JSGetter("_errno")
-        public Object getErrno()
-        {
-            return runner.getErrno();
-        }
-
         @JSGetter("platform")
         public String getPlatform()
         {
@@ -458,6 +452,22 @@ public class Process
         {
             Scriptable features = Context.getCurrentContext().newObject(this);
             return features;
+        }
+
+        // Internals used by JS modules
+
+        @JSGetter("_errno")
+        public Object getErrno()
+        {
+            return runner.getErrno();
+        }
+
+        /**
+         * Called in domain.js
+         */
+        @JSFunction("_usingDomains")
+        public void usingDomains()
+        {
         }
     }
 

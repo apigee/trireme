@@ -10,8 +10,6 @@ import org.mozilla.javascript.Scriptable;
 import org.mozilla.javascript.ScriptableObject;
 import org.mozilla.javascript.annotations.JSFunction;
 import org.mozilla.javascript.annotations.JSGetter;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 import static com.apigee.noderunner.core.internal.ArgUtils.*;
 

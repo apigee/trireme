@@ -123,6 +123,8 @@ public class Crypto
                 size = sizeNum.intValue();
                 if (size < 0) {
                     throw Utils.makeTypeError(cx, thisObj, "size must be >= 0");
+                } else if (size > Buffer.MAX_LENGTH) {
+                    throw Utils.makeTypeError(cx, thisObj, "size must be < max buffer length (" + Buffer.MAX_LENGTH + ')');
                 }
             }
 

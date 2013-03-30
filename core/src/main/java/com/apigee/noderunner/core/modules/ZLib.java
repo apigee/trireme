@@ -23,7 +23,6 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.lang.reflect.InvocationTargetException;
-import java.util.concurrent.Executor;
 import java.util.zip.CRC32;
 import java.util.zip.DataFormatException;
 import java.util.zip.Deflater;
@@ -105,18 +104,17 @@ public class ZLib
         ScriptableObject.defineClass(scope, ZLibObjImpl.class);
         ScriptableObject.defineClass(scope, ZLibHandleImpl.class);
 
-        ZLibImpl zlib = (ZLibImpl) cx.newObject(scope, ZLibImpl.CLASS_NAME);
-        zlib.setRuntime(runtime);
-        zlib.bindFunctions(cx, zlib);
-        return zlib;
+        ZLibImpl export = (ZLibImpl) cx.newObject(scope, ZLibImpl.CLASS_NAME);
+        export.setRuntime(runtime);
+        export.bindFunctions(cx, export);
+
+        return export;
     }
 
     public static class ZLibImpl
             extends InternalNodeNativeObject
     {
         public static final String CLASS_NAME = "_zlibClass";
-
-        protected Executor pool;
 
         @Override
         public String getClassName()
@@ -178,17 +176,18 @@ public class ZLib
 
         public void bindFunctions(Context cx, Scriptable export)
         {
-            FunctionObject zlib = new FunctionObject("Zlib",
+            FunctionObject ctor = new FunctionObject("Zlib",
                                                      Utils.findMethod(ZLibImpl.class, "Zlib"),
                                                      this);
-            export.put("Zlib", export, zlib);
+            ctor.setParentScope(this);
+            ScriptableObject.defineProperty(export, "Zlib", ctor, ScriptableObject.DONTENUM);
         }
 
         public static Object Zlib(Context cx, Scriptable thisObj, Object[] args, Function func)
         {
-            ZLibImpl thisClass = (ZLibImpl) thisObj;
+            ZLibImpl self = (ZLibImpl) func.getParentScope();
             ZLibObjImpl zLibObj = (ZLibObjImpl) cx.newObject(thisObj, ZLibObjImpl.CLASS_NAME, args);
-            zLibObj.setRuntime(thisClass.runtime);
+            zLibObj.setRuntime(self.runtime);
             return zLibObj;
         }
     }

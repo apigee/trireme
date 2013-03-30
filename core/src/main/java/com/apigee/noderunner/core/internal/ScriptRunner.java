@@ -34,9 +34,9 @@ import java.util.IdentityHashMap;
 import java.util.Iterator;
 import java.util.PriorityQueue;
 import java.util.concurrent.Callable;
+import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Future;
-import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.atomic.AtomicInteger;
 
 /**
@@ -67,7 +67,7 @@ public class ScriptRunner
     private final IdentityHashMap<Closeable, Closeable> openHandles =
         new IdentityHashMap<Closeable, Closeable>();
 
-    private final  LinkedBlockingQueue<Activity> tickFunctions = new LinkedBlockingQueue<Activity>();
+    private final  ConcurrentLinkedQueue<Activity> tickFunctions = new ConcurrentLinkedQueue<Activity>();
     private final  PriorityQueue<Activity>       timerQueue    = new PriorityQueue<Activity>();
     private final  Selector                      selector;
     private        int                           timerSequence;
@@ -472,7 +472,9 @@ public class ScriptRunner
                 long pollTimeout;
                 long now = System.currentTimeMillis();
 
-                if (timerQueue.isEmpty()) {
+                if (!tickFunctions.isEmpty()) {
+                    pollTimeout = 0;
+                } else if (timerQueue.isEmpty()) {
                     // This is a fudge factor and it helps to find stuck servers in debugging.
                     // in theory we could wait forever at a small advantage in efficiency
                     pollTimeout = DEFAULT_DELAY;
@@ -501,7 +503,8 @@ public class ScriptRunner
                     keys.remove();
                 }
 
-                // Call tick functions but don't let everything else starve unless configured to do so
+                // Call tick functions but don't let everything else starve unless configured to do so.
+                // We will only go up to "maxTick" -- we might not execute it all now!
                 executeTicks(cx);
 
                 // Check the timer queue for all expired timers

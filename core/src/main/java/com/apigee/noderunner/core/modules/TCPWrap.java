@@ -500,7 +500,7 @@ public class TCPWrap
                     try {
                         newChannel.close();
                     } catch (IOException ioe) {
-                        tcp.log.debug("Error closing channel that might be closed", ioe);
+                        tcp.log.debug("Error closing channel that might be closed: {}", ioe);
                     }
                 }
             }

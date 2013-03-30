@@ -28,7 +28,7 @@ public abstract class InternalNodeNativeObject
                 return ret[1];
             } catch (NodeOSException e) {
                 if (log.isDebugEnabled()) {
-                    log.debug("I/O exception: {}", e.getCode(), e);
+                    log.debug("I/O exception: {}: {}", e.getCode(), e);
                 }
                 Object[] err = action.mapSyncException(e);
                 if (err == null) {
@@ -52,7 +52,7 @@ public abstract class InternalNodeNativeObject
                     runtime.enqueueCallback(callback, callback, callback, args);
                 } catch (NodeOSException e) {
                     if (log.isDebugEnabled()) {
-                        log.debug("Async action {} failed: {}", action, e.getCode(), e);
+                        log.debug("Async action {} failed: {}: {}", action, e.getCode(), e);
                     }
                     runtime.enqueueCallback(callback, callback, callback,
                                            action.mapException(e));

@@ -300,7 +300,7 @@ public class SSLWrap
                 self.toWrap.compact();
             } catch (SSLException ssle) {
                 if (self.log.isDebugEnabled()) {
-                    self.log.debug("SSLException", ssle);
+                    self.log.debug("SSLException: {}", ssle);
                 }
                 return self.makeException(result, ssle);
             }
@@ -338,7 +338,7 @@ public class SSLWrap
                 self.toUnwrap.compact();
             } catch (SSLException ssle) {
                 if (self.log.isDebugEnabled()) {
-                    self.log.debug("SSLException", ssle);
+                    self.log.debug("SSLException: {}", ssle);
                 }
                 return self.makeException(result, ssle);
             }
@@ -535,7 +535,7 @@ public class SSLWrap
             try {
                 cert = self.engine.getSession().getPeerCertificates()[0];
             } catch (SSLPeerUnverifiedException puve) {
-                self.log.debug("getPeerCertificates threw", puve);
+                self.log.debug("getPeerCertificates threw {}", puve);
                 cert = null;
             }
             if ((cert == null) || (!(cert instanceof X509Certificate))) {

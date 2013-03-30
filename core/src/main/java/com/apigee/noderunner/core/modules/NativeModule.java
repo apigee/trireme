@@ -234,14 +234,14 @@ public class NativeModule
                 try {
                     return Utils.readStream(in);
                 } catch (IOException ioe) {
-                    self.log.debug("Error reading native code stream", ioe);
+                    self.log.debug("Error reading native code stream: {}", ioe);
                     return Context.getUndefinedValue();
                 }
             } finally {
                 try {
                     in.close();
                 } catch (IOException ioe) {
-                    self.log.debug("Error closing stream", ioe);
+                    self.log.debug("Error closing stream {}", ioe);
                 }
             }
         }

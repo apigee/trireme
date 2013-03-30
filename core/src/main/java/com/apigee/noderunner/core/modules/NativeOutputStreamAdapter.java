@@ -127,7 +127,7 @@ public class NativeOutputStreamAdapter
                 try {
                     self.out.close();
                 } catch (IOException ioe) {
-                    self.log.debug("Error closing output", ioe);
+                    self.log.debug("Error closing output: {}", ioe);
                 }
             }
         }

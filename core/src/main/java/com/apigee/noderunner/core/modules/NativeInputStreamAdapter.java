@@ -117,7 +117,7 @@ public class NativeInputStreamAdapter
                         }
                     } catch (IOException ioe) {
                         if (log.isDebugEnabled()) {
-                            log.debug("Error on read from {}", in, ioe);
+                            log.debug("Error on read from {}: {}", in, ioe);
                         }
                         fireError(callback, ioe);
                     }
@@ -175,7 +175,7 @@ public class NativeInputStreamAdapter
                 try {
                     self.in.close();
                 } catch (IOException ioe) {
-                    self.log.debug("Error closing input stream {}", self.in);
+                    self.log.debug("Error closing input stream {}: {}", self.in, ioe);
                 }
             }
         }

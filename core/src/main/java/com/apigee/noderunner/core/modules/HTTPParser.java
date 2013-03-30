@@ -82,6 +82,13 @@ public class HTTPParser
         {
             parser = new HTTPParsingMachine(
                 (type == REQUEST) ? HTTPParsingMachine.ParsingMode.REQUEST : HTTPParsingMachine.ParsingMode.RESPONSE);
+            // The JS code uses this as an object to hang various data structures. Ensure that they are GCed
+            // before we can continue.
+            for (Object id : getIds()) {
+                if (id instanceof String) {
+                    delete((String)id);
+                }
+            }
         }
 
         public static Object newParser(Context cx, Scriptable thisObj, Object[] args, Function fn)

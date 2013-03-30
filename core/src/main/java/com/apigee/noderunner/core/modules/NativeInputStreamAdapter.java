@@ -3,14 +3,13 @@ package com.apigee.noderunner.core.modules;
 import com.apigee.noderunner.core.NodeRuntime;
 import com.apigee.noderunner.core.ScriptTask;
 import com.apigee.noderunner.core.internal.InternalNodeModule;
+import com.apigee.noderunner.core.internal.InternalNodeNativeObject;
 import com.apigee.noderunner.core.internal.Utils;
 import org.mozilla.javascript.Context;
 import org.mozilla.javascript.Function;
 import org.mozilla.javascript.Scriptable;
 import org.mozilla.javascript.ScriptableObject;
 import org.mozilla.javascript.annotations.JSFunction;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 import static com.apigee.noderunner.core.internal.ArgUtils.*;
 
@@ -31,8 +30,6 @@ public class NativeInputStreamAdapter
 
     private static final int MAX_READ_SIZE = 65536;
 
-    protected static final Logger log = LoggerFactory.getLogger(NativeInputAdapterImpl.class);
-
     @Override
     public String getModuleName()
     {
@@ -40,7 +37,7 @@ public class NativeInputStreamAdapter
     }
 
     @Override
-    public Scriptable registerExports(Context cx, Scriptable scope, NodeRuntime runner)
+    public Scriptable registerExports(Context cx, Scriptable scope, NodeRuntime runtime)
         throws InvocationTargetException, IllegalAccessException, InstantiationException
     {
         ScriptableObject.defineClass(scope, NativeInputAdapterImpl.class);
@@ -48,27 +45,26 @@ public class NativeInputStreamAdapter
         return exports;
     }
 
-    public static Scriptable  createNativeStream(Context cx, Scriptable scope, NodeRuntime runner,
+    public static Scriptable createNativeStream(Context cx, Scriptable scope, NodeRuntime runtime,
                                                  InputStream in, boolean noClose)
     {
-        Function ctor = (Function)runner.require(READABLE_MODULE_NAME, cx);
+        Function ctor = (Function)runtime.require(READABLE_MODULE_NAME, cx);
 
         NativeInputAdapterImpl adapter =
             (NativeInputAdapterImpl)cx.newObject(scope, NativeInputAdapterImpl.CLASS_NAME);
-        adapter.initialize(runner, in, noClose);
+        adapter.setRuntime(runtime);
+        adapter.initialize(in, noClose);
 
-        Scriptable stream =
-            (Scriptable)ctor.call(cx, scope, null,
+        Scriptable stream = (Scriptable)ctor.call(cx, scope, null,
                                   new Object[] { Context.getUndefinedValue(), adapter });
         return stream;
     }
 
     public static class NativeInputAdapterImpl
-        extends ScriptableObject
+        extends InternalNodeNativeObject
     {
         public static final String CLASS_NAME = "_nativeInputStreamAdapter";
 
-        private NodeRuntime runner;
         private InputStream in;
         private boolean noClose;
 
@@ -78,9 +74,8 @@ public class NativeInputStreamAdapter
             return CLASS_NAME;
         }
 
-        void initialize(NodeRuntime runner, InputStream in, boolean noClose)
+        void initialize(InputStream in, boolean noClose)
         {
-            this.runner = runner;
             this.in = in;
             this.noClose = noClose;
         }
@@ -101,7 +96,7 @@ public class NativeInputStreamAdapter
                 log.debug("Going to read {} from {}", readLen, in);
             }
 
-            runner.getUnboundedPool().execute(new Runnable()
+            runtime.getUnboundedPool().execute(new Runnable()
             {
                 @Override
                 public void run()
@@ -132,7 +127,7 @@ public class NativeInputStreamAdapter
 
         private void fireError(final Function callback, final Exception e)
         {
-            runner.enqueueTask(new ScriptTask()
+            runtime.enqueueTask(new ScriptTask()
             {
                 @Override
                 public void execute(Context cx, Scriptable scope)
@@ -145,7 +140,7 @@ public class NativeInputStreamAdapter
 
         private void fireData(final Function callback, final byte[] buf, final int len, final int maxLen)
         {
-            runner.enqueueTask(new ScriptTask()
+            runtime.enqueueTask(new ScriptTask()
             {
                 @Override
                 public void execute(Context cx, Scriptable scope)
@@ -174,13 +169,13 @@ public class NativeInputStreamAdapter
         {
             NativeInputAdapterImpl self = (NativeInputAdapterImpl)thisObj;
             if (!self.noClose) {
-                if (log.isDebugEnabled()) {
-                    log.debug("Closing native input stream {}", self.in);
+                if (self.log.isDebugEnabled()) {
+                    self.log.debug("Closing native input stream {}", self.in);
                 }
                 try {
                     self.in.close();
                 } catch (IOException ioe) {
-                    log.debug("Error closing input stream {}: {}", self.in,  ioe);
+                    self.log.debug("Error closing input stream {}: {}", self.in, ioe);
                 }
             }
         }

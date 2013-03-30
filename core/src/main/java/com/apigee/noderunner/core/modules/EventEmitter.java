@@ -2,6 +2,7 @@ package com.apigee.noderunner.core.modules;
 
 import com.apigee.noderunner.core.NodeModule;
 import com.apigee.noderunner.core.NodeRuntime;
+import com.apigee.noderunner.core.internal.NodeNativeObject;
 import com.apigee.noderunner.core.internal.ScriptableUtils;
 import org.mozilla.javascript.Context;
 import org.mozilla.javascript.Function;
@@ -36,7 +37,7 @@ public class EventEmitter
     }
 
     @Override
-    public Scriptable registerExports(Context cx, Scriptable scope, NodeRuntime runner)
+    public Scriptable registerExports(Context cx, Scriptable scope, NodeRuntime runtime)
         throws InvocationTargetException, IllegalAccessException, InstantiationException
     {
         Scriptable exports = cx.newObject(scope);
@@ -48,7 +49,7 @@ public class EventEmitter
     }
 
     public static class EventEmitterImpl
-        extends ScriptableObject
+        extends NodeNativeObject
     {
         private final HashMap<String, List<Lsnr>> listeners = new HashMap<String, List<Lsnr>>();
         private int maxListeners = DEFAULT_MAX_LISTENERS;

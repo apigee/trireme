@@ -2,6 +2,7 @@ package com.apigee.noderunner.core.modules;
 
 import com.apigee.noderunner.core.NodeModule;
 import com.apigee.noderunner.core.NodeRuntime;
+import com.apigee.noderunner.core.internal.NodeNativeObject;
 import org.mozilla.javascript.Context;
 import org.mozilla.javascript.Scriptable;
 import org.mozilla.javascript.ScriptableObject;
@@ -24,7 +25,7 @@ public class Tty
     }
 
     @Override
-    public Scriptable registerExports(Context cx, Scriptable scope, NodeRuntime runner)
+    public Scriptable registerExports(Context cx, Scriptable scope, NodeRuntime runtime)
         throws InvocationTargetException, IllegalAccessException, InstantiationException
     {
         ScriptableObject.defineClass(scope, TtyImpl.class);
@@ -33,7 +34,7 @@ public class Tty
     }
 
     public static class TtyImpl
-        extends ScriptableObject
+        extends NodeNativeObject
     {
         @Override
         public String getClassName()

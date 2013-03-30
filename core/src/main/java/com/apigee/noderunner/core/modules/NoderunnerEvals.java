@@ -2,6 +2,7 @@ package com.apigee.noderunner.core.modules;
 
 import com.apigee.noderunner.core.NodeRuntime;
 import com.apigee.noderunner.core.internal.InternalNodeModule;
+import com.apigee.noderunner.core.internal.NodeNativeObject;
 import org.mozilla.javascript.Context;
 import org.mozilla.javascript.EvaluatorException;
 import org.mozilla.javascript.RhinoException;
@@ -28,7 +29,7 @@ public class NoderunnerEvals
     }
 
     @Override
-    public Scriptable registerExports(Context cx, Scriptable scope, NodeRuntime runner)
+    public Scriptable registerExports(Context cx, Scriptable scope, NodeRuntime runtime)
         throws InvocationTargetException, IllegalAccessException, InstantiationException
     {
         ScriptableObject.defineClass(scope, EvalsImpl.class);
@@ -38,7 +39,7 @@ public class NoderunnerEvals
     }
 
     public static class EvalsImpl
-        extends ScriptableObject
+        extends NodeNativeObject
     {
         public static final String CLASS_NAME = "_noderunnerEvalsClass";
 

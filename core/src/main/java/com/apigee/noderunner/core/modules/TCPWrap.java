@@ -4,6 +4,7 @@ import com.apigee.noderunner.core.NetworkPolicy;
 import com.apigee.noderunner.core.NodeRuntime;
 import com.apigee.noderunner.core.internal.Charsets;
 import com.apigee.noderunner.core.internal.InternalNodeModule;
+import com.apigee.noderunner.core.internal.NodeNativeObject;
 import com.apigee.noderunner.net.SelectorHandler;
 import com.apigee.noderunner.net.NetUtils;
 import org.mozilla.javascript.Context;
@@ -39,8 +40,6 @@ import java.util.ArrayDeque;
 public class TCPWrap
     implements InternalNodeModule
 {
-    protected static final Logger log = LoggerFactory.getLogger(TCPWrap.class);
-
     @Override
     public String getModuleName()
     {
@@ -48,7 +47,7 @@ public class TCPWrap
     }
 
     @Override
-    public Scriptable registerExports(Context cx, Scriptable scope, NodeRuntime runner)
+    public Scriptable registerExports(Context cx, Scriptable scope, NodeRuntime runtime)
         throws InvocationTargetException, IllegalAccessException, InstantiationException
     {
         ScriptableObject exports = (ScriptableObject)cx.newObject(scope);
@@ -250,14 +249,14 @@ public class TCPWrap
                 svrChannel.socket().setReuseAddress(true);
                 svrChannel.socket().bind(boundAddress, backlog);
                 svrChannel.register(getRunner().getSelector(), SelectionKey.OP_ACCEPT,
-                                    new SelectorHandler()
-                                    {
-                                        @Override
-                                        public void selected(SelectionKey key)
-                                        {
-                                            serverSelected(key);
-                                        }
-                                    });
+                        new SelectorHandler()
+                        {
+                            @Override
+                            public void selected(SelectionKey key)
+                            {
+                                serverSelected(key);
+                            }
+                        });
                 success = true;
                 return null;
 
@@ -458,13 +457,13 @@ public class TCPWrap
                 InetSocketAddress targetAddress = new InetSocketAddress(host, port);
                 NetworkPolicy netPolicy = tcp.getNetworkPolicy();
                 if ((netPolicy != null) && !netPolicy.allowConnection(targetAddress)) {
-                    log.debug("Disallowed connection to {} due to network policy", targetAddress);
+                    tcp.log.debug("Disallowed connection to {} due to network policy", targetAddress);
                     setErrno(Constants.EINVAL);
                     return null;
                 }
 
-                if (log.isDebugEnabled()) {
-                    log.debug("Client connecting to {}:{}", host, port);
+                if (tcp.log.isDebugEnabled()) {
+                    tcp.log.debug("Client connecting to {}:{}", host, port);
                 }
                 clearErrno();
                 if (tcp.boundAddress == null) {
@@ -492,7 +491,7 @@ public class TCPWrap
                 return tcp.pendingConnect;
 
             } catch (IOException ioe) {
-                log.debug("Error on connect: {}", ioe);
+                tcp.log.debug("Error on connect", ioe);
                 setErrno(Constants.EIO);
                 return null;
             } finally {
@@ -501,7 +500,7 @@ public class TCPWrap
                     try {
                         newChannel.close();
                     } catch (IOException ioe) {
-                        log.debug("Error closing channel that might be closed: {}", ioe);
+                        tcp.log.debug("Error closing channel that might be closed: {}", ioe);
                     }
                 }
             }
@@ -749,7 +748,7 @@ public class TCPWrap
     }
 
     public static class QueuedWrite
-        extends ScriptableObject
+        extends NodeNativeObject
     {
         public static final String CLASS_NAME = "_writeWrap";
 
@@ -788,7 +787,7 @@ public class TCPWrap
     }
 
     public static class PendingOp
-        extends ScriptableObject
+        extends NodeNativeObject
     {
         public static final String CLASS_NAME = "_pendingOp";
 

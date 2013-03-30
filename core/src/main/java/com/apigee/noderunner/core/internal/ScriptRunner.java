@@ -368,6 +368,11 @@ public class ScriptRunner
         cx.putThreadLocal(RUNNER, this);
     }
 
+    public static ScriptRunner getThreadLocal(Context cx)
+    {
+        return (ScriptRunner) cx.getThreadLocal(ScriptRunner.RUNNER);
+    }
+
     /**
      * Execute the script. We do this by actually executing the script.
      */

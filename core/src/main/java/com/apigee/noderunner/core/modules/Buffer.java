@@ -3,6 +3,7 @@ package com.apigee.noderunner.core.modules;
 import com.apigee.noderunner.core.NodeModule;
 import com.apigee.noderunner.core.NodeRuntime;
 import com.apigee.noderunner.core.internal.Charsets;
+import com.apigee.noderunner.core.internal.NodeNativeObject;
 import com.apigee.noderunner.core.internal.ScriptRunner;
 import com.apigee.noderunner.core.internal.Utils;
 import org.mozilla.javascript.Context;
@@ -45,7 +46,7 @@ public class Buffer
     }
 
     @Override
-    public Scriptable registerExports(Context cx, Scriptable scope, NodeRuntime runner)
+    public Scriptable registerExports(Context cx, Scriptable scope, NodeRuntime runtime)
         throws InvocationTargetException, IllegalAccessException, InstantiationException
     {
         ScriptableObject.defineClass(scope, BufferModuleImpl.class);
@@ -68,7 +69,7 @@ public class Buffer
      * plus one property.
      */
     public static class BufferModuleImpl
-        extends ScriptableObject
+        extends NodeNativeObject
     {
         public static final String CLASS_NAME = "_bufferModule";
 
@@ -103,7 +104,7 @@ public class Buffer
      * Implementation of the actual "buffer" class.
      */
     public static class BufferImpl
-        extends ScriptableObject
+        extends NodeNativeObject
     {
         public static final String CLASS_NAME = "Buffer";
         private byte[] buf;
@@ -456,7 +457,7 @@ public class Buffer
         }
 
         private void setCharsWritten(int cw) {
-            getRunner(Context.getCurrentContext()).getBufferModule().setCharsWritten(cw);
+            ScriptRunner.getThreadLocal(Context.getCurrentContext()).getBufferModule().setCharsWritten(cw);
         }
 
         @JSFunction
@@ -1065,9 +1066,5 @@ public class Buffer
             return charset;
         }
 
-        private static ScriptRunner getRunner(Context cx)
-        {
-            return (ScriptRunner)cx.getThreadLocal(ScriptRunner.RUNNER);
-        }
     }
 }

@@ -2,6 +2,9 @@ package com.apigee.noderunner.core.modules;
 
 import com.apigee.noderunner.core.NodeModule;
 import com.apigee.noderunner.core.NodeRuntime;
+import com.apigee.noderunner.core.internal.InternalNodeModule;
+import com.apigee.noderunner.core.internal.InternalNodeNativeObject;
+import com.apigee.noderunner.core.internal.NodeNativeObject;
 import com.apigee.noderunner.core.internal.ScriptRunner;
 import com.apigee.noderunner.core.internal.Utils;
 import org.mozilla.javascript.Context;
@@ -30,8 +33,6 @@ import java.lang.reflect.InvocationTargetException;
 public class NativeModule
     implements NodeModule
 {
-    protected static final Logger log = LoggerFactory.getLogger(NativeModule.class);
-
     public static final String MODULE_NAME = "native_module";
     public static final String SCRIPT_BASE = "/com/apigee/noderunner/scripts/";
     public static final String SCRIPT_SUFFIX = ".js";
@@ -43,23 +44,19 @@ public class NativeModule
     }
 
     @Override
-    public Scriptable registerExports(Context cx, Scriptable scope, NodeRuntime runner)
+    public Scriptable registerExports(Context cx, Scriptable scope, NodeRuntime runtime)
         throws InvocationTargetException, IllegalAccessException, InstantiationException
     {
         ScriptableObject.defineClass(scope, NativeImpl.class);
         ScriptableObject.defineClass(scope, ModuleImpl.class);
         NativeImpl nat = (NativeImpl)cx.newObject(scope, NativeImpl.CLASS_NAME);
-        nat.initialize(cx, runner);
+        nat.setRuntime(runtime);
+        nat.initialize(cx);
         return nat;
     }
 
-    private static ScriptRunner getRunner(Context cx)
-    {
-        return (ScriptRunner)cx.getThreadLocal(ScriptRunner.RUNNER);
-    }
-
     public static class NativeImpl
-        extends ScriptableObject
+        extends InternalNodeNativeObject
     {
         public static final String WRAP_PREFIX  =
             "(function (exports, require, module, __filename, __dirname) {";
@@ -75,11 +72,17 @@ public class NativeModule
         private boolean    loaded;
         private Scriptable cache;
 
-        void initialize(Context cx, NodeRuntime runner)
+        void initialize(Context cx)
         {
-            // This is an internal-only module and it's OK to use the internal interface here.
-            this.runner = (ScriptRunner)runner;
             this.cache = cx.newObject(this);
+        }
+
+        @Override
+        public void setRuntime(NodeRuntime runtime)
+        {
+            super.setRuntime(runtime);
+            // This is an internal-only module and it's OK to use the internal interface here.
+            this.runner = (ScriptRunner)this.runtime;
         }
 
         @Override
@@ -127,7 +130,7 @@ public class NativeModule
                 NativeImpl self = (NativeImpl)thisObj;
                 return self.internalRequire(name, cx);
             } else {
-                ScriptRunner r = getRunner(cx);
+                ScriptRunner r = ScriptRunner.getThreadLocal(cx);
                 return r.getNativeModule().internalRequire(name, cx);
             }
         }
@@ -218,6 +221,8 @@ public class NativeModule
         @JSFunction
         public static Object getSource(Context cx, Scriptable thisObj, Object[] args, Function func)
         {
+            NativeImpl self = (NativeImpl) thisObj;
+
             String name = stringArg(args, 0);
 
             InputStream in = NativeImpl.class.getResourceAsStream(SCRIPT_BASE + name + SCRIPT_SUFFIX);
@@ -229,14 +234,14 @@ public class NativeModule
                 try {
                     return Utils.readStream(in);
                 } catch (IOException ioe) {
-                    log.debug("Error reading native code stream: {}", ioe);
+                    self.log.debug("Error reading native code stream: {}", ioe);
                     return Context.getUndefinedValue();
                 }
             } finally {
                 try {
                     in.close();
                 } catch (IOException ioe) {
-                    log.debug("Error closing stream {}", ioe);
+                    self.log.debug("Error closing stream {}", ioe);
                 }
             }
         }
@@ -252,7 +257,7 @@ public class NativeModule
     }
 
     public static class ModuleImpl
-        extends ScriptableObject
+        extends NodeNativeObject
     {
         public static final String CLASS_NAME = "_moduleImplClass";
 

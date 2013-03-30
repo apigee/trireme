@@ -1,12 +1,12 @@
 package com.apigee.noderunner.core.modules;
 
+import com.apigee.noderunner.core.internal.InternalNodeNativeObject;
 import com.apigee.noderunner.core.internal.ScriptRunner;
 import org.mozilla.javascript.Context;
-import org.mozilla.javascript.ScriptableObject;
 import org.mozilla.javascript.annotations.JSFunction;
 
 public class Referenceable
-    extends ScriptableObject
+    extends InternalNodeNativeObject
 {
     protected boolean referenced;
 
@@ -45,21 +45,16 @@ public class Referenceable
 
     protected static void setErrno(String err)
     {
-        ((ScriptRunner)getRunner()).setErrno(err);
+        getRunner().setErrno(err);
     }
 
     protected static void clearErrno()
     {
-        ((ScriptRunner)getRunner()).clearErrno();
-    }
-
-    protected static ScriptRunner getRunner(Context cx)
-    {
-        return (ScriptRunner) cx.getThreadLocal(ScriptRunner.RUNNER);
+        getRunner().clearErrno();
     }
 
     protected static ScriptRunner getRunner()
     {
-        return getRunner(Context.getCurrentContext());
+        return ScriptRunner.getThreadLocal(Context.getCurrentContext());
     }
 }

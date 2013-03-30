@@ -2,6 +2,7 @@ package com.apigee.noderunner.core.modules;
 
 import com.apigee.noderunner.core.NodeRuntime;
 import com.apigee.noderunner.core.internal.InternalNodeModule;
+import com.apigee.noderunner.core.internal.NodeNativeObject;
 import com.apigee.noderunner.core.internal.Utils;
 import com.apigee.noderunner.net.HTTPParsingMachine;
 import org.mozilla.javascript.Context;
@@ -29,8 +30,6 @@ import java.util.Map;
 public class HTTPParser
     implements InternalNodeModule
 {
-    protected static final Logger log = LoggerFactory.getLogger(HTTPParser.class);
-
     @Override
     public String getModuleName()
     {
@@ -38,7 +37,7 @@ public class HTTPParser
     }
 
     @Override
-    public Scriptable registerExports(Context cx, Scriptable scope, NodeRuntime runner)
+    public Scriptable registerExports(Context cx, Scriptable scope, NodeRuntime runtime)
         throws InvocationTargetException, IllegalAccessException, InstantiationException
     {
         Scriptable exports = cx.newObject(scope);
@@ -55,8 +54,10 @@ public class HTTPParser
     }
 
     public static class ParserImpl
-        extends ScriptableObject
+        extends NodeNativeObject
     {
+        protected static final Logger log = LoggerFactory.getLogger(ParserImpl.class);
+
         public static final String CLASS_NAME = "_httpParserClass";
 
         public static final int REQUEST  = 1;

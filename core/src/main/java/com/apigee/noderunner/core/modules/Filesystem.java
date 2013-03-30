@@ -1,7 +1,10 @@
 package com.apigee.noderunner.core.modules;
 
+import com.apigee.noderunner.core.AsyncAction;
 import com.apigee.noderunner.core.NodeRuntime;
+import com.apigee.noderunner.core.internal.InternalNodeNativeObject;
 import com.apigee.noderunner.core.internal.InternalNodeModule;
+import com.apigee.noderunner.core.internal.NodeNativeObject;
 import com.apigee.noderunner.core.internal.NodeOSException;
 import com.apigee.noderunner.core.internal.Utils;
 import org.mozilla.javascript.Context;
@@ -21,7 +24,6 @@ import java.io.IOException;
 import java.io.RandomAccessFile;
 import java.lang.reflect.InvocationTargetException;
 import java.text.DateFormat;
-import java.util.concurrent.Executor;
 
 /**
  * An implementation of the "fs" internal Node module. The "fs.js" script depends on it.
@@ -29,8 +31,6 @@ import java.util.concurrent.Executor;
 public class Filesystem
     implements InternalNodeModule
 {
-    private static final Logger log = LoggerFactory.getLogger(Filesystem.class);
-
     protected static final DateFormat dateFormat =
         DateFormat.getDateTimeInstance(DateFormat.LONG, DateFormat.LONG);
 
@@ -41,82 +41,26 @@ public class Filesystem
     }
 
     @Override
-    public Scriptable registerExports(Context cx, Scriptable scope, NodeRuntime runner)
+    public Scriptable registerExports(Context cx, Scriptable scope, NodeRuntime runtime)
         throws InvocationTargetException, IllegalAccessException, InstantiationException
     {
         ScriptableObject.defineClass(scope, FSImpl.class, false, true);
         ScriptableObject.defineClass(scope, StatsImpl.class, false, true);
 
         FSImpl fs = (FSImpl) cx.newObject(scope, FSImpl.CLASS_NAME);
-        fs.initialize(runner, runner.getAsyncPool());
+        fs.setRuntime(runtime);
         ScriptableObject.defineClass(fs, StatsImpl.class, false, true);
         return fs;
     }
 
     public static class FSImpl
-        extends ScriptableObject
+        extends InternalNodeNativeObject
     {
         public static final String CLASS_NAME = "_fsClass";
-
-        protected NodeRuntime runner;
-        protected Executor pool;
 
         @Override
         public String getClassName() {
             return CLASS_NAME;
-        }
-
-        protected void initialize(NodeRuntime runner, Executor fsPool)
-        {
-            this.runner = runner;
-            this.pool = fsPool;
-        }
-
-        private Object runAction(final Function callback, final AsyncAction action)
-        {
-            if (callback == null) {
-                try {
-                    Object[] ret = action.execute();
-                    if ((ret == null) || (ret.length < 2)) {
-                        return null;
-                    }
-                    return ret[1];
-                } catch (NodeOSException e) {
-                    if (log.isDebugEnabled()) {
-                        log.debug("I/O exception: {}: {}", e.getCode(), e);
-                    }
-                    Object[] err = action.mapSyncException(e);
-                    if (err == null) {
-                        throw Utils.makeError(Context.getCurrentContext(), this, e);
-                    }
-                    return err[1];
-                }
-            }
-
-            runner.pin();
-            pool.execute(new Runnable()
-            {
-                @Override
-                public void run()
-                {
-                    if (log.isDebugEnabled()) {
-                        log.debug("Executing async action {}", action);
-                    }
-                    try {
-                        Object[] args = action.execute();
-                        runner.enqueueCallback(callback, callback, callback, args);
-                    } catch (NodeOSException e) {
-                        if (log.isDebugEnabled()) {
-                            log.debug("Async action {} failed: {}: {}", action, e.getCode(), e);
-                        }
-                        runner.enqueueCallback(callback, callback, callback,
-                                               action.mapException(e));
-                    } finally {
-                        runner.unPin();
-                    }
-                }
-            });
-            return null;
         }
 
         private void createFile(File f, int mode)
@@ -129,7 +73,7 @@ public class Filesystem
         private File translatePath(String path)
             throws NodeOSException
         {
-            File trans = runner.translatePath(path);
+            File trans = runtime.translatePath(path);
             if (trans == null) {
                 throw new NodeOSException(Constants.ENOENT);
             }
@@ -772,7 +716,7 @@ public class Filesystem
     }
 
     public static class StatsImpl
-        extends ScriptableObject
+        extends NodeNativeObject
     {
         public static final String CLASS_NAME = "Stats";
 
@@ -883,19 +827,4 @@ public class Filesystem
         }
     }
 
-    private abstract static class AsyncAction
-    {
-        public abstract Object[] execute()
-            throws NodeOSException;
-
-        public Object[] mapException(NodeOSException e)
-        {
-            return new Object[] { e.getCode() };
-        }
-
-        public Object[] mapSyncException(NodeOSException e)
-        {
-            return null;
-        }
-    }
 }

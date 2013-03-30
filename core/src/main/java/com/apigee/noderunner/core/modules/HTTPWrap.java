@@ -3,6 +3,7 @@ package com.apigee.noderunner.core.modules;
 import com.apigee.noderunner.core.NodeRuntime;
 import com.apigee.noderunner.core.ScriptTask;
 import com.apigee.noderunner.core.internal.Charsets;
+import com.apigee.noderunner.core.internal.InternalNodeNativeObject;
 import com.apigee.noderunner.core.internal.InternalNodeModule;
 import com.apigee.noderunner.core.internal.Utils;
 import com.apigee.noderunner.net.spi.HttpDataAdapter;
@@ -21,8 +22,6 @@ import org.mozilla.javascript.ScriptableObject;
 import org.mozilla.javascript.annotations.JSFunction;
 import org.mozilla.javascript.annotations.JSGetter;
 import org.mozilla.javascript.annotations.JSSetter;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 import java.lang.reflect.InvocationTargetException;
 import java.nio.ByteBuffer;
@@ -40,8 +39,6 @@ import java.util.concurrent.atomic.AtomicInteger;
 public class HTTPWrap
     implements InternalNodeModule
 {
-    protected static final Logger log = LoggerFactory.getLogger(HTTPWrap.class);
-
     @Override
     public String getModuleName()
     {
@@ -49,23 +46,21 @@ public class HTTPWrap
     }
 
     @Override
-    public Scriptable registerExports(Context cx, Scriptable scope, NodeRuntime runner)
+    public Scriptable registerExports(Context cx, Scriptable scope, NodeRuntime runtime)
         throws InvocationTargetException, IllegalAccessException, InstantiationException
     {
         ScriptableObject.defineClass(scope, HttpImpl.class);
         HttpImpl http = (HttpImpl) cx.newObject(scope, HttpImpl.CLASS_NAME);
-        http.init(runner);
+        http.setRuntime(runtime);
         ScriptableObject.defineClass(scope, ServerContainer.class);
         ScriptableObject.defineClass(scope, AdapterRequest.class);
         return http;
     }
 
     public static class HttpImpl
-        extends ScriptableObject
+        extends InternalNodeNativeObject
     {
         public static final String CLASS_NAME = "_httpWrapperClass";
-
-        private NodeRuntime runner;
 
         @Override
         public String getClassName()
@@ -73,15 +68,10 @@ public class HTTPWrap
             return CLASS_NAME;
         }
 
-        void init(NodeRuntime runner)
-        {
-            this.runner = runner;
-        }
-
         @JSFunction
         public boolean hasServerAdapter()
         {
-            return runner.getEnvironment().getHttpContainer() != null;
+            return runtime.getEnvironment().getHttpContainer() != null;
         }
 
         @JSFunction
@@ -89,18 +79,18 @@ public class HTTPWrap
         {
             HttpImpl http = (HttpImpl)thisObj;
             ServerContainer container = (ServerContainer)cx.newObject(thisObj, ServerContainer.CLASS_NAME);
-            container.init(http.runner, http.runner.getEnvironment().getHttpContainer());
+            container.setRuntime(http.runtime);
+            container.init(http.runtime.getEnvironment().getHttpContainer());
             return container;
         }
     }
 
     public static class ServerContainer
-        extends ScriptableObject
+        extends InternalNodeNativeObject
         implements HttpServerStub
     {
         public static final String CLASS_NAME = "_httpServerWrapperClass";
 
-        private NodeRuntime       runner;
         private HttpServerAdapter adapter;
 
         private Function onHeaders;
@@ -118,11 +108,10 @@ public class HTTPWrap
             return CLASS_NAME;
         }
 
-        void init(NodeRuntime runner, HttpServerContainer container)
+        void init(HttpServerContainer container)
         {
-            this.runner = runner;
-            this.adapter = container.newServer(runner.getScriptObject(), this);
-            runner.pin();
+            this.adapter = container.newServer(runtime.getScriptObject(), this);
+            runtime.pin();
         }
 
         @JSFunction
@@ -161,13 +150,14 @@ public class HTTPWrap
                 adapter.close();
                 adapter = null;
             }
-            runner.unPin();
+            runtime.unPin();
         }
 
         private Scriptable buildIncoming(Context cx, HttpRequestAdapter request, HttpResponseAdapter response)
         {
             AdapterRequest ar = (AdapterRequest) cx.newObject(this, AdapterRequest.CLASS_NAME);
-            ar.init(request, response, runner);
+            ar.setRuntime(runtime);
+            ar.init(request, response);
             request.setAttachment(ar);
             return ar;
         }
@@ -178,7 +168,7 @@ public class HTTPWrap
             if (log.isDebugEnabled()) {
                 log.debug("Received HTTP onRequest: {} self contained = {}", request, request.isSelfContained());
             }
-            runner.enqueueTask(new ScriptTask()
+            runtime.enqueueTask(new ScriptTask()
             {
                 @Override
                 public void execute(Context cx, Scriptable scope)
@@ -189,7 +179,7 @@ public class HTTPWrap
             if (request.isSelfContained()) {
                 final ByteBuffer requestData =
                     (request.hasData() ? request.getData() : null);
-                runner.enqueueTask(new ScriptTask()
+                runtime.enqueueTask(new ScriptTask()
                 {
                     @Override
                     public void execute(Context cx, Scriptable scope)
@@ -197,7 +187,7 @@ public class HTTPWrap
                         callOnData(cx, scope, request, response, requestData);
                     }
                 });
-                runner.enqueueTask(new ScriptTask()
+                runtime.enqueueTask(new ScriptTask()
                 {
                     @Override
                     public void execute(Context cx, Scriptable scope)
@@ -216,7 +206,7 @@ public class HTTPWrap
             }
             final ByteBuffer requestData =
                     (data.hasData() ? data.getData() : null);
-            runner.enqueueTask(new ScriptTask()
+            runtime.enqueueTask(new ScriptTask()
             {
                 @Override
                 public void execute(Context cx, Scriptable scope)
@@ -225,7 +215,7 @@ public class HTTPWrap
                 }
             });
             if (data.isLastChunk()) {
-                runner.enqueueTask(new ScriptTask()
+                runtime.enqueueTask(new ScriptTask()
                 {
                     @Override
                     public void execute(Context cx, Scriptable scope)
@@ -284,12 +274,14 @@ public class HTTPWrap
         public void onClose(final HttpRequestAdapter request)
         {
             if (request != null) {
-                runner.enqueueTask(new ScriptTask() {
+                runtime.enqueueTask(new ScriptTask()
+                {
                     @Override
-                    public void execute(Context cx, Scriptable scope) {
+                    public void execute(Context cx, Scriptable scope)
+                    {
                         Scriptable incoming = request.getAttachment();
                         onClose.call(cx, onClose, ServerContainer.this,
-                                     new Object[] { incoming });
+                                new Object[]{incoming});
                     }
                 });
             }
@@ -374,13 +366,12 @@ public class HTTPWrap
     }
 
     public static class AdapterRequest
-        extends ScriptableObject
+        extends InternalNodeNativeObject
     {
         public static final String CLASS_NAME = "_adapterRequestClass";
 
         private HttpRequestAdapter request;
         private HttpResponseAdapter response;
-        private NodeRuntime runner;
         private Function onWriteComplete;
         private Function onChannelClosed;
 
@@ -390,11 +381,10 @@ public class HTTPWrap
             return CLASS_NAME;
         }
 
-        void init(HttpRequestAdapter request, HttpResponseAdapter response, NodeRuntime runner)
+        void init(HttpRequestAdapter request, HttpResponseAdapter response)
         {
             this.request = request;
             this.response = response;
-            this.runner = runner;
         }
 
         @JSGetter("requestUrl")
@@ -586,7 +576,7 @@ public class HTTPWrap
                     if (log.isDebugEnabled()) {
                         log.debug("Write complete: success = {} closed = {} cause = {}", success, closed, cause);
                     }
-                    runner.enqueueTask(new ScriptTask()
+                    runtime.enqueueTask(new ScriptTask()
                     {
                         @Override
                         public void execute(Context cx, Scriptable scope)

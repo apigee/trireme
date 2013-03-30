@@ -25,8 +25,6 @@ import java.lang.reflect.InvocationTargetException;
 public class TimerWrap
     implements InternalNodeModule
 {
-    protected static final Logger log = LoggerFactory.getLogger(TimerWrap.class);
-
     @Override
     public String getModuleName()
     {
@@ -34,7 +32,7 @@ public class TimerWrap
     }
 
     @Override
-    public Scriptable registerExports(Context cx, Scriptable scope, NodeRuntime runner)
+    public Scriptable registerExports(Context cx, Scriptable scope, NodeRuntime runtime)
         throws InvocationTargetException, IllegalAccessException, InstantiationException
     {
         Scriptable export = cx.newObject(scope);
@@ -81,12 +79,14 @@ public class TimerWrap
         @JSFunction
         public static int start(Context cx, Scriptable thisObj, Object[] args, Function func)
         {
+            TimerImpl self = (TimerImpl) thisObj;
+
             int timeout = intArg(args, 0);
             int interval = intArg(args, 1, 0);
             TimerImpl timer = (TimerImpl)thisObj;
 
-            if (log.isDebugEnabled()) {
-                log.debug("Starting timer for {} in {} interval = {}",
+            if (self.log.isDebugEnabled()) {
+                self.log.debug("Starting timer for {} in {} interval = {}",
                           timer.onTimeout, timeout, interval);
             }
             timer.ref();

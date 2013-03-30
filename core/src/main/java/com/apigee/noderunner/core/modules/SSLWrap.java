@@ -1,6 +1,7 @@
 package com.apigee.noderunner.core.modules;
 
 import com.apigee.noderunner.core.NodeRuntime;
+import com.apigee.noderunner.core.internal.InternalNodeNativeObject;
 import com.apigee.noderunner.core.internal.InternalNodeModule;
 import org.mozilla.javascript.Context;
 import org.mozilla.javascript.EvaluatorException;
@@ -50,8 +51,6 @@ import java.util.regex.Pattern;
 public class SSLWrap
     implements InternalNodeModule
 {
-    protected static final Logger log = LoggerFactory.getLogger(SSLWrap.class);
-
     protected static final Pattern COLON = Pattern.compile(":");
     protected static final DateFormat X509_DATE = new SimpleDateFormat("MMM dd HH:mm:ss yyyy zzz");
 
@@ -64,23 +63,21 @@ public class SSLWrap
     }
 
     @Override
-    public Scriptable registerExports(Context cx, Scriptable scope, NodeRuntime runner)
+    public Scriptable registerExports(Context cx, Scriptable scope, NodeRuntime runtime)
         throws InvocationTargetException, IllegalAccessException, InstantiationException
     {
         ScriptableObject.defineClass(scope, WrapperImpl.class);
         ScriptableObject.defineClass(scope, EngineImpl.class);
         ScriptableObject.defineClass(scope, ContextImpl.class);
         WrapperImpl wrapper = (WrapperImpl)cx.newObject(scope, WrapperImpl.CLASS_NAME);
-        wrapper.init(runner);
+        wrapper.setRuntime(runtime);
         return wrapper;
     }
 
     public static class WrapperImpl
-        extends ScriptableObject
+        extends InternalNodeNativeObject
     {
         public static final String CLASS_NAME = "_sslWrapper";
-
-        private NodeRuntime runner;
 
         @Override
         public String getClassName()
@@ -88,17 +85,13 @@ public class SSLWrap
             return CLASS_NAME;
         }
 
-        void init(NodeRuntime runner)
-        {
-            this.runner = runner;
-        }
-
         @JSFunction
         public static Object createContext(Context cx, Scriptable thisObj, Object[] args, Function func)
         {
             WrapperImpl self = (WrapperImpl)thisObj;
             ContextImpl ctx = (ContextImpl)cx.newObject(thisObj, ContextImpl.CLASS_NAME);
-            ctx.init(self.runner);
+            ctx.setRuntime(self.runtime);
+            ctx.initTLSContext();
             return ctx;
         }
 
@@ -107,13 +100,14 @@ public class SSLWrap
         {
             WrapperImpl self = (WrapperImpl)thisObj;
             ContextImpl ctx = (ContextImpl)cx.newObject(thisObj, ContextImpl.CLASS_NAME);
-            ctx.initDefault(self.runner);
+            ctx.setRuntime(self.runtime);
+            ctx.initDefaultContext();
             return ctx;
         }
     }
 
     public static class ContextImpl
-        extends ScriptableObject
+        extends InternalNodeNativeObject
     {
         public static final String CLASS_NAME = "_sslContextClass";
 
@@ -127,13 +121,21 @@ public class SSLWrap
             return CLASS_NAME;
         }
 
-        void init(NodeRuntime runner)
+        void initTLSContext()
         {
-            this.runner = runner;
             try {
                 context = SSLContext.getInstance("TLS");
             } catch (NoSuchAlgorithmException nse) {
                 throw new AssertionError(nse);
+            }
+        }
+
+        void initDefaultContext()
+        {
+            try {
+                context = SSLContext.getDefault();
+            } catch (NoSuchAlgorithmException e) {
+                throw new EvaluatorException("Error initializing SSL context: " + e);
             }
         }
 
@@ -201,29 +203,20 @@ public class SSLWrap
             trustManagers = new TrustManager[] { AllTrustingManager.INSTANCE };
         }
 
-        void initDefault(NodeRuntime runner)
-        {
-            this.runner = runner;
-            try {
-                context = SSLContext.getDefault();
-            } catch (NoSuchAlgorithmException e) {
-                throw new EvaluatorException("Error initializing SSL context: " + e);
-            }
-        }
-
         @JSFunction
         public static Object createEngine(Context cx, Scriptable thisObj, Object[] args, Function func)
         {
             boolean clientMode = booleanArg(args, 0);
             ContextImpl self = (ContextImpl)thisObj;
             EngineImpl engine = (EngineImpl)cx.newObject(thisObj, EngineImpl.CLASS_NAME);
-            engine.init(self.runner, self.context, clientMode);
+            engine.setRuntime(self.runtime);
+            engine.init(self.context, clientMode);
             return engine;
         }
     }
 
     public static class EngineImpl
-        extends ScriptableObject
+        extends InternalNodeNativeObject
     {
         public static final String CLASS_NAME = "_sslEngineClass";
 
@@ -239,7 +232,6 @@ public class SSLWrap
         private static final int DEFAULT_BUFFER_SIZE = 8192;
 
         private SSLEngine engine;
-        private NodeRuntime runner;
         private ByteBuffer toWrap;
         private ByteBuffer fromWrap;
         private ByteBuffer toUnwrap;
@@ -250,9 +242,8 @@ public class SSLWrap
             return CLASS_NAME;
         }
 
-        void init(NodeRuntime runner, SSLContext ctx, boolean clientMode)
+        void init(SSLContext ctx, boolean clientMode)
         {
-            this.runner = runner;
             engine = ctx.createSSLEngine();
             engine.setUseClientMode(clientMode);
             toWrap = ByteBuffer.allocate(DEFAULT_BUFFER_SIZE);
@@ -295,12 +286,12 @@ public class SSLWrap
             try {
                 self.toWrap.flip();
                 do {
-                    if (log.isDebugEnabled()) {
-                        log.debug("SSLEngine wrap {} -> {}", self.toWrap, self.fromWrap);
+                    if (self.log.isDebugEnabled()) {
+                        self.log.debug("SSLEngine wrap {} -> {}", self.toWrap, self.fromWrap);
                     }
                     sslResult = self.engine.wrap(self.toWrap, self.fromWrap);
-                    if (log.isDebugEnabled()) {
-                        log.debug("  wrap {} -> {} = {}", self.toWrap, self.fromWrap, sslResult);
+                    if (self.log.isDebugEnabled()) {
+                        self.log.debug("  wrap {} -> {} = {}", self.toWrap, self.fromWrap, sslResult);
                     }
                     if (sslResult.getStatus() == SSLEngineResult.Status.BUFFER_OVERFLOW) {
                         self.fromWrap = doubleBuffer(self.fromWrap);
@@ -308,8 +299,8 @@ public class SSLWrap
                 } while (sslResult.getStatus() == SSLEngineResult.Status.BUFFER_OVERFLOW);
                 self.toWrap.compact();
             } catch (SSLException ssle) {
-                if (log.isDebugEnabled()) {
-                    log.debug("SSLException: {}", ssle);
+                if (self.log.isDebugEnabled()) {
+                    self.log.debug("SSLException", ssle);
                 }
                 return self.makeException(result, ssle);
             }
@@ -333,12 +324,12 @@ public class SSLWrap
             try {
                 self.toUnwrap.flip();
                 do {
-                    if (log.isDebugEnabled()) {
-                        log.debug("SSLEngine unwrap {} -> {}", self.toUnwrap, self.fromUnwrap);
+                    if (self.log.isDebugEnabled()) {
+                        self.log.debug("SSLEngine unwrap {} -> {}", self.toUnwrap, self.fromUnwrap);
                     }
                     sslResult = self.engine.unwrap(self.toUnwrap, self.fromUnwrap);
-                    if (log.isDebugEnabled()) {
-                        log.debug("  unwrap {} -> {} = {}", self.toUnwrap, self.fromUnwrap, sslResult);
+                    if (self.log.isDebugEnabled()) {
+                        self.log.debug("  unwrap {} -> {} = {}", self.toUnwrap, self.fromUnwrap, sslResult);
                     }
                     if (sslResult.getStatus() == SSLEngineResult.Status.BUFFER_OVERFLOW) {
                         self.fromUnwrap = ByteBuffer.allocate(self.fromUnwrap.capacity() * 2);
@@ -346,8 +337,8 @@ public class SSLWrap
                 } while (sslResult.getStatus() == SSLEngineResult.Status.BUFFER_OVERFLOW);
                 self.toUnwrap.compact();
             } catch (SSLException ssle) {
-                if (log.isDebugEnabled()) {
-                    log.debug("SSLException: {}", ssle);
+                if (self.log.isDebugEnabled()) {
+                    self.log.debug("SSLException", ssle);
                 }
                 return self.makeException(result, ssle);
             }
@@ -429,7 +420,7 @@ public class SSLWrap
             if (task == null) {
                 fireFunction(callback);
             } else {
-                runner.getAsyncPool().execute(new Runnable()
+                runtime.getAsyncPool().execute(new Runnable()
                 {
                     @Override
                     public void run()
@@ -484,7 +475,7 @@ public class SSLWrap
 
         private void fireFunction(Function callback)
         {
-            runner.enqueueCallback(callback, this, this, null);
+            runtime.enqueueCallback(callback, this, this, null);
         }
 
         @JSFunction
@@ -544,11 +535,11 @@ public class SSLWrap
             try {
                 cert = self.engine.getSession().getPeerCertificates()[0];
             } catch (SSLPeerUnverifiedException puve) {
-                log.debug("getPeerCertificates threw {}", puve);
+                self.log.debug("getPeerCertificates threw", puve);
                 cert = null;
             }
             if ((cert == null) || (!(cert instanceof X509Certificate))) {
-                log.debug("Peer certificate is not an X.509 cert");
+                self.log.debug("Peer certificate is not an X.509 cert");
                 return null;
             }
             return self.makeCertificate(cx, (X509Certificate) cert);

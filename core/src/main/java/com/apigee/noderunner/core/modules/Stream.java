@@ -24,8 +24,6 @@ import java.nio.charset.Charset;
 public class Stream
     implements NodeModule
 {
-    protected static final Logger log = LoggerFactory.getLogger(Stream.class);
-
     @Override
     public String getModuleName()
     {
@@ -33,7 +31,7 @@ public class Stream
     }
 
     @Override
-    public Scriptable registerExports(Context cx, Scriptable scope, NodeRuntime runner)
+    public Scriptable registerExports(Context cx, Scriptable scope, NodeRuntime runtime)
         throws InvocationTargetException, IllegalAccessException, InstantiationException
     {
         ScriptableObject.defineClass(scope, StreamImpl.class, false, true);
@@ -48,6 +46,8 @@ public class Stream
     public static class StreamImpl
             extends EventEmitter.EventEmitterImpl
     {
+        protected static final Logger log = LoggerFactory.getLogger(StreamImpl.class);
+
         public static final String CLASS_NAME = "_Stream";
 
         protected boolean readable;

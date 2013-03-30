@@ -2,6 +2,7 @@ package com.apigee.noderunner.core.modules;
 
 import com.apigee.noderunner.core.NodeModule;
 import com.apigee.noderunner.core.NodeRuntime;
+import com.apigee.noderunner.core.internal.InternalNodeNativeObject;
 import com.apigee.noderunner.core.internal.Utils;
 import org.mozilla.javascript.Context;
 import org.mozilla.javascript.Function;
@@ -32,31 +33,24 @@ public class DNS
     }
 
     @Override
-    public Scriptable registerExports(Context cx, Scriptable scope, NodeRuntime runner)
+    public Scriptable registerExports(Context cx, Scriptable scope, NodeRuntime runtime)
         throws InvocationTargetException, IllegalAccessException, InstantiationException
     {
         ScriptableObject.defineClass(scope, DNSImpl.class);
         DNSImpl dns = (DNSImpl)cx.newObject(scope, DNSImpl.CLASS_NAME);
-        dns.initialize(runner);
+        dns.setRuntime(runtime);
         return dns;
     }
 
     public static class DNSImpl
-        extends ScriptableObject
+        extends InternalNodeNativeObject
     {
         public static final String CLASS_NAME = "_dnsClass";
-
-        private NodeRuntime runner;
 
         @Override
         public String getClassName()
         {
             return CLASS_NAME;
-        }
-
-        void initialize(NodeRuntime runner)
-        {
-            this.runner = runner;
         }
 
         @JSFunction
@@ -84,8 +78,8 @@ public class DNS
 
             // TO prevent many, many tests from exiting, we have to "pin" the main script runner thread
             // before we go off into another thread, so it doesn't exit.
-            runner.pin();
-            runner.getAsyncPool().execute(new Runnable()
+            runtime.pin();
+            runtime.getAsyncPool().execute(new Runnable()
             {
                 @Override
                 public void run()
@@ -115,7 +109,7 @@ public class DNS
             } catch (IOException ioe) {
                 invokeCallback(cx, callback, Constants.EIO, null, family);
             } finally {
-                runner.unPin();
+                runtime.unPin();
                 Context.exit();
             }
         }
@@ -126,8 +120,8 @@ public class DNS
             if (code != null) {
                 err = Utils.makeErrorObject(cx, this, code, code);
             }
-            runner.enqueueCallback(callback, callback, this,
-                                   new Object[] { err, address, family } );
+            runtime.enqueueCallback(callback, callback, this,
+                    new Object[]{err, address, family});
         }
     }
 }

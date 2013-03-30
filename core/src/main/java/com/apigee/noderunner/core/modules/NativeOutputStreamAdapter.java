@@ -2,6 +2,7 @@ package com.apigee.noderunner.core.modules;
 
 import com.apigee.noderunner.core.NodeRuntime;
 import com.apigee.noderunner.core.internal.InternalNodeModule;
+import com.apigee.noderunner.core.internal.InternalNodeNativeObject;
 import com.apigee.noderunner.core.internal.Utils;
 import org.mozilla.javascript.Context;
 import org.mozilla.javascript.EvaluatorException;
@@ -9,8 +10,6 @@ import org.mozilla.javascript.Function;
 import org.mozilla.javascript.Scriptable;
 import org.mozilla.javascript.ScriptableObject;
 import org.mozilla.javascript.annotations.JSFunction;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 import static com.apigee.noderunner.core.internal.ArgUtils.*;
 
@@ -28,8 +27,6 @@ public class NativeOutputStreamAdapter
     public static final String MODULE_NAME = "native_output_stream";
     public static final String WRITABLE_MODULE_NAME = "native_stream_writable";
 
-    protected static final Logger log = LoggerFactory.getLogger(NativeOutputAdapterImpl.class);
-
     private Scriptable nativeStreamModule;
 
     @Override
@@ -39,7 +36,7 @@ public class NativeOutputStreamAdapter
     }
 
     @Override
-    public Scriptable registerExports(Context cx, Scriptable scope, NodeRuntime runner)
+    public Scriptable registerExports(Context cx, Scriptable scope, NodeRuntime runtime)
         throws InvocationTargetException, IllegalAccessException, InstantiationException
     {
         ScriptableObject.defineClass(scope, NativeOutputAdapterImpl.class);
@@ -52,14 +49,15 @@ public class NativeOutputStreamAdapter
      * and writes to the specified OutputStream using an instance of the adapter defined here.
      * This object may be used directly to support process.stdout and elsewhere.
      */
-    public static Scriptable createNativeStream(Context cx, Scriptable scope, NodeRuntime runner,
+    public static Scriptable createNativeStream(Context cx, Scriptable scope, NodeRuntime runtime,
                                                 OutputStream out, boolean noClose)
     {
-        Function ctor = (Function)runner.require(WRITABLE_MODULE_NAME, cx);
+        Function ctor = (Function)runtime.require(WRITABLE_MODULE_NAME, cx);
 
         NativeOutputAdapterImpl adapter =
             (NativeOutputAdapterImpl)cx.newObject(scope, NativeOutputAdapterImpl.CLASS_NAME);
-        adapter.initialize(runner, out, noClose);
+        adapter.setRuntime(runtime);
+        adapter.initialize(out, noClose);
 
         Scriptable stream =
             (Scriptable)ctor.call(cx, scope, null,
@@ -68,12 +66,11 @@ public class NativeOutputStreamAdapter
     }
 
     public static class NativeOutputAdapterImpl
-        extends ScriptableObject
+        extends InternalNodeNativeObject
     {
         public static final String CLASS_NAME = "_nativeOutputStreamAdapter";
 
         private OutputStream out;
-        private NodeRuntime runner;
         private boolean noClose;
 
         @Override
@@ -82,9 +79,8 @@ public class NativeOutputStreamAdapter
             return CLASS_NAME;
         }
 
-        public void initialize(NodeRuntime runner, OutputStream out, boolean noClose)
+        public void initialize(OutputStream out, boolean noClose)
         {
-            this.runner = runner;
             this.out = out;
             this.noClose = noClose;
         }
@@ -127,11 +123,11 @@ public class NativeOutputStreamAdapter
         {
             NativeOutputAdapterImpl self = (NativeOutputAdapterImpl)thisObj;
             if (!self.noClose) {
-                log.debug("Closing output stream {}", self.out);
+                self.log.debug("Closing output stream {}", self.out);
                 try {
                     self.out.close();
                 } catch (IOException ioe) {
-                    log.debug("Error closing output: {}", ioe);
+                    self.log.debug("Error closing output", ioe);
                 }
             }
         }

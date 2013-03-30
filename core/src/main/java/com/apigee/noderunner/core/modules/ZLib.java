@@ -3,7 +3,9 @@ package com.apigee.noderunner.core.modules;
 import com.apigee.noderunner.core.CircularByteBuffer;
 import com.apigee.noderunner.core.NodeRuntime;
 import com.apigee.noderunner.core.ScriptTask;
+import com.apigee.noderunner.core.internal.InternalNodeNativeObject;
 import com.apigee.noderunner.core.internal.InternalNodeModule;
+import com.apigee.noderunner.core.internal.NodeNativeObject;
 import com.apigee.noderunner.core.internal.Utils;
 import org.mozilla.javascript.Context;
 import org.mozilla.javascript.Function;
@@ -22,7 +24,6 @@ import java.io.InputStream;
 import java.io.OutputStream;
 import java.lang.reflect.InvocationTargetException;
 import java.util.concurrent.Executor;
-import java.util.concurrent.ExecutorService;
 import java.util.zip.CRC32;
 import java.util.zip.DataFormatException;
 import java.util.zip.Deflater;
@@ -97,7 +98,7 @@ public class ZLib
     }
 
     @Override
-    public Scriptable registerExports(Context cx, Scriptable scope, NodeRuntime runner)
+    public Scriptable registerExports(Context cx, Scriptable scope, NodeRuntime runtime)
             throws InvocationTargetException, IllegalAccessException, InstantiationException
     {
         ScriptableObject.defineClass(scope, ZLibImpl.class);
@@ -105,17 +106,16 @@ public class ZLib
         ScriptableObject.defineClass(scope, ZLibHandleImpl.class);
 
         ZLibImpl zlib = (ZLibImpl) cx.newObject(scope, ZLibImpl.CLASS_NAME);
-        zlib.initialize(runner, runner.getAsyncPool());
+        zlib.setRuntime(runtime);
         zlib.bindFunctions(cx, zlib);
         return zlib;
     }
 
     public static class ZLibImpl
-            extends ScriptableObject
+            extends InternalNodeNativeObject
     {
         public static final String CLASS_NAME = "_zlibClass";
 
-        protected NodeRuntime runner;
         protected Executor pool;
 
         @Override
@@ -176,31 +176,25 @@ public class ZLib
             this.put("UNZIP", this, UNZIP);
         }
 
-        protected void initialize(NodeRuntime runner, ExecutorService fsPool)
-        {
-            this.runner = runner;
-            this.pool = fsPool;
-        }
-
         public void bindFunctions(Context cx, Scriptable export)
         {
             FunctionObject zlib = new FunctionObject("Zlib",
                                                      Utils.findMethod(ZLibImpl.class, "Zlib"),
                                                      this);
             export.put("Zlib", export, zlib);
-            zlib.associateValue("_module", this);
         }
 
         public static Object Zlib(Context cx, Scriptable thisObj, Object[] args, Function func)
         {
+            ZLibImpl thisClass = (ZLibImpl) thisObj;
             ZLibObjImpl zLibObj = (ZLibObjImpl) cx.newObject(thisObj, ZLibObjImpl.CLASS_NAME, args);
-            zLibObj.setParentModule((ZLibImpl) ((ScriptableObject) func).getAssociatedValue("_module"));
+            zLibObj.setRuntime(thisClass.runtime);
             return zLibObj;
         }
     }
 
     public static class ZLibObjImpl
-        extends ScriptableObject
+        extends InternalNodeNativeObject
     {
         public static final String CLASS_NAME = "_zlibObjClass";
 
@@ -212,7 +206,6 @@ public class ZLib
 
         private Function onError; // (message, errno)
 
-        private ZLibImpl parentModule;
         private boolean initialized = false;
         private boolean initializedDeflate = false;
         private boolean initializedInflate = false;
@@ -287,8 +280,8 @@ public class ZLib
                     deflater.setDictionary(this.dictionary.getArray(),
                             this.dictionary.getArrayOffset(), this.dictionary.getLength());
                 } catch (IllegalArgumentException e) {
-                    parentModule.runner.enqueueCallback(onError, onError, ZLibObjImpl.this,
-                            new Object[] { "Bad dictionary", Z_DATA_ERROR });
+                    runtime.enqueueCallback(onError, onError, ZLibObjImpl.this,
+                            new Object[]{"Bad dictionary", Z_DATA_ERROR});
                 }
             }
 
@@ -409,7 +402,7 @@ public class ZLib
             final ZLibHandleImpl handle = (ZLibHandleImpl) Context.getCurrentContext().newObject(
                     this, ZLibHandleImpl.CLASS_NAME);
 
-            parentModule.runner.enqueueTask(new ScriptTask()
+            runtime.enqueueTask(new ScriptTask()
             {
                 @Override
                 public void execute(Context cx, Scriptable scope)
@@ -425,14 +418,14 @@ public class ZLib
                         try {
                             initializedDeflate = initDeflate();
                         } catch (IOException e) {
-                            parentModule.runner.enqueueCallback(onError, onError, ZLibObjImpl.this,
-                                    new Object[] { e.getMessage(), Z_DATA_ERROR });
+                            runtime.enqueueCallback(onError, onError, ZLibObjImpl.this,
+                                    new Object[]{e.getMessage(), Z_DATA_ERROR});
                             return;
                         }
 
                         if (!initializedDeflate) {
-                            parentModule.runner.enqueueCallback(handle.callback, handle.callback, ZLibObjImpl.this,
-                                    new Object[] { inLen - readBytes, outLen - writtenBytes });
+                            runtime.enqueueCallback(handle.callback, handle.callback, ZLibObjImpl.this,
+                                    new Object[]{inLen - readBytes, outLen - writtenBytes});
                             return;
                         }
                     }
@@ -452,14 +445,14 @@ public class ZLib
                             deflaterOutputStream.flush();
                         }
                     } catch (IOException e) {
-                        parentModule.runner.enqueueCallback(onError, onError, ZLibObjImpl.this,
-                                new Object[] { e.getMessage(), Z_DATA_ERROR });
+                        runtime.enqueueCallback(onError, onError, ZLibObjImpl.this,
+                                new Object[]{e.getMessage(), Z_DATA_ERROR});
                     }
 
                     writtenBytes += outBuffer.read(out.getArray(), out.getArrayOffset() + outOff, outLen);
 
-                    parentModule.runner.enqueueCallback(handle.callback, handle.callback, ZLibObjImpl.this,
-                            new Object[] { inLen - readBytes, outLen - writtenBytes });
+                    runtime.enqueueCallback(handle.callback, handle.callback, ZLibObjImpl.this,
+                            new Object[]{inLen - readBytes, outLen - writtenBytes});
                 }
             });
 
@@ -473,7 +466,7 @@ public class ZLib
             final ZLibHandleImpl handle = (ZLibHandleImpl) Context.getCurrentContext().newObject(
                     this, ZLibHandleImpl.CLASS_NAME);
 
-            parentModule.runner.enqueueTask(new ScriptTask()
+            runtime.enqueueTask(new ScriptTask()
             {
                 @Override
                 public void execute(Context cx, Scriptable scope)
@@ -489,14 +482,14 @@ public class ZLib
                         try {
                             initializedInflate = initInflate();
                         } catch (IOException e) {
-                            parentModule.runner.enqueueCallback(onError, onError, ZLibObjImpl.this,
-                                    new Object[] { e.getMessage(), Z_DATA_ERROR });
+                            runtime.enqueueCallback(onError, onError, ZLibObjImpl.this,
+                                    new Object[]{e.getMessage(), Z_DATA_ERROR});
                             return;
                         }
 
                         if (!initializedInflate) {
-                            parentModule.runner.enqueueCallback(handle.callback, handle.callback, ZLibObjImpl.this,
-                                    new Object[] { inLen - readBytes, outLen - writtenBytes });
+                            runtime.enqueueCallback(handle.callback, handle.callback, ZLibObjImpl.this,
+                                    new Object[]{inLen - readBytes, outLen - writtenBytes});
                             return;
                         }
                     }
@@ -515,8 +508,8 @@ public class ZLib
                                 read = inflaterInputStream.read(outArray, outArrayOffset + outOff + readOff, readLen);
                             } catch (IllegalArgumentException e) {
                                 // hopefully this is only thrown by setDictionary in the DictionaryAwareInflater
-                                parentModule.runner.enqueueCallback(onError, onError, ZLibObjImpl.this,
-                                        new Object[] { "Bad dictionary", Z_DATA_ERROR });
+                                runtime.enqueueCallback(onError, onError, ZLibObjImpl.this,
+                                        new Object[]{"Bad dictionary", Z_DATA_ERROR});
                                 return;
                             }
 
@@ -527,20 +520,20 @@ public class ZLib
                                 continue;
                             } else if (read == -1 && inflater.needsDictionary()) {
                                 // if we still need a dictionary here, it means there wasn't one preloaded
-                                parentModule.runner.enqueueCallback(onError, onError, ZLibObjImpl.this,
-                                        new Object[] { "Missing dictionary", Z_DATA_ERROR });
+                                runtime.enqueueCallback(onError, onError, ZLibObjImpl.this,
+                                        new Object[]{"Missing dictionary", Z_DATA_ERROR});
                                 return;
                             }
 
                             break; // EOF (read == -1) or unblock to get more data (-2)
                         }
                     } catch (IOException e) {
-                        parentModule.runner.enqueueCallback(onError, onError, ZLibObjImpl.this,
-                                new Object[] { e.getMessage(), Z_DATA_ERROR });
+                        runtime.enqueueCallback(onError, onError, ZLibObjImpl.this,
+                                new Object[]{e.getMessage(), Z_DATA_ERROR});
                     }
 
-                    parentModule.runner.enqueueCallback(handle.callback, handle.callback, ZLibObjImpl.this,
-                            new Object[] { inLen - readBytes, outLen - writtenBytes });
+                    runtime.enqueueCallback(handle.callback, handle.callback, ZLibObjImpl.this,
+                            new Object[]{inLen - readBytes, outLen - writtenBytes});
                 }
             });
 
@@ -603,15 +596,10 @@ public class ZLib
         {
             this.onError = onError;
         }
-
-        private void setParentModule(ZLibImpl parentModule)
-        {
-            this.parentModule = parentModule;
-        }
     }
 
     public static class ZLibHandleImpl
-        extends ScriptableObject
+        extends NodeNativeObject
     {
         public static final String CLASS_NAME = "_zlibHandleClass";
 

@@ -11,6 +11,8 @@ import com.apigee.noderunner.core.ScriptTask;
 import com.apigee.noderunner.core.SubprocessPolicy;
 import com.apigee.noderunner.core.internal.BitBucketOutputStream;
 import com.apigee.noderunner.core.internal.InternalNodeModule;
+import com.apigee.noderunner.core.internal.InternalNodeNativeObject;
+import com.apigee.noderunner.core.internal.NodeNativeObject;
 import com.apigee.noderunner.core.internal.ScriptRunner;
 import com.apigee.noderunner.core.internal.StreamPiper;
 import com.apigee.noderunner.core.internal.Utils;
@@ -42,7 +44,6 @@ import java.util.regex.Pattern;
 public class ProcessWrap
     implements InternalNodeModule
 {
-    protected static final Logger log = LoggerFactory.getLogger(ProcessWrap.class);
 
     public static final String STDIO_PIPE =      "pipe";
     public static final String STDIO_FD =        "fd";
@@ -57,10 +58,11 @@ public class ProcessWrap
     }
 
     @Override
-    public Scriptable registerExports(Context cx, Scriptable scope, NodeRuntime runner)
+    public Scriptable registerExports(Context cx, Scriptable scope, NodeRuntime runtime)
         throws InvocationTargetException, IllegalAccessException, InstantiationException
     {
-        ScriptRunner internalRunner = (ScriptRunner)runner;
+        // FIXME: we don't know for sure if runtime is a ScriptRunner
+        ScriptRunner internalRunner = (ScriptRunner) runtime;
         internalRunner.requireInternal(NativeInputStreamAdapter.MODULE_NAME, cx);
         internalRunner.requireInternal(NativeOutputStreamAdapter.MODULE_NAME, cx);
         internalRunner.require("stream", cx);
@@ -69,12 +71,12 @@ public class ProcessWrap
         ScriptableObject.defineClass(scope, ProcessModuleImpl.class);
 
         ProcessModuleImpl exports = (ProcessModuleImpl)cx.newObject(scope, ProcessModuleImpl.CLASS_NAME);
-        exports.initialize(internalRunner);
+        exports.setRunner(internalRunner);
         return exports;
     }
 
     public static class ProcessModuleImpl
-        extends ScriptableObject
+        extends NodeNativeObject
     {
         public static final String CLASS_NAME = "_processModule";
 
@@ -86,7 +88,7 @@ public class ProcessWrap
             return CLASS_NAME;
         }
 
-        void initialize(ScriptRunner runner)
+        public void setRunner(ScriptRunner runner)
         {
             this.runner = runner;
         }
@@ -94,8 +96,10 @@ public class ProcessWrap
         @JSFunction
         public static Object createProcess(Context cx, Scriptable thisObj, Object[] args, Function func)
         {
+            ProcessModuleImpl self = (ProcessModuleImpl)thisObj;
             ProcessImpl p = (ProcessImpl)cx.newObject(thisObj, ProcessImpl.CLASS_NAME);
-            p.initialize(((ProcessModuleImpl)thisObj).runner);
+            p.setRunner(self.runner);
+            p.initialize();
             return p;
         }
     }
@@ -115,9 +119,13 @@ public class ProcessWrap
             return CLASS_NAME;
         }
 
-        void initialize(ScriptRunner runner)
+        public void setRunner(ScriptRunner runner)
         {
             this.runner = runner;
+        }
+
+        void initialize()
+        {
             ref();
         }
 
@@ -248,6 +256,8 @@ public class ProcessWrap
     private static class SpawnedOSProcess
         extends SpawnedProcess
     {
+        protected static final Logger log = LoggerFactory.getLogger(SpawnedOSProcess.class);
+
         private java.lang.Process proc;
 
         SpawnedOSProcess(ProcessImpl parent)
@@ -425,6 +435,8 @@ public class ProcessWrap
     private static class SpawnedNoderunnerProcess
         extends SpawnedProcess
     {
+        protected static final Logger log = LoggerFactory.getLogger(SpawnedNoderunnerProcess.class);
+
         private ScriptFuture future;
 
         SpawnedNoderunnerProcess(ProcessImpl parent)

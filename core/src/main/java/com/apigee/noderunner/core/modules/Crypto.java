@@ -1,6 +1,8 @@
 package com.apigee.noderunner.core.modules;
 
+import com.apigee.noderunner.core.internal.InternalNodeNativeObject;
 import com.apigee.noderunner.core.internal.InternalNodeModule;
+import com.apigee.noderunner.core.internal.NodeNativeObject;
 import com.apigee.noderunner.core.internal.Utils;
 import com.apigee.noderunner.core.NodeRuntime;
 import org.mozilla.javascript.Context;
@@ -60,7 +62,7 @@ public class Crypto
         // *not* `exports`, and hasn't been initialized here, so it doesn't have a reference to the runtime.
         // With the varargs form, `thisObj` is the "wrong" scope (not a CryptoImpl), and func.getParentScope()
         // is the new, uninitialized CryptoImpl instance.
-        ScriptableObject proto = (ScriptableObject) export.getPrototype();
+        Scriptable proto = export.getPrototype();
         FunctionObject randomBytes = (FunctionObject) proto.get("randomBytes", proto);
         randomBytes.setParentScope(export);
         FunctionObject pseudoRandomBytes = (FunctionObject) proto.get("pseudoRandomBytes", proto);
@@ -72,14 +74,12 @@ public class Crypto
     }
 
     public static class CryptoImpl
-        extends ScriptableObject
+        extends InternalNodeNativeObject
     {
         public static final String CLASS_NAME = "_cryptoClass";
 
         private static final SecureRandom secureRandom = new SecureRandom();
         private static final Random pseudoRandom = new Random();
-
-        private NodeRuntime runtime;
 
         // TODO: SecureContext
         // TODO: Hmac
@@ -135,7 +135,7 @@ public class Crypto
             if (callback != null) {
                 // TODO: what exception can be returned here?
                 thisClass.runtime.enqueueCallback(callback, callback, thisObj,
-                        new Object[] { null, randomBytesBuffer });
+                        new Object[]{null, randomBytesBuffer});
                 return Undefined.instance;
             } else {
                 return randomBytesBuffer;
@@ -154,14 +154,10 @@ public class Crypto
         {
             return cx.newArray(thisObj, HashImpl.SUPPORTED_ALGORITHMS.toArray());
         }
-
-        private void setRuntime(NodeRuntime runtime) {
-            this.runtime = runtime;
-        }
     }
 
     public static class HashImpl
-        extends ScriptableObject
+        extends NodeNativeObject
     {
         public static final String CLASS_NAME = "Hash";
 

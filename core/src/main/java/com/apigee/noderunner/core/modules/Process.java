@@ -2,6 +2,7 @@ package com.apigee.noderunner.core.modules;
 
 import com.apigee.noderunner.core.NodeModule;
 import com.apigee.noderunner.core.NodeRuntime;
+import com.apigee.noderunner.core.internal.NodeNativeObject;
 import com.apigee.noderunner.core.internal.NodeExitException;
 import com.apigee.noderunner.core.internal.PathTranslator;
 import com.apigee.noderunner.core.internal.ScriptRunner;
@@ -43,7 +44,7 @@ public class Process
     }
 
     @Override
-    public Scriptable registerExports(Context cx, Scriptable scope, NodeRuntime runner)
+    public Scriptable registerExports(Context cx, Scriptable scope, NodeRuntime runtime)
         throws InvocationTargetException, IllegalAccessException, InstantiationException
     {
         ScriptableObject.defineClass(scope, EventEmitter.EventEmitterImpl.class, false, true);
@@ -52,7 +53,8 @@ public class Process
         ScriptableObject.defineClass(scope, EnvImpl.class, false, true);
 
         ProcessImpl exports = (ProcessImpl) cx.newObject(scope, ProcessImpl.CLASS_NAME);
-        exports.setRunner(runner);
+        // This is a low-level module and it's OK to access low-level stuff
+        exports.setRunner((ScriptRunner) runtime);
 
         // env
         EnvImpl env = (EnvImpl) cx.newObject(scope, EnvImpl.CLASS_NAME);
@@ -91,10 +93,9 @@ public class Process
             return CLASS_NAME;
         }
 
-        public void setRunner(NodeRuntime runner)
+        public void setRunner(ScriptRunner runner)
         {
-            // This is a low-level module and it's OK to access low-level stuff
-            this.runner = (ScriptRunner)runner;
+            this.runner = runner;
         }
 
         @JSGetter("mainModule")
@@ -461,7 +462,7 @@ public class Process
     }
 
     public static class EnvImpl
-            extends ScriptableObject
+            extends NodeNativeObject
     {
         public static final String CLASS_NAME = "_Environment";
 

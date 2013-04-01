@@ -5,23 +5,44 @@ import org.mozilla.javascript.EvaluatorException;
 
 /**
  * This special exception is thrown by the abort() and exit() methods, to pass the exit code
- * up the stack and make the script interpreter stop running.
+ * up the stack and make the script interpreter stop running. We also use it for timeouts.
  */
 public class NodeExitException
     extends EvaluatorException
 {
-    private final boolean fatal;
+    public enum Reason { NORMAL, FATAL, TIMEOUT }
+
+    private final Reason reason;
     private final int code;
 
-    public NodeExitException(boolean fatal, int code)
+    public NodeExitException(Reason reason)
     {
-        super("Node exit");
-        this.fatal = fatal;
+        super("Script exit: " + reasonToText(reason));
+        this.reason = reason;
+        switch (reason) {
+        case NORMAL:
+            this.code = 0;
+            break;
+        case FATAL:
+            this.code = ScriptStatus.EXCEPTION_CODE;
+            break;
+        case TIMEOUT:
+            this.code = ScriptStatus.TIMEOUT_CODE;
+            break;
+        default:
+            throw new IllegalArgumentException();
+        }
+    }
+
+    public NodeExitException(Reason reason, int code)
+    {
+        super("Script exit: " + reasonToText(reason));
+        this.reason = reason;
         this.code = code;
     }
 
-    public boolean isFatal() {
-        return fatal;
+    public Reason getReason() {
+        return reason;
     }
 
     public int getCode() {
@@ -30,9 +51,23 @@ public class NodeExitException
 
     public ScriptStatus getStatus()
     {
-        if (fatal) {
+        if (reason == Reason.NORMAL) {
             return ScriptStatus.OK;
         }
         return new ScriptStatus(code);
+    }
+
+    public static String reasonToText(Reason r)
+    {
+        switch (r) {
+        case NORMAL:
+            return "Normal";
+        case FATAL:
+            return "Fatal";
+        case TIMEOUT:
+            return "Timeout";
+        default:
+            throw new AssertionError();
+        }
     }
 }

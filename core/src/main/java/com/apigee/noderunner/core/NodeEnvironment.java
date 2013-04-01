@@ -1,14 +1,14 @@
 package com.apigee.noderunner.core;
 
 import com.apigee.noderunner.core.internal.ModuleRegistry;
+import com.apigee.noderunner.core.internal.RhinoContextFactory;
 import com.apigee.noderunner.net.spi.HttpServerContainer;
-import org.mozilla.javascript.ClassShutter;
 import org.mozilla.javascript.Context;
-import org.mozilla.javascript.RhinoException;
+import org.mozilla.javascript.ContextAction;
+import org.mozilla.javascript.ContextFactory;
 import org.mozilla.javascript.ScriptableObject;
 
 import java.io.File;
-import java.util.HashSet;
 import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -35,8 +35,6 @@ public class NodeEnvironment
     public static final int DEFAULT_OPT_LEVEL = 1;
     public static final boolean DEFAULT_SEAL_ROOT = true;
 
-    private static final OpaqueClassShutter CLASS_SHUTTER = new OpaqueClassShutter();
-
     private boolean             initialized;
     private ScriptableObject    rootScope;
     private ModuleRegistry      registry;
@@ -44,6 +42,7 @@ public class NodeEnvironment
     private ExecutorService     scriptPool;
     private HttpServerContainer httpContainer;
     private Sandbox             sandbox;
+    private RhinoContextFactory contextFactory;
 
     private int                 optLevel = DEFAULT_OPT_LEVEL;
     private boolean             sealRoot = DEFAULT_SEAL_ROOT;
@@ -198,34 +197,35 @@ public class NodeEnvironment
 
         registry = new ModuleRegistry();
 
-        Context cx = Context.enter();
-        try {
-            setUpContext(cx);
-            registry.load(cx);
-            // The standard objects, which are slow to create, are shared between scripts. Seal them so that
-            // one script can't modify another's.
-            rootScope = cx.initStandardObjects(null, sealRoot);
-            if (sealRoot) {
-                rootScope.sealObject();
+        contextFactory = new RhinoContextFactory();
+        contextFactory.setJsVersion(DEFAULT_JS_VERSION);
+        contextFactory.setOptLevel(optLevel);
+
+        contextFactory.call(new ContextAction()
+        {
+            @Override
+            public Object run(Context cx)
+            {
+                registry.load(cx);
+                // The standard objects, which are slow to create, are shared between scripts. Seal them so that
+                // one script can't modify another's.
+                rootScope = cx.initStandardObjects(null, sealRoot);
+                if (sealRoot) {
+                    rootScope.sealObject();
+                }
+                return null;
             }
-        } catch (RhinoException re) {
-            throw new NodeException(re);
-        } finally {
-            Context.exit();
-        }
+        });
 
         initialized = true;
     }
 
     /**
-     * Internal: Set up the Rhino Context object for language level, etc.
-     * This gives us a way to override this stuff across lots of scripts.
+     * Internal: Get the Rhino ContextFactory for this environment.
      */
-    public void setUpContext(Context cx)
+    public ContextFactory getContextFactory()
     {
-        cx.setLanguageVersion(DEFAULT_JS_VERSION);
-        cx.setOptimizationLevel(optLevel);
-        cx.setClassShutter(CLASS_SHUTTER);
+        return contextFactory;
     }
 
     private static final class PoolNameFactory
@@ -244,43 +244,6 @@ public class NodeEnvironment
             Thread t = new Thread(runnable, name);
             t.setDaemon(true);
             return t;
-        }
-    }
-
-    /**
-     * Don't allow access to Java code at all from inside Node code. However, Rhino seems to depend on access
-     * to certain internal classes, at least for error handing, so we will allow the code to have access
-     * to them.
-     */
-    private static final class OpaqueClassShutter
-        implements ClassShutter
-    {
-        private final HashSet<String> whitelist = new HashSet<String>();
-
-        OpaqueClassShutter()
-        {
-            whitelist.add("org.mozilla.javascript.EcmaError");
-            whitelist.add("org.mozilla.javascript.EvaluatorException");
-            whitelist.add("org.mozilla.javascript.JavaScriptException");
-            whitelist.add("org.mozilla.javascript.RhinoException");
-            whitelist.add("java.lang.Byte");
-            whitelist.add("java.lang.Character");
-            whitelist.add("java.lang.Double");
-            whitelist.add("java.lang.Exception");
-            whitelist.add("java.lang.Float");
-            whitelist.add("java.lang.Integer");
-            whitelist.add("java.lang.Long");
-            whitelist.add("java.lang.Short");
-            whitelist.add("java.lang.Number");
-            whitelist.add("java.lang.String");
-            whitelist.add("java.lang.Throwable");
-            whitelist.add("java.lang.Void");
-        }
-
-        @Override
-        public boolean visibleToScripts(String s)
-        {
-            return (whitelist.contains(s));
         }
     }
 }

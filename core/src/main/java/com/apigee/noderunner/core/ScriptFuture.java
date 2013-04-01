@@ -8,6 +8,7 @@ import java.util.concurrent.CancellationException;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.RunnableFuture;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 
 public class ScriptFuture
     implements RunnableFuture<ScriptStatus>
@@ -74,7 +75,7 @@ public class ScriptFuture
 
     @Override
     public ScriptStatus get(long timeout, TimeUnit timeUnit)
-        throws InterruptedException, ExecutionException
+        throws InterruptedException, ExecutionException, TimeoutException
     {
 
         long now = System.currentTimeMillis();
@@ -88,7 +89,7 @@ public class ScriptFuture
 
         synchronized (this) {
             if (result == null) {
-                return ScriptStatus.TIMEOUT;
+                throw new TimeoutException();
             }
             return getResult();
         }

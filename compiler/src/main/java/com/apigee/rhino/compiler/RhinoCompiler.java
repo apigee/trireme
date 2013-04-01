@@ -65,7 +65,7 @@ public class RhinoCompiler
         env.setGeneratingSource(generateSource);
         env.setRecordingComments(false);
         env.setRecoverFromErrors(false);
-        env.setGenerateObserverCount(false);
+        env.setGenerateObserverCount(true);
         return env;
     }
 

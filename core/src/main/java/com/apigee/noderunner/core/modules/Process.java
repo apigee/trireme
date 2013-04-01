@@ -255,7 +255,7 @@ public class Process
         public void abort()
             throws NodeExitException
         {
-            throw new NodeExitException(true, 0);
+            throw new NodeExitException(NodeExitException.Reason.FATAL);
         }
 
         // TODO chdir
@@ -283,9 +283,9 @@ public class Process
         {
             if (args.length >= 1) {
                 int code = (Integer)Context.jsToJava(args[0], Integer.class);
-                throw new NodeExitException(false, code);
+                throw new NodeExitException(NodeExitException.Reason.NORMAL, code);
             } else {
-                throw new NodeExitException(false, 0);
+                throw new NodeExitException(NodeExitException.Reason.NORMAL, 0);
             }
         }
 

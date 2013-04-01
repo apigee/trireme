@@ -23,6 +23,7 @@ import java.util.List;
 import java.util.concurrent.CancellationException;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 
 public class BasicTest
 {
@@ -97,6 +98,7 @@ public class BasicTest
         } catch (CancellationException ce) {
             // Expected result
         }
+        assertTrue(status.isDone());
     }
 
     @Test
@@ -116,8 +118,12 @@ public class BasicTest
             }
         });
         Thread.sleep(50L);
-        ScriptStatus stat = status.get(250L, TimeUnit.MILLISECONDS);
-        assertTrue(stat.isTimeout());
+        try {
+            status.get(250L, TimeUnit.MILLISECONDS);
+            assertTrue("Wait should have timed out", false);
+        } catch (TimeoutException ok) {
+        }
+        status.cancel(true);
     }
 
     @Test
@@ -144,6 +150,7 @@ public class BasicTest
         } catch (CancellationException ce) {
             // Expected result
         }
+        assertTrue(status.isDone());
     }
 
     @Test
@@ -165,6 +172,21 @@ public class BasicTest
         throws InterruptedException, ExecutionException, NodeException
     {
         runTest("builtinmoduletest.js");
+    }
+
+    @Test
+    public void testScriptTimeout()
+        throws InterruptedException, ExecutionException, NodeException
+    {
+        Sandbox sb = new Sandbox();
+        sb.setScriptTimeLimit(1, TimeUnit.SECONDS);
+        NodeEnvironment rootEnv = new NodeEnvironment();
+        rootEnv.setSandbox(sb);
+        NodeScript script = rootEnv.createScript("endlesscpu.js",
+                                             new File("./target/test-classes/tests/endlesscpu.js"),
+                                             null);
+        ScriptStatus stat = script.execute().get();
+        assertTrue(stat.isTimeout());
     }
 
     @Test

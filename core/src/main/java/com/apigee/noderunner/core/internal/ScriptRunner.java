@@ -13,6 +13,7 @@ import com.apigee.noderunner.core.modules.NativeModule;
 import com.apigee.noderunner.core.modules.Process;
 import com.apigee.noderunner.net.SelectorHandler;
 import org.mozilla.javascript.Context;
+import org.mozilla.javascript.ContextAction;
 import org.mozilla.javascript.EvaluatorException;
 import org.mozilla.javascript.Function;
 import org.mozilla.javascript.RhinoException;
@@ -51,6 +52,8 @@ public class ScriptRunner
 
     private static final long DEFAULT_DELAY = 60000L;
     private static final int DEFAULT_TICK_DEPTH = 1000;
+
+    public static final String TIMEOUT_TIMESTAMP_KEY = "_tickTimeout";
 
     private final  NodeEnvironment env;
     private        File            scriptFile;
@@ -362,12 +365,6 @@ public class ScriptRunner
         }
     }
 
-    private void setUpContext(Context cx)
-    {
-        env.setUpContext(cx);
-        cx.putThreadLocal(RUNNER, this);
-    }
-
     /**
      * Execute the script. We do this by actually executing the script.
      */
@@ -375,72 +372,83 @@ public class ScriptRunner
     public ScriptStatus call()
         throws NodeException
     {
-        Context cx = Context.enter();
-        setUpContext(cx);
+        Object ret = env.getContextFactory().call(new ContextAction()
+        {
+            @Override
+            public Object run(Context cx)
+            {
+                return runScript(cx);
+            }
+        });
+        return (ScriptStatus)ret;
+    }
+
+    private ScriptStatus runScript(Context cx)
+    {
+        ScriptStatus status;
+
+        cx.putThreadLocal(RUNNER, this);
 
         try {
-            ScriptStatus status;
+            // Re-use the global scope from before, but make it top-level so that there are no shared variables
+            scope = (ScriptableObject)cx.newObject(env.getScope());
+            scope.setPrototype(env.getScope());
+            scope.setParentScope(null);
 
             try {
-                // Re-use the global scope from before, but make it top-level so that there are no shared variables
-                scope = (ScriptableObject)cx.newObject(env.getScope());
-                scope.setPrototype(env.getScope());
-                scope.setParentScope(null);
-
                 initGlobals(cx);
-
-                if (scriptFile == null) {
-                    Scriptable bootstrap = (Scriptable)require("bootstrap", cx);
-                    Function eval = (Function)bootstrap.get("evalScript", bootstrap);
-                    enqueueCallback(eval, mainModule, mainModule,
-                                    new Object[] { scriptName, script });
-
-                } else {
-                    // Again like the real node, delegate running the actual script to the module module.
-                    String scriptPath = scriptFile.getPath();
-                    scriptPath = reverseTranslatePath(scriptPath);
-                    if (!scriptFile.isAbsolute() && !scriptPath.startsWith("./")) {
-                        // Add ./ before script path to un-confuse the module module if it's a local path
-                        scriptPath = new File("./", scriptPath).getPath();
-                    }
-
-                    if (log.isDebugEnabled()) {
-                        log.debug("Launching module.runMain({})", scriptPath);
-                    }
-                    setArgv(scriptPath);
-                    Function load = (Function)mainModule.get("runMain", mainModule);
-                    enqueueCallback(load, mainModule, mainModule, null);
-                }
-
-                status = mainLoop(cx);
-
-            } catch (IOException ioe) {
-                log.debug("I/O exception processing script: {}", ioe);
-                status = new ScriptStatus(ioe);
+            } catch (NodeException ne) {
+                return new ScriptStatus(ne);
             }
 
-            log.debug("Script exiting with exit code {}", status.getExitCode());
-            if (!status.hasCause()) {
-                // Fire the exit callback, but only if we aren't exiting due to an unhandled exception.
-                try {
-                    process.fireEvent("exit", status.getExitCode());
-                } catch (NodeExitException ee) {
-                    // Exit called exit -- allow it to replace the exit code
-                    log.debug("Script replacing exit code with {}", ee.getCode());
-                    status = ee.getStatus();
-                } catch (RhinoException re) {
-                    // Many of the unit tests fire exceptions inside exit.
-                    status = new ScriptStatus(re);
+            if (scriptFile == null) {
+                Scriptable bootstrap = (Scriptable)require("bootstrap", cx);
+                Function eval = (Function)bootstrap.get("evalScript", bootstrap);
+                enqueueCallback(eval, mainModule, mainModule,
+                                new Object[] { scriptName, script });
+
+            } else {
+                // Again like the real node, delegate running the actual script to the module module.
+                String scriptPath = scriptFile.getPath();
+                scriptPath = reverseTranslatePath(scriptPath);
+                if (!scriptFile.isAbsolute() && !scriptPath.startsWith("./")) {
+                    // Add ./ before script path to un-confuse the module module if it's a local path
+                    scriptPath = new File("./", scriptPath).getPath();
                 }
+
+                if (log.isDebugEnabled()) {
+                    log.debug("Launching module.runMain({})", scriptPath);
+                }
+                setArgv(scriptPath);
+                Function load = (Function)mainModule.get("runMain", mainModule);
+                enqueueCallback(load, mainModule, mainModule, null);
             }
 
-            closeCloseables();
+            status = mainLoop(cx);
 
-            return status;
-
-        } finally {
-            Context.exit();
+        } catch (IOException ioe) {
+            log.debug("I/O exception processing script: {}", ioe);
+            status = new ScriptStatus(ioe);
         }
+
+        log.debug("Script exiting with exit code {}", status.getExitCode());
+        if (!status.hasCause()) {
+            // Fire the exit callback, but only if we aren't exiting due to an unhandled exception.
+            try {
+                process.fireEvent("exit", status.getExitCode());
+            } catch (NodeExitException ee) {
+                // Exit called exit -- allow it to replace the exit code
+                log.debug("Script replacing exit code with {}", ee.getCode());
+                status = ee.getStatus();
+            } catch (RhinoException re) {
+                // Many of the unit tests fire exceptions inside exit.
+                status = new ScriptStatus(re);
+            }
+        }
+
+        closeCloseables();
+
+        return status;
     }
 
     private void setArgv(String scriptName)
@@ -467,6 +475,7 @@ public class ScriptRunner
                 long pollTimeout;
                 long now = System.currentTimeMillis();
 
+                // Calculate how long we will wait in the call to select
                 if (!tickFunctions.isEmpty()) {
                     pollTimeout = 0;
                 } else if (timerQueue.isEmpty()) {
@@ -494,12 +503,18 @@ public class ScriptRunner
                 Iterator<SelectionKey> keys = selector.selectedKeys().iterator();
                 while (keys.hasNext()) {
                     SelectionKey selKey = keys.next();
-                    ((SelectorHandler)selKey.attachment()).selected(selKey);
+                    boolean timed = startTiming(cx);
+                    try {
+                        ((SelectorHandler)selKey.attachment()).selected(selKey);
+                    } finally {
+                        if (timed) {
+                            endTiming(cx);
+                        }
+                    }
                     keys.remove();
                 }
 
                 // Call tick functions but don't let everything else starve unless configured to do so.
-                // We will only go up to "maxTick" -- we might not execute it all now!
                 executeTicks(cx);
 
                 // Check the timer queue for all expired timers
@@ -508,7 +523,14 @@ public class ScriptRunner
                     log.debug("Executing one timed-out task");
                     timerQueue.poll();
                     if (!timed.cancelled) {
-                        timed.execute(cx);
+                        boolean timing = startTiming(cx);
+                        try {
+                            timed.execute(cx);
+                        } finally {
+                            if (timing) {
+                                endTiming(cx);
+                            }
+                        }
                         if (timed.repeating && !timed.cancelled) {
                             log.debug("Re-registering with delay of {}", timed.interval);
                             timed.timeout = now + timed.interval;
@@ -548,13 +570,23 @@ public class ScriptRunner
         return handled;
     }
 
+    /**
+     * Execute up to "maxTickDepth" ticks. The count is in there to prevent starvation of timers and I/O.
+     */
     public void executeTicks(Context cx)
         throws RhinoException
     {
         int tickCount = 0;
         Activity nextCall = tickFunctions.poll();
         while (nextCall != null) {
-            nextCall.execute(cx);
+            boolean timing = startTiming(cx);
+            try {
+                nextCall.execute(cx);
+            } finally {
+                if (timing) {
+                    endTiming(cx);
+                }
+            }
             if (++tickCount > maxTickDepth) {
                 break;
             }
@@ -760,6 +792,23 @@ public class ScriptRunner
     public void cacheInternalModule(String name, Object module)
     {
         internalModuleCache.put(name, module);
+    }
+
+    private boolean startTiming(Context cx)
+    {
+        if (sandbox != null) {
+            long tl = sandbox.getScriptTimeLimit();
+            if (tl > 0L) {
+                cx.putThreadLocal(TIMEOUT_TIMESTAMP_KEY, System.currentTimeMillis() + tl);
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private void endTiming(Context cx)
+    {
+        cx.removeThreadLocal(TIMEOUT_TIMESTAMP_KEY);
     }
 
     public abstract static class Activity

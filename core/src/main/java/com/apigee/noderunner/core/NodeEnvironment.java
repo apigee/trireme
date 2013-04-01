@@ -43,6 +43,7 @@ public class NodeEnvironment
     private HttpServerContainer httpContainer;
     private Sandbox             sandbox;
     private RhinoContextFactory contextFactory;
+    private long                scriptTimeLimit;
 
     private int                 optLevel = DEFAULT_OPT_LEVEL;
     private boolean             sealRoot = DEFAULT_SEAL_ROOT;
@@ -60,8 +61,9 @@ public class NodeEnvironment
      * The sandbox is checked when this call is made, so please set all parameters on the Sandbox object
      * <i>before</i> calling this method.
      */
-    public void setSandbox(Sandbox box) {
+    public NodeEnvironment setSandbox(Sandbox box) {
         this.sandbox = box;
+        return this;
     }
 
     public Sandbox getSandbox() {
@@ -98,10 +100,12 @@ public class NodeEnvironment
     }
 
     /**
-     * Replace the default HTTP implementation with a custom implementation.
+     * Replace the default HTTP implementation with a custom implementation. Must be set before
+     * any calls to "createScript" in order to have any effect.
      */
-    public void setHttpContainer(HttpServerContainer container) {
+    public NodeEnvironment setHttpContainer(HttpServerContainer container) {
         this.httpContainer = container;
+        return this;
     }
 
     public HttpServerContainer getHttpContainer() {
@@ -115,11 +119,13 @@ public class NodeEnvironment
 
     /**
      * Set the Rhino optimization level for all new scripts that are run. -1 means interpreted mode,
-     * 0 means no optimization, 1 or greater means some optimization. Default is 1.
+     * 0 means no optimization, 1 or greater means some optimization. Default is 1. Must be set before
+     * any calls to "createScript" in order to have any effect.
      */
-    public void setOptLevel(int optLevel)
+    public NodeEnvironment setOptLevel(int optLevel)
     {
         this.optLevel = optLevel;
+        return this;
     }
 
     public boolean isSealRoot()
@@ -131,10 +137,28 @@ public class NodeEnvironment
      * Seal the root context, meaning that prototypes of language-level objects such as Object, Date, etc
      * cannot be modified. Since all scripts inside the JVM use the same top-level context, it is very
      * important that this be left alone in any multi-tenant VM -- but some test environments require it...
+     * Must be set before
+     * any calls to "createScript" in order to have any effect.
      */
-    public void setSealRoot(boolean sealRoot)
+    public NodeEnvironment setSealRoot(boolean sealRoot)
     {
         this.sealRoot = sealRoot;
+        return this;
+    }
+
+    /**
+     * Set the maximum amount of time that any one "tick" of this script is allowed to execute before an
+     * exception is raised and the script exits. Must be set before
+     * any calls to "createScript" in order to have any effect.
+     */
+    public NodeEnvironment setScriptTimeLimit(long limit, TimeUnit unit)
+    {
+        this.scriptTimeLimit = unit.toMillis(limit);
+        return this;
+    }
+
+    public long getScriptTimeLimit() {
+        return scriptTimeLimit;
     }
 
     /**
@@ -166,7 +190,6 @@ public class NodeEnvironment
     }
 
     private void initialize()
-        throws NodeException
     {
         if (initialized) {
             return;
@@ -200,6 +223,7 @@ public class NodeEnvironment
         contextFactory = new RhinoContextFactory();
         contextFactory.setJsVersion(DEFAULT_JS_VERSION);
         contextFactory.setOptLevel(optLevel);
+        contextFactory.setCountOperations(scriptTimeLimit > 0L);
 
         contextFactory.call(new ContextAction()
         {

@@ -5,7 +5,6 @@ import org.mozilla.javascript.Scriptable;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.util.concurrent.ExecutorService;
-import java.util.concurrent.TimeUnit;
 
 /**
  * The Sandbox defines the execution environment for all scripts. It may be used when embedding Noderunner
@@ -24,8 +23,6 @@ public class Sandbox
     private ExecutorService asyncPool;
     private NetworkPolicy   networkPolicy;
     private SubprocessPolicy processPolicy;
-    private long            startupTimeLimit;
-    private long            scriptTimeLimit;
 
     /**
      * Create a new sandbox that will not affect anything in any way.
@@ -191,31 +188,5 @@ public class Sandbox
 
     public SubprocessPolicy getSubprocessPolicy() {
         return processPolicy;
-    }
-
-    /**
-     * Set the maximum amount of time that any one "tick" of this script is allowed to execute before an
-     * exception is raised and the script exits.
-     */
-    public void setScriptTimeLimit(long limit, TimeUnit unit)
-    {
-        this.scriptTimeLimit = unit.toMillis(limit);
-    }
-
-    public long getScriptTimeLimit() {
-        return scriptTimeLimit;
-    }
-
-
-    /**
-     * Set the maximum amount of time that a script may run before modules are registered and it is running
-     * its main event loop.
-     */
-    public void setStartupTimeLimit(long startupTimeLimit) {
-        this.startupTimeLimit = startupTimeLimit;
-    }
-
-    public long getStartupTimeLimit() {
-        return startupTimeLimit;
     }
 }

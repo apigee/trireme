@@ -796,8 +796,8 @@ public class ScriptRunner
 
     private boolean startTiming(Context cx)
     {
-        if (sandbox != null) {
-            long tl = sandbox.getScriptTimeLimit();
+        if (env != null) {
+            long tl = env.getScriptTimeLimit();
             if (tl > 0L) {
                 cx.putThreadLocal(TIMEOUT_TIMESTAMP_KEY, System.currentTimeMillis() + tl);
                 return true;

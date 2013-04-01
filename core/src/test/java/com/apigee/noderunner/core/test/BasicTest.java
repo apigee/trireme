@@ -178,10 +178,9 @@ public class BasicTest
     public void testScriptTimeout()
         throws InterruptedException, ExecutionException, NodeException
     {
-        Sandbox sb = new Sandbox();
-        sb.setScriptTimeLimit(1, TimeUnit.SECONDS);
+
         NodeEnvironment rootEnv = new NodeEnvironment();
-        rootEnv.setSandbox(sb);
+        rootEnv.setScriptTimeLimit(1, TimeUnit.SECONDS);
         NodeScript script = rootEnv.createScript("endlesscpu.js",
                                              new File("./target/test-classes/tests/endlesscpu.js"),
                                              null);

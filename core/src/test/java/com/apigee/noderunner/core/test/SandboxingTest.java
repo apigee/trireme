@@ -15,6 +15,7 @@ import java.io.File;
 import java.nio.charset.Charset;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 
 public class SandboxingTest
 {
@@ -26,7 +27,7 @@ public class SandboxingTest
      */
     @Test
     public void testRedirectStdout()
-        throws NodeException, InterruptedException, ExecutionException
+        throws NodeException, InterruptedException, ExecutionException, TimeoutException
     {
         ByteArrayOutputStream out = new ByteArrayOutputStream();
         NodeEnvironment env = new NodeEnvironment();
@@ -52,7 +53,7 @@ public class SandboxingTest
 
     @Test
     public void testRedirectStderr()
-        throws NodeException, InterruptedException, ExecutionException
+        throws NodeException, InterruptedException, ExecutionException, TimeoutException
     {
         ByteArrayOutputStream out = new ByteArrayOutputStream();
         NodeEnvironment env = new NodeEnvironment();
@@ -84,7 +85,7 @@ public class SandboxingTest
      */
     @Test
     public void testStdoutIsolation()
-        throws NodeException, InterruptedException, ExecutionException
+        throws NodeException, InterruptedException, ExecutionException, TimeoutException
     {
         NodeEnvironment env = new NodeEnvironment();
 
@@ -131,7 +132,7 @@ public class SandboxingTest
      */
     @Test
     public void testStdoutSharing()
-        throws NodeException, InterruptedException, ExecutionException
+        throws NodeException, InterruptedException, ExecutionException, TimeoutException
     {
         ByteArrayOutputStream out = new ByteArrayOutputStream();
         NodeEnvironment env = new NodeEnvironment();

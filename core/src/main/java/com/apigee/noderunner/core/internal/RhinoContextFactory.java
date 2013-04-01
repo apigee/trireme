@@ -4,7 +4,6 @@ import com.apigee.noderunner.core.NodeEnvironment;
 import org.mozilla.javascript.ClassShutter;
 import org.mozilla.javascript.Context;
 import org.mozilla.javascript.ContextFactory;
-import org.mozilla.javascript.EvaluatorException;
 
 import java.util.HashSet;
 
@@ -15,6 +14,7 @@ public class RhinoContextFactory
 
     private int jsVersion = NodeEnvironment.DEFAULT_JS_VERSION;
     private int optLevel = NodeEnvironment.DEFAULT_OPT_LEVEL;
+    private boolean countOperations;
 
     @Override
     protected Context makeContext()
@@ -22,8 +22,10 @@ public class RhinoContextFactory
         Context c = super.makeContext();
         c.setLanguageVersion(jsVersion);
         c.setOptimizationLevel(optLevel);
-        c.setGenerateObserverCount(true);
-        c.setInstructionObserverThreshold(DEFAULT_INSTRUCTION_THRESHOLD);
+        c.setGenerateObserverCount(countOperations);
+        if (countOperations) {
+            c.setInstructionObserverThreshold(DEFAULT_INSTRUCTION_THRESHOLD);
+        }
         c.setClassShutter(OpaqueClassShutter.INSTANCE);
         return c;
     }
@@ -63,6 +65,16 @@ public class RhinoContextFactory
     public void setOptLevel(int optLevel)
     {
         this.optLevel = optLevel;
+    }
+
+    public boolean isCountOperations()
+    {
+        return countOperations;
+    }
+
+    public void setCountOperations(boolean countOperations)
+    {
+        this.countOperations = countOperations;
     }
 
     /**

@@ -51,7 +51,7 @@ public class ScriptRunner
     private static final Logger log = LoggerFactory.getLogger(ScriptRunner.class);
 
     private static final long DEFAULT_DELAY = 60000L;
-    private static final int DEFAULT_TICK_DEPTH = 1000;
+    private static final int DEFAULT_TICK_DEPTH = 10000;
 
     public static final String TIMEOUT_TIMESTAMP_KEY = "_tickTimeout";
 
@@ -269,6 +269,18 @@ public class ScriptRunner
     public void enqueueTask(ScriptTask task)
     {
         tickFunctions.offer(new Task(task, scope));
+        selector.wakeup();
+    }
+
+    /**
+     * This method is used specifically by process.nextTick, and stuff submitted here is subject to
+     * process.maxTickCount.
+     */
+    public void enqueueCallbackWithLimit(Function f, Scriptable scope, Scriptable thisObj, Object[] args)
+    {
+        Callback cb = new Callback(f, scope, thisObj, args);
+        cb.setHasLimit(true);
+        tickFunctions.offer(cb);
         selector.wakeup();
     }
 
@@ -517,6 +529,9 @@ public class ScriptRunner
                 // Call tick functions but don't let everything else starve unless configured to do so.
                 executeTicks(cx);
 
+                // And call another mechanism, this one in timers.js, for queuing tasks
+                process.checkImmediateTasks(cx);
+
                 // Check the timer queue for all expired timers
                 Activity timed = timerQueue.peek();
                 while ((timed != null) && (timed.timeout <= now)) {
@@ -587,7 +602,10 @@ public class ScriptRunner
                     endTiming(cx);
                 }
             }
-            if (++tickCount > maxTickDepth) {
+            if (nextCall.hasLimit) {
+                tickCount++;
+            }
+            if (tickCount >= maxTickDepth) {
                 break;
             }
             nextCall = tickFunctions.poll();
@@ -819,6 +837,7 @@ public class ScriptRunner
         protected long interval;
         protected boolean repeating;
         protected boolean cancelled;
+        protected boolean hasLimit;
 
         abstract void execute(Context cx);
 
@@ -860,6 +879,14 @@ public class ScriptRunner
 
         public void setCancelled(boolean cancelled) {
             this.cancelled = cancelled;
+        }
+
+        public boolean hasLimit() {
+            return hasLimit;
+        }
+
+        public void setHasLimit(boolean l) {
+            this.hasLimit = l;
         }
 
         @Override

@@ -77,6 +77,8 @@ public class Process
         private long startTime;
         private ScriptRunner runner;
         private Object mainModule;
+        private boolean needImmediateCallback;
+        private Function immediateCallback;
 
         @JSConstructor
         public static Object ProcessImpl(Context cx, Object[] args, Function ctorObj, boolean inNewExpr)
@@ -394,7 +396,7 @@ public class Process
         {
             Function f = functionArg(args, 0, true);
             ProcessImpl proc = (ProcessImpl)thisObj;
-            proc.runner.enqueueCallback(f, f, thisObj, new Object[0]);
+            proc.runner.enqueueCallbackWithLimit(f, f, thisObj, new Object[0]);
         }
 
         @JSFunction
@@ -417,6 +419,37 @@ public class Process
                 runner.setMaxTickDepth(Integer.MAX_VALUE);
             } else {
                 runner.setMaxTickDepth((int)depth);
+            }
+        }
+
+        @JSSetter("_needImmediateCallback")
+        public void setNeedImmediateCallback(boolean n)
+        {
+            this.needImmediateCallback = n;
+        }
+
+        @JSGetter("_needImmediateCallback")
+        public boolean isNeedImmediateCallback()
+        {
+            return needImmediateCallback;
+        }
+
+        @JSSetter("_immediateCallback")
+        public void setImmediateCallback(Function f)
+        {
+            this.immediateCallback = f;
+        }
+
+        @JSGetter("_immediateCallback")
+        public Function getImmediateCallback()
+        {
+            return immediateCallback;
+        }
+
+        public void checkImmediateTasks(Context cx)
+        {
+            while (needImmediateCallback) {
+                immediateCallback.call(cx, immediateCallback, null, null);
             }
         }
 

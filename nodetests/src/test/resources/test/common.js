@@ -176,7 +176,7 @@ function runCallChecks(exitCode) {
                 context.name,
                 context.expected,
                 context.actual);
-    console.log(context.stack.split('\n').slice(2).join('\n'));
+  //  console.log(context.stack.split('\n').slice(2).join('\n'));
   });
 
   if (failed.length) process.exit(1);

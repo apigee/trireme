@@ -37,12 +37,14 @@ for (var i = 0; i < bytes; i++) {
 }
 
 var server = net.createServer(function(c) {
-  c.on('connect', function() {
+  // NODERUNNER I can't tell where in the docs or in the code this
+  // event would ever be fired. It's a client-side event.
+  //c.on('connect', function() {
     total_connections++;
     common.print('#');
     c.write(body);
     c.end();
-  });
+  //});
 });
 
 function runClient(callback) {

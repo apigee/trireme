@@ -51,9 +51,6 @@ public class NodeExitException
 
     public ScriptStatus getStatus()
     {
-        if (reason == Reason.NORMAL) {
-            return ScriptStatus.OK;
-        }
         return new ScriptStatus(code);
     }
 

@@ -86,8 +86,8 @@ public class TimerWrap
             TimerImpl timer = (TimerImpl)thisObj;
 
             if (log.isDebugEnabled()) {
-                log.debug("Starting timer for {} in {} interval = {}",
-                          timer.onTimeout, timeout, interval);
+                log.debug("Starting timer {} in {} interval = {}",
+                          System.identityHashCode(timer), timeout, interval);
             }
             timer.ref();
             if (interval > 0) {
@@ -98,21 +98,25 @@ public class TimerWrap
             return 0;
         }
 
+        @Override
         @JSFunction
-        public void stop()
+        public void close()
         {
+            super.close();
             if (log.isDebugEnabled()) {
-                log.debug("Cancelling timer for {}", onTimeout);
+                log.debug("Cancelling timer {}", System.identityHashCode(this));
             }
             if (activity != null) {
                 activity.setCancelled(true);
             }
-            unref();
         }
 
         @Override
         public void execute(Context cx, Scriptable scope)
         {
+            if (log.isDebugEnabled()) {
+                log.debug("Executing timer {} ontimeout = {}", System.identityHashCode(this), onTimeout);
+            }
             if (onTimeout != null) {
                 onTimeout.call(cx, onTimeout, this, null);
             }

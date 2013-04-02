@@ -295,6 +295,9 @@ public class ScriptRunner
         long timeout = System.currentTimeMillis() + delay;
         int seq = timerSequence++;
 
+        if (log.isDebugEnabled()) {
+            log.debug("Going to fire timeout {} at {}", seq, timeout);
+        }
         t.setId(seq);
         t.setTimeout(timeout);
         if (repeating) {
@@ -378,7 +381,7 @@ public class ScriptRunner
     }
 
     /**
-     * Execute the script. We do this by actually executing the script.
+     * Execute the script.
      */
     @Override
     public ScriptStatus call()
@@ -441,6 +444,9 @@ public class ScriptRunner
         } catch (IOException ioe) {
             log.debug("I/O exception processing script: {}", ioe);
             status = new ScriptStatus(ioe);
+        } catch (Throwable t) {
+            log.debug("Unexpected script error: {}", t);
+            status = new ScriptStatus(t);
         }
 
         log.debug("Script exiting with exit code {}", status.getExitCode());
@@ -535,11 +541,13 @@ public class ScriptRunner
                 // Check the timer queue for all expired timers
                 Activity timed = timerQueue.peek();
                 while ((timed != null) && (timed.timeout <= now)) {
-                    log.debug("Executing one timed-out task");
                     timerQueue.poll();
                     if (!timed.cancelled) {
                         boolean timing = startTiming(cx);
                         try {
+                            if (log.isDebugEnabled()) {
+                                log.debug("Executing timer {}", timed.id);
+                            }
                             timed.execute(cx);
                         } finally {
                             if (timing) {
@@ -547,8 +555,10 @@ public class ScriptRunner
                             }
                         }
                         if (timed.repeating && !timed.cancelled) {
-                            log.debug("Re-registering with delay of {}", timed.interval);
                             timed.timeout = now + timed.interval;
+                            if (log.isDebugEnabled()) {
+                                log.debug("Re-registering {} to fire at {}", timed.id, timed.timeout);
+                            }
                             timerQueue.add(timed);
                         }
                     }

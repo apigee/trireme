@@ -4,6 +4,7 @@ import com.apigee.noderunner.core.NodeRuntime;
 import com.apigee.noderunner.core.internal.InternalNodeModule;
 import com.apigee.noderunner.core.internal.NodeOSException;
 import com.apigee.noderunner.core.internal.Utils;
+import org.mozilla.javascript.BaseFunction;
 import org.mozilla.javascript.Context;
 import org.mozilla.javascript.Function;
 import org.mozilla.javascript.Scriptable;
@@ -20,8 +21,9 @@ import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.io.RandomAccessFile;
 import java.lang.reflect.InvocationTargetException;
-import java.text.DateFormat;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.Executor;
+import java.util.concurrent.atomic.AtomicInteger;
 
 /**
  * An implementation of the "fs" internal Node module. The "fs.js" script depends on it.
@@ -30,9 +32,6 @@ public class Filesystem
     implements InternalNodeModule
 {
     private static final Logger log = LoggerFactory.getLogger(Filesystem.class);
-
-    protected static final DateFormat dateFormat =
-        DateFormat.getDateTimeInstance(DateFormat.LONG, DateFormat.LONG);
 
     @Override
     public String getModuleName()
@@ -57,9 +56,13 @@ public class Filesystem
         extends ScriptableObject
     {
         public static final String CLASS_NAME = "_fsClass";
+        private static final int FIRST_FD = 4;
 
         protected NodeRuntime runner;
         protected Executor pool;
+        private final AtomicInteger nextFd = new AtomicInteger(FIRST_FD);
+        private final ConcurrentHashMap<Integer, FileHandle> descriptors =
+            new ConcurrentHashMap<Integer, FileHandle>();
 
         @Override
         public String getClassName() {
@@ -104,12 +107,18 @@ public class Filesystem
                     }
                     try {
                         Object[] args = action.execute();
-                        runner.enqueueCallback(callback, callback, callback, args);
+                        if (args == null) {
+                            args = new Object[0];
+                        }
+                        if (log.isDebugEnabled()) {
+                            log.debug("Calling {} with {}", ((BaseFunction)callback).getFunctionName(), args);
+                        }
+                        runner.enqueueCallback(callback, callback, null, args);
                     } catch (NodeOSException e) {
                         if (log.isDebugEnabled()) {
                             log.debug("Async action {} failed: {}: {}", action, e.getCode(), e);
                         }
-                        runner.enqueueCallback(callback, callback, callback,
+                        runner.enqueueCallback(callback, callback, null,
                                                action.mapException(e));
                     } finally {
                         runner.unPin();
@@ -163,22 +172,24 @@ public class Filesystem
             }
         }
 
-        private static FileHandle ensureHandle(Context cx, Scriptable scope,
-                                               Object[] args, int pos)
+        private FileHandle ensureHandle(int fd)
+            throws NodeOSException
         {
-            ensureArg(args, pos);
-            try {
-                ScriptableObject handle = (ScriptableObject)args[pos];
-                Object assoc = handle.getAssociatedValue(FileHandle.KEY);
-                if (assoc != null) {
-                    return (FileHandle)assoc;
-                }
-                throw Utils.makeError(cx, scope,
-                                      "Bad file handle", "EBADF");
-            } catch (ClassCastException cce) {
-                throw Utils.makeError(cx, scope,
-                                      "Bad file handle", "EBADF");
+            FileHandle handle = descriptors.get(fd);
+            if (handle == null) {
+                throw new NodeOSException(Constants.EBADF, "Bad file handle");
             }
+            return handle;
+        }
+
+        private FileHandle ensureRegularFileHandle(int fd)
+            throws NodeOSException
+        {
+            FileHandle h = ensureHandle(fd);
+            if (h.file == null) {
+                throw new NodeOSException(Constants.EBADF,"Not a regular file");
+            }
+            return h;
         }
 
         private static Buffer.BufferImpl ensureBuffer(Context cx, Scriptable scope,
@@ -189,17 +200,17 @@ public class Filesystem
                 return (Buffer.BufferImpl)args[pos];
             } catch (ClassCastException cce) {
                 throw Utils.makeError(cx, scope,
-                                      "Not a buffer", "EINVAL");
+                                      "Not a buffer", Constants.EINVAL);
             }
         }
 
         @JSFunction
-        public static Object open(final Context cx, final Scriptable thisObj, Object[] args, Function func)
+        public static Object open(Context cx, Scriptable thisObj, Object[] args, Function func)
         {
             final String pathStr = stringArg(args, 0);
             final int flags = intArg(args, 1);
             final int mode = intArg(args, 2);
-            final Function callback = functionArg(args, 3, false);
+            Function callback = functionArg(args, 3, false);
             final FSImpl fs = (FSImpl)thisObj;
 
             return fs.runAction(callback, new AsyncAction()
@@ -213,7 +224,7 @@ public class Filesystem
                 @Override
                 public Object[] mapException(NodeOSException e)
                 {
-                    return new Object[] { e.getCode(), null };
+                    return new Object[] { e.getCode() };
                 }
             });
         }
@@ -251,50 +262,59 @@ public class Filesystem
                 }
             }
 
-            String modeStr;
-            if ((flags & Constants.O_RDWR) != 0) {
-                modeStr = "rw";
-            } else if ((flags & Constants.O_WRONLY) != 0) {
-                // Java does not have write-only...
-                modeStr = "rw";
-            } else {
-                modeStr = "r";
-            }
-            if ((flags & Constants.O_SYNC) != 0) {
-                // And Java does not have read-only with sync either
-                modeStr = "rws";
-            }
-
-            RandomAccessFile file;
-            try {
-                file = new RandomAccessFile(path, modeStr);
-                if (((flags & Constants.O_APPEND) != 0) && (file.length() > 0)) {
-                    file.seek(file.length());
+            RandomAccessFile file = null;
+            if (path.isFile()) {
+                // Only open the file if it's actually a file -- we can still have an FD to a directory
+                String modeStr;
+                if ((flags & Constants.O_RDWR) != 0) {
+                    modeStr = "rw";
+                } else if ((flags & Constants.O_WRONLY) != 0) {
+                    // Java does not have write-only...
+                    modeStr = "rw";
+                } else {
+                    modeStr = "r";
                 }
-            } catch (FileNotFoundException fnfe) {
-                throw new NodeOSException(Constants.ENOENT);
-            } catch (IOException ioe) {
-                throw new NodeOSException(Constants.EIO, ioe);
+                if ((flags & Constants.O_SYNC) != 0) {
+                    // And Java does not have read-only with sync either
+                    modeStr = "rws";
+                }
+
+                try {
+                    if (log.isDebugEnabled()) {
+                        log.debug("Opening {} with {}", path.getPath(), modeStr);
+                    }
+                    file = new RandomAccessFile(path, modeStr);
+                    if (((flags & Constants.O_APPEND) != 0) && (file.length() > 0)) {
+                        file.seek(file.length());
+                    }
+                } catch (FileNotFoundException fnfe) {
+                    log.debug("File not found");
+                    throw new NodeOSException(Constants.ENOENT);
+                } catch (IOException ioe) {
+                    if (log.isDebugEnabled()) {
+                        log.debug("I/O error: {}", ioe);
+                    }
+                    throw new NodeOSException(Constants.EIO, ioe);
+                }
             }
-            log.debug("Opened file");
 
             Context cx = Context.enter();
             try {
-                ScriptableObject handle = (ScriptableObject)cx.newObject(this);
                 FileHandle fileHandle = new FileHandle(path, file);
-                handle.associateValue(FileHandle.KEY, fileHandle);
-                return new Object [] { null, handle };
+                int fd = nextFd.getAndIncrement();
+                descriptors.put(fd, fileHandle);
+                return new Object [] { Context.getUndefinedValue(), fd };
             } finally {
                 Context.exit();
             }
         }
 
         @JSFunction
-        public static void close(final Context cx, final Scriptable thisObj, Object[] args, Function func)
+        public static void close(Context cx, Scriptable thisObj, Object[] args, Function func)
         {
-            final FileHandle handle = ensureHandle(cx, thisObj, args, 0);
-            final Function callback = functionArg(args, 1, false);
             final FSImpl fs = (FSImpl)thisObj;
+            final int fd = intArg(args, 0);
+            Function callback = functionArg(args, 1, false);
 
             fs.runAction(callback, new AsyncAction()
             {
@@ -302,47 +322,43 @@ public class Filesystem
                 public Object[] execute()
                     throws NodeOSException
                 {
-                    fs.doClose(handle);
+                    fs.doClose(fd);
                     return null;
                 }
             });
         }
 
-        private void doClose(FileHandle handle)
+        private void doClose(int fd)
             throws NodeOSException
         {
+            FileHandle handle = ensureRegularFileHandle(fd);
             try {
-                handle.file.close();
+                if (handle.file != null) {
+                    handle.file.close();
+                }
+                descriptors.remove(fd);
             } catch (IOException ioe) {
                 throw new NodeOSException(Constants.EIO, ioe);
             }
         }
 
         @JSFunction
-        public static Object read(final Context cx, final Scriptable thisObj, Object[] args, Function func)
+        public static Object read(Context cx, Scriptable thisObj, Object[] args, Function func)
         {
-            final FileHandle handle = ensureHandle(cx, thisObj, args, 0);
-            final Buffer.BufferImpl buf = ensureBuffer(cx, thisObj, args, 1);
-            final int off = intArg(args, 2);
-            final int len = intArg(args, 3);
-
-            // If position is null [or undefined], data will be read from the current file position.
-            final int pos;
-            ensureArg(args, 4);
-            if (args[4] != null) {
-                pos = intArg(args, 4, -1);
-            } else {
-                pos = -1;
-            }
-
-            final Function callback = functionArg(args, 5, false);
             final FSImpl fs = (FSImpl)thisObj;
+            final int fd = intArg(args, 0);
+            final Buffer.BufferImpl buf = ensureBuffer(cx, thisObj, args, 1);
+            final int off = intArgOnly(cx, fs, args, 2, 0);
+            final int len = intArgOnly(cx, fs, args, 3, 0);
+            final long pos = longArgOnly(cx, fs, args, 4, -1L);
+            Function callback = functionArg(args, 5, false);
+
 
             if (off >= buf.getLength()) {
-                throw Utils.makeError(cx, thisObj, "Offset is out of bounds", "EINVAL");
+                throw Utils.makeError(cx, thisObj, "Offset is out of bounds", Constants.EINVAL);
             }
             if ((off + len) > buf.getLength()) {
-                throw Utils.makeError(cx, thisObj, "Length extends beyond buffer", "EINVAL");
+                throw Utils.makeError(cx, thisObj, "Length extends beyond buffer", Constants.EINVAL);
             }
 
             return fs.runAction(callback, new AsyncAction()
@@ -351,7 +367,7 @@ public class Filesystem
                 public Object[] execute()
                     throws NodeOSException
                 {
-                    return fs.doRead(handle, buf, off, len, pos);
+                    return fs.doRead(fd, buf, off, len, pos);
                 }
 
                 public Object[] mapException(NodeOSException e)
@@ -361,18 +377,22 @@ public class Filesystem
             });
         }
 
-        private Object[] doRead(FileHandle handle, Buffer.BufferImpl buf,
-                                int off, int len, int pos)
+        private Object[] doRead(int fd, Buffer.BufferImpl buf,
+                                int off, int len, long pos)
             throws NodeOSException
         {
             byte[] bytes = buf.getArray();
             int bytesOffset = buf.getArrayOffset() + off;
+            FileHandle handle = ensureRegularFileHandle(fd);
 
             try {
-                if (pos >= 0) {
-                    handle.file.seek(pos);
+                int count;
+                synchronized (handle) {
+                    if (pos >= 0) {
+                        handle.file.seek(pos);
+                    }
+                    count = handle.file.read(bytes, bytesOffset, len);
                 }
-                int count = handle.file.read(bytes, bytesOffset, len);
                 // Node (like C) expects 0 on EOF, not -1
                 if (count < 0) {
                     count = 0;
@@ -381,7 +401,7 @@ public class Filesystem
                     log.debug("read({}, {}, {}) = {}",
                               off, len, pos, count);
                 }
-                return new Object[] { null, count, buf };
+                return new Object[] { Context.getUndefinedValue(), count, buf };
 
             } catch (IOException ioe) {
                 throw new NodeOSException(Constants.EIO, ioe);
@@ -389,15 +409,15 @@ public class Filesystem
         }
 
         @JSFunction
-        public static Object write(final Context cx, final Scriptable thisObj, Object[] args, Function func)
+        public static Object write(Context cx, Scriptable thisObj, Object[] args, Function func)
         {
-            final FileHandle handle = ensureHandle(cx, thisObj, args, 0);
-            final Buffer.BufferImpl buf = ensureBuffer(cx, thisObj, args, 1);
-            final int off = intArg(args, 2);
-            final int len = intArg(args, 3);
-            final int pos = intArg(args, 4);
-            final Function callback = functionArg(args, 5, false);
             final FSImpl fs = (FSImpl)thisObj;
+            final int fd = intArg(args, 0);
+            final Buffer.BufferImpl buf = ensureBuffer(cx, thisObj, args, 1);
+            final int off = intArgOnly(cx, fs, args, 2, 0);
+            final int len = intArgOnly(cx, fs, args, 3, 0);
+            final long pos = longArgOnly(cx, fs, args, 4, 0);
+            Function callback = functionArg(args, 5, false);
 
             if (off >= buf.getLength()) {
                 throw Utils.makeError(cx, thisObj, "Offset is out of bounds", "EINVAL");
@@ -412,7 +432,7 @@ public class Filesystem
                 public Object[] execute()
                     throws NodeOSException
                 {
-                    return fs.doWrite(handle, buf, off, len, pos);
+                    return fs.doWrite(fd, buf, off, len, pos);
                 }
 
                 public Object[] mapException(NodeOSException e)
@@ -422,22 +442,25 @@ public class Filesystem
             });
         }
 
-        private Object[] doWrite(FileHandle handle, Buffer.BufferImpl buf,
-                                 int off, int len, int pos)
+        private Object[] doWrite(int fd, Buffer.BufferImpl buf,
+                                 int off, int len, long pos)
             throws NodeOSException
         {
             byte[] bytes = buf.getArray();
             int bytesOffset = buf.getArrayOffset() + off;
+            FileHandle handle = ensureRegularFileHandle(fd);
 
             try {
-                if (pos > 0) {
-                    handle.file.seek(pos);
+                synchronized (handle) {
+                    if (pos > 0) {
+                        handle.file.seek(pos);
+                    }
+                    handle.file.write(bytes, bytesOffset, len);
                 }
-                handle.file.write(bytes, bytesOffset, len);
                 if (log.isDebugEnabled()) {
                     log.debug("write({}, {}, {})", off, len, pos);
                 }
-                return new Object[] { null, len, buf };
+                return new Object[] { Context.getUndefinedValue(), len, buf };
 
             } catch (IOException ioe) {
                 throw new NodeOSException(Constants.EIO, ioe);
@@ -445,27 +468,27 @@ public class Filesystem
         }
 
         @JSFunction
-        public static void fsync(final Context cx, final Scriptable thisObj, Object[] args, Function func)
+        public static void fsync(Context cx, Scriptable thisObj, Object[] args, Function func)
         {
-            final FileHandle handle = ensureHandle(cx, thisObj, args, 0);
-            final Function callback = functionArg(args, 1, false);
             final FSImpl fs = (FSImpl)thisObj;
-
+            final int fd = intArg(args, 0);
+            Function callback = functionArg(args, 1, false);
 
             fs.runAction(callback, new AsyncAction()
             {
                 @Override
                 public Object[] execute() throws NodeOSException
                 {
-                    fs.doSync(handle);
+                    fs.doSync(fd);
                     return null;
                 }
             });
         }
 
-        private void doSync(FileHandle handle)
+        private void doSync(int fd)
             throws NodeOSException
         {
+            FileHandle handle = ensureRegularFileHandle(fd);
             try {
                 handle.file.getFD().sync();
             } catch (IOException ioe) {
@@ -480,11 +503,11 @@ public class Filesystem
         }
 
         @JSFunction
-        public static void rename(final Context cx, final Scriptable thisObj, Object[] args, Function func)
+        public static void rename(Context cx, Scriptable thisObj, Object[] args, Function func)
         {
             final String oldPath = stringArg(args, 0);
             final String newPath = stringArg(args, 1);
-            final Function callback = functionArg(args, 2, false);
+            Function callback = functionArg(args, 2, false);
             final FSImpl fs = (FSImpl)thisObj;
 
             fs.runAction(callback, new AsyncAction()
@@ -515,12 +538,12 @@ public class Filesystem
         }
 
         @JSFunction
-        public static void ftruncate(final Context cx, final Scriptable thisObj, Object[] args, Function func)
+        public static void ftruncate(Context cx, Scriptable thisObj, Object[] args, Function func)
         {
-            final FileHandle handle = ensureHandle(cx, thisObj, args, 0);
-            final int len = intArg(args, 1);
-            final Function callback = functionArg(args, 2, false);
             final FSImpl fs = (FSImpl)thisObj;
+            final int fd = intArg(args, 0);
+            final long len = longArgOnly(cx, fs, args, 1, 0);
+            Function callback = functionArg(args, 2, false);
 
             fs.runAction(callback, new AsyncAction()
             {
@@ -528,16 +551,17 @@ public class Filesystem
                 public Object[] execute()
                     throws NodeOSException
                 {
-                    fs.doTruncate(handle, len);
+                    fs.doTruncate(fd, len);
                     return null;
                 }
             });
         }
 
-        private void doTruncate(FileHandle handle, int len)
+        private void doTruncate(int fd, long len)
             throws NodeOSException
         {
             try {
+                FileHandle handle = ensureRegularFileHandle(fd);
                 handle.file.setLength(len);
             } catch (IOException e) {
                 throw new NodeOSException(Constants.EIO, e);
@@ -545,11 +569,11 @@ public class Filesystem
         }
 
         @JSFunction
-        public static void rmdir(final Context cx, final Scriptable thisObj, Object[] args, Function func)
+        public static void rmdir(Context cx, Scriptable thisObj, Object[] args, Function func)
         {
-            final String path = stringArg(args, 0);
-            final Function callback = functionArg(args, 1, false);
             final FSImpl fs = (FSImpl)thisObj;
+            final String path = stringArg(args, 0);
+            Function callback = functionArg(args, 1, false);
 
             fs.runAction(callback, new AsyncAction()
             {
@@ -578,10 +602,10 @@ public class Filesystem
         }
 
         @JSFunction
-        public static void unlink(final Context cx, final Scriptable thisObj, Object[] args, Function func)
+        public static void unlink(Context cx, Scriptable thisObj, Object[] args, Function func)
         {
             final String path = stringArg(args, 0);
-            final Function callback = functionArg(args, 1, false);
+            Function callback = functionArg(args, 1, false);
             final FSImpl fs = (FSImpl)thisObj;
 
             fs.runAction(callback, new AsyncAction()
@@ -608,11 +632,11 @@ public class Filesystem
         }
 
         @JSFunction
-        public static void mkdir(final Context cx, final Scriptable thisObj, Object[] args, Function func)
+        public static void mkdir(Context cx, Scriptable thisObj, Object[] args, Function func)
         {
             final String path = stringArg(args, 0);
             final int mode = intArg(args, 1);
-            final Function callback = functionArg(args, 2, false);
+            Function callback = functionArg(args, 2, false);
             final FSImpl fs = (FSImpl)thisObj;
 
             fs.runAction(callback, new AsyncAction()
@@ -638,10 +662,10 @@ public class Filesystem
         }
 
         @JSFunction
-        public static Object readdir(final Context cx, final Scriptable thisObj, Object[] args, Function func)
+        public static Object readdir(Context cx, Scriptable thisObj, Object[] args, Function func)
         {
             final String path = stringArg(args, 0);
-            final Function callback = functionArg(args, 1, false);
+            Function callback = functionArg(args, 1, false);
             final FSImpl fs = (FSImpl)thisObj;
 
             return fs.runAction(callback, new AsyncAction()
@@ -669,17 +693,17 @@ public class Filesystem
                     System.arraycopy(files, 0, objs, 0, files.length);
                     fileList = cx.newArray(this, objs);
                 }
-                return new Object[] { null, fileList };
+                return new Object[] { Context.getUndefinedValue(), fileList };
             } finally {
                 Context.exit();
             }
         }
 
         @JSFunction
-        public static Object stat(final Context cx, final Scriptable thisObj, Object[] args, Function func)
+        public static Object stat(Context cx, Scriptable thisObj, Object[] args, Function func)
         {
             final String path = stringArg(args, 0);
-            final Function callback = functionArg(args, 1, false);
+            Function callback = functionArg(args, 1, false);
             final FSImpl fs = (FSImpl)thisObj;
 
             return fs.runAction(callback, new AsyncAction()
@@ -709,14 +733,14 @@ public class Filesystem
                 if (log.isDebugEnabled()) {
                     log.debug("stat {} = {}", f.getPath(), s);
                 }
-                return new Object[] { null, s };
+                return new Object[] { Context.getUndefinedValue(), s };
             } finally {
                 Context.exit();
             }
         }
 
         @JSFunction
-        public static Object lstat(final Context cx, final Scriptable thisObj, Object[] args, Function func)
+        public static Object lstat(Context cx, Scriptable thisObj, Object[] args, Function func)
         {
             // TODO this means that our code can't distinguish symbolic links. This will require either
             // native code or some changes in fs.js itself.
@@ -724,11 +748,11 @@ public class Filesystem
         }
 
         @JSFunction
-        public static Object fstat(final Context cx, final Scriptable thisObj, Object[] args, Function func)
+        public static Object fstat(Context cx, Scriptable thisObj, Object[] args, Function func)
         {
-            final FileHandle handle = ensureHandle(cx, thisObj, args, 0);
-            final Function callback = functionArg(args, 1, false);
             final FSImpl fs = (FSImpl)thisObj;
+            final int fd = intArg(args, 0);
+            Function callback = functionArg(args, 1, false);
 
             return fs.runAction(callback, new AsyncAction()
             {
@@ -736,39 +760,77 @@ public class Filesystem
                 public Object[] execute()
                     throws NodeOSException
                 {
-                    return fs.doFStat(handle.fileRef);
+                    return fs.doFStat(fd);
                 }
             });
         }
 
-        private Object[] doFStat(File f)
+        private Object[] doFStat(int fd)
         {
+            FileHandle handle = ensureHandle(fd);
             Context cx = Context.enter();
             try {
                 StatsImpl s = (StatsImpl)cx.newObject(this, StatsImpl.CLASS_NAME);
-                s.setFile(f);
-                return new Object[] { null, s };
+                s.setFile(handle.fileRef);
+                return new Object[] { Context.getUndefinedValue(), s };
             } finally {
                 Context.exit();
             }
         }
 
-        // TODO from the existing native module:
+        @JSFunction
+        public static void utimes(Context cx, Scriptable thisObj, Object[] args, Function func)
+        {
+            throw Utils.makeError(cx, thisObj, "Not implemented");
+        }
 
-        // sendfile
-        // lstat
-        // link
-        // symlink
-        // readlink
-        // chmod
-        // fchmod
-        // chown
-        // fchown
-        // utimes
-        // futimes
-        // errno
-        // node:encoding
-        // __buf
+        @JSFunction
+        public static void futimes(Context cx, Scriptable thisObj, Object[] args, Function func)
+        {
+            throw Utils.makeError(cx, thisObj, "Not implemented");
+        }
+
+        @JSFunction
+        public static void chmod(Context cx, Scriptable thisObj, Object[] args, Function func)
+        {
+            throw Utils.makeError(cx, thisObj, "Not implemented");
+        }
+
+        @JSFunction
+        public static void fchmod(Context cx, Scriptable thisObj, Object[] args, Function func)
+        {
+            throw Utils.makeError(cx, thisObj, "Not implemented");
+        }
+
+        @JSFunction
+        public static void chown(Context cx, Scriptable thisObj, Object[] args, Function func)
+        {
+            throw Utils.makeError(cx, thisObj, "Not implemented");
+        }
+
+        @JSFunction
+        public static void fchown(Context cx, Scriptable thisObj, Object[] args, Function func)
+        {
+            throw Utils.makeError(cx, thisObj, "Not implemented");
+        }
+
+        @JSFunction
+        public static void link(Context cx, Scriptable thisObj, Object[] args, Function func)
+        {
+            throw Utils.makeError(cx, thisObj, "Not implemented");
+        }
+
+        @JSFunction
+        public static void symlink(Context cx, Scriptable thisObj, Object[] args, Function func)
+        {
+            throw Utils.makeError(cx, thisObj, "Not implemented");
+        }
+
+        @JSFunction
+        public static void readlink(Context cx, Scriptable thisObj, Object[] args, Function func)
+        {
+            throw Utils.makeError(cx, thisObj, "Not implemented");
+        }
     }
 
     public static class StatsImpl
@@ -777,7 +839,6 @@ public class Filesystem
         public static final String CLASS_NAME = "Stats";
 
         private File file;
-        private int mode;
 
         @Override
         public String getClassName() {
@@ -787,12 +848,6 @@ public class Filesystem
         public void setFile(File file)
         {
             this.file = file;
-            if (file.isDirectory()) {
-                mode |= Constants.S_IFDIR;
-            }
-            if (file.isFile()) {
-                mode |= Constants.S_IFREG;
-            }
         }
 
         @JSFunction
@@ -841,7 +896,24 @@ public class Filesystem
         // TODO ino
 
         @JSGetter("mode")
-        public int getMode() {
+        public int getMode()
+        {
+            int mode = 0;
+            if (file.isDirectory()) {
+                mode |= Constants.S_IFDIR;
+            }
+            if (file.isFile()) {
+                mode |= Constants.S_IFREG;
+            }
+            if (file.canRead()) {
+                mode |= Constants.S_IRUSR;
+            }
+            if (file.canWrite()) {
+                mode |= Constants.S_IWUSR;
+            }
+            if (file.canExecute()) {
+                mode |= Constants.S_IXUSR;
+            }
             return mode;
         }
 
@@ -851,7 +923,7 @@ public class Filesystem
         // TODO rdev
 
         @JSGetter("size")
-        public long getSize() {
+        public double getSize() {
             return file.length();
         }
 
@@ -867,6 +939,16 @@ public class Filesystem
         }
 
         // TODO ctime
+
+        @JSFunction
+        public Object toJSON()
+        {
+            Scriptable s = Context.getCurrentContext().newObject(this);
+            s.put("mode", s, getMode());
+            s.put("size", s, getSize());
+            s.put("mtime", s, getMTime());
+            return s;
+        }
     }
 
     public static class FileHandle
@@ -890,7 +972,7 @@ public class Filesystem
 
         public Object[] mapException(NodeOSException e)
         {
-            return new Object[] { e.getCode() };
+            return new Object[] { e.getCode(), Context.getUndefinedValue() };
         }
 
         public Object[] mapSyncException(NodeOSException e)

@@ -37,6 +37,7 @@ public class Constants
 
     public static final String EACCES = "EACCES";
     public static final String EADDRINUSE = "EADDRINUSE";
+    public static final String EBADF = "EBADF";
     public static final String ECONNREFUSED = "ECONNREFUSED";
     public static final String EEXIST = "EEXIST";
     public static final String EINVAL = "EINVAL";

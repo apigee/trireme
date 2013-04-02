@@ -102,6 +102,7 @@ public class RhinoContextFactory
             whitelist.add("java.lang.Float");
             whitelist.add("java.lang.Integer");
             whitelist.add("java.lang.Long");
+            whitelist.add("java.lang.Object");
             whitelist.add("java.lang.Short");
             whitelist.add("java.lang.Number");
             whitelist.add("java.lang.String");

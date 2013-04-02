@@ -24,6 +24,11 @@
         <Description>Depends on internal SSL errors and cert parsing code.</Description>
     </Excluded>
     <Excluded>
+        <Name>test-http-client-timeout-event.js</Name>
+        <Description>Timeouts are too short -- assumes connection is opened in 1 ms. Change second timeout
+        to 100 ms and it works fine.</Description>
+    </Excluded>
+    <Excluded>
         <Name>test-pipe-address.js</Name>
         <Reason>UNIX sockets are not supported in Noderunner or in Java.</Reason>
     </Excluded>
@@ -57,6 +62,35 @@
     <Excluded>
         <Name>test-require-json.js</Name>
         <Reason>Checks against an error message when trying to parse JSON; Rhino and v8 generate different ones</Reason>
+    </Excluded>
+
+    <Excluded>
+        <Name>test-fs-write-file-sync.js</Name>
+        <Description>Relies too much on Unix file permissions</Description>
+    </Excluded>
+    <Excluded>
+        <Name>test-fs-chmod.js</Name>
+        <Description>Relies too much on Unix file permissions</Description>
+    </Excluded>
+    <Excluded>
+        <Name>test-fs-error-messages.js</Name>
+        <Description>Tests stuff that we don't support like symlinks.</Description>
+    </Excluded>
+    <Excluded>
+        <Name>test-fs-symlink-.+\.js</Name>
+        <Description>No symlinks in Java.</Description>
+    </Excluded>
+    <Excluded>
+        <Name>test-fs-realpath.js</Name>
+        <Description>No symlinks in Java.</Description>
+    </Excluded>
+    <Excluded>
+        <Name>test-fs-utimes.js</Name>
+        <Description>Can't set utimes in Java.</Description>
+    </Excluded>
+    <Excluded>
+        <Name>test-fs-watch.+\.js</Name>
+        <Description>Depends on native stuff.</Description>
     </Excluded>
 
     <Excluded>

@@ -4,6 +4,7 @@ import org.mozilla.javascript.Context;
 import org.mozilla.javascript.EvaluatorException;
 import org.mozilla.javascript.Function;
 import org.mozilla.javascript.ScriptRuntime;
+import org.mozilla.javascript.Scriptable;
 
 public class ArgUtils
 {
@@ -46,6 +47,36 @@ public class ArgUtils
         return def;
     }
 
+    public static Number numberArg(Object[] args, int pos)
+    {
+        ensureArg(args, pos);
+        return Context.toNumber(args[pos]);
+    }
+
+    public static int intArgOnly(Object[] args, int pos)
+    {
+        Number n = numberArg(args, pos);
+        if (n.doubleValue() == (double)n.intValue()) {
+            return n.intValue();
+        }
+        throw new EvaluatorException("Not an integer");
+    }
+
+    public static int intArgOnly(Context cx, Scriptable scope, Object[] args, int pos, int def)
+    {
+        if (pos < args.length) {
+            if ((args[pos] == null) || Context.getUndefinedValue().equals(args[pos])) {
+                return def;
+            }
+            Number n = numberArg(args, pos);
+            if (n.doubleValue() == (double)n.intValue()) {
+                return n.intValue();
+            }
+            throw Utils.makeError(cx, scope, "Not an integer");
+        }
+        return def;
+    }
+
     public static long longArg(Object[] args, int pos)
     {
         ensureArg(args, pos);
@@ -59,6 +90,21 @@ public class ArgUtils
             if (!n.equals(ScriptRuntime.NaN)) {
                 return n.longValue();
             }
+        }
+        return def;
+    }
+
+    public static long longArgOnly(Context cx, Scriptable scope, Object[] args, int pos, long def)
+    {
+        if (pos < args.length) {
+            if ((args[pos] == null) || Context.getUndefinedValue().equals(args[pos])) {
+                return def;
+            }
+            Number n = numberArg(args, pos);
+            if (n.doubleValue() == (double)n.longValue()) {
+                return n.longValue();
+            }
+            throw Utils.makeError(cx, scope, "Not an integer");
         }
         return def;
     }

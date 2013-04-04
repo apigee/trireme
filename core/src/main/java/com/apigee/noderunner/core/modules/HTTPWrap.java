@@ -12,6 +12,7 @@ import com.apigee.noderunner.net.spi.HttpResponseAdapter;
 import com.apigee.noderunner.net.spi.HttpServerAdapter;
 import com.apigee.noderunner.net.spi.HttpServerContainer;
 import com.apigee.noderunner.net.spi.HttpServerStub;
+import com.apigee.noderunner.net.spi.TLSParams;
 import org.mozilla.javascript.Context;
 import org.mozilla.javascript.EvaluatorException;
 import org.mozilla.javascript.Function;
@@ -134,10 +135,11 @@ public class HTTPWrap
         @JSFunction
         public int listen(String host, int port, int backlog)
         {
-            if (tlsParams != null) {
-                throw new EvaluatorException("TLS through adapter not supported yet");
+            TLSParams tls = null;
+            if (this.tlsParams != null) {
+                tls = makeTLSParams();
             }
-            adapter.listen(host, port, backlog);
+            adapter.listen(host, port, backlog, tls);
             log.debug("Listening on port {}", port);
             return 0;
         }
@@ -370,6 +372,47 @@ public class HTTPWrap
         public void setOnClose(Function oc)
         {
             this.onClose = oc;
+        }
+
+        private TLSParams makeTLSParams()
+        {
+            TLSParams t = new TLSParams();
+            if (tlsParams.has("keystore", tlsParams)) {
+                String fn = Context.toString(tlsParams.get("keystore", tlsParams));
+                t.setKeyStore(runner.translatePath(fn).getPath());
+            }
+            if (tlsParams.has("truststore", tlsParams)) {
+                String fn = Context.toString(tlsParams.get("truststore", tlsParams));
+                t.setTrustStore(runner.translatePath(fn).getPath());
+            }
+            if (tlsParams.has("crl", tlsParams)) {
+                String fn = Context.toString(tlsParams.get("crl", tlsParams));
+                t.setCrl(runner.translatePath(fn).getPath());
+            }
+            if (tlsParams.has("passphrase", tlsParams)) {
+                t.setPassphrase(Context.toString(tlsParams.get("passphrase", tlsParams)));
+            }
+            if (tlsParams.has("ciphers", tlsParams)) {
+                String ciphers = Context.toString(tlsParams.get("truststore", tlsParams));
+                ArrayList<String> cl = new ArrayList<String>();
+                for (String c : ciphers.split(":")) {
+                    cl.add(c);
+                }
+                t.setCiphers(cl);
+            }
+
+            boolean requestCert = tlsParams.has("requestCert", tlsParams) &&
+                                  Context.toBoolean(tlsParams.get("requestCert", tlsParams));
+            boolean rejectUnauthorized = tlsParams.has("rejectUnauthorized", tlsParams) &&
+                                  Context.toBoolean(tlsParams.get("rejectUnauthorized", tlsParams));
+            if (requestCert) {
+                if (rejectUnauthorized) {
+                    t.setClientAuthRequired(true);
+                } else {
+                    t.setClientAuthRequested(true);
+                }
+            }
+            return t;
         }
     }
 

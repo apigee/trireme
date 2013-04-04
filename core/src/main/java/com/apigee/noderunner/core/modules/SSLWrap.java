@@ -1,6 +1,7 @@
 package com.apigee.noderunner.core.modules;
 
 import com.apigee.noderunner.core.NodeRuntime;
+import com.apigee.noderunner.core.internal.CompositeTrustManager;
 import com.apigee.noderunner.core.internal.InternalNodeModule;
 import com.apigee.noderunner.core.internal.Utils;
 import org.mozilla.javascript.Context;
@@ -738,51 +739,6 @@ public class SSLWrap
         public X509Certificate[] getAcceptedIssuers()
         {
             return new X509Certificate[0];
-        }
-    }
-
-    private static final class CompositeTrustManager
-        implements X509TrustManager
-    {
-        private final X509TrustManager tm;
-        private final X509CRL crl;
-
-        public CompositeTrustManager(X509TrustManager tm, X509CRL crl)
-        {
-            this.tm = tm;
-            this.crl = crl;
-        }
-
-        @Override
-        public void checkClientTrusted(X509Certificate[] certs, String s)
-            throws CertificateException
-        {
-            tm.checkClientTrusted(certs, s);
-            checkCRL(certs);
-        }
-
-        @Override
-        public void checkServerTrusted(X509Certificate[] certs, String s)
-            throws CertificateException
-        {
-            tm.checkServerTrusted(certs, s);
-            checkCRL(certs);
-        }
-
-        private void checkCRL(X509Certificate[] certs)
-            throws CertificateException
-        {
-            for (X509Certificate cert : certs) {
-                if (crl.isRevoked(cert)) {
-                    throw new CertificateException("Certificate not trusted per the CRL");
-                }
-            }
-        }
-
-        @Override
-        public X509Certificate[] getAcceptedIssuers()
-        {
-            return tm.getAcceptedIssuers();
         }
     }
 }

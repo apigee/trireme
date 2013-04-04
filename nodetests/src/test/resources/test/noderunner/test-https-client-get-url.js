@@ -50,7 +50,14 @@ var server = https.createServer(options, function(req, res) {
 });
 
 server.listen(common.PORT, function() {
-  https.get('https://127.0.0.1:' + common.PORT + '/foo?bar');
+  https.get({ rejectUnauthorized: false,
+              hostname: 'localhost',
+              port: common.PORT,
+              path: '/foo?bar' },
+    function(res) {
+      res.on('data', function() { console.log('Got some'); });
+      console.log('Got result');
+    });
 });
 
 process.on('exit', function() {

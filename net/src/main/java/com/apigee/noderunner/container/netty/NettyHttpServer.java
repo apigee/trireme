@@ -56,6 +56,7 @@ public class NettyHttpServer
 
     private final HttpServerStub stub;
     private       NettyServer    server;
+    private volatile boolean     closing;
 
     NettyHttpServer(HttpServerStub stub)
     {
@@ -115,11 +116,16 @@ public class NettyHttpServer
         };
     }
 
+    boolean isClosing() {
+        return closing;
+    }
+
     @Override
     public void suspend()
     {
         log.debug("Suspending HTTP server for new connections");
         server.suspend();
+        closing = true;
     }
 
     @Override
@@ -280,7 +286,8 @@ public class NettyHttpServer
                     new DefaultHttpResponse(req.getProtocolVersion(),
                                             HttpResponseStatus.OK),
                     channel,
-                    curRequest.isKeepAlive());
+                    curRequest.isKeepAlive(),
+                    NettyHttpServer.this);
                 stub.onRequest(curRequest, curResponse);
 
             } else if (httpObject instanceof HttpContent) {

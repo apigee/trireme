@@ -9,7 +9,6 @@ import io.netty.handler.codec.http.DefaultHttpContent;
 import io.netty.handler.codec.http.DefaultLastHttpContent;
 import io.netty.handler.codec.http.HttpResponse;
 import io.netty.handler.codec.http.HttpResponseStatus;
-import io.netty.handler.codec.http.HttpVersion;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -25,16 +24,19 @@ public class NettyHttpResponse
     private static final Logger log = LoggerFactory.getLogger(NettyHttpResponse.class);
 
     private final HttpResponse  response;
+    private final NettyHttpServer server;
 
     private boolean             keepAlive;
     private ArrayList<Map.Entry<String, String>> trailers;
 
     public NettyHttpResponse(HttpResponse resp, SocketChannel channel,
-                             boolean keepAliveRequested)
+                             boolean keepAliveRequested,
+                             NettyHttpServer server)
     {
         super(resp, channel);
         this.response = resp;
         this.keepAlive = keepAliveRequested;
+        this.server = server;
     }
 
     @Override
@@ -144,7 +146,7 @@ public class NettyHttpResponse
             }
         }
         ChannelFuture ret = channel.write(chunk);
-        if (!keepAlive) {
+        if (!keepAlive || server.isClosing()) {
             channel.shutdownOutput();
         }
         return ret;

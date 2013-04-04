@@ -9,6 +9,8 @@
 
 var util = require('util');
 var events = require('events');
+var stream = require('stream');
+var timers = require('timers');
 var NodeHttp = require('node_http');
 var HttpWrap = process.binding('http_wrap');
 var assert = require('assert');
@@ -43,9 +45,62 @@ if (HttpWrap.hasServerAdapter()) {
 
   var END_OF_FILE = {};
 
-  function ServerResponse(adapter) {
-    if (!(this instanceof ServerResponse)) return new ServerResponse();
+  function DummySocket() {
+    if (!(this instanceof DummySocket)) return new DummySocket();
     events.EventEmitter.call(this);
+  }
+
+  util.inherits(DummySocket, events.EventEmitter);
+
+  DummySocket.prototype.setTimeout = function(msecs, callback) {
+    if (msecs > 0 && !isNaN(msecs) && isFinite(msecs)) {
+      debug('Enrolling timeout in ' + msecs);
+      timers.enroll(this, msecs);
+      timers.active(this);
+      if (callback) {
+        this.once('timeout', callback);
+      }
+    } else if (msecs === 0) {
+      debug('Unenrolling timeout');
+      timers.unenroll(this);
+      if (callback) {
+        this.removeListener('timeout', callback);
+      }
+    }
+  };
+
+  DummySocket.prototype.clearTimeout = function(cb) {
+    this.setTimeout(0, cb);
+  };
+
+  DummySocket.prototype._onTimeout = function() {
+    debug('_onTimeout');
+    this.emit('timeout');
+  };
+
+  DummySocket.prototype.active = function() {
+    timers.active(this);
+  };
+
+  DummySocket.prototype.close = function() {
+    if (!this.closed) {
+      timers.unenroll(this);
+      this.closed = true;
+    }
+  };
+
+  DummySocket.prototype.destroy = function() {
+    if (this._outgoing) {
+      this._outgoing.destroy();
+    } else {
+      this.close();
+    }
+    this.emit('close');
+  };
+
+  function ServerResponse(adapter, conn) {
+    if (!(this instanceof ServerResponse)) return new ServerResponse();
+    stream.Writable.call(this, {decodeStrings: true});
 
     this.statusCode = 200;
     this.headersSent = false;
@@ -53,11 +108,10 @@ if (HttpWrap.hasServerAdapter()) {
     this.sendDate = true;
     this._headers = {};
     this._adapter = adapter;
-    this._outstanding = 0;
+    this.connection = conn;
   }
 
-  util.inherits(ServerResponse, events.EventEmitter);
-
+  util.inherits(ServerResponse, stream.Writable);
   exports.ServerResponse = ServerResponse;
 
   ServerResponse.prototype.writeContinue = function() {
@@ -106,29 +160,25 @@ if (HttpWrap.hasServerAdapter()) {
     this._saveHeaders(headers);
   };
 
-  ServerResponse.prototype.write = function(data, encoding) {
+  ServerResponse.prototype._write = function(data, encoding, cb) {
     if (!this._savedHeaders) {
       this.writeHead(this.statusCode);
     }
 
-    if (typeof data !== 'string' && !Buffer.isBuffer(data)) {
-      throw new TypeError('first argument must be a string or Buffer');
-    }
-
-    if (data.length === 0) return false;
-
+    this.connection.active();
     if (!this.headersSent) {
       // Just send one additional chunk of data
-      debug('Sending http headers status = ' + this.statusCode);
-      this._adapter.send(this.statusCode, this.sendDate, this._savedHeaders, null, null, null, false);
+      debug('Sending http headers status = ' + this.statusCode +
+           ' data = ' + (data ? data.length : 0));
+      // We should always get a buffer with no encoding in this case
+      this._adapter.send(this.statusCode, this.sendDate, this._savedHeaders, data, encoding, null, false);
       this.headersSent = true;
+    } else {
+      debug('Sending data = ' + (data ? data.length : 0));
+      this._adapter.sendChunk(data, encoding, false);
     }
-    var result = this._adapter.sendChunk(data, encoding, false);
-    debug('Sent data result = ' + result);
-    if (!result) {
-      this._outstanding++;
-    }
-    return result;
+    // TODO register a future rather than accepting everything
+    cb();
   };
 
   ServerResponse.prototype._send = function() {
@@ -136,29 +186,25 @@ if (HttpWrap.hasServerAdapter()) {
   };
 
   ServerResponse.prototype.end = function(data, encoding) {
+    debug('end');
     if (!this._savedHeaders) {
       this.writeHead(this.statusCode);
     }
 
-    if (data && (typeof data !== 'string' && !Buffer.isBuffer(data))) {
-      throw new TypeError('first argument must be a string or Buffer');
-    }
-
-    var result;
-    if (this.headersSent) {
-      result = this._adapter.sendChunk(data, encoding, this._trailers, true);
-      debug('Sent last data result = ' + result);
-    } else {
-      result = this._adapter.send(this.statusCode, this.sendDate, this._savedHeaders,
-                                  data, encoding, this._trailers, true);
-      this.headersSent = true;
-      debug('Sent single message result = ' + result);
-    }
-    if (!result) {
-      this._outstanding++;
-    }
-    this.ended = true;
-    return result;
+    this.connection.active();
+    var self = this;
+    stream.Writable.prototype.end.call(this, data, encoding, function() {
+      self.connection.close();
+      if (self.headersSent) {
+        debug('Sending end of response');
+        self._adapter.sendChunk(null, null, this._trailers, true);
+      } else {
+        // We will only get here if we are sending an empty response
+        debug('Sending one shot response');
+        self._adapter.send(this.statusCode, this.sendDate, this._savedHeaders,
+                           null, null, this._trailers, true);
+      }
+    });
   };
 
   ServerResponse.prototype._saveHeaders = function(headers) {
@@ -215,6 +261,15 @@ if (HttpWrap.hasServerAdapter()) {
     if (this._adapter) {
       this._adapter.destroy();
     }
+    this.connection.close();
+  };
+
+  ServerResponse.prototype.setTimeout = function(timeout, cb) {
+    this.connection.setTimeout(timeout, cb);
+  };
+
+  ServerResponse.prototype.clearTimeout = function(cb) {
+    this.connectio.clearTimeout(cb);
   };
 
   ServerResponse.prototype.setHeader = NodeHttp.OutgoingMessage.prototype.setHeader;
@@ -222,7 +277,7 @@ if (HttpWrap.hasServerAdapter()) {
   ServerResponse.prototype.removeHeader = NodeHttp.OutgoingMessage.prototype.removeHeader;
   ServerResponse.prototype._renderHeaders = NodeHttp.OutgoingMessage.prototype._renderHeaders;
 
-  function ServerRequest(adapter) {
+  function ServerRequest(adapter, conn) {
     if (!(this instanceof ServerRequest)) return new ServerRequest(adapter);
     NodeHttp.IncomingMessage.call(this);
 
@@ -232,11 +287,14 @@ if (HttpWrap.hasServerAdapter()) {
     this.httpVersionMinor = adapter.requestMinorVersion;
     this.httpVersion = adapter.requestMajorVersion + '.' + adapter.requestMinorVersion;
     this.url = adapter.requestUrl;
+    this.connection = conn;
+    this.socket = conn;
   }
 
   util.inherits(ServerRequest, NodeHttp.IncomingMessage);
 
   ServerRequest.prototype._addPending = function(chunk) {
+    this.connection.active();
     if (this._readPending && !this._pendings.length) {
       this._readPending = pushChunk(this, chunk);
     } else {
@@ -260,6 +318,14 @@ if (HttpWrap.hasServerAdapter()) {
       var chunk = this._pendings.shift();
       this._readPending = pushChunk(this, chunk);
     }
+  };
+
+  ServerRequest.prototype.setTimeout = function(timeout, cb) {
+    this.connection.setTimeout(timeout, cb);
+  };
+
+  ServerRequest.prototype.clearTimeout = function(cb) {
+    this.connectio.clearTimeout(cb);
   };
 
   function Server(requestListener) {
@@ -292,9 +358,17 @@ if (HttpWrap.hasServerAdapter()) {
     debug('onHeadersComplete');
     var headers = info.getRequestHeaders();
     var url = info.requestUrl;
+    var self = this;
 
-    info.incoming = new ServerRequest(info);
+    var conn = new DummySocket();
+    if (this.timeout && (this.timeout > 0)) {
+      conn.setTimeout(this.timeout, function() {
+        self.timeoutCallback(conn);
+      });
+    }
+    conn.active();
 
+    info.incoming = new ServerRequest(info, conn);
 
     var n = headers.length;
 
@@ -311,13 +385,15 @@ if (HttpWrap.hasServerAdapter()) {
 
     info.incoming.method = info.requestMethod;
 
-    info.outgoing = new ServerResponse(info);
+    info.outgoing = new ServerResponse(info, conn);
+    conn._outgoing = info.outgoing;
 
     info.onchannelclosed = function() {
       debug('Server channel closed');
       if (!info.outgoing.ended) {
         info.outgoing.emit('close');
       }
+      conn.close();
     };
 
     info.onwritecomplete = function(err) {
@@ -335,6 +411,7 @@ if (HttpWrap.hasServerAdapter()) {
    */
   function onBody(info, b) {
     debug('onBody len = ' + b.length);
+    info.incoming.connection.active();
     info.incoming._addPending(b);
   }
 
@@ -343,23 +420,8 @@ if (HttpWrap.hasServerAdapter()) {
    */
   function onMessageComplete(info) {
     debug('onMessageComplete');
+    info.incoming.connection.active();
     var incoming = info.incoming;
-
-    // Emit any trailing headers.
-    // TODO
-    /*
-    var headers = parser._headers;
-    if (headers) {
-      for (var i = 0, n = headers.length; i < n; i += 2) {
-        var k = headers[i];
-        var v = headers[i + 1];
-        parser.incoming._addHeaderLine(k, v);
-      }
-      parser._headers = [];
-      parser._url = '';
-    }
-    */
-
     if (!incoming.upgrade) {
       incoming._addPending(END_OF_FILE);
     }
@@ -367,6 +429,7 @@ if (HttpWrap.hasServerAdapter()) {
 
   function onClose(info) {
     debug('onClose outgoing.complete = ' + info.outgoing.complete);
+    info.incoming.connection.close();
     if (!info.outgoing.ended) {
       info.outgoing.ended = true;
       info.incoming.emit('close');
@@ -458,6 +521,11 @@ if (HttpWrap.hasServerAdapter()) {
     });
 
     return this;
+  };
+
+  Server.prototype.setTimeout = function(timeout, cb) {
+    this.timeout = timeout;
+    this.timeoutCallback = cb;
   };
 
 } else {

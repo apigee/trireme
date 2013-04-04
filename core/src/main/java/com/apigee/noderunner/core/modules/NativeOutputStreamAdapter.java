@@ -108,6 +108,10 @@ public class NativeOutputStreamAdapter
                 throw new EvaluatorException("Not a buffer");
             }
 
+            if (log.isTraceEnabled()) {
+                log.debug("Writing {} bytes to {}", buf.getLength(), self.out);
+            }
+
             try {
                 self.out.write(buf.getArray(), buf.getArrayOffset(), buf.getLength());
                 if (callback != null) {
@@ -115,6 +119,9 @@ public class NativeOutputStreamAdapter
                                   new Object[] {});
                 }
             } catch (IOException ioe) {
+                if (log.isDebugEnabled()) {
+                    log.debug("I/O error on write: {}", ioe);
+                }
                 if (callback != null) {
                     callback.call(cx, thisObj, thisObj,
                                   new Object[] { Utils.makeError(cx, thisObj, ioe.toString(), Constants.EIO) });

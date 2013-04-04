@@ -27,33 +27,30 @@ if (!process.versions.openssl) {
 
 var hosterr = 'Hostname/IP doesn\'t match certificate\'s altnames';
 var testCases =
-    [{ ca: ['ca1-cert'],
-       key: 'agent2-key',
-       cert: 'agent2-cert',
+    [{ truststore: 'ca1-cert',
+       keystore: 'agent2',
        servers: [
-         { ok: true, key: 'agent1-key', cert: 'agent1-cert' },
-         { ok: false, key: 'agent2-key', cert: 'agent2-cert' },
-         { ok: false, key: 'agent3-key', cert: 'agent3-cert' }
+         { ok: true, keystore: 'agent1' },
+         { ok: false, keystore: 'agent2' },
+         { ok: false, keystore: 'agent3' }
        ]
      },
 
-     { ca: [],
-       key: 'agent2-key',
-       cert: 'agent2-cert',
+     { truststore: null,
+       keystore: 'agent2',
        servers: [
-         { ok: false, key: 'agent1-key', cert: 'agent1-cert' },
-         { ok: false, key: 'agent2-key', cert: 'agent2-cert' },
-         { ok: false, key: 'agent3-key', cert: 'agent3-cert' }
+         { ok: false, keystore: 'agent1' },
+         { ok: false, keystore: 'agent2' },
+         { ok: false, keystore: 'agent3' }
        ]
      },
 
-     { ca: ['ca1-cert', 'ca2-cert'],
-       key: 'agent2-key',
-       cert: 'agent2-cert',
+     { truststore: 'ca1-and-2-cert',
+       keystore: 'agent2',
        servers: [
-         { ok: true, key: 'agent1-key', cert: 'agent1-cert' },
-         { ok: false, key: 'agent2-key', cert: 'agent2-cert' },
-         { ok: true, key: 'agent3-key', cert: 'agent3-cert' }
+         { ok: true, keystore: 'agent1' },
+         { ok: false, keystore: 'agent2' },
+         { ok: true, keystore: 'agent3' }
        ]
      }
     ];
@@ -65,13 +62,11 @@ var fs = require('fs');
 var tls = require('tls');
 
 
-function filenamePEM(n) {
-  return require('path').join(common.fixturesDir, 'keys', n + '.pem');
-}
-
-
-function loadPEM(n) {
-  return fs.readFileSync(filenamePEM(n));
+function filenameJKS(n) {
+  if (n === null) {
+    return null;
+  }
+  return require('path').join(common.fixturesDir, 'keys', n + '.jks');
 }
 
 var successfulTests = 0;
@@ -85,29 +80,34 @@ function testServers(index, servers, clientOptions, cb) {
 
   var ok = serverOptions.ok;
 
-  if (serverOptions.key) {
-    serverOptions.key = loadPEM(serverOptions.key);
-  }
-
-  if (serverOptions.cert) {
-    serverOptions.cert = loadPEM(serverOptions.cert);
+  if (serverOptions.keystore) {
+    serverOptions.keystore = filenameJKS(serverOptions.keystore);
+    serverOptions.passphrase = 'secure';
   }
 
   var server = tls.createServer(serverOptions, function(s) {
     s.end('hello world\n');
   });
 
+  console.log('Starting server using keystore ' + 
+              serverOptions.keystore);
+
   server.listen(common.PORT, function() {
     var b = '';
 
-    console.error('connecting...');
+    console.error('connecting using keystore ' +
+                  clientOptions.keystore +
+                  ' and trust store ' +
+                  clientOptions.truststore);
     var client = tls.connect(clientOptions, function() {
-      var authorized = client.authorized ||
-                       client.authorizationError === hosterr;
+      console.log('Successful connect');
+      assert(ok);
+      server.close();
+    });
 
-      console.error('expected: ' + ok + ' authed: ' + authorized);
-
-      assert.equal(ok, authorized);
+    client.on('error', function(err) {
+      console.error('Received TLS error ' + err);
+      assert(!ok);
       server.close();
     });
 
@@ -132,10 +132,9 @@ function runTest(testIndex) {
 
   var clientOptions = {
     port: common.PORT,
-    ca: tcase.ca.map(loadPEM),
-    key: loadPEM(tcase.key),
-    cert: loadPEM(tcase.cert),
-    rejectUnauthorized: false
+    truststore: filenameJKS(tcase.truststore),
+    keystore: filenameJKS(tcase.keystore),
+    passphrase: 'secure',
   };
 
 

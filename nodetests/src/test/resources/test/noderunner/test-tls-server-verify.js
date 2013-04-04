@@ -39,7 +39,7 @@ var testCases =
     [{ title: 'Do not request certs. Everyone is unauthorized.',
       requestCert: false,
       rejectUnauthorized: false,
-      CAs: ['ca1-cert'],
+      truststore: 'ca1-cert',
       clients:
        [{ name: 'agent1', shouldReject: false, shouldAuth: false },
         { name: 'agent2', shouldReject: false, shouldAuth: false },
@@ -47,23 +47,22 @@ var testCases =
         { name: 'nocert', shouldReject: false, shouldAuth: false }
        ]
     },
-
     { title: 'Allow both authed and unauthed connections with CA1',
       requestCert: true,
       rejectUnauthorized: false,
-      CAs: ['ca1-cert'],
+      truststore: 'ca1-cert',
       clients:
        [{ name: 'agent1', shouldReject: false, shouldAuth: true },
-        { name: 'agent2', shouldReject: false, shouldAuth: false },
-        { name: 'agent3', shouldReject: false, shouldAuth: false },
+        // Server with a trust store will always reject these
+        //{ name: 'agent2', shouldReject: false, shouldAuth: false },
+        //{ name: 'agent3', shouldReject: false, shouldAuth: false },
         { name: 'nocert', shouldReject: false, shouldAuth: false }
        ]
     },
-
     { title: 'Allow only authed connections with CA1',
       requestCert: true,
       rejectUnauthorized: true,
-      CAs: ['ca1-cert'],
+      truststore: 'ca1-cert',
       clients:
        [{ name: 'agent1', shouldReject: false, shouldAuth: true },
         { name: 'agent2', shouldReject: true },
@@ -75,7 +74,7 @@ var testCases =
     { title: 'Allow only authed connections with CA1 and CA2',
       requestCert: true,
       rejectUnauthorized: true,
-      CAs: ['ca1-cert', 'ca2-cert'],
+      truststore: 'ca1-and-2-cert',
       clients:
        [{ name: 'agent1', shouldReject: false, shouldAuth: true },
         { name: 'agent2', shouldReject: true },
@@ -88,7 +87,7 @@ var testCases =
     { title: 'Allow only certs signed by CA2 but not in the CRL',
       requestCert: true,
       rejectUnauthorized: true,
-      CAs: ['ca2-cert'],
+      truststore: 'ca2-cert',
       crl: 'ca2-crl',
       clients:
        [
@@ -109,20 +108,13 @@ var fs = require('fs');
 var tls = require('tls');
 var spawn = require('child_process').spawn;
 
-
 function filenamePEM(n) {
   return require('path').join(common.fixturesDir, 'keys', n + '.pem');
 }
 
-
-function loadPEM(n) {
-  return fs.readFileSync(filenamePEM(n));
+function filenameJKS(n) {
+  return require('path').join(common.fixturesDir, 'keys', n + '.jks');
 }
-
-
-var serverKey = loadPEM('agent2-key');
-var serverCert = loadPEM('agent2-cert');
-
 
 function runClient(options, cb) {
 
@@ -131,7 +123,7 @@ function runClient(options, cb) {
   // - Certificate, but not signed by CA.
   // - Certificate signed by CA.
 
-  var args = ['s_client', '-connect', '127.0.0.1:' + common.PORT];
+  var args = ['s_client', '-no_tls1_2', '-connect', '127.0.0.1:' + common.PORT];
 
 
   console.log('  connecting with', options.name);
@@ -180,6 +172,7 @@ function runClient(options, cb) {
 
   // To test use: openssl s_client -connect localhost:8000
   var client = spawn('openssl', args);
+  console.log('Spawning openssl ' + JSON.stringify(args));
 
   var out = '';
 
@@ -188,6 +181,7 @@ function runClient(options, cb) {
 
   client.stdout.setEncoding('utf8');
   client.stdout.on('data', function(d) {
+    //console.log('Client: ' + d);
     out += d;
 
     if (/_unauthed/g.test(out)) {
@@ -210,6 +204,11 @@ function runClient(options, cb) {
   client.on('exit', function(code) {
     //assert.equal(0, code, options.name +
     //      ": s_client exited with error code " + code);
+    console.log('Client exited with ' + code);
+    console.log('shouldReject = ' + options.shouldReject + 
+                ' rejected = ' + rejected);
+    console.log('shouldAuth = ' + options.shouldAuth + 
+                ' authed = ' + authed);
     if (options.shouldReject) {
       assert.equal(true, rejected, options.name +
           ' NOT rejected, but should have been');
@@ -231,15 +230,16 @@ function runTest(testIndex) {
   if (!tcase) return;
 
   console.error("Running '%s'", tcase.title);
+  console.error('requestCert = ' + tcase.requestCert +
+                ' rejectUnauthorized = ' + tcase.rejectUnauthorized +
+                ' truststore = ' + tcase.truststore);
 
-  var cas = tcase.CAs.map(loadPEM);
-
-  var crl = tcase.crl ? loadPEM(tcase.crl) : null;
+  var crl = tcase.crl ? filenamePEM(tcase.crl) : null;
 
   var serverOptions = {
-    key: serverKey,
-    cert: serverCert,
-    ca: cas,
+    keystore: filenameJKS('agent2'),
+    passphrase: 'secure',
+    truststore: filenameJKS(tcase.truststore),
     crl: crl,
     requestCert: tcase.requestCert,
     rejectUnauthorized: tcase.rejectUnauthorized
@@ -249,14 +249,24 @@ function runTest(testIndex) {
 
   var server = tls.Server(serverOptions, function(c) {
     connections++;
-    if (c.authorized) {
-      console.error('- authed connection: ' +
-                    c.getPeerCertificate().subject.CN);
-      c.write('\n_authed\n');
-    } else {
-      console.error('- unauthed connection: %s', c.authorizationError);
+    console.log('Got a connection from ' + 
+                JSON.stringify(c.getPeerCertificate()));
+    if (c.getPeerCertificate() === undefined) {
       c.write('\n_unauthed\n');
+    } else {
+      c.write('\n_authed\n');
     }
+    c.on('data', function(chunk) {
+      console.log('Server got ' + chunk);
+    });
+    c.on('end', function() {
+      console.log('Server got end');
+    });
+  });
+  server.on('clientError', function(err, conn) {
+    connections++;
+    console.log('Rejected a connection: ' + err);
+    conn.destroy();
   });
 
   function runNextClient(clientIndex) {

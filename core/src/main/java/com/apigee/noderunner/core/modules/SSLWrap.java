@@ -2,6 +2,7 @@ package com.apigee.noderunner.core.modules;
 
 import com.apigee.noderunner.core.NodeRuntime;
 import com.apigee.noderunner.core.internal.InternalNodeModule;
+import com.apigee.noderunner.core.internal.Utils;
 import org.mozilla.javascript.Context;
 import org.mozilla.javascript.EvaluatorException;
 import org.mozilla.javascript.Function;
@@ -21,6 +22,7 @@ import javax.net.ssl.SSLEngine;
 import javax.net.ssl.SSLEngineResult;
 import javax.net.ssl.SSLException;
 import javax.net.ssl.SSLPeerUnverifiedException;
+import javax.net.ssl.SSLSession;
 import javax.net.ssl.TrustManager;
 import javax.net.ssl.TrustManagerFactory;
 import javax.net.ssl.X509TrustManager;
@@ -33,13 +35,20 @@ import java.security.GeneralSecurityException;
 import java.security.KeyManagementException;
 import java.security.KeyStore;
 import java.security.NoSuchAlgorithmException;
+import java.security.cert.CRLException;
 import java.security.cert.Certificate;
+import java.security.cert.CertificateException;
+import java.security.cert.CertificateFactory;
+import java.security.cert.CertificateParsingException;
+import java.security.cert.X509CRL;
 import java.security.cert.X509Certificate;
 import java.text.DateFormat;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collection;
 import java.util.HashSet;
+import java.util.List;
 import java.util.regex.Pattern;
 
 /**
@@ -122,6 +131,7 @@ public class SSLWrap
 
         private KeyManager[] keyManagers;
         private TrustManager[] trustManagers;
+        private X509CRL crl;
 
         public String getClassName() {
             return CLASS_NAME;
@@ -186,10 +196,42 @@ public class SSLWrap
         }
 
         @JSFunction
+        public void setCRL(String fileName)
+        {
+            FileInputStream crlFile;
+            try {
+                crlFile = new FileInputStream(fileName);
+            } catch (IOException ioe) {
+                throw Utils.makeError(Context.getCurrentContext(), this, "Can't open CRL file: " + ioe);
+            }
+
+            try {
+                CertificateFactory certFactory = CertificateFactory.getInstance("X.509");
+                crl = (X509CRL)certFactory.generateCRL(crlFile);
+
+            } catch (CertificateException e) {
+                throw Utils.makeError(Context.getCurrentContext(), this, "Error reading CRL: " + e);
+            } catch (CRLException e) {
+                throw Utils.makeError(Context.getCurrentContext(), this, "Error reading CRL: " + e);
+            } finally {
+                try {
+                    crlFile.close();
+                } catch (IOException ioe) {
+                    // Ignore
+                }
+            }
+        }
+
+        @JSFunction
         public void init()
         {
+            TrustManager[] tms = trustManagers;
+            if ((trustManagers != null) && (crl != null)) {
+                tms[0] = new CompositeTrustManager((X509TrustManager)trustManagers[0], crl);
+            }
+
             try {
-                context.init(keyManagers, trustManagers, null);
+                context.init(keyManagers, tms, null);
             } catch (KeyManagementException kme) {
                 throw new EvaluatorException("Error initializing SSL context: " + kme);
             }
@@ -520,6 +562,18 @@ public class SSLWrap
         }
 
         @JSFunction
+        public void setClientAuthRequired(boolean required)
+        {
+            engine.setNeedClientAuth(required);
+        }
+
+        @JSFunction
+        public void setClientAuthRequested(boolean requested)
+        {
+            engine.setWantClientAuth(requested);
+        }
+
+        @JSFunction
         public void setCiphers(String cipherList)
         {
             HashSet<String> supportedCiphers = new HashSet<String>(Arrays.asList(engine.getSupportedCipherSuites()));
@@ -538,7 +592,7 @@ public class SSLWrap
         {
             EngineImpl self = (EngineImpl)thisObj;
             if ((self.engine == null) || (self.engine.getSession() == null)) {
-                return null;
+                return Context.getUndefinedValue();
             }
             Certificate cert;
             try {
@@ -549,7 +603,7 @@ public class SSLWrap
             }
             if ((cert == null) || (!(cert instanceof X509Certificate))) {
                 log.debug("Peer certificate is not an X.509 cert");
-                return null;
+                return Context.getUndefinedValue();
             }
             return self.makeCertificate(cx, (X509Certificate) cert);
         }
@@ -557,15 +611,67 @@ public class SSLWrap
         private Object makeCertificate(Context cx, X509Certificate cert)
         {
             if (log.isDebugEnabled()) {
-                log.debug("Returning cert " + cert.getSubjectX500Principal().getName(X500Principal.CANONICAL));
+                log.debug("Returning subject " + cert.getSubjectX500Principal());
             }
             Scriptable ret = cx.newObject(this);
-            ret.put("subject", ret, cert.getSubjectX500Principal().getName(X500Principal.CANONICAL));
-            ret.put("issuer", ret, cert.getIssuerX500Principal().getName(X500Principal.CANONICAL));
+            ret.put("subject", ret, cert.getSubjectX500Principal().getName(X500Principal.RFC2253));
+            ret.put("issuer", ret, cert.getIssuerX500Principal().getName(X500Principal.RFC2253));
             ret.put("valid_from", ret, X509_DATE.format(cert.getNotBefore()));
             ret.put("valid_to", ret, X509_DATE.format(cert.getNotAfter()));
             //ret.put("fingerprint", ret, null);
+
+            try {
+                addAltNames(cx, ret, "subjectAltNames", cert.getSubjectAlternativeNames());
+                addAltNames(cx, ret, "issuerAltNames", cert.getIssuerAlternativeNames());
+            } catch (CertificateParsingException e) {
+                log.debug("Error getting all the cert names: {}", e);
+            }
             return ret;
+        }
+
+        private void addAltNames(Context cx, Scriptable s, String type, Collection<List<?>> altNames)
+        {
+            if (altNames == null) {
+                return;
+            }
+            // Create an object that contains the alt names
+            Scriptable o = cx.newObject(this);
+            s.put(type, s, o);
+            for (List<?> an : altNames) {
+                if ((an.size() >= 2) && (an.get(0) instanceof Integer) && (an.get(1) instanceof String)) {
+                    int typeNum = (Integer)an.get(0);
+                    String typeName;
+                    switch (typeNum) {
+                    case 1:
+                        typeName = "rfc822Name";
+                        break;
+                    case 2:
+                        typeName = "dNSName";
+                        break;
+                    case 6:
+                        typeName = "uniformResourceIdentifier";
+                        break;
+                    default:
+                        return;
+                    }
+                    o.put(typeName, s, an.get(1));
+                }
+            }
+        }
+
+        @JSFunction
+        public static Object getSession(Context cx, Scriptable thisObj, Object[] args, Function func)
+        {
+            EngineImpl self = (EngineImpl)thisObj;
+            SSLSession session = self.engine.getSession();
+            Buffer.BufferImpl id = Buffer.BufferImpl.newBuffer(cx, thisObj, session.getId());
+            return id;
+        }
+
+        @JSFunction
+        public static boolean isSessionReused(Context cx, Scriptable thisObj, Object[] args, Function func)
+        {
+            return false;
         }
 
         @JSGetter("OK")
@@ -632,6 +738,51 @@ public class SSLWrap
         public X509Certificate[] getAcceptedIssuers()
         {
             return new X509Certificate[0];
+        }
+    }
+
+    private static final class CompositeTrustManager
+        implements X509TrustManager
+    {
+        private final X509TrustManager tm;
+        private final X509CRL crl;
+
+        public CompositeTrustManager(X509TrustManager tm, X509CRL crl)
+        {
+            this.tm = tm;
+            this.crl = crl;
+        }
+
+        @Override
+        public void checkClientTrusted(X509Certificate[] certs, String s)
+            throws CertificateException
+        {
+            tm.checkClientTrusted(certs, s);
+            checkCRL(certs);
+        }
+
+        @Override
+        public void checkServerTrusted(X509Certificate[] certs, String s)
+            throws CertificateException
+        {
+            tm.checkServerTrusted(certs, s);
+            checkCRL(certs);
+        }
+
+        private void checkCRL(X509Certificate[] certs)
+            throws CertificateException
+        {
+            for (X509Certificate cert : certs) {
+                if (crl.isRevoked(cert)) {
+                    throw new CertificateException("Certificate not trusted per the CRL");
+                }
+            }
+        }
+
+        @Override
+        public X509Certificate[] getAcceptedIssuers()
+        {
+            return tm.getAcceptedIssuers();
         }
     }
 }

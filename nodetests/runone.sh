@@ -13,6 +13,8 @@ td=./src/test/resources/test/tmp
 rm -rf ${td}
 mkdir ${td}
 
+ARGS=-Xmx1g
+
 if [ $1 == "-d" ]
 then
   ARGS="-Xdebug -Xrunjdwp:server=y,suspend=y,transport=dt_socket,address=localhost:14000"

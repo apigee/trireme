@@ -162,9 +162,11 @@ public class TCPWrap
 
         private void removeInterest(int i)
         {
-            selKey.interestOps(selKey.interestOps() & ~i);
-            if (log.isDebugEnabled()) {
-                log.debug("Interest now {}", selKey.interestOps());
+            if (selKey.isValid()) {
+                selKey.interestOps(selKey.interestOps() & ~i);
+                if (log.isDebugEnabled()) {
+                    log.debug("Interest now {}", selKey.interestOps());
+                }
             }
         }
         @JSFunction
@@ -628,40 +630,32 @@ public class TCPWrap
             int read;
             do {
                 try {
-                    try {
-                        read = clientChannel.read(readBuffer);
-                    } catch (ClosedChannelException cce) {
-                        log.debug("got ClosedChannelException");
-                        read = 0;
-                    }
-                    if (log.isDebugEnabled()) {
-                        log.debug("Read {} bytes from {} into {}", read, clientChannel, readBuffer);
-                    }
-                    if (read > 0) {
-                        readBuffer.flip();
-                        Buffer.BufferImpl buf = Buffer.BufferImpl.newBuffer(cx, this, readBuffer, true);
-                        readBuffer.clear();
-
-                        if (onRead != null) {
-                            onRead.call(cx, onRead, this,
-                                        new Object[] { buf, 0, read });
-                        }
-                    } else if (read < 0) {
-                        setErrno(Constants.EOF);
-                        removeInterest(SelectionKey.OP_READ);
-                        if (onRead != null) {
-                            onRead.call(cx, onRead, this,
-                                        new Object[] { null, 0, 0 });
-                        }
-                    }
+                    read = clientChannel.read(readBuffer);
                 } catch (IOException ioe) {
-                    log.debug("Error on read: {}", ioe);
-                    setErrno(Constants.EIO);
+                    if (log.isDebugEnabled()) {
+                        log.debug("Error reading from channel: {}", ioe, ioe);
+                    }
+                    read = -1;
+                }
+                if (log.isDebugEnabled()) {
+                    log.debug("Read {} bytes from {} into {}", read, clientChannel, readBuffer);
+                }
+                if (read > 0) {
+                    readBuffer.flip();
+                    Buffer.BufferImpl buf = Buffer.BufferImpl.newBuffer(cx, this, readBuffer, true);
+                    readBuffer.clear();
+
+                    if (onRead != null) {
+                        onRead.call(cx, onRead, this,
+                                    new Object[] { buf, 0, read });
+                    }
+                } else if (read < 0) {
+                    setErrno(Constants.EOF);
+                    removeInterest(SelectionKey.OP_READ);
                     if (onRead != null) {
                         onRead.call(cx, onRead, this,
                                     new Object[] { null, 0, 0 });
                     }
-                    return;
                 }
             } while (readStarted && (read > 0));
         }

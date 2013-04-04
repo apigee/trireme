@@ -35,7 +35,7 @@ var spawn = require('child_process').spawn;
 var options = {
   keystore: join(common.fixturesDir, 'agent.jks'),
   passphrase: 'secure',
-  cert: fs.readFileSync(join(common.fixturesDir, 'multi-alice.crt'))
+  truststore: join(common.fixturesDir, 'multi-alice.jks')
 };
 var verified = false;
 
@@ -48,7 +48,7 @@ server.listen(common.PORT, function() {
     rejectUnauthorized: false
   }, function() {
     var peerCert = socket.getPeerCertificate();
-    common.debug(util.inspect(peerCert));
+    common.debug(JSON.stringify(peerCert));
     assert.deepEqual(peerCert.subject.OU,
                      ['Information Technology', 'Engineering', 'Marketing']);
     verified = true;

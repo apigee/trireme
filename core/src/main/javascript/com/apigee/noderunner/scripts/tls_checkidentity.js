@@ -129,7 +129,7 @@ exports.checkServerIdentity = checkServerIdentity;
 
 function parseCertString(s) {
   var out = {};
-  var parts = s.split('\n');
+  var parts = s.split(',');
   for (var i = 0, len = parts.length; i < len; i++) {
     var sepIndex = parts[i].indexOf('=');
     if (sepIndex > 0) {

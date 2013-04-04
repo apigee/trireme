@@ -49,6 +49,11 @@ var server = tls.createServer(options, function(socket) {
     common.debug(data.toString());
     assert.equal(data, 'ok');
   });
+  socket.end();
+});
+server.on('clientError', function(err, conn) {
+  console.error('Client error found on server: ' + err);
+  conn.destroy();
 });
 server.listen(common.PORT, function() {
   unauthorized();
@@ -67,6 +72,7 @@ function unauthorized() {
     assert(false);
   });
   socket.write('ok');
+  socket.end();
 }
 
 function rejectUnauthorized() {
@@ -79,6 +85,7 @@ function rejectUnauthorized() {
     authorized();
   });
   socket.write('ng');
+  socket.end();
 }
 
 function authorized() {

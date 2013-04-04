@@ -59,7 +59,7 @@ server.listen(common.PORT, function() {
         return process.nextTick(send);
       }
       sent += bufSize;
-      common.debug('sent: ' + sent);
+      common.debug('sent now: ' + bufSize + ' total: ' + sent);
       resumed = true;
       client.resume();
       common.debug('resumed');
@@ -68,6 +68,7 @@ server.listen(common.PORT, function() {
   client.on('data', function(data) {
     assert.ok(resumed);
     received += data.length;
+    common.debug('received now ' + data.length + ' total ' + received);
     if (received >= sent) {
       common.debug('received: ' + received);
       client.end();

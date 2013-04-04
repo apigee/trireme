@@ -143,8 +143,8 @@ proxy.listen(proxyPort, function() {
 
     https.get({
       path: '/foo',
-      key: key,
-      cert: cert,
+      keystore: keystore,
+      passphrase: 'secure',
       socket: socket,  // reuse the socket
       agent: false,
       rejectUnauthorized: false

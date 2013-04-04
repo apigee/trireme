@@ -23,6 +23,35 @@ if (process.env.NODE_DEBUG && /tls/.test(process.env.NODE_DEBUG)) {
 
 var END_SENTINEL = {};
 var DEFAULT_REJECT_UNAUTHORIZED = true;
+var DEFAULT_HANDSHAKE_TIMEOUT = 60000;
+
+// Store the SSL context for a client -- re-use contexts if the key store, trust store, or
+// rejectUnauthorized flags all match
+function getContext(opts, rejectUnauthorized) {
+  var ctx;
+  if (!opts || (!opts.keystore && !opts.truststore && rejectUnauthorized)) {
+    debug('Creating default SSL context');
+    ctx = wrap.createDefaultContext();
+  } else {
+    ctx = wrap.createContext();
+    if (!rejectUnauthorized) {
+      debug('Using SSL context that trusts everyone');
+      ctx.setTrustEverybody();
+    } else if (opts.truststore) {
+      debug('Using trust store ' + opts.truststore);
+      ctx.setTrustStore(opts.truststore);
+    } else {
+      debug('Context will not trust anybody');
+    }
+    if (opts.keystore) {
+      debug('Client using key store ' + opts.keystore);
+      ctx.setKeyStore(opts.keystore, opts.passphrase);
+    }
+
+    ctx.init();
+  }
+  return ctx;
+}
 
 function Server() {
   var options, listener;
@@ -52,6 +81,11 @@ function Server() {
     debug('Server using trust store ' + options.truststore);
     self.context.setTrustStore(options.truststore);
   }
+  if (options.crl) {
+    debug('Server using CRL ' + options.crl);
+    self.context.setCRL(options.crl);
+  }
+
   self.context.init();
 
   if (options.ciphers) {
@@ -61,13 +95,29 @@ function Server() {
     }
   }
 
+  var handshakeTimeout = options.handshakeTimeout;
+  if (!handshakeTimeout) {
+    handshakeTimeout = DEFAULT_HANDSHAKE_TIMEOUT;
+  }
+
   self.netServer = net.createServer(options, function(connection) {
     var engine = self.context.createEngine(false);
+    if (options.requestCert) {
+      if (options.rejectUnauthorized) {
+        debug('Client auth required');
+        engine.setClientAuthRequired(true);
+      } else {
+        debug('Client auth requested');
+        engine.setClientAuthRequested(true);
+      }
+    }
+
     if (options.ciphers) {
       engine.setCiphers(options.ciphers);
     }
     var clearStream = new CleartextStream();
     clearStream.init(true, self, connection, engine);
+    clearStream.setHandshakeTimeout(handshakeTimeout);
   });
   return self;
 }
@@ -151,29 +201,8 @@ exports.connect = function() {
   var hostname = options.servername || options.host || 'localhost';
   options.host = hostname;
 
-  var sslContext;
-  if (!options.keystore && !options.truststore && rejectUnauthorized) {
-    debug('Client using default SSL context');
-    sslContext = wrap.createDefaultContext();
-  } else {
-    sslContext = wrap.createContext();
-    if (!options.rejectUnauthorized) {
-      debug('Client using SSL context that trusts everyone');
-      sslContext.setTrustEverybody();
-    } else if (options.truststore) {
-      debug('Client using trust store ' + options.truststore);
-      sslContext.setTrustStore(options.truststore);
-    } else {
-      debug('Client will not trust anybody');
-    }
-    if (options.keystore) {
-      debug('Client using key store ' + options.keystore);
-      sslContext.setKeyStore(options.keystore, options.passphrase);
-    }
-    sslContext.init();
-  }
+  var sslContext = getContext(options, rejectUnauthorized);
 
-  // TODO pass host and port to SSL engine init
   var engine = sslContext.createEngine(true);
   var sslConn = new CleartextStream();
   var netConn;
@@ -274,7 +303,8 @@ CleartextStream.prototype.init = function(serverMode, server, connection, engine
   connection.on('close', function() {
     debug(self.id + ' onClose');
     if (!self.closed) {
-      doClose(self);
+      self.closed = true;
+      self.emit('close', false);
     }
   });
   connection.on('timeout', function() {
@@ -283,7 +313,16 @@ CleartextStream.prototype.init = function(serverMode, server, connection, engine
   });
 };
 
+CleartextStream.prototype.setHandshakeTimeout = function(timeout) {
+  var self = this;
+  this.handshakeTimeout = setTimeout(function() {
+    debug('Handshake timeout');
+    self.server.emit('clientError', new Error('Handshake timeout'), self);
+  }, timeout);
+};
+
 function doClose(self, err) {
+  debug(self.id + ' destroy');
   self.closed = true;
   self.socket.destroy();
   self.emit('close', err ? true : false);
@@ -294,7 +333,7 @@ CleartextStream.prototype.address = function() {
 };
 
 CleartextStream.prototype._write = function(data, encoding, cb) {
-  debug(this.id + ' write(' + (data ? data.length : 0) + ')');
+  debug(this.id + ' _write(' + (data ? data.length : 0) + ')');
 
   if (!this.handshakeComplete) {
     addToWriteQueue(this, data, cb);
@@ -318,20 +357,26 @@ function writeData(self, data, offset, cb) {
   });
 }
 
-CleartextStream.prototype.end = function(data, encoding, cb) {
+CleartextStream.prototype.end = function(data, encoding) {
   debug(this.id + ' end');
-  if (data) {
-    this.write(data, encoding, cb);
-  }
+
   if (!this.handshakeComplete) {
-    addToWriteQueue(this, END_SENTINEL);
-  } else if (!this.closed && !this.ended) {
-    debug(this.id + ' Closing SSL outbound');
-    this.ended = true;
-    this.engine.closeOutbound();
-    while (!this.engine.isOutboundDone()) {
-      writeCleartext(this);
+    if (data) {
+      this.write(data, encoding);
     }
+    addToWriteQueue(this, END_SENTINEL);
+  } else {
+    if (!this.ended) {
+      this.on('finish', function() {
+        debug(this.id + ' onFinish: Closing SSL outbound');
+        this.ended = true;
+        this.engine.closeOutbound();
+        while (!this.engine.isOutboundDone()) {
+          writeCleartext(this);
+        }
+      });
+    }
+    Stream.Writable.prototype.end.call(this, data, encoding);
   }
 };
 
@@ -345,7 +390,7 @@ CleartextStream.prototype._read = function(maxLen) {
 };
 
 function pushRead(self, d) {
-  debug('Pushing ' + d.length + ' readPending = ' + self.readPending);
+  debug('Pushing ' + (d ? d.length : 0) + ' readPending = ' + self.readPending);
   if (d === END_SENTINEL) {
     if (self.onend) {
       self.onend();
@@ -371,10 +416,11 @@ function handleEnd(self) {
     if (!self.handshakeComplete) {
       self.handleSSLError('Connection closed by peer');
     } else if (self.ended) {
+      debug(self.id + ' received end from the other side after our own end');
       doClose(self);
     } else {
-      debug(self.id + ' Closing SSL inbound without a close from the client');
-      /* TODO assess if we need this.
+      debug(self.id + ' Closing SSL inbound without a close from the client', self.id);
+      /* assess if we need this.
       self.engine.closeInbound();
       while (!self.engine.isInboundDone()) {
         writeCleartext(self);
@@ -386,7 +432,10 @@ function handleEnd(self) {
   }
 }
 
-CleartextStream.prototype.setTimeout = function(timeout) {
+CleartextStream.prototype.setTimeout = function(timeout, cb) {
+  if (cb) {
+    this.once('timeout', cb);
+  }
   this.socket.setTimeout(timeout);
 }
 
@@ -399,6 +448,9 @@ CleartextStream.prototype.destroy = function() {
 
 CleartextStream.prototype.justHandshaked = function() {
   debug(this.id + ' justHandshaked');
+  if (this.handshakeTimeout) {
+    clearTimeout(this.handshakeTimeout);
+  }
   this.readable = this.writable = true;
   this.handshakeComplete = true;
   this.authorized = true;
@@ -428,6 +480,9 @@ CleartextStream.prototype.handleSSLError = function(err) {
     this.emit('error', err);
     doClose(this, true);
   } else {
+    if (this.handshakeTimeout) {
+      clearTimeout(this.handshakeTimeout);
+    }
     if (this.serverMode) {
       // On the server -- just emit and close
       this.server.emit('clientError', err, this);
@@ -451,14 +506,25 @@ function addToWriteQueue(self, item, cb) {
 
 CleartextStream.prototype.address = function() {
   return this.socket.address();
-}
+};
 
 CleartextStream.prototype.getCipher = function() {
   return this.engine.getCipher();
-}
+};
+
+CleartextStream.prototype.getSession = function() {
+  return this.engine.getSession();
+};
+
+CleartextStream.prototype.isSessionReused = function() {
+  return this.engine.isSessionReused();
+};
 
 CleartextStream.prototype.getPeerCertificate = function() {
   var cert = this.engine.getPeerCertificate();
+  if (cert === undefined) {
+    return undefined;
+  }
   if (cert.subject) {
     cert.subject = tlscheckidentity.parseCertString(cert.subject);
   }

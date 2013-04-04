@@ -30,12 +30,26 @@ NativeWritableStream.prototype._write = function(chunk, encoding, callback) {
   this.handle.write(chunk, callback);
 };
 
+NativeWritableStream.prototype.end = function(chunk, encoding) {
+  var self = this;
+  Writable.prototype.end.call(this, chunk, encoding, function() {
+    doClose(self);
+  });
+};
+
 NativeWritableStream.prototype.destroy = function() {
   if (!this._writableState.ended) {
     this.end();
   }
-  this.handle.close();
-  this.emit('close');
-};
+  doClose(this);
+}
+
+function doClose(self) {
+  if (!self.closed) {
+    self.handle.close();
+    self.emit('close');
+    self.closed = true;
+  }
+}
 
 

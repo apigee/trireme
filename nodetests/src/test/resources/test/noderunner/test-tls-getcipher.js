@@ -24,7 +24,7 @@ var assert = require('assert');
 var tls = require('tls');
 var fs = require('fs');
 //var cipher_list = ['RC4-SHA', 'AES256-SHA'];
-var cipher_list = ['SSL_RSA_WITH_RC4_128_SHA', 'TLS_RSA_WITH_AES_256_CBC_SHA'];
+var cipher_list = ['SSL_RSA_WITH_RC4_128_SHA', 'TLS_RSA_WITH_AES_128_CBC_SHA'];
 var cipher_version_pattern = /TLS|SSL/;
 var options = {
   keystore: common.fixturesDir + '/keys/agent2.jks',
@@ -53,7 +53,8 @@ server.listen(common.PORT, '127.0.0.1', function() {
   }, function() {
     var cipher = client.getCipher();
     console.log('Got a connection with cipher ' + cipher.name);
-    assert.equal(cipher.name, cipher_list[0]);
+    assert((cipher.name === cipher_list[0]) || 
+           (cipher.name === cipher_list[1]));
     assert(cipher_version_pattern.test(cipher.version));
     client.end();
     server.close();

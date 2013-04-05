@@ -262,7 +262,7 @@ Server.prototype.addContext = function(hostname, credentials) {
 
 Server.prototype.address = function() {
   return this.netServer.address();
-}
+};
 
 var counter = 0;
 
@@ -304,7 +304,9 @@ CleartextStream.prototype.init = function(serverMode, server, connection, engine
     debug(self.id + ' onClose');
     if (!self.closed) {
       self.closed = true;
-      self.emit('close', false);
+      process.nextTick(function() {
+          self.emit('close', false);
+      });
     }
   });
   connection.on('timeout', function() {
@@ -325,8 +327,20 @@ function doClose(self, err) {
   debug(self.id + ' destroy');
   self.closed = true;
   self.socket.destroy();
-  self.emit('close', err ? true : false);
+  process.nextTick(function() {
+    self.emit('close', err ? true : false);
+  });
 }
+
+CleartextStream.prototype.destroySoon = function() {
+  if (this.socket.writable)
+    this.end();
+
+  if (this.socket._writableState.finished)
+    this.destroy();
+  else
+    this.once('finish', this.destroy);
+};
 
 CleartextStream.prototype.address = function() {
   return this.socket.address();
@@ -437,14 +451,22 @@ CleartextStream.prototype.setTimeout = function(timeout, cb) {
     this.once('timeout', cb);
   }
   this.socket.setTimeout(timeout);
-}
+};
+
+CleartextStream.prototype.setNoDelay = function(noDelay) {
+  this.socket.setNoDelay(noDelay);
+};
+
+CleartextStream.prototype.setKeepAlive = function(keepAlive, ms) {
+  this.socket.setKeepAlive(keepAlive, ms);
+};
 
 CleartextStream.prototype.destroy = function() {
   if (!this.closed) {
     debug('destroy');
     doClose(this);
   }
-}
+};
 
 CleartextStream.prototype.justHandshaked = function() {
   debug(this.id + ' justHandshaked');
@@ -471,7 +493,7 @@ CleartextStream.prototype.justHandshaked = function() {
     this.emit('secureConnect');
     this.emit('connect');
   }
-}
+};
 
 CleartextStream.prototype.handleSSLError = function(err) {
   debug(this.id + ' Received an error (handshake complete = ' +
@@ -494,7 +516,7 @@ CleartextStream.prototype.handleSSLError = function(err) {
       doClose(this, true);
     }
   }
-}
+};
 
 function addToWriteQueue(self, item, cb) {
   if (!self.writeQueue) {

@@ -1716,6 +1716,7 @@ ClientRequest.prototype._deferToConnect = function(method, arguments_, cb) {
   var self = this;
   var onSocket = function() {
     if (self.socket.writable) {
+      debug('Apply ' + method + ' on ' + self.socket);
       if (method) {
         self.socket[method].apply(self.socket, arguments_);
       }

@@ -34,7 +34,7 @@ var http = require('http');
 var https = require('https');
 
 var options = {
-  keystore: common.fixturesDir + '/keys/agent1.jks'),
+  keystore: common.fixturesDir + '/keys/agent1.jks',
   passphrase: 'secure'
 };
 
@@ -58,8 +58,8 @@ server_http.listen(common.PORT, function() {
   });
   // These methods should exist on the request and get passed down to the socket
   req.setNoDelay(true);
-  req.setTimeout(1000, function() { });
-  req.setSocketKeepAlive(true, 1000);
+  req.setTimeout(10000, function() { });
+  req.setSocketKeepAlive(true, 2000);
   req.end();
 });
 
@@ -80,7 +80,9 @@ server_https.listen(common.PORT+1, function() {
   });
   // These methods should exist on the request and get passed down to the socket
   req.setNoDelay(true);
-  req.setTimeout(1000, function() { });
-  req.setSocketKeepAlive(true, 1000);
+  req.setTimeout(2000, function() { 
+    console.error('Request timeout!');
+  });
+  req.setSocketKeepAlive(true, 2000);
   req.end();
 });

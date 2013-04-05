@@ -66,10 +66,10 @@ public class NettyHttpServer
     @Override
     public void listen(String host, int port, int backlog, TLSParams tls)
     {
-        SSLEngine ssl = null;
+        SSLContext ssl = null;
         if (tls != null) {
             try {
-                ssl = makeSSLEngine(tls);
+                ssl = makeSSLContext(tls);
             } catch (NoSuchAlgorithmException e) {
                 throw new EvaluatorException(e.toString());
             } catch (KeyManagementException e) {
@@ -78,10 +78,10 @@ public class NettyHttpServer
         }
         log.debug("About to listen for HTTP on {}:{}", host, port);
         if (ssl != null) {
-            log.debug("Using SSLEngine " + ssl);
+            log.debug("Using SSLContext " + ssl);
         }
         try {
-            server = NettyFactory.get().createServer(port, host, backlog, makePipeline(ssl));
+            server = NettyFactory.get().createServer(port, host, backlog, makePipeline(tls, ssl));
             log.debug("Listening on port {}", port);
         } catch (ChannelException ce) {
             stub.onError(ce.getMessage());
@@ -89,7 +89,7 @@ public class NettyHttpServer
         }
     }
 
-    private ChannelInitializer<SocketChannel> makePipeline(final SSLEngine ssl)
+    private ChannelInitializer<SocketChannel> makePipeline(final TLSParams tls, final SSLContext ssl)
     {
         return new ChannelInitializer<SocketChannel>()
         {
@@ -101,7 +101,8 @@ public class NettyHttpServer
                                      IDLE_CONNECTION_SECONDS, IDLE_CONNECTION_SECONDS,
                                      IDLE_CONNECTION_SECONDS));
                 if (ssl != null) {
-                    c.pipeline().addLast(new SslHandler(ssl));
+                    SSLEngine engine = makeSSLEngine(tls, ssl);
+                    c.pipeline().addLast(new SslHandler(engine));
                 }
                 if (log.isTraceEnabled()) {
                     c.pipeline().addLast("loggingReq", new ByteLoggingHandler(LogLevel.DEBUG));
@@ -136,7 +137,7 @@ public class NettyHttpServer
         stub.onClose(null);
     }
 
-    private SSLEngine makeSSLEngine(TLSParams p)
+    private SSLContext makeSSLContext(TLSParams p)
         throws NoSuchAlgorithmException, KeyManagementException
     {
         SSLContext ctx = SSLContext.getInstance("TLS");
@@ -159,7 +160,11 @@ public class NettyHttpServer
         }
 
         ctx.init(kms, tms, null);
+        return ctx;
+    }
 
+    private SSLEngine makeSSLEngine(TLSParams p, SSLContext ctx)
+    {
         SSLEngine eng = ctx.createSSLEngine();
         if (p.getCiphers() != null) {
             eng.setEnabledCipherSuites(p.getCiphers().toArray(new String[p.getCiphers().size()]));

@@ -24,14 +24,16 @@ var assert = require('assert');
 var https = require('https');
 var fs = require('fs');
 
-var pfx = fs.readFileSync(common.fixturesDir + '/test_cert.pfx');
+var pfx = common.fixturesDir + '/test_certs.jks';
 
 var options = {
   host: '127.0.0.1',
   port: common.PORT,
   path: '/',
-  pfx: pfx,
-  passphrase: 'sample',
+  keystore: common.fixturesDir + '/agent.jks',
+  passphrase: 'secret',
+  truststore: pfx,
+  passphrase: 'secure',
   requestCert: true,
   rejectUnauthorized: false
 };

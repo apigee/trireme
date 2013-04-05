@@ -58,7 +58,6 @@ server.listen(common.PORT, function() {
     if (err) throw err;
     common.error(common.inspect(stdout));
     assert.equal(body, stdout);
-
     // Do the same thing now without --insecure
     // The connection should not be accepted.
     var cmd = 'curl https://127.0.0.1:' + common.PORT + '/';

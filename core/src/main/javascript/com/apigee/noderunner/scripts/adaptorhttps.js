@@ -20,7 +20,7 @@ if (HttpWrap.hasServerAdapter()) {
 
   function Server(opts, requestListener) {
     if (!(this instanceof Server)) return new Server(opts, requestListener);
-    http.Server.call(requestListener);
+    http.Server.call(this, requestListener);
     this.tlsParams = opts;
   }
   util.inherits(Server, http.Server);

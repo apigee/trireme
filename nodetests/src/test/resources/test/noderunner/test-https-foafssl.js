@@ -34,7 +34,7 @@ var exec = require('child_process').exec;
 var https = require('https');
 
 var options = {
-  keystore: common.fixturesDir + '/agent.jks'),
+  keystore: common.fixturesDir + '/agent.jks',
   passphrase: 'secure',
   requestCert: true
 };

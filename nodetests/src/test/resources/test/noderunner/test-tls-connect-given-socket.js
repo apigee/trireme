@@ -34,6 +34,7 @@ var options = {
   passphrase: 'secure'
 };
 
+console.log('Connecting with ' + JSON.stringify(options));
 var server = tls.createServer(options, function(socket) {
   console.log('Server connected');
   serverConnected = true;

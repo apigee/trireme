@@ -55,6 +55,8 @@ server.listen(common.PORT, function() {
           rejectUnauthorized: false
         }, function(res) {
           console.log(res.statusCode);
+          res.on('data', function(chunk) { console.log('data') });
+          res.on('end', function() { console.log('end'); });
           if (++responses == N * M) server.close();
         }).on('error', function(e) {
           console.log(e.message);

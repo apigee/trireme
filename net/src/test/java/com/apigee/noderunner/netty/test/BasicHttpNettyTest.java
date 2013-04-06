@@ -1,5 +1,6 @@
 package com.apigee.noderunner.netty.test;
 
+import com.apigee.noderunner.container.netty.NettyHttpContainer;
 import com.apigee.noderunner.core.NodeEnvironment;
 import com.apigee.noderunner.core.NodeException;
 import com.apigee.noderunner.core.NodeScript;
@@ -12,7 +13,7 @@ import java.util.concurrent.ExecutionException;
 
 import static org.junit.Assert.*;
 
-public class BasicHttpTest
+public class BasicHttpNettyTest
 {
     private static NodeEnvironment env;
 
@@ -20,6 +21,7 @@ public class BasicHttpTest
     public static void init()
     {
         env = new NodeEnvironment();
+        env.setHttpContainer(new NettyHttpContainer());
     }
 
     @Test

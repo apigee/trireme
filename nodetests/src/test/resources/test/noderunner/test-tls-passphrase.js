@@ -31,11 +31,12 @@ var fs = require('fs');
 var path = require('path');
 
 var keystore = path.join(common.fixturesDir, 'test.jks');
+var truststore = path.join(common.fixturesDir, 'cert.jks');
 
 var server = tls.Server({
   keystore: keystore,
   passphrase: 'secure',
-  //ca: [cert],
+  truststore: truststore,
   requestCert: true,
   rejectUnauthorized: true
 }, function(s) {
@@ -50,6 +51,7 @@ server.listen(common.PORT, function() {
     passphrase: 'secure',
     rejectUnauthorized: false
   }, function() {
+    console.log('CLient connected the first time');
     ++connectCount;
   });
   c.on('end', function() {

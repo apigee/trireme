@@ -25,8 +25,7 @@ var END_SENTINEL = {};
 var DEFAULT_REJECT_UNAUTHORIZED = true;
 var DEFAULT_HANDSHAKE_TIMEOUT = 60000;
 
-// Store the SSL context for a client -- re-use contexts if the key store, trust store, or
-// rejectUnauthorized flags all match
+// Store the SSL context for a client. We could do some caching here to speed up clients.
 function getContext(opts, rejectUnauthorized) {
   var ctx;
   if (!opts || (!opts.keystore && !opts.truststore && rejectUnauthorized)) {
@@ -349,17 +348,22 @@ CleartextStream.prototype.address = function() {
 CleartextStream.prototype._write = function(data, encoding, cb) {
   debug(this.id + ' _write(' + (data ? data.length : 0) + ')');
 
-  if (!this.handshakeComplete) {
-    addToWriteQueue(this, data, cb);
-    return;
-  }
+  if (this.handshakeComplete) {
+    writeData(this, data, 0, cb);
 
-  writeData(this, data, 0, cb);
+  } else {
+    var self = this;
+    debug('Waiting for handshake to write');
+    this.on('secureConnect', function() {
+      writeData(self, data, 0, cb);
+    });
+  }
 };
 
 function writeData(self, data, offset, cb) {
   var chunk = offset ? data.slice(offset) : data;
   writeCleartext(self, chunk, function(written) {
+    debug('Net wrote ' + written + ' bytes from ' + data.length);
     var newOffset = offset + written;
     if (newOffset < data.length) {
       writeData(self, data, newOffset, cb);
@@ -372,27 +376,33 @@ function writeData(self, data, offset, cb) {
 }
 
 CleartextStream.prototype.end = function(data, encoding) {
-  debug(this.id + ' end');
+  debug(this.id + ' end(' + (data ? data.length : 0) + ')');;
 
-  if (!this.handshakeComplete) {
-    if (data) {
-      this.write(data, encoding);
-    }
-    addToWriteQueue(this, END_SENTINEL);
+  var self = this;
+  if (this.handshakeComplete) {
+    doEnd(self, data, encoding);
+
   } else {
-    if (!this.ended) {
-      this.on('finish', function() {
-        debug(this.id + ' onFinish: Closing SSL outbound');
-        this.ended = true;
-        this.engine.closeOutbound();
-        while (!this.engine.isOutboundDone()) {
-          writeCleartext(this);
-        }
-      });
-    }
-    Stream.Writable.prototype.end.call(this, data, encoding);
+    debug('Waiting for handshake to send end');
+    this.on('secureConnect', function() {
+      doEnd(self, data, encoding);
+    });
   }
 };
+
+function doEnd(self, data, encoding) {
+  if (!self.ended) {
+    self.on('finish', function() {
+      debug(self.id + ' onFinish: Closing SSL outbound');
+      self.ended = true;
+      self.engine.closeOutbound();
+      while (!self.engine.isOutboundDone()) {
+        writeCleartext(self);
+      }
+    });
+  }
+  Stream.Writable.prototype.end.call(self, data, encoding);
+}
 
 CleartextStream.prototype._read = function(maxLen) {
   debug('_read');
@@ -419,7 +429,7 @@ function pushRead(self, d) {
     } else if (self.readPending) {
       self.readPending = self.push(d);
     } else {
-      self.readQueue.push(null);
+      self.readQueue.push(d);
     }
   }
 }
@@ -469,24 +479,13 @@ CleartextStream.prototype.destroy = function() {
 };
 
 CleartextStream.prototype.justHandshaked = function() {
-  debug(this.id + ' justHandshaked');
   if (this.handshakeTimeout) {
     clearTimeout(this.handshakeTimeout);
   }
   this.readable = this.writable = true;
   this.handshakeComplete = true;
   this.authorized = true;
-  if (this.writeQueue) {
-    var nextWrite = this.writeQueue.shift();
-    while (nextWrite) {
-      if (nextWrite.item === END_SENTINEL) {
-        this.end(nextWrite.cb);
-      } else {
-        this.write(nextWrite.item, nextWrite.cb);
-      }
-      nextWrite = this.writeQueue.shift();
-    }
-  }
+
   if (this.serverMode) {
     this.server.emit('secureConnection', this);
   } else {
@@ -517,14 +516,6 @@ CleartextStream.prototype.handleSSLError = function(err) {
     }
   }
 };
-
-function addToWriteQueue(self, item, cb) {
-  if (!self.writeQueue) {
-    self.writeQueue = [];
-  }
-  debug(self.id + ' Adding item to write queue');
-  self.writeQueue.push({ item: item, cb: cb });
-}
 
 CleartextStream.prototype.address = function() {
   return this.socket.address();
@@ -570,7 +561,9 @@ function readCiphertext(self, d, offset, end) {
   debug(self.id + ' readCiphertext(' + (data ? data.length : 0) + '): SSL status ' + sslResult.status +
         ' consumed ' + sslResult.consumed + ' produced ' + (sslResult.data ? sslResult.data.length : 0));
   if (sslResult.justHandshaked) {
-    self.justHandshaked();
+    setImmediate(function() {
+      self.justHandshaked();
+    });
   }
 
   switch (sslResult.status) {
@@ -627,12 +620,14 @@ function writeCleartext(self, data, cb) {
     self.socket.write(sslResult.data, function() {
       debug(self.id + ' Write complete');
       if (cb) {
-        cb(sslResult.data.length);
+        cb(bytesConsumed);
       }
     });
   }
   if (sslResult.justHandshaked) {
-    self.justHandshaked();
+    setImmediate(function() {
+        self.justHandshaked();
+    });
   }
 
   switch (sslResult.status) {

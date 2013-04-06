@@ -18,4 +18,8 @@
         <Name>test-postmortem-jsstack.js</Name>
         <Description>Relies on internal V8 and Node classes.</Description>
     </Excluded>
+    <Excluded>
+        <Name>test-tls-connect-memleak.js</Name>
+        <Description>Depends on V8 GC behavior</Description>
+    </Excluded>
 </ExcludedTests>

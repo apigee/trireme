@@ -47,6 +47,8 @@ public class OS
     {
         public static final String CLASS_NAME = "_osClass";
 
+        private final long startTime = System.currentTimeMillis();
+
         private RuntimeMXBean runtimeMXBean = ManagementFactory.getRuntimeMXBean();
         private Runtime runtime = Runtime.getRuntime();
 
@@ -83,7 +85,7 @@ public class OS
         public static Object getUptime(Context cx, Scriptable thisObj, Object[] args, Function func)
         {
             // This is the JRE uptime, not system uptime
-            return ManagementFactory.getRuntimeMXBean().getUptime() / 1000;
+            return Math.max(ManagementFactory.getRuntimeMXBean().getUptime() / 1000, 1);
         }
 
         @JSFunction
@@ -182,6 +184,12 @@ public class OS
             }
 
             return obj;
+        }
+
+        @JSFunction
+        public static Object getEndianness(Context cx, Scriptable thisObj, Object[] args, Function func)
+        {
+            return "BE";
         }
     }
 }

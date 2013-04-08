@@ -19,7 +19,11 @@
         <Name>test-cluster.+\.js</Name>
         <Description>cluster module support planned but not implemented.</Description>
     </Excluded>
-    
+    <Excluded>
+        <Name>test-dgram.+\.js</Name>
+        <Description>dgram module support not implemented but would be fun in theory.</Description>
+    </Excluded>
+
     <!-- NOT SUPPORTED
          These are modules and tests that we don't plan to implement in Noderunner
     -->
@@ -27,6 +31,11 @@
         <Name>test-debug.+\.js</Name>
         <Description>Debug module support requires V8 and won't be implemented.</Description>
     </Excluded>
+    <Excluded>
+        <Name>test-c-ares.js</Name>
+        <Description>This is a wrapper around some native code.</Description>
+    </Excluded>
+
     <Excluded>
         <Name>test-http-unix-socket.js</Name>
         <Reason>UNIX sockets are not supported in Noderunner or in Java.</Reason>
@@ -64,8 +73,12 @@
         <Description>Can't set utimes in Java.</Description>
     </Excluded>
     <Excluded>
-        <Name>test-fs-watch.+\.js</Name>
+        <Name>test-fs-watch.+</Name>
         <Description>Depends on native stuff.</Description>
+    </Excluded>
+    <Excluded>
+        <Name>test-umask.js</Name>
+        <Description>Can't set that in Java.</Description>
     </Excluded>
     <Excluded>
         <Name>test-net-listen-fd0.js</Name>
@@ -123,10 +136,31 @@
         <Name>test-https-pfx.js</Name>
         <Description>Depends on internal SSL errors and cert parsing code.</Description>
     </Excluded>
+    <Excluded>
+        <Name>test-tcp-wrap.+</Name>
+        <Description>Internal Node module.</Description>
+    </Excluded>
+    <Excluded>
+        <Name>test-process-wrap.js</Name>
+        <Description>Internal Node module.</Description>
+    </Excluded>
 
     <!-- MISCELLANEOUS
          Tests that just don't work in Noderunner for other good reasons
     -->
+    <Excluded>
+        <Name>test-cli-eval.js</Name>
+        <Description>Depends on different command-line params.</Description>
+    </Excluded>
+    <Excluded>
+        <Name>test-eval.js</Name>
+        <Description>Depends on different command-line params.</Description>
+    </Excluded>
+    <Excluded>
+        <Name>test-executable-path.js</Name>
+        <Description>Depends on different command-line params.</Description>
+    </Excluded>
+
     <Excluded>
         <Name>test-eval-require.js</Name>
         <Description>We don't support the same command-line params.</Description>

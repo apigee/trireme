@@ -38,6 +38,7 @@ public class Charsets
         encodings.put("ASCII", ASCII);
         // These are implemented in NodeCharsetEncoder
         encodings.put("binary", NODE_BINARY);
+        encodings.put("raw", NODE_BINARY);
         encodings.put("hex", NODE_HEX);
         encodings.put("base64", BASE64);
     }

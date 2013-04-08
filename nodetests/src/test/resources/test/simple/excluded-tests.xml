@@ -2,10 +2,30 @@
     <!-- This file contains a list of tests that, although they exist in the Node test suite, we have excluded
          them. This lets us simply copy the Node test suite to ours rather than try to maintain a file synchronization,
          but we can exclude them here. -->
+
+    <!-- NOT IMPLEMENTED YET
+         These are modules that we plan to implement but have not worked on yet other than
+         the very basics.
+    -->
     <Excluded>
-        <Name>test-regression-object-prototype.js</Name>
-        <Reason>Relies on modifying the protype of "Object," which we wish to disable in our multi-tenant
-        environment.</Reason>
+        <Name>test-crypto.+\.js</Name>
+        <Description>crypto module support planned but not implemented.</Description>
+    </Excluded>
+    <Excluded>
+        <Name>test-domain.+\.js</Name>
+        <Description>domain module support planned but not implemented.</Description>
+    </Excluded>
+    <Excluded>
+        <Name>test-cluster.+\.js</Name>
+        <Description>cluster module support planned but not implemented.</Description>
+    </Excluded>
+    
+    <!-- NOT SUPPORTED
+         These are modules and tests that we don't plan to implement in Noderunner
+    -->
+    <Excluded>
+        <Name>test-debug.+\.js</Name>
+        <Description>Debug module support requires V8 and won't be implemented.</Description>
     </Excluded>
     <Excluded>
         <Name>test-http-unix-socket.js</Name>
@@ -19,51 +39,6 @@
         <Name>test-http-client-response-domain.js</Name>
         <Description>Pipes are not supported in Noderunner or in Java.</Description>
     </Excluded>
-    <Excluded>
-        <Name>test-https-pfx.js</Name>
-        <Description>Depends on internal SSL errors and cert parsing code.</Description>
-    </Excluded>
-    <Excluded>
-        <Name>test-http-client-timeout-event.js</Name>
-        <Description>Timeouts are too short -- assumes connection is opened in 1 ms. Change second timeout
-        to 100 ms and it works fine.</Description>
-    </Excluded>
-    <Excluded>
-        <Name>test-pipe-address.js</Name>
-        <Reason>UNIX sockets are not supported in Noderunner or in Java.</Reason>
-    </Excluded>
-
-    <Excluded>
-        <Name>test-net-listen-fd0.js</Name>
-        <Description>Listening on a file descriptor is not supported in Noderunner or Java.</Description>
-    </Excluded>
-    <Excluded>
-        <Name>test-net-pingpong.js</Name>
-        <Description>Listening on a file descriptor is not supported in Noderunner or Java.</Description>
-    </Excluded>
-    <Excluded>
-        <Name>test-net-pipe-connect-errors.js</Name>
-        <Description>No pipes in NR or Java.</Description>
-    </Excluded>
-    <Excluded>
-        <Name>test-eval-require.js</Name>
-        <Description>We don't support the same command-line params.</Description>
-    </Excluded>
-    <Excluded>
-        <Name>test-buffer.js</Name>
-        <Description>Relies on internal details of Node buffer implementation, like negative "sourceStart"
-                     in copy. Copy in noderunner test dir.</Description>
-    </Excluded>
-    <Excluded>
-        <Name>test-buffer-ascii.js</Name>
-        <Description>Relies on Node's way of converting non-8-bit ASCII by stripping the high
-                     bits. Java does it differently unless we custom code it.</Description>
-    </Excluded>
-    <Excluded>
-        <Name>test-require-json.js</Name>
-        <Reason>Checks against an error message when trying to parse JSON; Rhino and v8 generate different ones</Reason>
-    </Excluded>
-
     <Excluded>
         <Name>test-fs-write-file-sync.js</Name>
         <Description>Relies too much on Unix file permissions</Description>
@@ -92,7 +67,23 @@
         <Name>test-fs-watch.+\.js</Name>
         <Description>Depends on native stuff.</Description>
     </Excluded>
+    <Excluded>
+        <Name>test-net-listen-fd0.js</Name>
+        <Description>Listening on a file descriptor is not supported in Noderunner or Java.</Description>
+    </Excluded>
+    <Excluded>
+        <Name>test-net-pingpong.js</Name>
+        <Description>Listening on a file descriptor is not supported in Noderunner or Java.</Description>
+    </Excluded>
+    <Excluded>
+        <Name>test-net-pipe-connect-errors.js</Name>
+        <Description>No pipes in NR or Java.</Description>
+    </Excluded>
 
+    <!-- DIFFERENT TESTS
+         We have different versions of these tests in the "noderunner" directory because they must
+         be different.
+    -->
     <Excluded>
         <Name>test-tls-.+\.js</Name>
         <Description>All TLS tests are run from the "noderunner" directory because they
@@ -100,9 +91,48 @@
         </Description>
     </Excluded>
     <Excluded>
+        <Name>test-buffer.js</Name>
+        <Description>Relies on internal details of Node buffer implementation, like negative "sourceStart"
+                     in copy. Copy in noderunner test dir.</Description>
+    </Excluded>
+    <Excluded>
+        <Name>test-buffer-ascii.js</Name>
+        <Description>Relies on Node's way of converting non-8-bit ASCII by stripping the high
+                     bits. Java does it differently unless we custom code it.</Description>
+    </Excluded>
+    <Excluded>
         <Name>test-https-.+\.js</Name>
         <Description>All HTTPS tests are run from the "noderunner" directory because they
                      use a different keystore format.
         </Description>
+    </Excluded>
+    <Excluded>
+        <Name>test-pipe-address.js</Name>
+        <Reason>UNIX sockets are not supported in Noderunner or in Java.</Reason>
+    </Excluded>
+    <Excluded>
+        <Name>test-http-client-timeout-event.js</Name>
+        <Description>Timeouts are too short -- assumes connection is opened in 1 ms. Change second timeout
+        to 100 ms and it works fine.</Description>
+    </Excluded>
+
+    <!-- INTERNAL TESTS
+         Tests that exercise internal, undocumented APIs in the original Node implementation.
+    -->
+    <Excluded>
+        <Name>test-https-pfx.js</Name>
+        <Description>Depends on internal SSL errors and cert parsing code.</Description>
+    </Excluded>
+
+    <!-- MISCELLANEOUS
+         Tests that just don't work in Noderunner for other good reasons
+    -->
+    <Excluded>
+        <Name>test-eval-require.js</Name>
+        <Description>We don't support the same command-line params.</Description>
+    </Excluded>
+    <Excluded>
+        <Name>test-require-json.js</Name>
+        <Reason>Checks against an error message when trying to parse JSON; Rhino and v8 generate different ones</Reason>
     </Excluded>
 </ExcludedTests>

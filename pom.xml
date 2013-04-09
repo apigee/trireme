@@ -4,7 +4,7 @@
   <groupId>com.apigee.noderunner</groupId>
   <artifactId>noderunner</artifactId>
   <name>noderunner</name>
-  <version>0.5.5</version>
+  <version>0.5.6-SNAPSHOT</version>
   
   <packaging>pom</packaging>
 
@@ -14,7 +14,7 @@
   </organization>
 
   <properties>
-    <project.version>0.5.5-SNAPSHOT</project.version>
+    <project.version>0.5.6-SNAPSHOT</project.version>
     <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
   </properties>
 

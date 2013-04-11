@@ -14,8 +14,10 @@ import com.apigee.noderunner.core.modules.Process;
 import com.apigee.noderunner.net.SelectorHandler;
 import org.mozilla.javascript.Context;
 import org.mozilla.javascript.ContextAction;
+import org.mozilla.javascript.EcmaError;
 import org.mozilla.javascript.EvaluatorException;
 import org.mozilla.javascript.Function;
+import org.mozilla.javascript.JavaScriptException;
 import org.mozilla.javascript.RhinoException;
 import org.mozilla.javascript.Scriptable;
 import org.mozilla.javascript.ScriptableObject;
@@ -276,9 +278,11 @@ public class ScriptRunner
      * This method is used specifically by process.nextTick, and stuff submitted here is subject to
      * process.maxTickCount.
      */
-    public void enqueueCallbackWithLimit(Function f, Scriptable scope, Scriptable thisObj, Object[] args)
+    public void enqueueCallbackWithLimit(Function f, Scriptable scope, Scriptable thisObj,
+                                         Scriptable domain, Object[] args)
     {
         Callback cb = new Callback(f, scope, thisObj, args);
+        cb.setDomain(domain);
         cb.setHasLimit(true);
         tickFunctions.offer(cb);
         selector.wakeup();
@@ -289,7 +293,8 @@ public class ScriptRunner
      * outside the context of the "TimerWrap" module then we need to check for synchronization, add an
      * assertion check, or synchronize the timer queue.
      */
-    public Activity createTimer(long delay, boolean repeating, long repeatInterval, ScriptTask task, Scriptable scope)
+    public Activity createTimer(long delay, boolean repeating, long repeatInterval, ScriptTask task,
+                                Scriptable scope, Scriptable domain)
     {
         Task t = new Task(task, scope);
         long timeout = System.currentTimeMillis() + delay;
@@ -299,6 +304,7 @@ public class ScriptRunner
             log.debug("Going to fire timeout {} at {}", seq, timeout);
         }
         t.setId(seq);
+        t.setDomain(domain);
         t.setTimeout(timeout);
         if (repeating) {
             t.setInterval(repeatInterval);
@@ -569,8 +575,9 @@ public class ScriptRunner
                 // This exception is thrown by process.exit()
                 return ne.getStatus();
             } catch (RhinoException re) {
+                Scriptable err = makeError(cx, re);
                 try {
-                    boolean handled = handleRhinoException(re);
+                    boolean handled = handleScriptException(cx, err, re);
                     if (!handled) {
                         return new ScriptStatus(re);
                     }
@@ -586,12 +593,72 @@ public class ScriptRunner
         return ScriptStatus.OK;
     }
 
-    private boolean handleRhinoException(RhinoException re)
+    private Scriptable makeError(Context cx, RhinoException re)
     {
-        log.debug("Handling uncaught exception {}", re);
+        if ((re instanceof JavaScriptException) &&
+            (((JavaScriptException)re).getValue() instanceof Scriptable)) {
+            return (Scriptable)((JavaScriptException)re).getValue();
+        } else if (re instanceof EcmaError) {
+            return Utils.makeErrorObject(cx, scope, ((EcmaError)re).getErrorMessage());
+        } else {
+            return Utils.makeErrorObject(cx, scope, re.getMessage());
+        }
+    }
+
+    private boolean handleScriptException(Context cx, Scriptable error, RhinoException re)
+    {
+        Scriptable domain = ArgUtils.ensureValid(process.getDomain());
+        if (domain != null) {
+            if (ScriptableObject.hasProperty(domain, "_disposed")) {
+                if (log.isDebugEnabled()) {
+                    log.debug("Handling exception and ignoring disposed domain {}", domain);
+                }
+                return true;
+            }
+            if (log.isDebugEnabled()) {
+                log.debug("Handling uncaught exception {} using domain {}", re, domain);
+            }
+
+            Function exit = (Function)ScriptableObject.getProperty(domain, "exit");
+            boolean handled = false;
+            try {
+                Function emit = (Function)ScriptableObject.getProperty(domain, "emit");
+                error.put("domain", error, domain);
+                error.put("domainThrown", error, Boolean.TRUE);
+                handled = (Boolean)emit.call(cx, emit, domain, new Object[] { "error", error });
+                if (log.isDebugEnabled()) {
+                    log.debug("  handled = {}", handled);
+                }
+
+                while (ArgUtils.ensureValid(process.getDomain()) != null) {
+                    log.debug("Popping domain stack");
+                    exit.call(cx, exit, domain, new Object[0]);
+                }
+
+            } catch (RhinoException re2) {
+                exit.call(cx, exit, domain, new Object[0]);
+                if (ArgUtils.ensureValid(process.getDomain()) != null) {
+                    handled = handleScriptException(cx, error, re2);
+                }
+            }
+
+            if (handled) {
+                return true;
+            }
+        }
+        return handleRhinoException(error, re);
+    }
+
+    private boolean handleRhinoException(Scriptable error, RhinoException re)
+    {
+        if (log.isDebugEnabled()) {
+            log.debug("Handling uncaught exception {}", re);
+        }
         boolean handled =
-            process.fireEvent("uncaughtException", re);
-        log.debug("  handled = {}", handled);
+            process.fireEvent("uncaughtException", error);
+        if (log.isDebugEnabled()) {
+            log.debug("  handled = {}", handled);
+        }
         return handled;
     }
 
@@ -848,8 +915,38 @@ public class ScriptRunner
         protected boolean repeating;
         protected boolean cancelled;
         protected boolean hasLimit;
+        protected Scriptable domain;
 
-        abstract void execute(Context cx);
+        protected abstract void executeInternal(Context cx);
+
+        void execute(Context cx)
+        {
+            if (domain != null) {
+                if (ScriptableObject.hasProperty(domain, "_disposed")) {
+                    domain = null;
+                }
+            }
+            if (domain != null) {
+                if (log.isDebugEnabled()) {
+                    log.debug("Entering domain {}", domain);
+                }
+                Function enter = (Function)ScriptableObject.getProperty(domain, "enter");
+                enter.call(cx, enter, domain, new Object[0]);
+            }
+
+            executeInternal(cx);
+
+            // Do NOT do this next bit in a try..finally block. Why not? Because the exception handling
+            // logic in runMain depends on "process.domain" still being set, and it will clean up
+            // on failure there.
+            if (domain != null) {
+                if (log.isDebugEnabled()) {
+                    log.debug("Exiting domain {}", domain);
+                }
+                Function exit = (Function)ScriptableObject.getProperty(domain, "exit");
+                exit.call(cx, exit, domain, new Object[0]);
+            }
+        }
 
         int getId() {
             return id;
@@ -899,6 +996,14 @@ public class ScriptRunner
             this.hasLimit = l;
         }
 
+        public Scriptable getDomain() {
+            return domain;
+        }
+
+        public void setDomain(Scriptable domain) {
+            this.domain = domain;
+        }
+
         @Override
         public int compareTo(Activity a)
         {
@@ -929,7 +1034,7 @@ public class ScriptRunner
         }
 
         @Override
-        void execute(Context cx)
+        protected void executeInternal(Context cx)
         {
             function.call(cx, scope, thisObj, args);
         }
@@ -948,7 +1053,7 @@ public class ScriptRunner
         }
 
         @Override
-        void execute(Context ctx)
+        protected void executeInternal(Context ctx)
         {
             task.execute(ctx, scope);
         }

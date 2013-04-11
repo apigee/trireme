@@ -254,4 +254,14 @@ public class ArgUtils
         }
         return 0;
     }
+
+    public static Scriptable ensureValid(Object obj)
+    {
+        if ((obj == null) ||
+            Scriptable.NOT_FOUND.equals(obj) ||
+            Context.getUndefinedValue().equals(obj)) {
+            return null;
+        }
+        return (Scriptable)obj;
+    }
 }

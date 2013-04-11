@@ -79,6 +79,7 @@ public class Process
         private Object mainModule;
         private boolean needImmediateCallback;
         private Function immediateCallback;
+        private Object domain;
 
         @JSConstructor
         public static Object ProcessImpl(Context cx, Object[] args, Function ctorObj, boolean inNewExpr)
@@ -396,7 +397,16 @@ public class Process
         {
             Function f = functionArg(args, 0, true);
             ProcessImpl proc = (ProcessImpl)thisObj;
-            proc.runner.enqueueCallbackWithLimit(f, f, thisObj, new Object[0]);
+            proc.runner.enqueueCallbackWithLimit(f, f, thisObj, null, new Object[0]);
+        }
+
+        @JSFunction
+        public static void _nextDomainTick(Context cx, Scriptable thisObj, Object[] args, Function func)
+        {
+            Function f = functionArg(args, 0, true);
+            ProcessImpl proc = (ProcessImpl)thisObj;
+            Scriptable domain = ensureValid(proc.domain);
+            proc.runner.enqueueCallbackWithLimit(f, f, thisObj, domain, new Object[0]);
         }
 
         @JSFunction
@@ -404,6 +414,12 @@ public class Process
         {
             ProcessImpl proc = (ProcessImpl)thisObj;
             proc.runner.executeTicks(cx);
+        }
+
+        @JSFunction
+        public static void _tickDomainCallback(Context cx, Scriptable thisObj, Object[] args, Function func)
+        {
+            _tickCallback(cx, thisObj, args, func);
         }
 
         @JSGetter("maxTickDepth")
@@ -490,6 +506,18 @@ public class Process
         {
             Scriptable features = Context.getCurrentContext().newObject(this);
             return features;
+        }
+
+        @JSGetter("domain")
+        public Object getDomain()
+        {
+            return domain;
+        }
+
+        @JSSetter("domain")
+        public void setDomain(Object d)
+        {
+            this.domain = d;
         }
     }
 

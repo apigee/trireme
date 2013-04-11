@@ -54,6 +54,7 @@ public class TimerWrap
 
         private Function              onTimeout;
         private ScriptRunner.Activity activity;
+        private Object                domain;
 
         @Override
         public String getClassName()
@@ -78,12 +79,23 @@ public class TimerWrap
             this.onTimeout = f;
         }
 
+        @JSGetter("domain")
+        public Object getDomain() {
+            return domain;
+        }
+
+        @JSSetter("domain")
+        public void setDomain(Object d) {
+            this.domain = d;
+        }
+
         @JSFunction
         public static int start(Context cx, Scriptable thisObj, Object[] args, Function func)
         {
             int timeout = intArg(args, 0);
             int interval = intArg(args, 1, 0);
             TimerImpl timer = (TimerImpl)thisObj;
+            Scriptable domain = ensureValid(timer.domain);
 
             if (log.isDebugEnabled()) {
                 log.debug("Starting timer {} in {} interval = {}",
@@ -91,9 +103,9 @@ public class TimerWrap
             }
             timer.ref();
             if (interval > 0) {
-                timer.activity = getRunner().createTimer(timeout, true, interval, timer, timer);
+                timer.activity = getRunner().createTimer(timeout, true, interval, timer, timer, domain);
             } else {
-                timer.activity = getRunner().createTimer(timeout, false, 0L, timer, timer);
+                timer.activity = getRunner().createTimer(timeout, false, 0L, timer, timer, domain);
             }
             return 0;
         }

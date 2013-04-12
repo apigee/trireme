@@ -259,21 +259,25 @@ public class NettyHttpServer
         }
 
         @Override
-        public void channelRegistered(ChannelHandlerContext ctx)
+        public void channelActive(ChannelHandlerContext ctx)
+            throws Exception
         {
             if (log.isDebugEnabled()) {
                 log.debug("New server-side connection {}", ctx.channel());
             }
             stub.onConnection();
+            ctx.fireChannelActive();
         }
 
         @Override
-        public void channelUnregistered(ChannelHandlerContext ctx)
+        public void channelInactive(ChannelHandlerContext ctx)
+            throws Exception
         {
             if (log.isDebugEnabled()) {
                 log.debug("Closed server-side connection {}", ctx.channel());
             }
             stub.onClose(curRequest);
+            ctx.fireChannelInactive();
         }
 
         @Override

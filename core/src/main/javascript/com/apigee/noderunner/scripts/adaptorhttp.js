@@ -13,6 +13,7 @@ var stream = require('stream');
 var timers = require('timers');
 var NodeHttp = require('node_http');
 var HttpWrap = process.binding('http_wrap');
+var domain = require('domain');
 var assert = require('assert');
 
 var debug;
@@ -197,12 +198,11 @@ if (HttpWrap.hasServerAdapter()) {
       self.connection.close();
       if (self.headersSent) {
         debug('Sending end of response');
-        self._adapter.sendChunk(null, null, this._trailers, true);
+        self._adapter.sendChunk(null, null, self._trailers, true);
       } else {
         // We will only get here if we are sending an empty response
-        debug('Sending one shot response');
-        self._adapter.send(this.statusCode, this.sendDate, this._savedHeaders,
-                           null, null, this._trailers, true);
+        self._adapter.send(self.statusCode, self.sendDate, self._savedHeaders,
+                           null, null, self._trailers, true);
       }
     });
   };
@@ -351,6 +351,29 @@ if (HttpWrap.hasServerAdapter()) {
     return new Server(requestListener);
   };
 
+  /**
+   * Error callback for domain.
+   */
+  function handleError(err, info) {
+    debug('Handling server error and sending to adapter');
+    if (info.outgoing.headersSent) {
+      debug('Response already sent -- closing');
+      info.destroy();
+
+    } else {
+      var msg;
+      if (typeof err === 'string') {
+        msg = err;
+      } else if ((typeof err === 'object') && (err instanceof Error)) {
+        msg = err.message;
+      } else {
+        msg = '';
+      }
+      info.send(500, true, { 'Content-Type': 'text/plain' },
+                msg, null, null, true);
+    }
+  }
+
   /*
    * Called directly by the adapter when a message arrives and all the headers have been received.
    */
@@ -403,7 +426,13 @@ if (HttpWrap.hasServerAdapter()) {
       }
     };
 
-    this.emit('request', info.incoming, info.outgoing);
+    info.domain = domain.create();
+    info.domain.on('error', function(err) {
+      handleError(err, info);
+    });
+    info.domain.run(function() {
+      self.emit('request', info.incoming, info.outgoing);
+    });
   };
 
   /*
@@ -412,7 +441,9 @@ if (HttpWrap.hasServerAdapter()) {
   function onBody(info, b) {
     debug('onBody len = ' + b.length);
     info.incoming.connection.active();
-    info.incoming._addPending(b);
+    info.domain.run(function() {
+      info.incoming._addPending(b);
+    });
   }
 
   /*
@@ -423,7 +454,9 @@ if (HttpWrap.hasServerAdapter()) {
     info.incoming.connection.active();
     var incoming = info.incoming;
     if (!incoming.upgrade) {
-      incoming._addPending(END_OF_FILE);
+      info.domain.run(function() {
+        incoming._addPending(END_OF_FILE);
+      });
     }
   }
 
@@ -431,9 +464,11 @@ if (HttpWrap.hasServerAdapter()) {
     debug('onClose outgoing.complete = ' + info.outgoing.complete);
     info.incoming.connection.close();
     if (!info.outgoing.ended) {
-      info.outgoing.ended = true;
-      info.incoming.emit('close');
-      info.outgoing.emit('close');
+      info.domain.run(function() {
+        info.outgoing.ended = true;
+        info.incoming.emit('close');
+        info.outgoing.emit('close');
+      });
     }
   }
 

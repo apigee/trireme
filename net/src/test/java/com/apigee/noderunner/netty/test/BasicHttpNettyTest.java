@@ -73,6 +73,24 @@ public class BasicHttpNettyTest
         runTest("postmanychunkshttps.js");
     }
 
+    @Test
+    public void testResponseCode()
+        throws InterruptedException, ExecutionException, NodeException
+    {
+        runTest("responsecodetest.js");
+    }
+
+    /*
+     * Verify that an HTTP server callback can throw an exception and get caught without the server going
+     * down. This test is only valid when using the HTTP adapter.
+     */
+    @Test
+    public void testCatchException()
+        throws InterruptedException, ExecutionException, NodeException
+    {
+        runTest("catchexception.js");
+    }
+
     private void runTest(String name)
         throws InterruptedException, ExecutionException, NodeException
     {

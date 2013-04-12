@@ -71,6 +71,13 @@ public class BasicHttpTest
         runTest("postmanychunkshttps.js");
     }
 
+    @Test
+    public void testResponseCode()
+        throws InterruptedException, ExecutionException, NodeException
+    {
+        runTest("responsecodetest.js");
+    }
+
     private void runTest(String name)
         throws InterruptedException, ExecutionException, NodeException
     {

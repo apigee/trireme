@@ -240,40 +240,24 @@ public class HTTPWrap
 
         private void callOnHeaders(Context cx, HttpRequestAdapter request, HttpResponseAdapter response)
         {
-            try {
-                Scriptable incoming = buildIncoming(cx, request, response);
-                onHeaders.call(cx, onHeaders, this, new Object[]{incoming});
-            } catch (Throwable t) {
-                response.destroy();
-                rethrow(t);
-            }
+            Scriptable incoming = buildIncoming(cx, request, response);
+            onHeaders.call(cx, onHeaders, this, new Object[]{incoming});
         }
 
         private void callOnComplete(Context cx, HttpRequestAdapter request, HttpResponseAdapter response)
         {
-            try {
-                Scriptable incoming = request.getAttachment();
-                onComplete.call(cx, onComplete, this,
-                                new Object[] { incoming });
-            } catch (Throwable t) {
-                response.destroy();
-                rethrow(t);
-            }
+            Scriptable incoming = request.getAttachment();
+            onComplete.call(cx, onComplete, this,
+                            new Object[] { incoming });
         }
 
         private void callOnData(Context cx, Scriptable scope,
                                 HttpRequestAdapter request, HttpResponseAdapter response,
                                 ByteBuffer requestData)
         {
-            try {
-                Scriptable incoming = request.getAttachment();
-                Buffer.BufferImpl buf = Buffer.BufferImpl.newBuffer(cx, scope, requestData, true);
-                onData.call(cx, onData, this,
-                            new Object[]{incoming, buf});
-            } catch (Throwable t) {
-                response.destroy();
-                rethrow(t);
-            }
+            Scriptable incoming = request.getAttachment();
+            Buffer.BufferImpl buf = Buffer.BufferImpl.newBuffer(cx, scope, requestData, true);
+            onData.call(cx, onData, this, new Object[]{incoming, buf});
         }
 
         @Override
@@ -548,7 +532,9 @@ public class HTTPWrap
             if (last) {
                 // Send everything in one big message
                 addTrailers(trailers, response);
-                response.setData(buf);
+                if (buf != null) {
+                    response.setData(buf);
+                }
                 future = response.send(true);
             } else {
                 future = response.send(false);

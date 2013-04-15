@@ -10,6 +10,7 @@ import org.junit.Test;
 
 import java.io.File;
 import java.util.concurrent.ExecutionException;
+import java.util.concurrent.TimeUnit;
 
 import static org.junit.Assert.*;
 
@@ -17,11 +18,14 @@ public class BasicHttpNettyTest
 {
     private static NodeEnvironment env;
 
+    private static final int TIME_LIMIT = 5;
+
     @BeforeClass
     public static void init()
     {
         env = new NodeEnvironment();
         env.setHttpContainer(new NettyHttpContainer());
+        env.setScriptTimeLimit(TIME_LIMIT, TimeUnit.SECONDS);
     }
 
     @Test
@@ -89,6 +93,13 @@ public class BasicHttpNettyTest
         throws InterruptedException, ExecutionException, NodeException
     {
         runTest("catchexception.js");
+    }
+
+    @Test
+    public void testCPULoop()
+        throws InterruptedException, ExecutionException, NodeException
+    {
+        runTest("cpulooptest.js");
     }
 
     private void runTest(String name)

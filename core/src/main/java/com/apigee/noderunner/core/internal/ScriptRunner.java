@@ -9,6 +9,7 @@ import com.apigee.noderunner.core.Sandbox;
 import com.apigee.noderunner.core.ScriptStatus;
 import com.apigee.noderunner.core.ScriptTask;
 import com.apigee.noderunner.core.modules.Buffer;
+import com.apigee.noderunner.core.modules.Filesystem;
 import com.apigee.noderunner.core.modules.NativeModule;
 import com.apigee.noderunner.core.modules.Process;
 import com.apigee.noderunner.net.SelectorHandler;
@@ -370,8 +371,14 @@ public class ScriptRunner
         openHandles.remove(c);
     }
 
-    private void closeCloseables()
+    /**
+     * Clean up all the leaked handles and file descriptors.
+     */
+    private void closeCloseables(Context cx)
     {
+        Filesystem.FSImpl fs = (Filesystem.FSImpl)requireInternal("fs", cx);
+        fs.cleanup();
+
         for (Closeable c: openHandles.values()) {
             if (log.isDebugEnabled()) {
                 log.debug("Closing leaked handle {}", c);
@@ -470,7 +477,7 @@ public class ScriptRunner
             }
         }
 
-        closeCloseables();
+        closeCloseables(cx);
 
         return status;
     }

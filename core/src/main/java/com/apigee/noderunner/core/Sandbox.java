@@ -87,8 +87,9 @@ public class Sandbox
      * Set the stream that scripts should use for standard error output. By default, System.err will be used.
      * If this method is used to set the stream to non-null, then the corresponding stream will be used instead.
      */
-    public void setStderr(OutputStream s) {
+    public Sandbox setStderr(OutputStream s) {
         this.stderr = s;
+        return this;
     }
 
     public OutputStream getStderr() {

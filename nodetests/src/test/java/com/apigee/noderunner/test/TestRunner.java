@@ -40,9 +40,6 @@ public class TestRunner
             try {
                 exec = script.execute();
                 ScriptStatus status = exec.get(TEST_TIMEOUT_SECS, TimeUnit.SECONDS);
-                if (status == ScriptStatus.TIMEOUT) {
-                    throw new TimeoutException();
-                }
                 exitCode = status.getExitCode();
                 if (status.hasCause()) {
                     Throwable cause = status.getCause();

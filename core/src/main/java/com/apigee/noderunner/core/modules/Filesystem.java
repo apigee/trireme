@@ -75,6 +75,22 @@ public class Filesystem
             this.pool = fsPool;
         }
 
+        public void cleanup()
+        {
+            for (FileHandle handle : descriptors.values()) {
+                if (log.isDebugEnabled()) {
+                    log.debug("Closing leaked file descriptor " + handle);
+                }
+                if (handle.file != null) {
+                    try {
+                        handle.file.close();
+                    } catch (IOException ignore) {
+                    }
+                }
+            }
+            descriptors.clear();
+        }
+
         private Object runAction(final Function callback, final AsyncAction action)
         {
             if (callback == null) {

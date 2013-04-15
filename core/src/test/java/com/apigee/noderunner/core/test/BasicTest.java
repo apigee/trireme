@@ -12,6 +12,7 @@ import com.apigee.noderunner.core.SubprocessPolicy;
 import com.apigee.noderunner.core.internal.Utils;
 import org.junit.Before;
 import org.junit.Test;
+import org.mozilla.javascript.JavaScriptException;
 
 import static org.junit.Assert.*;
 
@@ -184,8 +185,12 @@ public class BasicTest
         NodeScript script = rootEnv.createScript("endlesscpu.js",
                                              new File("./target/test-classes/tests/endlesscpu.js"),
                                              null);
-        ScriptStatus stat = script.execute().get();
-        assertTrue(stat.isTimeout());
+        try {
+            script.execute().get();
+            assertFalse("Expected a time out exception", true);
+        } catch (ExecutionException ee) {
+            assertTrue("Expected a JavaScriptException", ee.getCause() instanceof JavaScriptException);
+        }
     }
 
     @Test

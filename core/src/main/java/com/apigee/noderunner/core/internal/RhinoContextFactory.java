@@ -4,6 +4,7 @@ import com.apigee.noderunner.core.NodeEnvironment;
 import org.mozilla.javascript.ClassShutter;
 import org.mozilla.javascript.Context;
 import org.mozilla.javascript.ContextFactory;
+import org.mozilla.javascript.JavaScriptException;
 
 import java.util.HashSet;
 
@@ -43,7 +44,7 @@ public class RhinoContextFactory
         }
 
         if (System.currentTimeMillis() > (Long)timeoutObj) {
-            throw new NodeExitException(NodeExitException.Reason.TIMEOUT);
+            throw new JavaScriptException("Script timed out");
         }
     }
 

@@ -152,6 +152,13 @@ public class Utils
         return cx.newObject(scope, "Error", new Object[] { message });
     }
 
+    public static Scriptable makeErrorObject(Context cx, Scriptable scope, String message, RhinoException re)
+    {
+        Scriptable e = cx.newObject(scope, "Error", new Object[] { message });
+        e.put("stack", e, re.getScriptStackTrace());
+        return e;
+    }
+
     public static RhinoException makeError(Context cx, Scriptable scope, String message)
     {
         return new JavaScriptException(makeErrorObject(cx, scope, message));

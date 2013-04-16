@@ -606,9 +606,9 @@ public class ScriptRunner
             (((JavaScriptException)re).getValue() instanceof Scriptable)) {
             return (Scriptable)((JavaScriptException)re).getValue();
         } else if (re instanceof EcmaError) {
-            return Utils.makeErrorObject(cx, scope, ((EcmaError)re).getErrorMessage());
+            return Utils.makeErrorObject(cx, scope, ((EcmaError)re).getErrorMessage(), re);
         } else {
-            return Utils.makeErrorObject(cx, scope, re.getMessage());
+            return Utils.makeErrorObject(cx, scope, re.getMessage(), re);
         }
     }
 
@@ -624,6 +624,7 @@ public class ScriptRunner
             }
             if (log.isDebugEnabled()) {
                 log.debug("Handling uncaught exception {} using domain {}", re, domain);
+                log.debug("  " + re.getScriptStackTrace());
             }
 
             Function exit = (Function)ScriptableObject.getProperty(domain, "exit");

@@ -99,6 +99,13 @@ if (HttpWrap.hasServerAdapter()) {
     this.emit('close');
   };
 
+  /*
+   * This object represents the "http.ServerResponse" object from Node with code that wraps our
+   * adapter. Frameworks like Express like to add to this object, take things away, and even
+   * add and remove functions from the prototype. So for that reason we do NOT add any functions
+   * to this object's prototype that are not documented in the Node docs.
+   */
+
   function ServerResponse(adapter, conn) {
     if (!(this instanceof ServerResponse)) return new ServerResponse();
     stream.Writable.call(this, {decodeStrings: true});
@@ -277,6 +284,11 @@ if (HttpWrap.hasServerAdapter()) {
   ServerResponse.prototype.removeHeader = NodeHttp.OutgoingMessage.prototype.removeHeader;
   ServerResponse.prototype._renderHeaders = NodeHttp.OutgoingMessage.prototype._renderHeaders;
 
+  /*
+   * Like ServerResponse, frameworks like to mess with the prototype to this object, so add no
+   * functions there unless they are publicly-documented in the Node docs.
+   */
+
   function ServerRequest(adapter, conn) {
     if (!(this instanceof ServerRequest)) return new ServerRequest(adapter);
     NodeHttp.IncomingMessage.call(this);
@@ -293,13 +305,13 @@ if (HttpWrap.hasServerAdapter()) {
 
   util.inherits(ServerRequest, NodeHttp.IncomingMessage);
 
-  ServerRequest.prototype._addPending = function(chunk) {
-    this.connection.active();
-    if (this._readPending && !this._pendings.length) {
-      this._readPending = pushChunk(this, chunk);
+  function addPending(self, chunk) {
+    self.connection.active();
+    if (self._readPending && !self._pendings.length) {
+      self._readPending = pushChunk(self, chunk);
     } else {
       debug('Adding ' + chunk.length + ' bytes to the push queue');
-      this._pendings.push(chunk);
+      self._pendings.push(chunk);
     }
   };
 
@@ -356,6 +368,10 @@ if (HttpWrap.hasServerAdapter()) {
    */
   function handleError(err, info) {
     debug('Handling server error and sending to adapter');
+    if (err.stack) {
+      debug(err.message);
+      debug(err.stack);
+    }
     if (info.outgoing.headersSent) {
       debug('Response already sent -- closing');
       info.destroy();
@@ -439,10 +455,9 @@ if (HttpWrap.hasServerAdapter()) {
    * This is called directly by the adapter when data is received for the message body.
    */
   function onBody(info, b) {
-    debug('onBody len = ' + b.length);
     info.incoming.connection.active();
     info.domain.run(function() {
-      info.incoming._addPending(b);
+      addPending(info.incoming, b);
     });
   }
 
@@ -450,18 +465,17 @@ if (HttpWrap.hasServerAdapter()) {
    * This is called directly by the adapter when the complete message has been received.
    */
   function onMessageComplete(info) {
-    debug('onMessageComplete');
     info.incoming.connection.active();
     var incoming = info.incoming;
     if (!incoming.upgrade) {
       info.domain.run(function() {
-        incoming._addPending(END_OF_FILE);
+        addPending(incoming, END_OF_FILE);
       });
     }
   }
 
   function onClose(info) {
-    debug('onClose outgoing.complete = ' + info.outgoing.complete);
+    debug('onClose');
     info.incoming.connection.close();
     if (!info.outgoing.ended) {
       info.domain.run(function() {

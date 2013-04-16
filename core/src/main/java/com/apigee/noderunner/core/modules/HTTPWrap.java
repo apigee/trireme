@@ -241,12 +241,18 @@ public class HTTPWrap
         private void callOnHeaders(Context cx, HttpRequestAdapter request, HttpResponseAdapter response)
         {
             Scriptable incoming = buildIncoming(cx, request, response);
+            if (log.isDebugEnabled()) {
+                log.debug("Calling onHeaders with {}", incoming);
+            }
             onHeaders.call(cx, onHeaders, this, new Object[]{incoming});
         }
 
         private void callOnComplete(Context cx, HttpRequestAdapter request, HttpResponseAdapter response)
         {
             Scriptable incoming = request.getAttachment();
+            if (log.isDebugEnabled()) {
+                log.debug("Calling onComplete with {}", incoming);
+            }
             onComplete.call(cx, onComplete, this,
                             new Object[] { incoming });
         }
@@ -256,6 +262,9 @@ public class HTTPWrap
                                 ByteBuffer requestData)
         {
             Scriptable incoming = request.getAttachment();
+            if (log.isDebugEnabled()) {
+                log.debug("Calling onData with {}", incoming);
+            }
             Buffer.BufferImpl buf = Buffer.BufferImpl.newBuffer(cx, scope, requestData, true);
             onData.call(cx, onData, this, new Object[]{incoming, buf});
         }
@@ -627,7 +636,8 @@ public class HTTPWrap
                                                                          AdapterRequest.this, null);
                             } else {
                                 if (!success) {
-                                    err = Utils.makeErrorObject(cx, AdapterRequest.this, cause.toString());
+                                    err = Utils.makeErrorObject(cx, AdapterRequest.this,
+                                                                (cause == null) ? null : cause.toString());
                                 }
                                 AdapterRequest.this.onWriteComplete.call(cx, AdapterRequest.this.onWriteComplete,
                                                                      AdapterRequest.this,

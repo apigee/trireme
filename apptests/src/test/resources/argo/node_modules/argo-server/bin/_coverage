@@ -1,0 +1,7 @@
+#!/bin/sh
+
+rm -rf ../argo-jscoverage/
+jscoverage --exclude=example --exclude=node_modules ./ ../argo-jscoverage
+cd ../argo-jscoverage/
+mocha --reporter html-cov > coverage.html
+open coverage.html

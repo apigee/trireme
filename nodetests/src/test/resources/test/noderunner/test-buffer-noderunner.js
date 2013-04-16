@@ -712,9 +712,11 @@ assert.strictEqual('Unknown encoding: invalid', caught_error.message);
 
 
 // This should not segfault the program.
+/* Not sure that I care -- NODERUNNER Gjb
 assert.throws(function() {
   new Buffer('"pong"', 0, 6, 8031, '127.0.0.1');
 });
+*/
 
 // #1210 Test UTF-8 string includes null character
 var buf = new Buffer('\0');

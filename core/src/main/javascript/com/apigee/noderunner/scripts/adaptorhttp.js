@@ -364,7 +364,8 @@ if (HttpWrap.hasServerAdapter()) {
   };
 
   /**
-   * Error callback for domain.
+   * Error callback for domain. This gets invoked if the user's code throws an exception while processing
+   * a request.
    */
   function handleError(err, info) {
     debug('Handling server error and sending to adapter');
@@ -382,6 +383,9 @@ if (HttpWrap.hasServerAdapter()) {
         msg = err;
       } else if ((typeof err === 'object') && (err instanceof Error)) {
         msg = err.message;
+        if (err.stack) {
+          msg += '\n' + err.stack;
+        }
       } else {
         msg = '';
       }

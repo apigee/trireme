@@ -19,10 +19,6 @@
         <Name>test-cluster.+\.js</Name>
         <Description>cluster module support planned but not implemented.</Description>
     </Excluded>
-    <Excluded>
-        <Name>test-dgram.+\.js</Name>
-        <Description>dgram module support not implemented but would be fun in theory.</Description>
-    </Excluded>
 
     <!-- NOT SUPPORTED
          These are modules and tests that we don't plan to implement in Noderunner
@@ -34,6 +30,13 @@
     <Excluded>
         <Name>test-c-ares.js</Name>
         <Description>This is a wrapper around some native code.</Description>
+    </Excluded>
+
+    <Excluded>
+        <Name>test-dgram-multicast-multi-process.js</Name>
+    </Excluded>
+    <Excluded>
+        <Name>test-dgram-multicast-setTTL.js</Name>
     </Excluded>
 
     <Excluded>

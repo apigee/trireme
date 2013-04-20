@@ -136,13 +136,18 @@ public class Buffer
 
         public static BufferImpl newBuffer(Context cx, Scriptable scope, byte[] bb)
         {
+            return newBuffer(cx, scope, bb, 0, bb.length);
+        }
+
+        public static BufferImpl newBuffer(Context cx, Scriptable scope, byte[] bb, int offset, int length)
+        {
             BufferImpl buf = (BufferImpl)cx.newObject(scope, CLASS_NAME);
             if (bb == null) {
                 return buf;
             }
             buf.buf = bb;
-            buf.bufOffset = 0;
-            buf.bufLength = buf.buf.length;
+            buf.bufOffset = offset;
+            buf.bufLength = length;
             return buf;
         }
 

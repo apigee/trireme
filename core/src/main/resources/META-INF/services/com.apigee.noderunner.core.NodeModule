@@ -20,4 +20,5 @@ com.apigee.noderunner.core.modules.Stream
 com.apigee.noderunner.core.modules.TCPWrap
 com.apigee.noderunner.core.modules.TimerWrap
 com.apigee.noderunner.core.modules.Tty
+com.apigee.noderunner.core.modules.UDPWrap
 com.apigee.noderunner.core.modules.ZLib

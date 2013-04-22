@@ -178,9 +178,14 @@ public class Utils
 
     public static RhinoException makeError(Context cx, Scriptable scope, NodeOSException e)
     {
+        return new JavaScriptException(makeErrorObject(cx, scope, e));
+    }
+
+    public static Scriptable makeErrorObject(Context cx, Scriptable scope, NodeOSException e)
+    {
         Scriptable err = cx.newObject(scope, "Error", new Object[] { e.getMessage() });
         err.put("code", err, e.getCode());
-        return new JavaScriptException(err);
+        return err;
     }
 
     public static RhinoException makeRangeError(Context cx, Scriptable scope, String message)

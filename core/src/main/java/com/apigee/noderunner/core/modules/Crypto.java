@@ -13,7 +13,10 @@ import org.mozilla.javascript.Undefined;
 import org.mozilla.javascript.annotations.JSConstructor;
 import org.mozilla.javascript.annotations.JSFunction;
 
+import javax.crypto.Mac;
+import javax.crypto.spec.SecretKeySpec;
 import java.lang.reflect.InvocationTargetException;
+import java.security.InvalidKeyException;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.security.SecureRandom;
@@ -67,6 +70,7 @@ public class Crypto
         pseudoRandomBytes.setParentScope(export);
 
         ScriptableObject.defineClass(export, HashImpl.class, false, true);
+        ScriptableObject.defineClass(export, MacImpl.class, false, true);
 
         return export;
     }
@@ -176,7 +180,6 @@ public class Crypto
         }
         public static final Set<String> SUPPORTED_ALGORITHMS = MD_ALGORITHMS.keySet();
 
-        private String algorithm;
         private MessageDigest messageDigest;
 
         @Override
@@ -194,11 +197,11 @@ public class Crypto
             } else {
                 ret = (HashImpl) cx.newObject(ctorObj, CLASS_NAME);
             }
-            initializeHash(ret, cx, args, ctorObj);
+            ret.initializeHash(cx, args, ctorObj);
             return ret;
         }
 
-        public static void initializeHash(HashImpl hash, Context cx, Object[] args, Function ctorObj)
+        private void initializeHash(Context cx, Object[] args, Function ctorObj)
         {
             String nodeAlgorithm = stringArg(args, 0);
 
@@ -208,12 +211,10 @@ public class Crypto
             }
 
             try {
-                hash.messageDigest = MessageDigest.getInstance(jceAlgorithm);
+                messageDigest = MessageDigest.getInstance(jceAlgorithm);
             } catch (NoSuchAlgorithmException e) {
                 throw Utils.makeError(cx, ctorObj, "Digest method not supported");
             }
-
-            hash.algorithm = nodeAlgorithm;
         }
 
         @JSFunction
@@ -235,4 +236,72 @@ public class Crypto
 
     }
 
+    public static class MacImpl
+        extends ScriptableObject
+    {
+        public static final String CLASS_NAME = "Hmac";
+
+        public static final HashMap<String, String> MAC_ALGORITHMS = new HashMap<String, String>();
+        static {
+            MAC_ALGORITHMS.put("md5", "HmacMD5");
+            MAC_ALGORITHMS.put("sha1", "HmacSHA1");
+            MAC_ALGORITHMS.put("sha256", "HmacSHA256");
+            MAC_ALGORITHMS.put("sha384", "HmacSHA384");
+            MAC_ALGORITHMS.put("sha512", "HmacSHA512");
+        }
+
+        private Mac digest;
+
+        @Override
+        public String getClassName()
+        {
+            return CLASS_NAME;
+        }
+
+        @JSFunction
+        public static void init(Context cx, Scriptable thisObj, Object[] args, Function func)
+        {
+            String nodeAlgorithm = stringArg(args, 0);
+            Buffer.BufferImpl buf = objArg(args, 1, Buffer.BufferImpl.class, true);
+            MacImpl self = (MacImpl)thisObj;
+
+            String jceAlgorithm = MAC_ALGORITHMS.get(nodeAlgorithm);
+            if (jceAlgorithm == null) {
+                jceAlgorithm = nodeAlgorithm;
+            }
+
+            try {
+                self.digest = Mac.getInstance(jceAlgorithm);
+            } catch (NoSuchAlgorithmException e) {
+                throw Utils.makeError(cx, thisObj, "Digest method not supported: \"" + jceAlgorithm + '\"');
+            }
+
+            if ((buf != null) && (buf.getLength() > 0)) {
+                SecretKeySpec key = new SecretKeySpec(buf.getArray(), buf.getArrayOffset(),
+                                                      buf.getLength(), jceAlgorithm);
+                try {
+                    self.digest.init(key);
+                } catch (InvalidKeyException e) {
+                    throw Utils.makeError(cx, thisObj, "Error initializing key: " + e);
+                }
+            }
+        }
+
+        @JSFunction
+        public static void update(Context cx, Scriptable thisObj, Object[] args, Function func)
+        {
+            MacImpl thisClass = (MacImpl) thisObj;
+            Buffer.BufferImpl buf = objArg(args, 0, Buffer.BufferImpl.class, true);
+
+            thisClass.digest.update(buf.getArray(), buf.getArrayOffset(), buf.getLength());
+        }
+
+        @JSFunction
+        public static Object digest(Context cx, Scriptable thisObj, Object[] args, Function func)
+        {
+            MacImpl thisClass = (MacImpl) thisObj;
+            byte[] digest = thisClass.digest.doFinal();
+            return Buffer.BufferImpl.newBuffer(cx, thisObj, digest);
+        }
+    }
 }

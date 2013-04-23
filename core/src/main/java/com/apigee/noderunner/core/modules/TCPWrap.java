@@ -4,6 +4,7 @@ import com.apigee.noderunner.core.NetworkPolicy;
 import com.apigee.noderunner.core.NodeRuntime;
 import com.apigee.noderunner.core.internal.Charsets;
 import com.apigee.noderunner.core.internal.InternalNodeModule;
+import com.apigee.noderunner.core.internal.ScriptRunner;
 import com.apigee.noderunner.net.SelectorHandler;
 import com.apigee.noderunner.net.NetUtils;
 import org.mozilla.javascript.Context;
@@ -182,23 +183,24 @@ public class TCPWrap
         {
             super.close();
             try {
+                ScriptRunner runner = getRunner();
                 if (clientChannel != null) {
                     if (log.isDebugEnabled()) {
                         log.debug("Closing client channel {}", clientChannel);
                     }
                     clientChannel.close();
-                    getRunner().unregisterCloseable(clientChannel);
+                    runner.unregisterCloseable(clientChannel);
                 }
                 if (svrChannel != null) {
                     if (log.isDebugEnabled()) {
                         log.debug("Closing server channel {}", svrChannel);
                     }
                     svrChannel.close();
-                    getRunner().unregisterCloseable(svrChannel);
+                    runner.unregisterCloseable(svrChannel);
                 }
 
                 if (callback != null) {
-                    getRunner().enqueueCallback(callback, this, null, new Object[] {});
+                    runner.enqueueCallback(callback, this, null, runner.getDomain(), new Object[] {});
                 }
             } catch (IOException ioe) {
                 log.debug("Uncaught exception in channel close: {}", ioe);

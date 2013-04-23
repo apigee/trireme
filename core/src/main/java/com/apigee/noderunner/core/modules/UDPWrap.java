@@ -24,7 +24,6 @@ import java.lang.reflect.InvocationTargetException;
 import java.net.BindException;
 import java.net.DatagramPacket;
 import java.net.DatagramSocket;
-import java.net.DatagramSocketImpl;
 import java.net.InetSocketAddress;
 import java.net.SocketException;
 import java.util.ArrayDeque;
@@ -175,6 +174,7 @@ public class UDPWrap
 
             final DatagramPacket packet = new DatagramPacket(qw.buf, qw.offset, qw.length,
                                                              address.getAddress(), port);
+            final Scriptable domain = self.runner.getDomain();
 
             self.runner.getAsyncPool().execute(new Runnable()
             {
@@ -189,7 +189,7 @@ public class UDPWrap
 
                         if (qw.onComplete != null) {
                             self.runner.enqueueCallback(qw.onComplete,
-                                                        self, null,
+                                                        self, null, domain,
                                                         new Object[] { 0, self, qw, buf });
                         }
 
@@ -199,7 +199,7 @@ public class UDPWrap
                         }
                         if (qw.onComplete != null) {
                             self.runner.enqueueCallback(qw.onComplete,
-                                                        self, null,
+                                                        self, null, domain,
                                                         new Object[] { Constants.EIO, self, qw, buf });
                         }
                     }
@@ -220,6 +220,7 @@ public class UDPWrap
         {
             ref();
             final UDPImpl self = this;
+            final Scriptable domain = runner.getDomain();
             clearErrno();
             if (readThread == null) {
                 readThread = new Thread(new Runnable() {
@@ -255,7 +256,7 @@ public class UDPWrap
                                                                new Object[] { self, buf, 0, packet.getLength(), rinfo });
                                             }
                                         }
-                                    });
+                                    }, domain);
                                 }
                             }
                         } catch (IOException ioe) {

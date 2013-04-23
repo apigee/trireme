@@ -113,6 +113,7 @@ public class Filesystem
             }
 
             final Filesystem.FSImpl self = this;
+            final Scriptable domain = runner.getDomain();
             runner.pin();
             pool.execute(new Runnable()
             {
@@ -130,12 +131,12 @@ public class Filesystem
                         if (log.isDebugEnabled()) {
                             log.debug("Calling {} with {}", ((BaseFunction)callback).getFunctionName(), args);
                         }
-                        runner.enqueueCallback(callback, callback, null, args);
+                        runner.enqueueCallback(callback, callback, null, domain, args);
                     } catch (NodeOSException e) {
                         if (log.isDebugEnabled()) {
                             log.debug("Async action {} failed: {}: {}", action, e.getCode(), e);
                         }
-                        runner.enqueueCallback(callback, callback, null,
+                        runner.enqueueCallback(callback, callback, null, domain,
                                                action.mapException(cx, self, e));
                     } finally {
                         runner.unPin();

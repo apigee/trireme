@@ -80,6 +80,7 @@ public class Process
         private boolean needImmediateCallback;
         private Function immediateCallback;
         private Object domain;
+        private boolean exiting;
 
         @JSConstructor
         public static Object ProcessImpl(Context cx, Object[] args, Function ctorObj, boolean inNewExpr)
@@ -518,6 +519,18 @@ public class Process
         public void setDomain(Object d)
         {
             this.domain = d;
+        }
+
+        @JSGetter("_exiting")
+        public boolean isExiting()
+        {
+            return exiting;
+        }
+
+        @JSSetter("_exiting")
+        public void setExiting(boolean e)
+        {
+            this.exiting = e;
         }
     }
 

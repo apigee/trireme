@@ -624,6 +624,7 @@ public class HTTPWrap
                     if (log.isDebugEnabled()) {
                         log.debug("Write complete: success = {} closed = {} cause = {}", success, closed, cause);
                     }
+                    Scriptable domain = runner.getDomain();
                     runner.enqueueTask(new ScriptTask()
                     {
                         @Override
@@ -644,7 +645,7 @@ public class HTTPWrap
                                                                      new Object[] { err });
                             }
                         }
-                    });
+                    }, domain);
                 }
             });
         }

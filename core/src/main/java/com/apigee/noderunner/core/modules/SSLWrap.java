@@ -469,8 +469,9 @@ public class SSLWrap
         public void runTask(final Function callback)
         {
             final Runnable task = engine.getDelegatedTask();
+            final Scriptable domain = runner.getDomain();
             if (task == null) {
-                fireFunction(callback);
+                fireFunction(callback, domain);
             } else {
                 runner.getAsyncPool().execute(new Runnable()
                 {
@@ -481,7 +482,7 @@ public class SSLWrap
                             log.debug("Running async task {} in thread pool", task);
                         }
                         task.run();
-                        fireFunction(callback);
+                        fireFunction(callback, domain);
                     }
                 });
             }
@@ -525,9 +526,9 @@ public class SSLWrap
             return engine.isInboundDone();
         }
 
-        private void fireFunction(Function callback)
+        private void fireFunction(Function callback, Scriptable domain)
         {
-            runner.enqueueCallback(callback, this, this, null);
+            runner.enqueueCallback(callback, this, this, domain, null);
         }
 
         @JSFunction

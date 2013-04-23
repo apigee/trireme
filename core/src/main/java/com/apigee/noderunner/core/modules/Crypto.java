@@ -138,7 +138,7 @@ public class Crypto
 
             if (callback != null) {
                 // TODO: what exception can be returned here?
-                thisClass.runtime.enqueueCallback(callback, callback, thisObj,
+                thisClass.runtime.enqueueCallback(callback, callback, thisObj, thisClass.runtime.getDomain(),
                         new Object[] { null, randomBytesBuffer });
                 return Undefined.instance;
             } else {

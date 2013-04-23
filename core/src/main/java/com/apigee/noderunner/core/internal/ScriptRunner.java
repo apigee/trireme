@@ -86,6 +86,7 @@ public class ScriptRunner
     private Buffer.BufferModuleImpl buffer;
     private Scriptable          mainModule;
     private Object              console;
+    private Scriptable          fatalHandler;
 
     private ScriptableObject    scope;
 
@@ -261,7 +262,18 @@ public class ScriptRunner
     @Override
     public void enqueueCallback(Function f, Scriptable scope, Scriptable thisObj, Object[] args)
     {
-        tickFunctions.offer(new Callback(f, scope, thisObj, args));
+       enqueueCallback(f, scope, thisObj, null, args);
+    }
+
+    /**
+     * This method uses a concurrent queue so it may be called from any thread.
+     */
+    @Override
+    public void enqueueCallback(Function f, Scriptable scope, Scriptable thisObj, Scriptable domain, Object[] args)
+    {
+        Callback cb = new Callback(f, scope, thisObj, args);
+        cb.setDomain(domain);
+        tickFunctions.offer(cb);
         selector.wakeup();
     }
 
@@ -271,7 +283,18 @@ public class ScriptRunner
     @Override
     public void enqueueTask(ScriptTask task)
     {
-        tickFunctions.offer(new Task(task, scope));
+        enqueueTask(task, null);
+    }
+
+    /**
+     * This method uses a concurrent queue so it may be called from any thread.
+     */
+    @Override
+    public void enqueueTask(ScriptTask task, Scriptable domain)
+    {
+        Task t = new Task(task, scope);
+        t.setDomain(domain);
+        tickFunctions.offer(t);
         selector.wakeup();
     }
 
@@ -287,6 +310,11 @@ public class ScriptRunner
         cb.setHasLimit(true);
         tickFunctions.offer(cb);
         selector.wakeup();
+    }
+
+    public Scriptable getDomain()
+    {
+        return ArgUtils.ensureValid(process.getDomain());
     }
 
     /**
@@ -463,9 +491,10 @@ public class ScriptRunner
         }
 
         log.debug("Script exiting with exit code {}", status.getExitCode());
-        if (!status.hasCause()) {
+        if (!status.hasCause() && !process.isExiting()) {
             // Fire the exit callback, but only if we aren't exiting due to an unhandled exception.
             try {
+                process.setExiting(true);
                 process.fireEvent("exit", status.getExitCode());
             } catch (NodeExitException ee) {
                 // Exit called exit -- allow it to replace the exit code
@@ -614,58 +643,16 @@ public class ScriptRunner
 
     private boolean handleScriptException(Context cx, Scriptable error, RhinoException re)
     {
-        Scriptable domain = ArgUtils.ensureValid(process.getDomain());
-        if (domain != null) {
-            if (ScriptableObject.hasProperty(domain, "_disposed")) {
-                if (log.isDebugEnabled()) {
-                    log.debug("Handling exception and ignoring disposed domain {}", domain);
-                }
-                return true;
-            }
-            if (log.isDebugEnabled()) {
-                log.debug("Handling uncaught exception {} using domain {}", re, domain);
-                log.debug("  " + re.getScriptStackTrace());
-            }
+        Function handleFatal = (Function)ScriptableObject.getProperty(fatalHandler, "handleFatal");
 
-            Function exit = (Function)ScriptableObject.getProperty(domain, "exit");
-            boolean handled = false;
-            try {
-                Function emit = (Function)ScriptableObject.getProperty(domain, "emit");
-                error.put("domain", error, domain);
-                error.put("domainThrown", error, Boolean.TRUE);
-                handled = (Boolean)emit.call(cx, emit, domain, new Object[] { "error", error });
-                if (log.isDebugEnabled()) {
-                    log.debug("  handled = {}", handled);
-                }
-
-                while (ArgUtils.ensureValid(process.getDomain()) != null) {
-                    log.debug("Popping domain stack");
-                    exit.call(cx, exit, domain, new Object[0]);
-                }
-
-            } catch (RhinoException re2) {
-                exit.call(cx, exit, domain, new Object[0]);
-                if (ArgUtils.ensureValid(process.getDomain()) != null) {
-                    handled = handleScriptException(cx, error, re2);
-                }
-            }
-
-            if (handled) {
-                return true;
-            }
-        }
-        return handleRhinoException(error, re);
-    }
-
-    private boolean handleRhinoException(Scriptable error, RhinoException re)
-    {
         if (log.isDebugEnabled()) {
-            log.debug("Handling uncaught exception {}", re);
+            log.debug("Handling fatal exception {} domain = {}\n{}",
+                      re, System.identityHashCode(process.getDomain()), re.getScriptStackTrace());
         }
         boolean handled =
-            process.fireEvent("uncaughtException", error);
+            Context.toBoolean(handleFatal.call(cx, scope, null, new Object[] { error, log.isDebugEnabled() }));
         if (log.isDebugEnabled()) {
-            log.debug("  handled = {}", handled);
+            log.debug("Handled = {}", handled);
         }
         return handled;
     }
@@ -790,6 +777,9 @@ public class ScriptRunner
             scope.defineProperty("console", this,
                                  Utils.findMethod(ScriptRunner.class, "getConsole"),
                                  null, 0);
+
+            // We will need this later for exception handling
+            fatalHandler = (Scriptable)require("_fatal_handler", cx);
 
         } catch (InvocationTargetException e) {
             throw new NodeException(e);
@@ -936,7 +926,7 @@ public class ScriptRunner
             }
             if (domain != null) {
                 if (log.isDebugEnabled()) {
-                    log.debug("Entering domain {}", domain);
+                    log.debug("Entering domain {}", System.identityHashCode(domain));
                 }
                 Function enter = (Function)ScriptableObject.getProperty(domain, "enter");
                 enter.call(cx, enter, domain, new Object[0]);
@@ -949,7 +939,7 @@ public class ScriptRunner
             // on failure there.
             if (domain != null) {
                 if (log.isDebugEnabled()) {
-                    log.debug("Exiting domain {}", domain);
+                    log.debug("Exiting domain {}", System.identityHashCode(domain));
                 }
                 Function exit = (Function)ScriptableObject.getProperty(domain, "exit");
                 exit.call(cx, exit, domain, new Object[0]);

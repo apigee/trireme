@@ -101,6 +101,7 @@ public class NativeInputStreamAdapter
                 log.debug("Going to read {} from {}", readLen, in);
             }
 
+            final Scriptable domain = runner.getDomain();
             runner.getUnboundedPool().execute(new Runnable()
             {
                 @Override
@@ -116,21 +117,21 @@ public class NativeInputStreamAdapter
                             log.debug("Read {} from {}", bytesRead, in);
                         }
                         if (bytesRead > 0) {
-                            fireData(callback, buf, bytesRead, maxLen);
+                            fireData(callback, buf, bytesRead, maxLen, domain);
                         } else if (bytesRead < 0) {
-                            fireData(callback, null, 0, maxLen);
+                            fireData(callback, null, 0, maxLen, domain);
                         }
                     } catch (IOException ioe) {
                         if (log.isDebugEnabled()) {
                             log.debug("Error on read from {}: {}", in, ioe);
                         }
-                        fireError(callback, ioe);
+                        fireError(callback, ioe, domain);
                     }
                 }
             });
         }
 
-        private void fireError(final Function callback, final Exception e)
+        private void fireError(final Function callback, final Exception e, final Scriptable domain)
         {
             runner.enqueueTask(new ScriptTask()
             {
@@ -140,10 +141,11 @@ public class NativeInputStreamAdapter
                     callback.call(cx, scope, null,
                                   new Object[] { Utils.makeError(cx, scope, e.toString(), Constants.EIO) });
                 }
-            });
+            }, domain);
         }
 
-        private void fireData(final Function callback, final byte[] buf, final int len, final int maxLen)
+        private void fireData(final Function callback, final byte[] buf, final int len, final int maxLen,
+                              final Scriptable domain)
         {
             runner.enqueueTask(new ScriptTask()
             {
@@ -166,7 +168,7 @@ public class NativeInputStreamAdapter
                         fireRead(maxLen, callback);
                     }
                 }
-            });
+            }, domain);
         }
 
         @JSFunction

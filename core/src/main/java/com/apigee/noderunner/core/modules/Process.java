@@ -80,6 +80,7 @@ public class Process
         private boolean needImmediateCallback;
         private Function immediateCallback;
         private Object domain;
+        private boolean usingDomains;
         private boolean exiting;
 
         @JSConstructor
@@ -394,19 +395,20 @@ public class Process
         }
 
         @JSFunction
+        public static void _usingDomains(Context cx, Scriptable thisObj, Object[] args, Function func)
+        {
+            ((ProcessImpl)thisObj).usingDomains = true;
+        }
+
+        @JSFunction
         public static void nextTick(Context cx, Scriptable thisObj, Object[] args, Function func)
         {
             Function f = functionArg(args, 0, true);
             ProcessImpl proc = (ProcessImpl)thisObj;
-            proc.runner.enqueueCallbackWithLimit(f, f, thisObj, null, new Object[0]);
-        }
-
-        @JSFunction
-        public static void _nextDomainTick(Context cx, Scriptable thisObj, Object[] args, Function func)
-        {
-            Function f = functionArg(args, 0, true);
-            ProcessImpl proc = (ProcessImpl)thisObj;
-            Scriptable domain = ensureValid(proc.domain);
+            Scriptable domain = null;
+            if (proc.usingDomains) {
+                domain = ensureValid(proc.domain);
+            }
             proc.runner.enqueueCallbackWithLimit(f, f, thisObj, domain, new Object[0]);
         }
 
@@ -415,12 +417,6 @@ public class Process
         {
             ProcessImpl proc = (ProcessImpl)thisObj;
             proc.runner.executeTicks(cx);
-        }
-
-        @JSFunction
-        public static void _tickDomainCallback(Context cx, Scriptable thisObj, Object[] args, Function func)
-        {
-            _tickCallback(cx, thisObj, args, func);
         }
 
         @JSGetter("maxTickDepth")

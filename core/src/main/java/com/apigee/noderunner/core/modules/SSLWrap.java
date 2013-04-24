@@ -367,8 +367,10 @@ public class SSLWrap
 
             if ((args.length > 0) && (args[0] != Context.getUndefinedValue())) {
                 Buffer.BufferImpl buf = (Buffer.BufferImpl)args[0];
-                ByteBuffer newData = buf.getBuffer();
-                self.toUnwrap = append(self.toUnwrap, newData);
+                if (buf != null) {
+                    ByteBuffer newData = buf.getBuffer();
+                    self.toUnwrap = append(self.toUnwrap, newData);
+                }
             }
 
             Scriptable result = cx.newObject(thisObj);

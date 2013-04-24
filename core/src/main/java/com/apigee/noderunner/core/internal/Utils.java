@@ -164,6 +164,11 @@ public class Utils
         return new JavaScriptException(makeErrorObject(cx, scope, message));
     }
 
+    public static RhinoException makeError(Context cx, Scriptable scope, String message, RhinoException re)
+    {
+        return new JavaScriptException(makeErrorObject(cx, scope, message, re));
+    }
+
     public static Scriptable makeErrorObject(Context cx, Scriptable scope, String message, String code)
     {
         Scriptable err = cx.newObject(scope, "Error", new Object[] { message });

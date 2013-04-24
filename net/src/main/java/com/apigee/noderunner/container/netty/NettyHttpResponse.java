@@ -1,7 +1,10 @@
 package com.apigee.noderunner.container.netty;
 
+import com.apigee.noderunner.core.internal.Charsets;
 import com.apigee.noderunner.net.spi.HttpFuture;
 import com.apigee.noderunner.net.spi.HttpResponseAdapter;
+import io.netty.buffer.ByteBuf;
+import io.netty.buffer.Unpooled;
 import io.netty.channel.ChannelFuture;
 import io.netty.channel.DefaultChannelPromise;
 import io.netty.channel.socket.SocketChannel;
@@ -13,6 +16,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.nio.ByteBuffer;
+import java.nio.charset.Charset;
 import java.util.AbstractMap;
 import java.util.ArrayList;
 import java.util.Map;
@@ -51,11 +55,8 @@ public class NettyHttpResponse
         response.setStatus(HttpResponseStatus.valueOf(code));
     }
 
-    @Override
-    public HttpFuture send(boolean lastChunk)
+    private void calculateKeepAlive(boolean lastChunk)
     {
-        ChannelFuture future;
-
         if (isOlderHttpVersion()) {
             // HTTP 1.0 -- must close at end if no content length
             if (lastChunk) {
@@ -87,11 +88,17 @@ public class NettyHttpResponse
         if (!keepAlive && !response.headers().contains("Connection")) {
             response.headers().add("Connection", "close");
         }
+    }
 
+    @Override
+    public HttpFuture send(boolean lastChunk)
+    {
+        calculateKeepAlive(lastChunk);
         if (log.isDebugEnabled()) {
             log.debug("send: sending HTTP response {}", response);
         }
-        future = channel.write(response);
+
+        ChannelFuture future = channel.write(response);
 
         if (data != null) {
             if (log.isDebugEnabled()) {
@@ -132,6 +139,33 @@ public class NettyHttpResponse
             future = doneFuture;
         }
         return new NettyHttpFuture(future);
+    }
+
+    @Override
+    public void fatalError(String message, String stack)
+    {
+        if (log.isDebugEnabled()) {
+            log.debug("Sending HTTP error due to script error {}", message);
+        }
+
+        StringBuilder msg = new StringBuilder(message);
+        if (stack != null) {
+            msg.append('\n');
+            msg.append(stack);
+        }
+        ByteBuf data = Unpooled.copiedBuffer(msg, Charsets.UTF8);
+
+        response.setStatus(HttpResponseStatus.INTERNAL_SERVER_ERROR);
+        response.headers().add("Content-Type", "text/plain");
+        response.headers().add("Content-Length", data.readableBytes());
+        response.headers().add("Connection", "close");
+        calculateKeepAlive(true);
+        channel.write(response);
+
+        DefaultHttpContent chunk = new DefaultHttpContent(data);
+        channel.write(chunk);
+
+        sendLastChunk();
     }
 
     private ChannelFuture sendLastChunk()

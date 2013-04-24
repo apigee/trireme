@@ -28,14 +28,13 @@ public class NodeEnvironment
     public static final int POOL_QUEUE_SIZE   = 8;
     public static final long POOL_TIMEOUT_SECS = 60L;
 
-    // TODO is this the best version to use for V8 compatibility?
     public static final int DEFAULT_JS_VERSION = Context.VERSION_1_8;
-    // Testing has not shown that 9 is any faster and it is theoretically riskier.
-    // Re-test later with better workloads.
+    // Level 1 and level 9 are really the same. Level 1 calls to pre-compile the JS code into bytecode.
     public static final int DEFAULT_OPT_LEVEL = 1;
     public static final boolean DEFAULT_SEAL_ROOT = true;
 
     private boolean             initialized;
+    private final Object        initializationLock = new Object();
     private ScriptableObject    rootScope;
     private ModuleRegistry      registry;
     private ExecutorService     asyncPool;
@@ -191,57 +190,59 @@ public class NodeEnvironment
 
     private void initialize()
     {
-        if (initialized) {
-            return;
-        }
-
-        if (sandbox != null) {
-            if (sandbox.getAsyncThreadPool() != null) {
-                asyncPool = sandbox.getAsyncThreadPool();
+        synchronized (initializationLock) {
+            if (initialized) {
+                return;
             }
-        }
 
-        if (asyncPool == null) {
-            // This pool is used for operations that must appear async to JavaScript but are synchronous
-            // in Java. Right now this means file I/O, at least in Java 6.
-            ThreadPoolExecutor pool =
-                new ThreadPoolExecutor(CORE_POOL_SIZE, MAX_POOL_SIZE, POOL_TIMEOUT_SECS, TimeUnit.SECONDS,
-                                               new ArrayBlockingQueue<Runnable>(POOL_QUEUE_SIZE),
-                                               new PoolNameFactory("NodeRunner Async Pool"),
-                                               new ThreadPoolExecutor.AbortPolicy());
-            pool.allowCoreThreadTimeOut(true);
-            asyncPool = pool;
-        }
-
-        // This pool is used to run scripts. As a cached thread pool it will grow as necessary and shrink
-        // down to zero when idle. This is a separate thread pool because these threads persist for the life
-        // of the script.
-        scriptPool = Executors.newCachedThreadPool(new PoolNameFactory("NodeRunner Script Thread"));
-
-        registry = new ModuleRegistry();
-
-        contextFactory = new RhinoContextFactory();
-        contextFactory.setJsVersion(DEFAULT_JS_VERSION);
-        contextFactory.setOptLevel(optLevel);
-        contextFactory.setCountOperations(scriptTimeLimit > 0L);
-
-        contextFactory.call(new ContextAction()
-        {
-            @Override
-            public Object run(Context cx)
-            {
-                registry.load(cx);
-                // The standard objects, which are slow to create, are shared between scripts. Seal them so that
-                // one script can't modify another's.
-                rootScope = cx.initStandardObjects(null, sealRoot);
-                if (sealRoot) {
-                    rootScope.sealObject();
+            if (sandbox != null) {
+                if (sandbox.getAsyncThreadPool() != null) {
+                    asyncPool = sandbox.getAsyncThreadPool();
                 }
-                return null;
             }
-        });
 
-        initialized = true;
+            if (asyncPool == null) {
+                // This pool is used for operations that must appear async to JavaScript but are synchronous
+                // in Java. Right now this means file I/O, at least in Java 6.
+                ThreadPoolExecutor pool =
+                    new ThreadPoolExecutor(CORE_POOL_SIZE, MAX_POOL_SIZE, POOL_TIMEOUT_SECS, TimeUnit.SECONDS,
+                                           new ArrayBlockingQueue<Runnable>(POOL_QUEUE_SIZE),
+                                           new PoolNameFactory("NodeRunner Async Pool"),
+                                           new ThreadPoolExecutor.AbortPolicy());
+                pool.allowCoreThreadTimeOut(true);
+                asyncPool = pool;
+            }
+
+            // This pool is used to run scripts. As a cached thread pool it will grow as necessary and shrink
+            // down to zero when idle. This is a separate thread pool because these threads persist for the life
+            // of the script.
+            scriptPool = Executors.newCachedThreadPool(new PoolNameFactory("NodeRunner Script Thread"));
+
+            registry = new ModuleRegistry();
+
+            contextFactory = new RhinoContextFactory();
+            contextFactory.setJsVersion(DEFAULT_JS_VERSION);
+            contextFactory.setOptLevel(optLevel);
+            contextFactory.setCountOperations(scriptTimeLimit > 0L);
+
+            contextFactory.call(new ContextAction()
+            {
+                @Override
+                public Object run(Context cx)
+                {
+                    registry.load(cx);
+                    // The standard objects, which are slow to create, are shared between scripts. Seal them so that
+                    // one script can't modify another's.
+                    rootScope = cx.initStandardObjects(null, sealRoot);
+                    if (sealRoot) {
+                        rootScope.sealObject();
+                    }
+                    return null;
+                }
+            });
+
+            initialized = true;
+        }
     }
 
     /**

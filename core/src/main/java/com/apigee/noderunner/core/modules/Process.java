@@ -54,8 +54,8 @@ public class Process
         ProcessImpl exports = (ProcessImpl) cx.newObject(scope, ProcessImpl.CLASS_NAME);
         exports.setRunner(runner);
 
-        // env
         EnvImpl env = (EnvImpl) cx.newObject(scope, EnvImpl.CLASS_NAME);
+        env.initialize(runner.getScriptObject().getEnvironment());
         exports.setEnv(env);
 
         // Put the object directly in the scope -- we only do this for modules that are always deployed
@@ -540,8 +540,9 @@ public class Process
             return CLASS_NAME;
         }
 
-        public EnvImpl() {
-            for (Map.Entry<String, String> ee : System.getenv().entrySet()) {
+        void initialize(Map<String, String> env)
+        {
+            for (Map.Entry<String, String> ee : env.entrySet()) {
                 this.put(ee.getKey(), this, ee.getValue());
             }
         }

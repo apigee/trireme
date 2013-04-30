@@ -20,6 +20,7 @@ import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
 import java.net.InetSocketAddress;
+import java.util.HashMap;
 import java.util.List;
 import java.util.concurrent.CancellationException;
 import java.util.concurrent.ExecutionException;
@@ -313,6 +314,39 @@ public class BasicTest
         } catch (ExecutionException jse) {
             // GOOD.
         }
+    }
+
+    @Test
+    public void testAddEnvironment()
+        throws InterruptedException, ExecutionException, NodeException
+    {
+        NodeEnvironment localEnv = new NodeEnvironment();
+        NodeScript script = localEnv.createScript("environmenttest.js",
+                                                  new File("./target/test-classes/tests/environmenttest.js"),
+                                                  new String[] { "foo", "bar" });
+
+        script.addEnvironment("foo", "bar");
+
+        ScriptStatus status = script.execute().get();
+        assertEquals(0, status.getExitCode());
+    }
+
+    @Test
+    public void testSetEnvironment()
+        throws InterruptedException, ExecutionException, NodeException
+    {
+        NodeEnvironment localEnv = new NodeEnvironment();
+        NodeScript script = localEnv.createScript("environmenttest.js",
+                                                  new File("./target/test-classes/tests/environmenttest.js"),
+                                                  new String[] { "foo", "bar", "baz", "foo" });
+
+        HashMap<String, String> env = new HashMap<String, String>();
+        env.put("foo", "bar");
+        env.put("baz", "foo");
+        script.setEnvironment(env);
+
+        ScriptStatus status = script.execute().get();
+        assertEquals(0, status.getExitCode());
     }
 
     private void runTest(String name)

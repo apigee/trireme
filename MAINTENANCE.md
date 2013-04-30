@@ -1,5 +1,9 @@
 * How do to a release:
 
+Be sure that JAVA_HOME is set. On the Mac:
+
+        export JAVA_HOME=`/usr/libexec/java_home -v 1.6`
+
 	mvn -DautoVersionSubmodules=true release:prepare
 	mvn release:perform
 	mvn release:clean
@@ -20,6 +24,8 @@ What this does:
 You have to have permissions to push to git -- git ref is defined
 in the top-level pom.xml and shouldn't change if you have perms.
 
+If you see a "403" error (but not a "409") while doing release:perform:
+
 You have to have permissions to push to the repo (currently
 labdt1 on our internal network). You will need to have
 ~/.m2/settings.xml set up in order to do this like follows:
@@ -36,3 +42,9 @@ labdt1 on our internal network). You will need to have
 	  </server>
 	  </servers>
 	</settings>
+
+If the "deploy" task fails part way, then some deployment tasks will return
+a "409" (conflict) status. You can fix this by using the Archiva web app to
+manually delete the artifacts and try again. I'm not sure of a better way
+to do this.
+

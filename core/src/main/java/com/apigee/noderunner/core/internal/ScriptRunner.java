@@ -53,7 +53,7 @@ public class ScriptRunner
 
     private static final Logger log = LoggerFactory.getLogger(ScriptRunner.class);
 
-    private static final long DEFAULT_DELAY = 60000L;
+    private static final long DEFAULT_DELAY = Integer.MAX_VALUE;
     private static final int DEFAULT_TICK_DEPTH = 10000;
 
     public static final String TIMEOUT_TIMESTAMP_KEY = "_tickTimeout";
@@ -532,15 +532,13 @@ public class ScriptRunner
                     return ScriptStatus.CANCELLED;
                 }
 
-                long pollTimeout;
                 long now = System.currentTimeMillis();
 
                 // Calculate how long we will wait in the call to select
+                long pollTimeout;
                 if (!tickFunctions.isEmpty()) {
                     pollTimeout = 0;
                 } else if (timerQueue.isEmpty()) {
-                    // This is a fudge factor and it helps to find stuck servers in debugging.
-                    // in theory we could wait forever at a small advantage in efficiency
                     pollTimeout = DEFAULT_DELAY;
                 } else {
                     Activity nextActivity = timerQueue.peek();

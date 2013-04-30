@@ -33,9 +33,7 @@ public class ScriptFuture
             return false;
         }
         cancelled = true;
-        if (interrupt) {
-            runner.getSelector().wakeup();
-        }
+        runner.getSelector().wakeup();
         return true;
     }
 

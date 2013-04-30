@@ -81,10 +81,12 @@ public class BasicHttpTest
     private void runTest(String name)
         throws InterruptedException, ExecutionException, NodeException
     {
+        System.out.println("Running " + name + "...");
         NodeScript script = env.createScript(name,
                                              new File("./target/test-classes/tests/" + name),
                                              null);
         ScriptStatus status = script.execute().get();
+        System.out.println("  " + name + " returned " + status.getExitCode());
         assertEquals(0, status.getExitCode());
     }
 }

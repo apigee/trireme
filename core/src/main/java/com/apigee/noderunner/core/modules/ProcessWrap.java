@@ -169,6 +169,7 @@ public class ProcessWrap
                 log.debug("Process {} exited with code {} and signal {}", spawned, code, signal);
             }
             spawned.setFinished(true);
+            final Scriptable domain = runner.getDomain();
             runner.enqueueTask(new ScriptTask()
             {
                 @Override
@@ -176,7 +177,7 @@ public class ProcessWrap
                 {
                     onExit.call(cx, scope, ProcessImpl.this, new Object[]{code, signal});
                 }
-            });
+            }, domain);
         }
 
         @JSFunction

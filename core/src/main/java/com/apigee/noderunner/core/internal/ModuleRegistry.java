@@ -101,6 +101,7 @@ public class ModuleRegistry
         addCompiledModule("zlib", "com.apigee.noderunner.fromnode.zlib");
 
         addCompiledModule("bootstrap", "com.apigee.noderunner.scripts.bootstrap");
+        addCompiledModule("_fatal_handler", "com.apigee.noderunner.scripts._fatal_handler");
         addCompiledModule("http", "com.apigee.noderunner.scripts.adaptorhttp");
         addCompiledModule("https", "com.apigee.noderunner.scripts.adaptorhttps");
         addCompiledModule("child_process", "com.apigee.noderunner.scripts.child_process");

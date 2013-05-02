@@ -4,12 +4,12 @@
   <parent>
     <groupId>com.apigee.noderunner</groupId>
     <artifactId>noderunner</artifactId>
-    <version>0.5.7-SNAPSHOT</version>
+    <version>0.6.1-SNAPSHOT</version>
   </parent>
 
   <name>noderunner-tests</name>
   <artifactId>noderunner-tests</artifactId>
-  <version>0.5.7-SNAPSHOT</version>
+  <version>0.6.1-SNAPSHOT</version>
 
   <properties>
     <skipTests>true</skipTests>

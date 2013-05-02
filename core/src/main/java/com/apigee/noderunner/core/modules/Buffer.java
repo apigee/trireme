@@ -29,6 +29,7 @@ import java.nio.charset.CharsetEncoder;
 import java.nio.charset.CoderResult;
 import java.nio.charset.CodingErrorAction;
 import java.util.Arrays;
+import java.util.regex.Pattern;
 
 public class Buffer
     implements NodeModule
@@ -136,13 +137,18 @@ public class Buffer
 
         public static BufferImpl newBuffer(Context cx, Scriptable scope, byte[] bb)
         {
+            return newBuffer(cx, scope, bb, 0, bb.length);
+        }
+
+        public static BufferImpl newBuffer(Context cx, Scriptable scope, byte[] bb, int offset, int length)
+        {
             BufferImpl buf = (BufferImpl)cx.newObject(scope, CLASS_NAME);
             if (bb == null) {
                 return buf;
             }
             buf.buf = bb;
-            buf.bufOffset = 0;
-            buf.bufLength = buf.buf.length;
+            buf.bufOffset = offset;
+            buf.bufLength = length;
             return buf;
         }
 
@@ -250,6 +256,7 @@ public class Buffer
                 System.arraycopy(src.buf, src.bufOffset, buf.buf, 0, buf.bufLength);
 
             } else if (args[0] instanceof Scriptable) {
+                // Array of integers, or apparently in some cases an array of strings containing integers...
                 Scriptable s = (Scriptable)args[0];
                 if (s.getPrototype().equals(ScriptableObject.getArrayPrototype(ctorObj))) {
                     // An array of integers -- use that, from the docs
@@ -265,11 +272,7 @@ public class Buffer
                         } else {
                             throw Utils.makeTypeError(cx, ctorObj, "Invalid argument type in array");
                         }
-                        if (isIntArg(e)) {
-                            buf.putByte(pos++, (Integer)Context.jsToJava(e, Integer.class));
-                        } else {
-                            throw Utils.makeTypeError(cx, ctorObj, "Invalid argument type in array");
-                        }
+                        buf.putByte(pos++, (int)Context.toNumber(e));
                     }
                 } else {
                     // An object with the field "length" -- use that, from the tests but not the docs

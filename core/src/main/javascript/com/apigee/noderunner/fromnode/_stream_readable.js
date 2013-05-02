@@ -65,6 +65,7 @@ function ReadableState(options, stream) {
   // that we're awaiting a 'readable' event emission.
   this.needReadable = false;
   this.emittedReadable = false;
+  this.readableListening = false;
 
 
   // object stream flag. Used to make read(n) ignore n and to
@@ -114,34 +115,44 @@ Readable.prototype.push = function(chunk) {
 
 Readable.prototype.unshift = function(chunk) {
   var state = this._readableState;
-  if (typeof chunk === 'string' && !state.objectMode)
-    chunk = new Buffer(chunk, arguments[1]);
   return readableAddChunk(this, state, chunk, true);
 };
 
 function readableAddChunk(stream, state, chunk, addToFront) {
-  state.reading = false;
-
   var er = chunkInvalid(state, chunk);
   if (er) {
     stream.emit('error', er);
   } else if (chunk === null || chunk === undefined) {
-    onEofChunk(stream, state);
+    state.reading = false;
+    if (!state.ended)
+      onEofChunk(stream, state);
   } else if (state.objectMode || chunk && chunk.length > 0) {
-    if (state.decoder)
-      chunk = state.decoder.write(chunk);
+    if (state.ended && !addToFront) {
+      var e = new Error('stream.push() after EOF');
+      stream.emit('error', e);
+    } else if (state.endEmitted && addToFront) {
+      var e = new Error('stream.unshift() after end event');
+      stream.emit('error', e);
+    } else {
+      if (state.decoder && !addToFront)
+        chunk = state.decoder.write(chunk);
 
-    // update the buffer info.
-    state.length += state.objectMode ? 1 : chunk.length;
-    if (addToFront)
-      state.buffer.unshift(chunk);
-    else
-      state.buffer.push(chunk);
+      // update the buffer info.
+      state.length += state.objectMode ? 1 : chunk.length;
+      if (addToFront) {
+        state.buffer.unshift(chunk);
+      } else {
+        state.reading = false;
+        state.buffer.push(chunk);
+      }
 
-    if (state.needReadable)
-      emitReadable(stream);
+      if (state.needReadable)
+        emitReadable(stream);
 
-    maybeReadMore(stream, state);
+      maybeReadMore(stream, state);
+    }
+  } else {
+    state.reading = false;
   }
 
   return needMoreData(state);
@@ -235,7 +246,7 @@ Readable.prototype.read = function(n) {
   // the 'readable' event and move on.
   if (n === 0 &&
       state.needReadable &&
-      state.length >= state.highWaterMark) {
+      (state.length >= state.highWaterMark || state.ended)) {
     emitReadable(this);
     return null;
   }
@@ -378,7 +389,6 @@ function emitReadable(stream) {
 }
 
 function emitReadable_(stream) {
-  var state = stream._readableState;
   stream.emit('readable');
 }
 
@@ -655,8 +665,19 @@ Readable.prototype.on = function(ev, fn) {
   if (ev === 'data' && !this._readableState.flowing)
     emitDataEvents(this);
 
-  if (ev === 'readable' && !this._readableState.reading)
-    this.read(0);
+  if (ev === 'readable' && this.readable) {
+    var state = this._readableState;
+    if (!state.readableListening) {
+      state.readableListening = true;
+      state.emittedReadable = false;
+      state.needReadable = true;
+      if (!state.reading) {
+        this.read(0);
+      } else if (state.length) {
+        emitReadable(this, state);
+      }
+    }
+  }
 
   return res;
 };
@@ -866,10 +887,13 @@ function endReadable(stream) {
 
   if (!state.endEmitted && state.calledRead) {
     state.ended = true;
-    state.endEmitted = true;
     process.nextTick(function() {
-      stream.readable = false;
-      stream.emit('end');
+      // Check that we didn't get one last unshift.
+      if (!state.endEmitted && state.length === 0) {
+        state.endEmitted = true;
+        stream.readable = false;
+        stream.emit('end');
+      }
     });
   }
 }

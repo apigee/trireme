@@ -3,6 +3,8 @@ package com.apigee.noderunner.core;
 import com.apigee.noderunner.core.internal.ScriptRunner;
 
 import java.io.File;
+import java.util.HashMap;
+import java.util.Map;
 
 /**
  * This class represents an instance of a single Node script. It will execute the script in one or more
@@ -21,6 +23,7 @@ public class NodeScript
     private Object attachment;
     private Sandbox sandbox;
     private boolean pin;
+    private Map<String, String> environment;
 
     NodeScript(NodeEnvironment env, String scriptName, File script, String[] args)
     {
@@ -120,6 +123,37 @@ public class NodeScript
     public boolean isPinned()
     {
         return pin;
+    }
+
+    /**
+     * Get the current set of environment variables that will be passed to the script. If the environment
+     * has not been set then we simply return what is in the current process environment.
+     */
+    public Map<String, String> getEnvironment()
+    {
+        if (environment == null) {
+            return System.getenv();
+        }
+        return environment;
+    }
+
+    /**
+     * Replace the current set of environment variables for the script with the specified set.
+     */
+    public void setEnvironment(Map<String, String> env)
+    {
+        this.environment = env;
+    }
+
+    /**
+     * Add an environment variable to the script without removing anything that already exists.
+     */
+    public void addEnvironment(String name, String value)
+    {
+        if (environment == null) {
+            environment = new HashMap<String, String>(System.getenv());
+        }
+        environment.put(name, value);
     }
 }
 

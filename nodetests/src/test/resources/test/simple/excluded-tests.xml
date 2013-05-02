@@ -8,20 +8,8 @@
          the very basics.
     -->
     <Excluded>
-        <Name>test-crypto.+\.js</Name>
-        <Description>crypto module support planned but not implemented.</Description>
-    </Excluded>
-    <Excluded>
-        <Name>test-domain.+\.js</Name>
-        <Description>domain module support planned but not implemented.</Description>
-    </Excluded>
-    <Excluded>
         <Name>test-cluster.+\.js</Name>
         <Description>cluster module support planned but not implemented.</Description>
-    </Excluded>
-    <Excluded>
-        <Name>test-dgram.+\.js</Name>
-        <Description>dgram module support not implemented but would be fun in theory.</Description>
     </Excluded>
 
     <!-- NOT SUPPORTED
@@ -34,6 +22,13 @@
     <Excluded>
         <Name>test-c-ares.js</Name>
         <Description>This is a wrapper around some native code.</Description>
+    </Excluded>
+
+    <Excluded>
+        <Name>test-dgram-multicast-multi-process.js</Name>
+    </Excluded>
+    <Excluded>
+        <Name>test-dgram-multicast-setTTL.js</Name>
     </Excluded>
 
     <Excluded>
@@ -97,6 +92,10 @@
          We have different versions of these tests in the "noderunner" directory because they must
          be different.
     -->
+    <Excluded>
+        <Name>test-crypto.js</Name>
+        <Description>Noderunner version supports only Java ciphers and other stuff for now.</Description>
+    </Excluded>
     <Excluded>
         <Name>test-tls-.+\.js</Name>
         <Description>All TLS tests are run from the "noderunner" directory because they

@@ -6,8 +6,13 @@ import org.mozilla.javascript.Function;
 import org.mozilla.javascript.ScriptRuntime;
 import org.mozilla.javascript.Scriptable;
 
+import java.util.regex.Pattern;
+
 public class ArgUtils
 {
+    private static final Pattern NUMBER_RE =
+            Pattern.compile("^([0-9]+(\\.[0-9]+)?((e|E)(\\+\\-)?[0-9]+)?)|(0(x|X)[0-9a-fA-F]+)$");
+
     public static void ensureArg(Object[] args, int pos)
     {
         if (pos >= args.length) {
@@ -203,12 +208,7 @@ public class ArgUtils
             return true;
         }
         if (o instanceof String) {
-            try {
-                Integer.parseInt((String)o);
-                return true;
-            } catch (NumberFormatException nfe) {
-                return false;
-            }
+            return NUMBER_RE.matcher((String)o).matches();
         }
         return false;
     }

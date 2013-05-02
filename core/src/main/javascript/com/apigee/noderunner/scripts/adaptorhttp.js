@@ -363,8 +363,20 @@ if (HttpWrap.hasServerAdapter()) {
     return new Server(requestListener);
   };
 
+  function getErrorMessage(err) {
+    var msg;
+    if (typeof err === 'string') {
+      return msg;
+    } else if ((typeof err === 'object') && (err instanceof Error)) {
+      return err.message;
+    } else {
+      return '';
+    }
+  }
+
   /**
-   * Error callback for domain.
+   * Error callback for domain. This gets invoked if the user's code throws an exception while processing
+   * a request.
    */
   function handleError(err, info) {
     debug('Handling server error and sending to adapter');
@@ -377,16 +389,9 @@ if (HttpWrap.hasServerAdapter()) {
       info.destroy();
 
     } else {
-      var msg;
-      if (typeof err === 'string') {
-        msg = err;
-      } else if ((typeof err === 'object') && (err instanceof Error)) {
-        msg = err.message;
-      } else {
-        msg = '';
-      }
-      info.send(500, true, { 'Content-Type': 'text/plain' },
-                msg, null, null, true);
+      var msg = getErrorMessage(err);
+      var stack = err.stack ? err.stack : undefined;
+      info.fatalError(msg, stack);
     }
   }
 
@@ -510,6 +515,21 @@ if (HttpWrap.hasServerAdapter()) {
     self._adapter.oncomplete = onMessageComplete;
     self._adapter.onclose = onClose;
 
+    process.on('uncaughtException', function(err) {
+      if ((self._adapter !== null) && !self.exiting) {
+        self.exiting = true;
+        var msg = getErrorMessage(err);
+        var stack = err.stack ? err.stack : undefined;
+        self._adapter.fatalError(msg, stack);
+      }
+    });
+    process.on('exit', function() {
+      if ((self._adapter !== null) && !self.exiting) {
+        self.exiting = true;
+        self._adapter.fatalError('Premature script exit');
+      }
+    });
+
     process.nextTick(function() {
       self.emit('listening');
     });
@@ -563,10 +583,11 @@ if (HttpWrap.hasServerAdapter()) {
       this.once('close', cb);
     }
     this._adapter.close();
-    this._handle = null;
+    this._adapter = null;
 
+    var self = this;
     process.nextTick(function() {
-      this.emit('close');
+      self.emit('close');
     });
 
     return this;

@@ -59,7 +59,7 @@ var StringDecoder = require('string_decoder').StringDecoder;
 
 function Credentials(secureProtocol, flags, context) {
   if (!(this instanceof Credentials)) {
-    return new Credentials(secureProtocol);
+    return new Credentials(secureProtocol, flags, context);
   }
 
   if (!crypto) {
@@ -155,23 +155,34 @@ function LazyTransform(options) {
 }
 util.inherits(LazyTransform, stream.Transform);
 
-['read', 'write', 'end'].forEach(function(action, i, actions) {
-  LazyTransform.prototype[action] = function() {
-    stream.Transform.call(this, this._options);
-
-    actions.forEach(function(action) {
-      this[action] = stream.Transform.prototype[action];
-    }, this);
-
-    return this[action].apply(this, arguments);
-  };
+[
+  '_readableState',
+  '_writableState',
+  '_transformState'
+].forEach(function(prop, i, props) {
+  Object.defineProperty(LazyTransform.prototype, prop, {
+    get: function() {
+      stream.Transform.call(this, this._options);
+      return this[prop];
+    },
+    set: function(val) {
+      Object.defineProperty(this, prop, {
+        value: val,
+        enumerable: true,
+        configurable: true,
+        writable: true
+      });
+    },
+    configurable: true,
+    enumerable: true
+  });
 });
 
 
 exports.createHash = exports.Hash = Hash;
 function Hash(algorithm, options) {
   if (!(this instanceof Hash))
-    return new Hash(algorithm);
+    return new Hash(algorithm, options);
   this._binding = new binding.Hash(algorithm);
   LazyTransform.call(this, options);
 }
@@ -209,7 +220,7 @@ exports.createHmac = exports.Hmac = Hmac;
 
 function Hmac(hmac, key, options) {
   if (!(this instanceof Hmac))
-    return new Hmac(hmac, key);
+    return new Hmac(hmac, key, options);
   this._binding = new binding.Hmac();
   this._binding.init(hmac, toBuf(key));
   LazyTransform.call(this, options);
@@ -233,7 +244,7 @@ function getDecoder(decoder, encoding) {
 exports.createCipher = exports.Cipher = Cipher;
 function Cipher(cipher, password, options) {
   if (!(this instanceof Cipher))
-    return new Cipher(cipher, password);
+    return new Cipher(cipher, password, options);
   this._binding = new binding.Cipher;
 
   this._binding.init(cipher, toBuf(password));
@@ -293,7 +304,7 @@ Cipher.prototype.setAutoPadding = function(ap) {
 exports.createCipheriv = exports.Cipheriv = Cipheriv;
 function Cipheriv(cipher, key, iv, options) {
   if (!(this instanceof Cipheriv))
-    return new Cipheriv(cipher, key, iv);
+    return new Cipheriv(cipher, key, iv, options);
   this._binding = new binding.Cipher();
   this._binding.initiv(cipher, toBuf(key), toBuf(iv));
   this._decoder = null;
@@ -314,7 +325,7 @@ Cipheriv.prototype.setAutoPadding = Cipher.prototype.setAutoPadding;
 exports.createDecipher = exports.Decipher = Decipher;
 function Decipher(cipher, password, options) {
   if (!(this instanceof Decipher))
-    return new Decipher(cipher, password);
+    return new Decipher(cipher, password, options);
 
   this._binding = new binding.Decipher;
   this._binding.init(cipher, toBuf(password));
@@ -337,7 +348,7 @@ Decipher.prototype.setAutoPadding = Cipher.prototype.setAutoPadding;
 exports.createDecipheriv = exports.Decipheriv = Decipheriv;
 function Decipheriv(cipher, key, iv, options) {
   if (!(this instanceof Decipheriv))
-    return new Decipheriv(cipher, key, iv);
+    return new Decipheriv(cipher, key, iv, options);
 
   this._binding = new binding.Decipher;
   this._binding.initiv(cipher, toBuf(key), toBuf(iv));
@@ -360,7 +371,7 @@ Decipheriv.prototype.setAutoPadding = Cipher.prototype.setAutoPadding;
 exports.createSign = exports.Sign = Sign;
 function Sign(algorithm, options) {
   if (!(this instanceof Sign))
-    return new Sign(algorithm);
+    return new Sign(algorithm, options);
   this._binding = new binding.Sign();
   this._binding.init(algorithm);
 
@@ -391,7 +402,7 @@ Sign.prototype.sign = function(key, encoding) {
 exports.createVerify = exports.Verify = Verify;
 function Verify(algorithm, options) {
   if (!(this instanceof Verify))
-    return new Verify(algorithm);
+    return new Verify(algorithm, options);
 
   this._binding = new binding.Verify;
   this._binding.init(algorithm);
@@ -576,21 +587,23 @@ exports.prng = pseudoRandomBytes;
 
 
 exports.getCiphers = function() {
-  return getCiphers.call(null, arguments).sort();
+  return filterDuplicates(getCiphers.call(null, arguments));
 };
 
 
 exports.getHashes = function() {
-  var names = getHashes.call(null, arguments);
+  return filterDuplicates(getHashes.call(null, arguments));
 
+};
+
+
+function filterDuplicates(names) {
   // Drop all-caps names in favor of their lowercase aliases,
   // for example, 'sha1' instead of 'SHA1'.
   var ctx = {};
-  names = names.forEach(function(name) {
+  names.forEach(function(name) {
     if (/^[0-9A-Z\-]+$/.test(name)) name = name.toLowerCase();
     ctx[name] = true;
   });
-  names = Object.getOwnPropertyNames(ctx);
-
-  return names.sort();
-};
+  return Object.getOwnPropertyNames(ctx).sort();
+}

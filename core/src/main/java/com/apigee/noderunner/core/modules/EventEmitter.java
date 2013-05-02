@@ -163,7 +163,7 @@ public class EventEmitter
         }
 
         @JSFunction
-        public static void emit(Context ctx, Scriptable thisObj, Object[] args, Function caller)
+        public static boolean emit(Context ctx, Scriptable thisObj, Object[] args, Function caller)
         {
             EventEmitterImpl thisClass = ScriptableUtils.prototypeCast(thisObj, EventEmitterImpl.class);
             String event = stringArg(args, 0);
@@ -173,7 +173,7 @@ public class EventEmitter
                 funcArgs = new Object[args.length - 1];
                 System.arraycopy(args, 1, funcArgs, 0, args.length - 1);
             }
-            thisClass.fireEvent(event, funcArgs);
+            return thisClass.fireEvent(event, funcArgs);
         }
 
         public boolean fireEvent(String event, Object... args)

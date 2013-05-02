@@ -143,6 +143,7 @@ public class HTTPParser
         @JSFunction
         public void reinitialize(int type)
         {
+            log.debug("HTTP parser: init");
             init(type);
         }
 

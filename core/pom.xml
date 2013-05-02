@@ -4,12 +4,12 @@
   <parent>
     <groupId>com.apigee.noderunner</groupId>
     <artifactId>noderunner</artifactId>
-    <version>0.6.0-SNAPSHOT</version>
+    <version>0.6.0</version>
   </parent>
 
   <name>noderunner-core</name>
   <artifactId>noderunner-core</artifactId>
-  <version>0.6.0-SNAPSHOT</version>
+  <version>0.6.0</version>
 
   <dependencies>
     <dependency>

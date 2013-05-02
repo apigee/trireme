@@ -14,7 +14,7 @@
   </organization>
 
   <properties>
-    <project.version>0.6.0-SNAPSHOT</project.version>
+    <project.version>0.6.1-SNAPSHOT</project.version>
     <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
   </properties>
 

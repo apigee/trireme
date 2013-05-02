@@ -91,7 +91,7 @@ public class Filesystem
             descriptors.clear();
         }
 
-        private Object runAction(final Function callback, final AsyncAction action)
+        private Object runAction(final Context cx, final Function callback, final AsyncAction action)
         {
             if (callback == null) {
                 try {
@@ -106,12 +106,14 @@ public class Filesystem
                     }
                     Object[] err = action.mapSyncException(e);
                     if (err == null) {
-                        throw Utils.makeError(Context.getCurrentContext(), this, e);
+                        throw Utils.makeError(cx, this, e);
                     }
                     return err[1];
                 }
             }
 
+            final Filesystem.FSImpl self = this;
+            final Scriptable domain = runner.getDomain();
             runner.pin();
             pool.execute(new Runnable()
             {
@@ -129,13 +131,13 @@ public class Filesystem
                         if (log.isDebugEnabled()) {
                             log.debug("Calling {} with {}", ((BaseFunction)callback).getFunctionName(), args);
                         }
-                        runner.enqueueCallback(callback, callback, null, args);
+                        runner.enqueueCallback(callback, callback, null, domain, args);
                     } catch (NodeOSException e) {
                         if (log.isDebugEnabled()) {
                             log.debug("Async action {} failed: {}: {}", action, e.getCode(), e);
                         }
-                        runner.enqueueCallback(callback, callback, null,
-                                               action.mapException(e));
+                        runner.enqueueCallback(callback, callback, null, domain,
+                                               action.mapException(cx, self, e));
                     } finally {
                         runner.unPin();
                     }
@@ -221,7 +223,7 @@ public class Filesystem
         }
 
         @JSFunction
-        public static Object open(Context cx, Scriptable thisObj, Object[] args, Function func)
+        public static Object open(final Context cx, final Scriptable thisObj, Object[] args, Function func)
         {
             final String pathStr = stringArg(args, 0);
             final int flags = intArg(args, 1);
@@ -229,7 +231,7 @@ public class Filesystem
             Function callback = functionArg(args, 3, false);
             final FSImpl fs = (FSImpl)thisObj;
 
-            return fs.runAction(callback, new AsyncAction()
+            return fs.runAction(cx, callback, new AsyncAction()
             {
                 @Override
                 public Object[] execute() throws NodeOSException
@@ -238,9 +240,9 @@ public class Filesystem
                 }
 
                 @Override
-                public Object[] mapException(NodeOSException e)
+                public Object[] mapException(Context cx, Scriptable scope, NodeOSException e)
                 {
-                    return new Object[] { e.getCode() };
+                    return new Object[] { Utils.makeErrorObject(cx, thisObj, e) };
                 }
             });
         }
@@ -332,7 +334,7 @@ public class Filesystem
             final int fd = intArg(args, 0);
             Function callback = functionArg(args, 1, false);
 
-            fs.runAction(callback, new AsyncAction()
+            fs.runAction(cx, callback, new AsyncAction()
             {
                 @Override
                 public Object[] execute()
@@ -359,7 +361,7 @@ public class Filesystem
         }
 
         @JSFunction
-        public static Object read(Context cx, Scriptable thisObj, Object[] args, Function func)
+        public static Object read(final Context cx, final Scriptable thisObj, Object[] args, Function func)
         {
             final FSImpl fs = (FSImpl)thisObj;
             final int fd = intArg(args, 0);
@@ -377,7 +379,7 @@ public class Filesystem
                 throw Utils.makeError(cx, thisObj, "Length extends beyond buffer", Constants.EINVAL);
             }
 
-            return fs.runAction(callback, new AsyncAction()
+            return fs.runAction(cx, callback, new AsyncAction()
             {
                 @Override
                 public Object[] execute()
@@ -386,9 +388,10 @@ public class Filesystem
                     return fs.doRead(fd, buf, off, len, pos);
                 }
 
-                public Object[] mapException(NodeOSException e)
+                @Override
+                public Object[] mapException(Context cx, Scriptable scope, NodeOSException e)
                 {
-                    return new Object[] { e.getCode(), 0, buf };
+                    return new Object[] { Utils.makeErrorObject(cx, thisObj, e), 0, buf };
                 }
             });
         }
@@ -425,7 +428,7 @@ public class Filesystem
         }
 
         @JSFunction
-        public static Object write(Context cx, Scriptable thisObj, Object[] args, Function func)
+        public static Object write(final Context cx, final Scriptable thisObj, Object[] args, Function func)
         {
             final FSImpl fs = (FSImpl)thisObj;
             final int fd = intArg(args, 0);
@@ -442,7 +445,7 @@ public class Filesystem
                 throw Utils.makeError(cx, thisObj, "Length extends beyond buffer", "EINVAL");
             }
 
-            return fs.runAction(callback, new AsyncAction()
+            return fs.runAction(cx, callback, new AsyncAction()
             {
                 @Override
                 public Object[] execute()
@@ -451,9 +454,10 @@ public class Filesystem
                     return fs.doWrite(fd, buf, off, len, pos);
                 }
 
-                public Object[] mapException(NodeOSException e)
+                @Override
+                public Object[] mapException(Context cx, Scriptable scope, NodeOSException e)
                 {
-                    return new Object[] { e.getCode(), 0, buf };
+                    return new Object[] { Utils.makeErrorObject(cx, thisObj, e), 0, buf };
                 }
             });
         }
@@ -490,7 +494,7 @@ public class Filesystem
             final int fd = intArg(args, 0);
             Function callback = functionArg(args, 1, false);
 
-            fs.runAction(callback, new AsyncAction()
+            fs.runAction(cx, callback, new AsyncAction()
             {
                 @Override
                 public Object[] execute() throws NodeOSException
@@ -526,7 +530,7 @@ public class Filesystem
             Function callback = functionArg(args, 2, false);
             final FSImpl fs = (FSImpl)thisObj;
 
-            fs.runAction(callback, new AsyncAction()
+            fs.runAction(cx, callback, new AsyncAction()
             {
                 @Override
                 public Object[] execute() throws NodeOSException
@@ -561,7 +565,7 @@ public class Filesystem
             final long len = longArgOnly(cx, fs, args, 1, 0);
             Function callback = functionArg(args, 2, false);
 
-            fs.runAction(callback, new AsyncAction()
+            fs.runAction(cx, callback, new AsyncAction()
             {
                 @Override
                 public Object[] execute()
@@ -591,7 +595,7 @@ public class Filesystem
             final String path = stringArg(args, 0);
             Function callback = functionArg(args, 1, false);
 
-            fs.runAction(callback, new AsyncAction()
+            fs.runAction(cx, callback, new AsyncAction()
             {
                 @Override
                 public Object[] execute() throws NodeOSException
@@ -624,7 +628,7 @@ public class Filesystem
             Function callback = functionArg(args, 1, false);
             final FSImpl fs = (FSImpl)thisObj;
 
-            fs.runAction(callback, new AsyncAction()
+            fs.runAction(cx, callback, new AsyncAction()
             {
                 @Override
                 public Object[] execute() throws NodeOSException
@@ -655,7 +659,7 @@ public class Filesystem
             Function callback = functionArg(args, 2, false);
             final FSImpl fs = (FSImpl)thisObj;
 
-            fs.runAction(callback, new AsyncAction()
+            fs.runAction(cx, callback, new AsyncAction()
             {
                 @Override
                 public Object[] execute()
@@ -671,6 +675,9 @@ public class Filesystem
             throws NodeOSException
         {
             File file = translatePath(path);
+            if (file.exists()) {
+                throw new NodeOSException(Constants.EEXIST);
+            }
             if (!file.mkdir()) {
                 throw new NodeOSException(Constants.EIO);
             }
@@ -684,7 +691,7 @@ public class Filesystem
             Function callback = functionArg(args, 1, false);
             final FSImpl fs = (FSImpl)thisObj;
 
-            return fs.runAction(callback, new AsyncAction()
+            return fs.runAction(cx, callback, new AsyncAction()
             {
                 @Override
                 public Object[] execute()
@@ -722,7 +729,7 @@ public class Filesystem
             Function callback = functionArg(args, 1, false);
             final FSImpl fs = (FSImpl)thisObj;
 
-            return fs.runAction(callback, new AsyncAction()
+            return fs.runAction(cx, callback, new AsyncAction()
             {
                 @Override
                 public Object[] execute()
@@ -770,7 +777,7 @@ public class Filesystem
             final int fd = intArg(args, 0);
             Function callback = functionArg(args, 1, false);
 
-            return fs.runAction(callback, new AsyncAction()
+            return fs.runAction(cx, callback, new AsyncAction()
             {
                 @Override
                 public Object[] execute()
@@ -986,9 +993,9 @@ public class Filesystem
         public abstract Object[] execute()
             throws NodeOSException;
 
-        public Object[] mapException(NodeOSException e)
+        public Object[] mapException(Context cx, Scriptable scope, NodeOSException e)
         {
-            return new Object[] { e.getCode(), Context.getUndefinedValue() };
+            return new Object[] { Utils.makeErrorObject(cx, scope, e) };
         }
 
         public Object[] mapSyncException(NodeOSException e)

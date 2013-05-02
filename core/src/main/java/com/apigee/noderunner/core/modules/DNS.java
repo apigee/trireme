@@ -84,13 +84,14 @@ public class DNS
 
             // TO prevent many, many tests from exiting, we have to "pin" the main script runner thread
             // before we go off into another thread, so it doesn't exit.
+            final Scriptable domain = runner.getDomain();
             runner.pin();
             runner.getAsyncPool().execute(new Runnable()
             {
                 @Override
                 public void run()
                 {
-                    doLookup(name, family, callback);
+                    doLookup(name, family, callback, domain);
                 }
             });
         }
@@ -98,35 +99,36 @@ public class DNS
         /**
          * This message does an actual DNS lookup from a thread pool to prevent blocking.
          */
-        private void doLookup(String name, int family, Function callback)
+        private void doLookup(String name, int family, Function callback, Scriptable domain)
         {
             Context cx = Context.enter();
             try {
                 InetAddress addr = InetAddress.getByName(name);
                 if (((family == 4) && (!(addr instanceof Inet4Address))) ||
                     ((family == 6) && (!(addr instanceof Inet6Address)))) {
-                    invokeCallback(cx, callback, Constants.EIO, null, family);
+                    invokeCallback(cx, callback, Constants.EIO, null, family, domain);
                     return;
                 }
-                invokeCallback(cx, callback, null, addr.getHostAddress(), family);
+                invokeCallback(cx, callback, null, addr.getHostAddress(), family, domain);
 
             } catch (UnknownHostException uhe) {
-                invokeCallback(cx, callback, Constants.ENOTFOUND, null, family);
+                invokeCallback(cx, callback, Constants.ENOTFOUND, null, family, domain);
             } catch (IOException ioe) {
-                invokeCallback(cx, callback, Constants.EIO, null, family);
+                invokeCallback(cx, callback, Constants.EIO, null, family, domain);
             } finally {
                 runner.unPin();
                 Context.exit();
             }
         }
 
-        private void invokeCallback(Context cx, Function callback, String code, String address, int family)
+        private void invokeCallback(Context cx, Function callback, String code, String address,
+                                    int family, Scriptable domain)
         {
             Scriptable err = null;
             if (code != null) {
                 err = Utils.makeErrorObject(cx, this, code, code);
             }
-            runner.enqueueCallback(callback, callback, this,
+            runner.enqueueCallback(callback, callback, this, domain,
                                    new Object[] { err, address, family } );
         }
     }

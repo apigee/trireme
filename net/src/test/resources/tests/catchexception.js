@@ -1,5 +1,6 @@
 var http = require('http');
 var assert = require('assert');
+var urlparse = require('url');
 
 var svr = http.createServer(function(req, resp) {
   console.log('Got %s', req.url);
@@ -27,32 +28,51 @@ var svr = http.createServer(function(req, resp) {
     resp.write('Hello, World!');
     throw new Error('Throwing after write');
   } else if (req.url === '/ok') {
-    resp.end('ok');
+    req.on('end', function() {
+      resp.end('ok');
+    });
+  } else if ((req.url === '/throwOnData') || (req.url === '/throwOnEnd')) {
+    req.on('end', function() {
+      resp.end('Should not get here!');
+    });
   } else {
-    throw new Error('Unkown URL ' + req.url);
+    throw new Error('Unknown URL ' + req.url);
   }
 });
 
 svr.listen(33333, function() {
-  doTest('ok', false, 200, function() {
-    doTest('throw', false, 500, function() {
-      doTest('throwOnData', false, 500, function() {
-        doTest('throwOnEnd', false, 500, function() {
-          doTest('headThenThrow', false, 500, function() {
-            doTest('ok', true, 200);
-          });
+  doTest('GET', 'ok', false, 200, function() {
+    doTest('GET', 'throw', false, 500, function() {
+      doTest('POST', 'throwOnData', false, 500, function() {
+        doTest('POST', 'throwOnEnd', false, 500, function() {
+          doTest('POST', 'headThenThrow', false, 500, function() {
+            // TODO the client side of HTTP doesn't seem to handle this right
+            //doTest('GET', 'writeThenThrow', false, 500, function() {
+              doTest('GET', 'ok', true, 200);
+            });
+          //});
         });
       });
     });
   });
 });
 
-function doTest(url, shouldClose, code, next) {
-  http.get('http://localhost:33333/' + url, function(resp) {
+function doTest(verb, url, shouldClose, code, next) {
+  opts = urlparse.parse('http://localhost:33333/' + url);
+  opts.method = verb;
+  req = http.request(opts, function(resp) {
+    var respData = '';
     resp.on('readable', function() {
-      resp.read();
+      var data;
+      do {
+        data = resp.read();
+        if (data !== null) {
+          respData += data;
+        }
+      } while (data !== null);
     });
     resp.on('end', function() {
+      console.log('Response data: "%s"', respData);
       if (shouldClose) {
         svr.close();
       } else {
@@ -63,4 +83,10 @@ function doTest(url, shouldClose, code, next) {
     console.log('Got %d for %s', resp.statusCode, url);
     assert.equal(code, resp.statusCode);
   });
+
+  if (verb === 'GET') {
+    req.end();
+  } else {
+    req.end('Hello, there test guy!');
+  }
 }

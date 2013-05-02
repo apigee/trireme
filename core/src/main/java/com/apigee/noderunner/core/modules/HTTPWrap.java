@@ -30,6 +30,7 @@ import java.nio.ByteBuffer;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Date;
+import java.util.IdentityHashMap;
 import java.util.Map;
 import java.util.TimeZone;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -61,6 +62,9 @@ public class HTTPWrap
         return http;
     }
 
+    /**
+     * This is the top-level module object, aka "exports" for this module.
+     */
     public static class HttpImpl
         extends ScriptableObject
     {
@@ -95,6 +99,10 @@ public class HTTPWrap
         }
     }
 
+    /**
+     * This implements the stub that the HTTP implementation will call into to notify us of new messages and data.
+     * This object is also passed to adapterhttp and is the root of the "server" object.
+     */
     public static class ServerContainer
         extends ScriptableObject
         implements HttpServerStub
@@ -112,6 +120,8 @@ public class HTTPWrap
 
         private final AtomicInteger connectionCount = new AtomicInteger();
         private volatile boolean closed;
+        private final IdentityHashMap<AdapterRequest, AdapterRequest> pendingRequests =
+            new IdentityHashMap<AdapterRequest, AdapterRequest>();
 
         @Override
         public String getClassName()
@@ -124,6 +134,10 @@ public class HTTPWrap
             this.runner = runner;
             this.adapter = container.newServer(runner.getScriptObject(), this);
             runner.pin();
+        }
+
+        NodeRuntime getRunner() {
+            return runner;
         }
 
         @JSFunction
@@ -166,12 +180,43 @@ public class HTTPWrap
             runner.unPin();
         }
 
+        /**
+         * This method is called when the whole server has failed or is shutting down prematurely.
+         */
+        @JSFunction
+        public void fatalError(String message, Object stack)
+        {
+            if (log.isDebugEnabled()) {
+                log.debug("Caught a top-level script error. Terminating all HTTP requests");
+            }
+            String stackStr = null;
+            if ((stack instanceof String) && !Context.getUndefinedValue().equals(stack)) {
+                stackStr = (String)stack;
+            }
+            for (AdapterRequest ar : pendingRequests.keySet()) {
+                try {
+                    ar.fatalError(message, stackStr);
+                } catch (Throwable t) {
+                    if (log.isDebugEnabled()) {
+                        log.debug("Error handling a fatal request: {}", t);
+                    }
+                }
+            }
+            pendingRequests.clear();
+        }
+
         private Scriptable buildIncoming(Context cx, HttpRequestAdapter request, HttpResponseAdapter response)
         {
             AdapterRequest ar = (AdapterRequest) cx.newObject(this, AdapterRequest.CLASS_NAME);
-            ar.init(request, response, runner);
+            ar.init(request, response, this);
             request.setAttachment(ar);
+            pendingRequests.put(ar, ar);
             return ar;
+        }
+
+        void requestComplete(AdapterRequest ar)
+        {
+            pendingRequests.remove(ar);
         }
 
         @Override
@@ -294,30 +339,20 @@ public class HTTPWrap
             }
         }
 
-        private void rethrow(Throwable t)
-        {
-            if (t instanceof RhinoException) {
-                throw (RhinoException)t;
-            } else {
-                EvaluatorException ee = new EvaluatorException(t.getMessage());
-                ee.initCause(t);
-                throw ee;
-            }
-        }
-
         @Override
         public void onError(String message)
         {
-            //To change body of implemented methods use File | Settings | File Templates.
+            throw Utils.makeError(Context.getCurrentContext(), this, message);
         }
 
         @Override
         public void onError(String message, Throwable cause)
         {
-            //To change body of implemented methods use File | Settings | File Templates.
+            if (cause instanceof RhinoException) {
+                throw Utils.makeError(Context.getCurrentContext(), this, message, (RhinoException)cause);
+            }
+            throw Utils.makeError(Context.getCurrentContext(), this, cause.getMessage());
         }
-
-
 
         @JSGetter("onheaders")
         public Function getOnHeaders()
@@ -409,6 +444,10 @@ public class HTTPWrap
         }
     }
 
+    /**
+     * This is a JavaScript object passed to the "adaptorhttp" module for each request. This is the object
+     * that the adapter uses to interact with the adapter for each request.
+     */
     public static class AdapterRequest
         extends ScriptableObject
     {
@@ -416,7 +455,7 @@ public class HTTPWrap
 
         private HttpRequestAdapter request;
         private HttpResponseAdapter response;
-        private NodeRuntime runner;
+        private ServerContainer server;
         private Function onWriteComplete;
         private Function onChannelClosed;
 
@@ -426,11 +465,11 @@ public class HTTPWrap
             return CLASS_NAME;
         }
 
-        void init(HttpRequestAdapter request, HttpResponseAdapter response, NodeRuntime runner)
+        void init(HttpRequestAdapter request, HttpResponseAdapter response, ServerContainer server)
         {
             this.request = request;
             this.response = response;
-            this.runner = runner;
+            this.server = server;
         }
 
         @JSGetter("requestUrl")
@@ -510,6 +549,10 @@ public class HTTPWrap
         public boolean send(int statusCode, boolean sendDate, Scriptable headers,
                             Object data, Object encoding, Scriptable trailers, boolean last)
         {
+            if (last) {
+                server.requestComplete(this);
+            }
+
             ByteBuffer buf = gatherData(data, encoding);
 
             response.setStatusCode(statusCode);
@@ -559,6 +602,10 @@ public class HTTPWrap
         @JSFunction
         public boolean sendChunk(Object data, Object encoding, Scriptable trailers, boolean last)
         {
+            if (last) {
+                server.requestComplete(this);
+            }
+
             ByteBuffer buf = gatherData(data, encoding);
             if (last) {
                 addTrailers(trailers, response);
@@ -570,8 +617,19 @@ public class HTTPWrap
         }
 
         @JSFunction
+        public void fatalError(String message, Object stack)
+        {
+            String stackStr = null;
+            if ((stack instanceof String) && !Context.getUndefinedValue().equals(stack)) {
+                stackStr = (String)stack;
+            }
+            response.fatalError(message, stackStr);
+        }
+
+        @JSFunction
         public void destroy()
         {
+            server.requestComplete(this);
             response.destroy();
         }
 
@@ -609,6 +667,7 @@ public class HTTPWrap
         private void addDateHeader(HttpResponseAdapter response)
         {
             // TODO we can optimize this by attaching the formatter to the server adapter
+            // However it cannot just be static as it is not thread safe
             SimpleDateFormat df = new SimpleDateFormat(RFC_1123_FORMAT);
             df.setTimeZone(TimeZone.getTimeZone("GMT"));
             String headerVal = df.format(new Date());
@@ -624,7 +683,8 @@ public class HTTPWrap
                     if (log.isDebugEnabled()) {
                         log.debug("Write complete: success = {} closed = {} cause = {}", success, closed, cause);
                     }
-                    runner.enqueueTask(new ScriptTask()
+                    Scriptable domain = server.getRunner().getDomain();
+                    server.getRunner().enqueueTask(new ScriptTask()
                     {
                         @Override
                         public void execute(Context cx, Scriptable scope)
@@ -644,7 +704,7 @@ public class HTTPWrap
                                                                      new Object[] { err });
                             }
                         }
-                    });
+                    }, domain);
                 }
             });
         }

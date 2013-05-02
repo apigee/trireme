@@ -54,8 +54,8 @@ public class Process
         ProcessImpl exports = (ProcessImpl) cx.newObject(scope, ProcessImpl.CLASS_NAME);
         exports.setRunner(runner);
 
-        // env
         EnvImpl env = (EnvImpl) cx.newObject(scope, EnvImpl.CLASS_NAME);
+        env.initialize(runner.getScriptObject().getEnvironment());
         exports.setEnv(env);
 
         // Put the object directly in the scope -- we only do this for modules that are always deployed
@@ -80,6 +80,8 @@ public class Process
         private boolean needImmediateCallback;
         private Function immediateCallback;
         private Object domain;
+        private boolean usingDomains;
+        private boolean exiting;
 
         @JSConstructor
         public static Object ProcessImpl(Context cx, Object[] args, Function ctorObj, boolean inNewExpr)
@@ -393,19 +395,20 @@ public class Process
         }
 
         @JSFunction
+        public static void _usingDomains(Context cx, Scriptable thisObj, Object[] args, Function func)
+        {
+            ((ProcessImpl)thisObj).usingDomains = true;
+        }
+
+        @JSFunction
         public static void nextTick(Context cx, Scriptable thisObj, Object[] args, Function func)
         {
             Function f = functionArg(args, 0, true);
             ProcessImpl proc = (ProcessImpl)thisObj;
-            proc.runner.enqueueCallbackWithLimit(f, f, thisObj, null, new Object[0]);
-        }
-
-        @JSFunction
-        public static void _nextDomainTick(Context cx, Scriptable thisObj, Object[] args, Function func)
-        {
-            Function f = functionArg(args, 0, true);
-            ProcessImpl proc = (ProcessImpl)thisObj;
-            Scriptable domain = ensureValid(proc.domain);
+            Scriptable domain = null;
+            if (proc.usingDomains) {
+                domain = ensureValid(proc.domain);
+            }
             proc.runner.enqueueCallbackWithLimit(f, f, thisObj, domain, new Object[0]);
         }
 
@@ -414,12 +417,6 @@ public class Process
         {
             ProcessImpl proc = (ProcessImpl)thisObj;
             proc.runner.executeTicks(cx);
-        }
-
-        @JSFunction
-        public static void _tickDomainCallback(Context cx, Scriptable thisObj, Object[] args, Function func)
-        {
-            _tickCallback(cx, thisObj, args, func);
         }
 
         @JSGetter("maxTickDepth")
@@ -519,6 +516,18 @@ public class Process
         {
             this.domain = d;
         }
+
+        @JSGetter("_exiting")
+        public boolean isExiting()
+        {
+            return exiting;
+        }
+
+        @JSSetter("_exiting")
+        public void setExiting(boolean e)
+        {
+            this.exiting = e;
+        }
     }
 
     public static class EnvImpl
@@ -531,8 +540,9 @@ public class Process
             return CLASS_NAME;
         }
 
-        public EnvImpl() {
-            for (Map.Entry<String, String> ee : System.getenv().entrySet()) {
+        void initialize(Map<String, String> env)
+        {
+            for (Map.Entry<String, String> ee : env.entrySet()) {
                 this.put(ee.getKey(), this, ee.getValue());
             }
         }

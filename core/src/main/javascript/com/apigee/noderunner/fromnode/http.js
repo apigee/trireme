@@ -349,8 +349,12 @@ IncomingMessage.prototype._read = function(n) {
 };
 
 
+// It's possible that the socket will be destroyed, and removed from
+// any messages, before ever calling this.  In that case, just skip
+// it, since something else is destroying this connection anyway.
 IncomingMessage.prototype.destroy = function(error) {
-  this.socket.destroy(error);
+  if (this.socket)
+    this.socket.destroy(error);
 };
 
 
@@ -467,8 +471,16 @@ OutgoingMessage.prototype.setTimeout = function(msecs, callback) {
 };
 
 
+// It's possible that the socket will be destroyed, and removed from
+// any messages, before ever calling this.  In that case, just skip
+// it, since something else is destroying this connection anyway.
 OutgoingMessage.prototype.destroy = function(error) {
-  this.socket.destroy(error);
+  if (this.socket)
+    this.socket.destroy(error);
+  else
+    this.once('socket', function(socket) {
+      socket.destroy(error);
+    });
 };
 
 
@@ -514,23 +526,7 @@ OutgoingMessage.prototype._writeRaw = function(data, encoding) {
     return this.connection.write(data, encoding);
   } else if (this.connection && this.connection.destroyed) {
     // The socket was destroyed.  If we're still trying to write to it,
-    // then something bad happened, but it could be just that we haven't
-    // gotten the 'close' event yet.
-    //
-    // In v0.10 and later, this isn't a problem, since ECONNRESET isn't
-    // ignored in the first place.  We'll probably emit 'close' on the
-    // next tick, but just in case it's not coming, set a timeout that
-    // will emit it for us.
-    if (!this._hangupClose) {
-      this._hangupClose = true;
-      var socket = this.socket;
-      var timer = setTimeout(function() {
-        socket.emit('close');
-      });
-      socket.once('close', function() {
-        clearTimeout(timer);
-      });
-    }
+    // then we haven't gotten the 'close' event yet.
     return false;
   } else {
     // buffer, as long as we're not destroyed.
@@ -788,15 +784,18 @@ OutgoingMessage.prototype.write = function(chunk, encoding) {
 
   var len, ret;
   if (this.chunkedEncoding) {
-    if (typeof(chunk) === 'string') {
+    if (typeof(chunk) === 'string' &&
+        encoding !== 'hex' &&
+        encoding !== 'base64' &&
+        encoding !== 'binary') {
       len = Buffer.byteLength(chunk, encoding);
       chunk = len.toString(16) + CRLF + chunk + CRLF;
       ret = this._send(chunk, encoding);
     } else {
-      // buffer
+      // buffer, or a non-toString-friendly encoding
       len = chunk.length;
       this._send(len.toString(16) + CRLF);
-      this._send(chunk);
+      this._send(chunk, encoding);
       ret = this._send(CRLF);
     }
   } else {
@@ -1635,8 +1634,10 @@ function parserOnIncomingClient(res, shouldKeepAlive) {
   COUNTER_HTTP_CLIENT_RESPONSE();
   req.res = res;
   res.req = req;
-  var handled = req.emit('response', res);
+
+  // add our listener first, so that we guarantee socket cleanup
   res.on('end', responseOnEnd);
+  var handled = req.emit('response', res);
 
   // If the user did not listen for the 'response' event, then they
   // can't possibly read the data, so we ._dump() it into the void
@@ -1667,7 +1668,11 @@ function responseOnEnd() {
     }
     socket.removeListener('close', socketCloseListener);
     socket.removeListener('error', socketErrorListener);
-    socket.emit('free');
+    // Mark this socket as available, AFTER user-added end
+    // handlers have a chance to run.
+    process.nextTick(function() {
+      socket.emit('free');
+    });
   }
 }
 
@@ -1716,7 +1721,6 @@ ClientRequest.prototype._deferToConnect = function(method, arguments_, cb) {
   var self = this;
   var onSocket = function() {
     if (self.socket.writable) {
-      debug('Apply ' + method + ' on ' + self.socket);
       if (method) {
         self.socket[method].apply(self.socket, arguments_);
       }

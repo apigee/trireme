@@ -87,6 +87,9 @@ public class ScriptRunner
     private Scriptable          mainModule;
     private Object              console;
     private Scriptable          fatalHandler;
+    private String              workingDirectory;
+    private String              scriptFileName;
+    private String              scriptDirName;
 
     private ScriptableObject    scope;
 
@@ -96,6 +99,19 @@ public class ScriptRunner
     {
         this(so, env, sandbox, scriptName, args);
         this.scriptFile = scriptFile;
+
+        try {
+            File scriptPath = new File(pathTranslator.reverseTranslate(scriptFile.getAbsolutePath()));
+            if (scriptPath == null) {
+                this.scriptFileName = "";
+                this.scriptDirName = ".";
+            } else {
+                this.scriptFileName = scriptPath.getPath();
+                this.scriptDirName = scriptPath.getParent();
+            }
+        } catch (IOException ioe) {
+            throw new AssertionError("Error translating file path: " + ioe);
+        }
     }
 
     public ScriptRunner(NodeScript so, NodeEnvironment env, Sandbox sandbox,
@@ -104,6 +120,8 @@ public class ScriptRunner
     {
         this(so, env, sandbox, scriptName, args);
         this.script = script;
+        this.scriptFileName = scriptName;
+        this.scriptDirName = ".";
     }
 
     private ScriptRunner(NodeScript so, NodeEnvironment env, Sandbox sandbox, String scriptName,
@@ -116,26 +134,30 @@ public class ScriptRunner
         this.args = args;
         this.sandbox = sandbox;
 
-        ExecutorService ap = null;
-        PathTranslator pt = null;
-        if (sandbox != null) {
-            if (sandbox.getFilesystemRoot() != null) {
-                try {
-                    pt = new PathTranslator(sandbox.getFilesystemRoot());
-                } catch (IOException ioe) {
-                    throw new AssertionError("Unexpected I/O error setting filesystem root: " + ioe);
-                }
+        if ((sandbox != null) && (sandbox.getFilesystemRoot() != null)) {
+            try {
+                this.pathTranslator = new PathTranslator(sandbox.getFilesystemRoot());
+            } catch (IOException ioe) {
+                throw new AssertionError("Unexpected I/O error setting filesystem root: " + ioe);
             }
-            if (sandbox.getAsyncThreadPool() != null) {
-                ap = sandbox.getAsyncThreadPool();
-            }
-        }
-        if (ap == null) {
-            ap = env.getAsyncPool();
+        } else {
+            this.pathTranslator = new PathTranslator();
         }
 
-        this.pathTranslator = pt;
-        this.asyncPool = ap;
+        if ((sandbox != null) && (sandbox.getWorkingDirectory() != null)) {
+            this.workingDirectory = sandbox.getWorkingDirectory();
+        } else if ((sandbox != null) && (sandbox.getFilesystemRoot() != null)) {
+            this.workingDirectory = "/";
+        } else {
+            this.workingDirectory = new File(".").getAbsolutePath();
+        }
+        pathTranslator.setWorkingDir(workingDirectory);
+
+        if ((sandbox != null) && (sandbox.getAsyncThreadPool() != null)) {
+            this.asyncPool = sandbox.getAsyncThreadPool();
+        } else {
+            this.asyncPool = env.getAsyncPool();
+        }
 
         try {
             this.selector = Selector.open();
@@ -169,6 +191,16 @@ public class ScriptRunner
     @Override
     public NodeScript getScriptObject() {
         return scriptObject;
+    }
+
+    public String getWorkingDirectory() {
+        return workingDirectory;
+    }
+
+    public void setWorkingDirectory(String wd)
+    {
+        this.workingDirectory = wd;
+        pathTranslator.setWorkingDir(wd);
     }
 
     public Scriptable getScriptScope() {
@@ -235,19 +267,19 @@ public class ScriptRunner
     @Override
     public File translatePath(String path)
     {
-        if (pathTranslator == null) {
-            return new File(path);
+        File pf = new File(path);
+        /*
+        if (!pf.isAbsolute()) {
+            pf = new File(pf, workingDirectory);
         }
-        return pathTranslator.translate(path);
+        */
+        return pathTranslator.translate(pf.getPath());
     }
 
     @Override
     public String reverseTranslatePath(String path)
         throws IOException
     {
-        if (pathTranslator == null) {
-            return path;
-        }
         return pathTranslator.reverseTranslate(path);
     }
 
@@ -465,17 +497,17 @@ public class ScriptRunner
 
             } else {
                 // Again like the real node, delegate running the actual script to the module module.
-                String scriptPath = scriptFile.getPath();
-                scriptPath = reverseTranslatePath(scriptPath);
+                /*
                 if (!scriptFile.isAbsolute() && !scriptPath.startsWith("./")) {
                     // Add ./ before script path to un-confuse the module module if it's a local path
                     scriptPath = new File("./", scriptPath).getPath();
                 }
+                */
 
                 if (log.isDebugEnabled()) {
-                    log.debug("Launching module.runMain({})", scriptPath);
+                    log.debug("Launching module.runMain({})", scriptFileName);
                 }
-                setArgv(scriptPath);
+                setArgv(scriptFileName);
                 Function load = (Function)mainModule.get("runMain", mainModule);
                 enqueueCallback(load, mainModule, mainModule, null);
             }
@@ -748,25 +780,8 @@ public class ScriptRunner
 
             // Set up globals that are set up when running a script from the command line (set in "evalScript"
             // in node.js.)
-            try {
-                if (scriptFile == null) {
-                    scope.put("__filename", scope, scriptName);
-                    scope.put("__dirname", scope,
-                              reverseTranslatePath("."));
-                } else {
-                    scope.put("__filename", scope,
-                              scriptFile.getPath());
-                    if (scriptFile.getParentFile() == null) {
-                        scope.put("__dirname", scope,
-                                  reverseTranslatePath("."));
-                    } else {
-                        scope.put("__dirname", scope,
-                                  reverseTranslatePath(scriptFile.getParentFile().getPath()));
-                    }
-                }
-            } catch (IOException ioe) {
-                throw new NodeException(ioe);
-            }
+            scope.put("__filename", scope, scriptFileName);
+            scope.put("__dirname", scope, scriptDirName);
 
             // Set up the main native module
             mainModule = (Scriptable)require("module", cx);

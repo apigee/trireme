@@ -11,6 +11,17 @@ import java.io.IOException;
 public class PathTranslatorTest
 {
     @Test
+    public void testIdentity()
+        throws IOException
+    {
+        PathTranslator trans = new PathTranslator();
+        File xl = trans.translate("./target/test-classes/com/apigee/noderunner/core/test/PathTranslatorTest.class");
+        File realFile = new File("./target/test-classes/com/apigee/noderunner/core/test/PathTranslatorTest.class");
+        assertTrue(realFile.exists());
+        assertEquals(realFile.getCanonicalPath(), xl.getCanonicalPath());
+    }
+
+    @Test
     public void testBasicPath()
         throws IOException
     {

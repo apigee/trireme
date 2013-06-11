@@ -210,6 +210,38 @@ public class BasicTest
     }
 
     @Test
+    public void testChrootAndChdir()
+        throws InterruptedException, ExecutionException, NodeException, IOException
+    {
+        Sandbox sb = new Sandbox();
+        sb.setFilesystemRoot("./target");
+        sb.setWorkingDirectory("./test-classes");
+        NodeEnvironment rootEnv = new NodeEnvironment();
+        rootEnv.setSandbox(sb);
+        NodeScript script = rootEnv.createScript("chroottest.js",
+                                             new File("./target/test-classes/tests/chroottest.js"),
+                                             null);
+        ScriptStatus stat = script.execute().get();
+        assertEquals(0, stat.getExitCode());
+    }
+
+    @Test
+    public void testChrootAndChdirAbsolute()
+        throws InterruptedException, ExecutionException, NodeException, IOException
+    {
+        Sandbox sb = new Sandbox();
+        sb.setFilesystemRoot("./target");
+        sb.setWorkingDirectory("/test-classes");
+        NodeEnvironment rootEnv = new NodeEnvironment();
+        rootEnv.setSandbox(sb);
+        NodeScript script = rootEnv.createScript("chroottest.js",
+                                             new File("./target/test-classes/tests/chroottest.js"),
+                                             null);
+        ScriptStatus stat = script.execute().get();
+        assertEquals(0, stat.getExitCode());
+    }
+
+    @Test
     public void testChrootAbsolutePath()
         throws InterruptedException, ExecutionException, NodeException, IOException
     {

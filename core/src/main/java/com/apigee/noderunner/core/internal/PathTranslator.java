@@ -19,6 +19,13 @@ public class PathTranslator
 
     private final File root;
     private final String canonicalRoot;
+    private File workingDir;
+
+    public PathTranslator()
+    {
+        this.root = null;
+        this.canonicalRoot = null;
+    }
 
     public PathTranslator(String root)
         throws IOException
@@ -27,13 +34,31 @@ public class PathTranslator
         this.canonicalRoot = this.root.getCanonicalPath();
     }
 
-    public String getRoot() {
-        return root.getPath();
+    public void setWorkingDir(String wd) {
+        this.workingDir = new File(wd);
     }
 
-    public File translate(String path)
+    public String getRoot() {
+        return (root == null ? null : root.getPath());
+    }
+
+    /**
+     * Convert a Node.js path to a native (Java) path based on the specified root.
+     * If the path is "above" the current root, then return null -- the caller must treat this as "file not found".
+     */
+    public File translate(String pathStr)
     {
-        String[] components = separator.split(path);
+        File path = new File(pathStr);
+        if (!path.isAbsolute()) {
+            // Make the path relative to the working directory in case it starts with a ".".
+            // We need this because we may have manually overridden the OS's notion of the "cwd"
+            path = new File(workingDir, pathStr);
+        }
+
+        if (root == null) {
+            return path;
+        }
+        String[] components = separator.split(path.getPath());
         int depth = 0;
         for (String c : components) {
             if ("..".equals(c)) {
@@ -49,16 +74,22 @@ public class PathTranslator
             return null;
         }
 
-        File realPath = new File(root, path);
+        File realPath = new File(root, path.getPath());
         if (log.isDebugEnabled()) {
             log.debug("PathTranslator: {} -> {}", path, realPath.getPath());
         }
         return realPath;
     }
 
+    /**
+     * Convert a native (Java) path to a Node.js path based on the root.
+     */
     public String reverseTranslate(String path)
         throws IOException
     {
+        if (root == null) {
+            return path;
+        }
         String canon = new File(path).getCanonicalPath();
         String realPath;
 

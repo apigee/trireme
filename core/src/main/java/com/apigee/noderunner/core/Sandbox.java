@@ -20,6 +20,7 @@ public class Sandbox
     private Scriptable      stdinStream;
     private Scriptable      stderrStream;
     private String          filesystemRoot;
+    private String          workingDirectory;
     private ExecutorService asyncPool;
     private NetworkPolicy   networkPolicy;
     private SubprocessPolicy processPolicy;
@@ -45,6 +46,7 @@ public class Sandbox
             this.stdinStream = parent.stdinStream;
             this.stderrStream = parent.stderrStream;
             this.filesystemRoot = parent.filesystemRoot;
+            this.workingDirectory = parent.workingDirectory;
             this.asyncPool = parent.asyncPool;
             this.networkPolicy = parent.networkPolicy;
             this.processPolicy = parent.processPolicy;
@@ -68,6 +70,22 @@ public class Sandbox
 
     public String getFilesystemRoot() {
         return filesystemRoot;
+    }
+
+    /**
+     * Set the working directory of this script. This is the directory for relative paths and for "process.cwd()".
+     * This directory is relative to the filesystem root set in "setFilesystemRoot".
+     * By default if "setFilesystemRoot" was called then the directory defaults to that, and otherwise to the
+     * user's working directory.
+     */
+    public Sandbox setWorkingDirectory(String wd)
+    {
+        this.workingDirectory = wd;
+        return this;
+    }
+
+    public String getWorkingDirectory() {
+        return workingDirectory;
     }
 
     /**

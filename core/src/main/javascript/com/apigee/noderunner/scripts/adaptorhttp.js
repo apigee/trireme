@@ -57,7 +57,7 @@ if (HttpWrap.hasServerAdapter()) {
     if (msecs > 0 && !isNaN(msecs) && isFinite(msecs)) {
       debug('Enrolling timeout in ' + msecs);
       timers.enroll(this, msecs);
-      timers.active(this);
+      timers._unrefActive(this);
       if (callback) {
         this.once('timeout', callback);
       }
@@ -80,7 +80,7 @@ if (HttpWrap.hasServerAdapter()) {
   };
 
   DummySocket.prototype.active = function() {
-    timers.active(this);
+    timers._unrefActive(this);
   };
 
   DummySocket.prototype.close = function() {

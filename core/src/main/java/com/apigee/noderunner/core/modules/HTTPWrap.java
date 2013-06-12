@@ -533,16 +533,20 @@ public class HTTPWrap
             if ((data == null) || (data == Context.getUndefinedValue())) {
                 return null;
             }
-            if ((encoding == null) || (encoding == Context.getUndefinedValue())){
-                if (data instanceof String) {
+
+            if (data instanceof String) {
+                if ((encoding == null) || (encoding == Context.getUndefinedValue())) {
                     return Utils.stringToBuffer((String)data, Charsets.get().getCharset(Charsets.DEFAULT_ENCODING));
                 } else {
-                    return (((Buffer.BufferImpl)data).getBuffer());
+                    String encStr = Context.toString(encoding);
+                    String str = Context.toString(data);
+                    return Utils.stringToBuffer(str, Charsets.get().resolveCharset(encStr));
                 }
+            } else if (data instanceof Buffer.BufferImpl) {
+                return (((Buffer.BufferImpl)data).getBuffer());
+            } else {
+                throw Utils.makeError(Context.getCurrentContext(), this, "Data must be a String or a Buffer");
             }
-            String str = Context.toString(data);
-            String encStr = Context.toString(encoding);
-            return Utils.stringToBuffer(str, Charsets.get().resolveCharset(encStr));
         }
 
         @JSFunction

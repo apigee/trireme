@@ -28,6 +28,9 @@ var FreeList = require('freelist').FreeList;
 var HTTPParser = process.binding('http_parser').HTTPParser;
 var assert = require('assert').ok;
 
+// an empty buffer for UPGRADE/CONNECT bodyHead compatibility
+var emptyBuffer = new Buffer(0);
+
 var debug;
 if (process.env.NODE_DEBUG && /http/.test(process.env.NODE_DEBUG)) {
   debug = function(x) { console.error('HTTP: %s', x); };
@@ -780,14 +783,32 @@ OutgoingMessage.prototype.write = function(chunk, encoding) {
     throw new TypeError('first argument must be a string or Buffer');
   }
 
-  if (chunk.length === 0) return false;
+  // If we get an empty string or buffer, then just do nothing, and
+  // signal the user to keep writing.
+  if (chunk.length === 0) return true;
+
+  // TODO(bnoordhuis) Temporary optimization hack, remove in v0.11. We only
+  // want to convert the buffer when we're sending:
+  //
+  //   a) Transfer-Encoding chunks, because it lets us pack the chunk header
+  //      and the chunk into a single write(), or
+  //
+  //   b) the first chunk of a fixed-length request, because it lets us pack
+  //      the request headers and the chunk into a single write().
+  //
+  // Converting to strings is expensive, CPU-wise, but reducing the number
+  // of write() calls more than makes up for that because we're dramatically
+  // reducing the number of TCP roundtrips.
+  if (chunk instanceof Buffer && (this.chunkedEncoding || !this._headerSent)) {
+    chunk = chunk.toString('binary');
+    encoding = 'binary';
+  }
 
   var len, ret;
   if (this.chunkedEncoding) {
     if (typeof(chunk) === 'string' &&
         encoding !== 'hex' &&
-        encoding !== 'base64' &&
-        encoding !== 'binary') {
+        encoding !== 'base64') {
       len = Buffer.byteLength(chunk, encoding);
       chunk = len.toString(16) + CRLF + chunk + CRLF;
       ret = this._send(chunk, encoding);
@@ -1561,7 +1582,9 @@ function socketOnData(d, start, end) {
       socket.removeListener('close', socketCloseListener);
       socket.removeListener('error', socketErrorListener);
 
-      req.emit(eventName, res, socket, bodyHead);
+      socket.unshift(bodyHead);
+
+      req.emit(eventName, res, socket, emptyBuffer);
       req.emit('close');
     } else {
       // Got Upgrade header or CONNECT method, but have no handler.
@@ -1934,7 +1957,8 @@ function connectionListener(socket) {
 
       var eventName = req.method === 'CONNECT' ? 'connect' : 'upgrade';
       if (EventEmitter.listenerCount(self, eventName) > 0) {
-        self.emit(eventName, req, req.socket, bodyHead);
+        socket.unshift(bodyHead);
+        self.emit(eventName, req, req.socket, emptyBuffer);
       } else {
         // Got upgrade header or CONNECT method, but have no handler.
         socket.destroy();

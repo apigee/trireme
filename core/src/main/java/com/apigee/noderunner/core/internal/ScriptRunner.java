@@ -678,6 +678,7 @@ public class ScriptRunner
         if (log.isDebugEnabled()) {
             log.debug("Handling fatal exception {} domain = {}\n{}",
                       re, System.identityHashCode(process.getDomain()), re.getScriptStackTrace());
+            log.debug("Fatal Java exception: {}", re);
         }
         boolean handled =
             Context.toBoolean(handleFatal.call(cx, scope, null, new Object[] { error, log.isDebugEnabled() }));

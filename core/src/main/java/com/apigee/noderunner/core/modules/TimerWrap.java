@@ -66,6 +66,7 @@ public class TimerWrap
         public static Object newTimerImpl(Context cx, Object[] args, Function fn, boolean isNew)
         {
             TimerImpl t = new TimerImpl();
+            t.ref();
             return t;
         }
 
@@ -101,7 +102,6 @@ public class TimerWrap
                 log.debug("Starting timer {} in {} interval = {}",
                           System.identityHashCode(timer), timeout, interval);
             }
-            timer.ref();
             if (interval > 0) {
                 timer.activity = getRunner().createTimer(timeout, true, interval, timer, timer, domain);
             } else {

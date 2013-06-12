@@ -1385,16 +1385,28 @@ Interface.prototype.setBreakpoint = function(script, line,
       scriptId = script;
     }
 
-    if (!scriptId) return this.error('Script : ' + script + ' not found');
     if (ambiguous) return this.error('Script name is ambiguous');
     if (line <= 0) return this.error('Line should be a positive value');
 
-    var req = {
-      type: 'scriptId',
-      target: scriptId,
-      line: line - 1,
-      condition: condition
-    };
+    var req;
+    if (scriptId) {
+      req = {
+        type: 'scriptId',
+        target: scriptId,
+        line: line - 1,
+        condition: condition
+      };
+    } else {
+      this.print('Warning: script \'' + script + '\' was not loaded yet.');
+      var escapedPath = script.replace(/([/\\.?*()^${}|[\]])/g, '\\$1');
+      var scriptPathRegex = '^(.*[\\/\\\\])?' + escapedPath + '$';
+      req = {
+        type: 'scriptRegExp',
+        target: scriptPathRegex,
+        line: line - 1,
+        condition: condition
+      };
+    }
   }
 
   self.pause();
@@ -1411,20 +1423,18 @@ Interface.prototype.setBreakpoint = function(script, line,
       // Try load scriptId and line from response
       if (!scriptId) {
         scriptId = res.script_id;
-        line = res.line;
+        line = res.line + 1;
       }
 
-      // If we finally have one - remember this breakpoint
-      if (scriptId) {
-        self.client.breakpoints.push({
-          id: res.breakpoint,
-          scriptId: scriptId,
-          script: (self.client.scripts[scriptId] || {}).name,
-          line: line,
-          condition: condition
-        });
-      }
-
+      // Remember this breakpoint even if scriptId is not resolved yet
+      self.client.breakpoints.push({
+        id: res.breakpoint,
+        scriptId: scriptId,
+        script: (self.client.scripts[scriptId] || {}).name,
+        line: line,
+        condition: condition,
+        scriptReq: script
+      });
     }
     self.resume();
   });
@@ -1439,7 +1449,9 @@ Interface.prototype.clearBreakpoint = function(script, line) {
       index;
 
   this.client.breakpoints.some(function(bp, i) {
-    if (bp.scriptId === script || bp.script.indexOf(script) !== -1) {
+    if (bp.scriptId === script ||
+        bp.scriptReq === script ||
+        (bp.script && bp.script.indexOf(script) !== -1)) {
       if (index !== undefined) {
         ambiguous = true;
       }
@@ -1601,7 +1613,8 @@ Interface.prototype.trySpawn = function(cb) {
   var self = this,
       breakpoints = this.breakpoints || [],
       port = exports.port,
-      host = 'localhost';
+      host = 'localhost',
+      childArgs = this.args;
 
   this.killChild();
 
@@ -1634,13 +1647,13 @@ Interface.prototype.trySpawn = function(cb) {
         // Start debugger on custom port
         // `node debug --port=5858 app.js`
         port = parseInt(match[1], 10);
-        this.args.splice(0, 2, '--debug-brk=' + port);
+        childArgs = ['--debug-brk=' + port].concat(this.args.slice(2));
       }
     }
   }
 
   if (!this.child) {
-    this.child = spawn(process.execPath, this.args);
+    this.child = spawn(process.execPath, childArgs);
 
     this.child.stdout.on('data', this.childPrint.bind(this));
     this.child.stderr.on('data', this.childPrint.bind(this));
@@ -1656,7 +1669,8 @@ Interface.prototype.trySpawn = function(cb) {
 
     // Restore breakpoints
     breakpoints.forEach(function(bp) {
-      self.setBreakpoint(bp.scriptId, bp.line, bp.condition, true);
+      self.print('Restoring breakpoint ' + bp.scriptReq + ':' + bp.line);
+      self.setBreakpoint(bp.scriptReq, bp.line, bp.condition, true);
     });
 
     client.on('close', function() {

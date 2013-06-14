@@ -44,7 +44,8 @@ assert.AssertionError = function AssertionError(options) {
   this.operator = options.operator;
   this.message = options.message || getMessage(this);
   var stackStartFunction = options.stackStartFunction || fail;
-  Error.captureStackTrace(this, stackStartFunction);
+  // TODO Noderunner not supported in Rhino yet.
+  //Error.captureStackTrace(this, stackStartFunction);
 };
 
 // assert.AssertionError instanceof Error

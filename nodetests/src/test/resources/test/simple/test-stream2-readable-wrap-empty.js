@@ -21,25 +21,23 @@
 
 var common = require('../common');
 var assert = require('assert');
-var N = 2;
-var tickCount = 0;
-var exceptionCount = 0;
 
-function cb() {
-  ++tickCount;
-  throw new Error();
-}
+var Readable = require('_stream_readable');
+var EE = require('events').EventEmitter;
 
-for (var i = 0; i < N; ++i) {
-  process.nextTick(cb);
-}
+var oldStream = new EE();
+oldStream.pause = function(){};
+oldStream.resume = function(){};
 
-process.on('uncaughtException', function() {
-  ++exceptionCount;
-});
+var newStream = new Readable().wrap(oldStream);
 
-process.on('exit', function() {
-  process.removeAllListeners('uncaughtException');
-  assert.equal(tickCount, N);
-  assert.equal(exceptionCount, N);
+var ended = false;
+newStream
+  .on('readable', function(){})
+  .on('end', function(){ ended = true; });
+
+oldStream.emit('end');
+
+process.on('exit', function(){
+  assert.ok(ended);
 });

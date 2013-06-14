@@ -21,25 +21,27 @@
 
 var common = require('../common');
 var assert = require('assert');
-var N = 2;
-var tickCount = 0;
-var exceptionCount = 0;
+var net = require('net');
 
-function cb() {
-  ++tickCount;
-  throw new Error();
-}
+var server = net.createServer(function (c) {
+  c.write('hello');
+  c.unref();
+});
+server.listen(common.PORT);
+server.unref();
 
-for (var i = 0; i < N; ++i) {
-  process.nextTick(cb);
-}
+var timedout = false;
 
-process.on('uncaughtException', function() {
-  ++exceptionCount;
+[8, 5, 3, 6, 2, 4].forEach(function (T) {
+  var socket = net.createConnection(common.PORT, 'localhost');
+  socket.setTimeout(T * 1000, function () {
+    console.log(process._getActiveHandles());
+    timedout = true;
+    socket.destroy();
+  });
+  socket.unref();
 });
 
-process.on('exit', function() {
-  process.removeAllListeners('uncaughtException');
-  assert.equal(tickCount, N);
-  assert.equal(exceptionCount, N);
+process.on('exit', function () {
+  assert.strictEqual(timedout, false, 'Socket timeout should not hold loop open');
 });

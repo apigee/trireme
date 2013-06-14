@@ -21,25 +21,47 @@
 
 var common = require('../common');
 var assert = require('assert');
-var N = 2;
-var tickCount = 0;
-var exceptionCount = 0;
 
-function cb() {
-  ++tickCount;
-  throw new Error();
-}
+// Make sure that throwing in 'end' handler doesn't lock
+// up the socket forever.
+//
+// This is NOT a good way to handle errors in general, but all
+// the same, we should not be so brittle and easily broken.
 
-for (var i = 0; i < N; ++i) {
-  process.nextTick(cb);
-}
+var http = require('http');
 
-process.on('uncaughtException', function() {
-  ++exceptionCount;
+var n = 0;
+var server = http.createServer(function(req, res) {
+  if (++n === 10) server.close();
+  res.end('ok');
 });
 
+server.listen(common.PORT, function() {
+  for (var i = 0; i < 10; i++) {
+    var options = { port: common.PORT };
+
+    var req = http.request(options, function (res) {
+      res.resume()
+      res.on('end', function() {
+        throw new Error('gleep glorp');
+      });
+    });
+    req.end();
+  }
+});
+
+setTimeout(function() {
+  process.removeListener('uncaughtException', catcher);
+  throw new Error('Taking too long!');
+}, 1000).unref();
+
+process.on('uncaughtException', catcher);
+var errors = 0;
+function catcher() {
+  errors++;
+}
+
 process.on('exit', function() {
-  process.removeAllListeners('uncaughtException');
-  assert.equal(tickCount, N);
-  assert.equal(exceptionCount, N);
+  assert.equal(errors, 10);
+  console.log('ok');
 });

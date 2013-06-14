@@ -21,25 +21,19 @@
 
 var common = require('../common');
 var assert = require('assert');
-var N = 2;
-var tickCount = 0;
-var exceptionCount = 0;
+var dgram = require('dgram');
 
-function cb() {
-  ++tickCount;
-  throw new Error();
-}
+dgram.createSocket('udp4').bind(common.PORT + 0, common.mustCall(function() {
+  assert.equal(this.address().port, common.PORT + 0);
+  assert.equal(this.address().address, '0.0.0.0');
+  this.close();
+}));
 
-for (var i = 0; i < N; ++i) {
-  process.nextTick(cb);
-}
-
-process.on('uncaughtException', function() {
-  ++exceptionCount;
-});
-
-process.on('exit', function() {
-  process.removeAllListeners('uncaughtException');
-  assert.equal(tickCount, N);
-  assert.equal(exceptionCount, N);
-});
+dgram.createSocket('udp6').bind(common.PORT + 1, common.mustCall(function() {
+  assert.equal(this.address().port, common.PORT + 1);
+  var address = this.address().address;
+  if (address === '::ffff:0.0.0.0')
+    address = '::';
+  assert.equal(address, '::');
+  this.close();
+}));

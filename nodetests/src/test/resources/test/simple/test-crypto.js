@@ -698,9 +698,20 @@ var secret3 = dh3.computeSecret(key2, 'hex', 'base64');
 
 assert.equal(secret1, secret3);
 
+// Run this one twice to make sure that the dh3 clears its error properly
+(function() {
+  var c = crypto.createDecipher('aes-128-ecb', '');
+  assert.throws(function() { c.final('utf8') }, /wrong final block length/);
+})();
+
 assert.throws(function() {
   dh3.computeSecret('');
 }, /key is too small/i);
+
+(function() {
+  var c = crypto.createDecipher('aes-128-ecb', '');
+  assert.throws(function() { c.final('utf8') }, /wrong final block length/);
+})();
 
 // Create a shared using a DH group.
 var alice = crypto.createDiffieHellmanGroup('modp5');
@@ -834,30 +845,29 @@ testPBKDF2('pass\0word', 'sa\0lt', 4096, 16,
            '\x25\xe0\xc3');
 
 function assertSorted(list) {
-  for (var i = 0, k = list.length - 1; i < k; ++i) {
-    var a = list[i + 0];
-    var b = list[i + 1];
-    assert(a <= b);
-  }
+  assert.deepEqual(list, list.sort());
 }
 
-// Assume that we have at least AES256-SHA.
-assert.notEqual(0, crypto.getCiphers());
-assert.notEqual(-1, crypto.getCiphers().indexOf('AES256-SHA'));
+// Assume that we have at least AES-128-CBC.
+assert.notEqual(0, crypto.getCiphers().length);
+assert.notEqual(-1, crypto.getCiphers().indexOf('aes-128-cbc'));
+assert.equal(-1, crypto.getCiphers().indexOf('AES-128-CBC'));
 assertSorted(crypto.getCiphers());
 
+// Assume that we have at least AES256-SHA.
+var tls = require('tls');
+assert.notEqual(0, tls.getCiphers().length);
+assert.notEqual(-1, tls.getCiphers().indexOf('aes256-sha'));
+assert.equal(-1, tls.getCiphers().indexOf('AES256-SHA'));
+assertSorted(tls.getCiphers());
+
 // Assert that we have sha and sha1 but not SHA and SHA1.
-assert.notEqual(0, crypto.getHashes());
+assert.notEqual(0, crypto.getHashes().length);
 assert.notEqual(-1, crypto.getHashes().indexOf('sha1'));
 assert.notEqual(-1, crypto.getHashes().indexOf('sha'));
 assert.equal(-1, crypto.getHashes().indexOf('SHA1'));
 assert.equal(-1, crypto.getHashes().indexOf('SHA'));
 assertSorted(crypto.getHashes());
-
-(function() {
-  var c = crypto.createDecipher('aes-128-ecb', '');
-  assert.throws(function() { c.final('utf8') }, /invalid public key/);
-})();
 
 // Base64 padding regression test, see #4837.
 (function() {
@@ -882,4 +892,11 @@ assert.throws(function() {
   try { d.final('xxx') } catch (e) { /* Ignore. */ }
   try { d.final('xxx') } catch (e) { /* Ignore. */ }
   try { d.final('xxx') } catch (e) { /* Ignore. */ }
+})();
+
+// Regression test for #5482: string to Cipher#update() should not assert.
+(function() {
+  var c = crypto.createCipher('aes192', '0123456789abcdef');
+  c.update('update');
+  c.final();
 })();

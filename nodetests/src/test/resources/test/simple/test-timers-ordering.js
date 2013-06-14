@@ -21,25 +21,28 @@
 
 var common = require('../common');
 var assert = require('assert');
-var N = 2;
-var tickCount = 0;
-var exceptionCount = 0;
+var i;
 
-function cb() {
-  ++tickCount;
-  throw new Error();
-}
+var N = 30;
 
-for (var i = 0; i < N; ++i) {
-  process.nextTick(cb);
-}
+var last_i = 0;
+var last_ts = 0;
+var start = Date.now();
 
-process.on('uncaughtException', function() {
-  ++exceptionCount;
-});
+var f = function(i) {
+  if (i <= N) {
+    // check order
+    assert.equal(i, last_i + 1, 'order is broken: ' + i + ' != ' + last_i + ' + 1');
+    last_i = i;
 
-process.on('exit', function() {
-  process.removeAllListeners('uncaughtException');
-  assert.equal(tickCount, N);
-  assert.equal(exceptionCount, N);
-});
+    // check that this iteration is fired at least 1ms later than the previous
+    var now = Date.now();
+    console.log(i, now);
+    assert(now >= last_ts + 1, 'current ts ' + now + ' < prev ts ' + last_ts + ' + 1');
+    last_ts = now;
+
+    // schedule next iteration
+    setTimeout(f, 1, i + 1);
+  }
+};
+f(1);

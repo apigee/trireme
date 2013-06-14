@@ -21,25 +21,22 @@
 
 var common = require('../common');
 var assert = require('assert');
-var N = 2;
-var tickCount = 0;
-var exceptionCount = 0;
 
-function cb() {
-  ++tickCount;
-  throw new Error();
-}
-
-for (var i = 0; i < N; ++i) {
-  process.nextTick(cb);
-}
-
-process.on('uncaughtException', function() {
-  ++exceptionCount;
-});
+var crypto = require('crypto');
+var stream = require('stream')
+var s = new stream.PassThrough();
+var h = crypto.createHash('sha1');
+var expect = '15987e60950cf22655b9323bc1e281f9c4aff47e';
+var gotData = false;
 
 process.on('exit', function() {
-  process.removeAllListeners('uncaughtException');
-  assert.equal(tickCount, N);
-  assert.equal(exceptionCount, N);
+  assert(gotData);
+  console.log('ok');
 });
+
+s.pipe(h).on('data', function(c) {
+  assert.equal(c, expect);
+  gotData = true;
+}).setEncoding('hex');
+
+s.end('aoeu');

@@ -19,27 +19,13 @@
 // OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE
 // USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-var common = require('../common');
-var assert = require('assert');
-var N = 2;
-var tickCount = 0;
-var exceptionCount = 0;
+var repl = require('./helper-debugger-repl.js');
 
-function cb() {
-  ++tickCount;
-  throw new Error();
-}
+repl.startDebugger('breakpoints.js');
 
-for (var i = 0; i < N; ++i) {
-  process.nextTick(cb);
-}
+// Restart the debugged script
+repl.addTest('restart', [
+  /terminated/,
+].concat(repl.initialLines));
 
-process.on('uncaughtException', function() {
-  ++exceptionCount;
-});
-
-process.on('exit', function() {
-  process.removeAllListeners('uncaughtException');
-  assert.equal(tickCount, N);
-  assert.equal(exceptionCount, N);
-});
+repl.addTest('quit', []);

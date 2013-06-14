@@ -21,25 +21,34 @@
 
 var common = require('../common');
 var assert = require('assert');
-var N = 2;
-var tickCount = 0;
-var exceptionCount = 0;
 
-function cb() {
-  ++tickCount;
-  throw new Error();
-}
+// no warnings should happen!
+var trace = console.trace;
+console.trace = function() {
+  trace.apply(console, arguments);
+  throw new Error('no tracing should happen here');
+};
 
-for (var i = 0; i < N; ++i) {
-  process.nextTick(cb);
-}
+var http = require('http');
+var net = require('net');
 
-process.on('uncaughtException', function() {
-  ++exceptionCount;
+var server = http.createServer(function(req, res) {
+  res.end('ok');
+
+  // Oh no!  The connection died!
+  req.socket.destroy();
 });
 
-process.on('exit', function() {
-  process.removeAllListeners('uncaughtException');
-  assert.equal(tickCount, N);
-  assert.equal(exceptionCount, N);
+server.listen(common.PORT);
+
+var client = net.connect({ port: common.PORT, allowHalfOpen: true });
+for (var i = 0; i < 20; i++) {
+  client.write('GET / HTTP/1.1\r\n' +
+               'Host: some.host.name\r\n'+
+               '\r\n\r\n');
+}
+client.end();
+client.on('connect', function() {
+  server.close();
 });
+client.pipe(process.stdout);

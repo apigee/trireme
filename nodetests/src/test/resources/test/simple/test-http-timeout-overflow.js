@@ -19,27 +19,46 @@
 // OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE
 // USE OR OTHER DEALINGS IN THE SOFTWARE.
 
+
 var common = require('../common');
 var assert = require('assert');
-var N = 2;
-var tickCount = 0;
-var exceptionCount = 0;
 
-function cb() {
-  ++tickCount;
-  throw new Error();
-}
+var http = require('http');
 
-for (var i = 0; i < N; ++i) {
-  process.nextTick(cb);
-}
+var port = common.PORT;
+var serverRequests = 0;
+var clientRequests = 0;
 
-process.on('uncaughtException', function() {
-  ++exceptionCount;
+var server = http.createServer(function(req, res) {
+  serverRequests++;
+  res.writeHead(200, {'Content-Type': 'text/plain'});
+  res.end('OK');
 });
 
-process.on('exit', function() {
-  process.removeAllListeners('uncaughtException');
-  assert.equal(tickCount, N);
-  assert.equal(exceptionCount, N);
+server.listen(port, function() {
+  function callback(){}
+
+  var req = http.request({
+    port: port,
+    path: '/',
+    agent: false
+  }, function(res) {
+    req.clearTimeout(callback);
+
+    res.on('end', function() {
+      clientRequests++;
+      server.close();
+    })
+
+    res.resume();
+  });
+
+  // Overflow signed int32
+  req.setTimeout(0xffffffff, callback);
+  req.end();
+});
+
+process.once('exit', function() {
+  assert.equal(clientRequests, 1);
+  assert.equal(serverRequests, 1);
 });

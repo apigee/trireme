@@ -19,27 +19,21 @@
 // OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE
 // USE OR OTHER DEALINGS IN THE SOFTWARE.
 
+
+// Simple tests of most basic domain functionality.
+
 var common = require('../common');
 var assert = require('assert');
-var N = 2;
-var tickCount = 0;
-var exceptionCount = 0;
 
-function cb() {
-  ++tickCount;
-  throw new Error();
-}
-
-for (var i = 0; i < N; ++i) {
-  process.nextTick(cb);
-}
-
-process.on('uncaughtException', function() {
-  ++exceptionCount;
-});
-
-process.on('exit', function() {
-  process.removeAllListeners('uncaughtException');
-  assert.equal(tickCount, N);
-  assert.equal(exceptionCount, N);
+// timeouts call the callback directly from cc, so need to make sure the
+// domain will be used regardless
+setTimeout(function() {
+  var domain = require('domain');
+  var d = domain.create();
+  d.run(function() {
+    process.nextTick(function() {
+      console.trace('in nexttick', process.domain === d)
+      assert.equal(process.domain, d);
+    });
+  });
 });

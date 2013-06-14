@@ -21,25 +21,14 @@
 
 var common = require('../common');
 var assert = require('assert');
-var N = 2;
-var tickCount = 0;
-var exceptionCount = 0;
+var fork = require('child_process').fork;
 
-function cb() {
-  ++tickCount;
-  throw new Error();
+var expected = Array(1e5).join('ßßßß');
+if (process.argv[2] === 'child') {
+  process.send(expected);
+} else {
+  var child = fork(process.argv[1], ['child']);
+  child.on('message', common.mustCall(function(actual) {
+    assert.equal(actual, expected);
+  }));
 }
-
-for (var i = 0; i < N; ++i) {
-  process.nextTick(cb);
-}
-
-process.on('uncaughtException', function() {
-  ++exceptionCount;
-});
-
-process.on('exit', function() {
-  process.removeAllListeners('uncaughtException');
-  assert.equal(tickCount, N);
-  assert.equal(exceptionCount, N);
-});

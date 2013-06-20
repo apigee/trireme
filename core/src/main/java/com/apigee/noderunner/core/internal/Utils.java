@@ -1,5 +1,6 @@
 package com.apigee.noderunner.core.internal;
 
+import com.apigee.noderunner.core.modules.Constants;
 import org.mozilla.javascript.Context;
 import org.mozilla.javascript.JavaScriptException;
 import org.mozilla.javascript.RhinoException;
@@ -189,7 +190,16 @@ public class Utils
     public static Scriptable makeErrorObject(Context cx, Scriptable scope, NodeOSException e)
     {
         Scriptable err = cx.newObject(scope, "Error", new Object[] { e.getMessage() });
-        err.put("code", err, e.getCode());
+        if (e.getPath() != null) {
+            err.put("path", err, e.getPath());
+        }
+        if (e.getCode() != null) {
+            err.put("code", err, e.getCode());
+            int errno = Constants.getErrno(e.getCode());
+            if (errno >= 0) {
+                err.put("errno", err, errno);
+            }
+        }
         return err;
     }
 

@@ -10,6 +10,7 @@ import com.apigee.noderunner.core.ScriptStatus;
 import com.apigee.noderunner.core.ScriptStatusListener;
 import com.apigee.noderunner.core.SubprocessPolicy;
 import com.apigee.noderunner.core.internal.Utils;
+import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
 import org.mozilla.javascript.JavaScriptException;
@@ -35,6 +36,12 @@ public class BasicTest
     public void createEnvironment()
     {
         env = new NodeEnvironment();
+    }
+
+    @After
+    public void cleanEnvironment()
+    {
+        env.close();
     }
 
     @Test
@@ -210,6 +217,20 @@ public class BasicTest
     }
 
     @Test
+    public void testChrootScript()
+        throws InterruptedException, ExecutionException, NodeException, IOException
+    {
+        Sandbox sb = new Sandbox();
+        sb.setFilesystemRoot("./target/test-classes");
+        NodeScript script = env.createScript("chroottest.js",
+                                             new File("./target/test-classes/tests/chroottest.js"),
+                                             null);
+        script.setSandbox(sb);
+        ScriptStatus stat = script.execute().get();
+        assertEquals(0, stat.getExitCode());
+    }
+
+    @Test
     public void testChrootAndChdir()
         throws InterruptedException, ExecutionException, NodeException, IOException
     {
@@ -367,10 +388,10 @@ public class BasicTest
     public void testSetEnvironment()
         throws InterruptedException, ExecutionException, NodeException
     {
-        NodeEnvironment localEnv = new NodeEnvironment();
-        NodeScript script = localEnv.createScript("environmenttest.js",
-                                                  new File("./target/test-classes/tests/environmenttest.js"),
-                                                  new String[] { "foo", "bar", "baz", "foo" });
+
+        NodeScript script = env.createScript("environmenttest.js",
+                                             new File("./target/test-classes/tests/environmenttest.js"),
+                                             new String[] { "foo", "bar", "baz", "foo" });
 
         HashMap<String, String> env = new HashMap<String, String>();
         env.put("foo", "bar");
@@ -381,6 +402,77 @@ public class BasicTest
         assertEquals(0, status.getExitCode());
     }
 
+    @Test
+    public void testGlobalModule()
+        throws InterruptedException, ExecutionException, NodeException
+    {
+        NodeScript script = env.createScript("globalmoduletest.js",
+                                             new File("./target/test-classes/tests/globalmoduletest.js"), null);
+        HashMap<String, String> env = new HashMap<String, String>();
+        env.put("NODE_PATH", "./target/test-classes/global");
+        script.setEnvironment(env);
+
+        ScriptStatus status = script.execute().get();
+        assertEquals(0, status.getExitCode());
+        script.close();
+    }
+
+    @Test
+    public void testChrootGlobalModule()
+        throws InterruptedException, ExecutionException, NodeException
+    {
+        Sandbox sb = new Sandbox();
+        sb.setFilesystemRoot("./target/test-classes");
+        NodeScript script = env.createScript("globalmoduletest.js",
+                                             new File("./target/test-classes/tests/globalmoduletest.js"), null);
+        HashMap<String, String> env = new HashMap<String, String>();
+        env.put("NODE_PATH", "./global");
+        script.setEnvironment(env);
+        script.setSandbox(sb);
+
+        ScriptStatus status = script.execute().get();
+        assertEquals(0, status.getExitCode());
+        script.close();
+    }
+
+    @Test
+    public void testMountGlobalModule()
+        throws InterruptedException, ExecutionException, NodeException
+    {
+        Sandbox sb = new Sandbox();
+        NodeScript script = env.createScript("globalmoduletest.js",
+                                             new File("./target/test-classes/tests/globalmoduletest.js"), null);
+        sb.mount("/usr/lib/node_modules", "./target/test-classes/global");
+        HashMap<String, String> env = new HashMap<String, String>();
+        env.put("NODE_PATH", "/usr/lib/node_modules");
+        script.setEnvironment(env);
+        script.setSandbox(sb);
+
+        ScriptStatus status = script.execute().get();
+        assertEquals(0, status.getExitCode());
+        script.close();
+    }
+
+    @Test
+    public void testMountChrootGlobalModule()
+        throws InterruptedException, ExecutionException, NodeException
+    {
+        Sandbox sb = new Sandbox();
+        sb.setFilesystemRoot("./target/test-classes");
+        sb.mount("/node_modules", "./target/test-classes/global");
+        NodeScript script = env.createScript("globalmoduletest.js",
+                                             new File("./target/test-classes/tests/globalmoduletest.js"), null);
+        HashMap<String, String> env = new HashMap<String, String>();
+        // TODO we can't seem to do this for nested paths unless we have every subdirectory there.
+        env.put("NODE_PATH", "/node_modules");
+        script.setEnvironment(env);
+        script.setSandbox(sb);
+
+        ScriptStatus status = script.execute().get();
+        assertEquals(0, status.getExitCode());
+        script.close();
+    }
+
     private void runTest(String name)
         throws InterruptedException, ExecutionException, NodeException
     {
@@ -389,6 +481,7 @@ public class BasicTest
                                              null);
         ScriptStatus status = script.execute().get();
         assertEquals(0, status.getExitCode());
+        script.close();
     }
 
     private static final class RejectInPolicy

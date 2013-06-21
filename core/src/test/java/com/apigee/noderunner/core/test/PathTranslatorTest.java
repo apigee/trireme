@@ -113,4 +113,47 @@ public class PathTranslatorTest
         File xl = trans.translate("/com/apigee/../../com/../..");
         assertNull(xl);
     }
+
+    @Test
+    public void testMount()
+        throws IOException
+    {
+        File realFile = new File("./target/test-classes/global/globaltestmodule.js");
+        PathTranslator trans = new PathTranslator("./target/test-classes");
+        trans.mount("/opt", new File("./target/test-classes/global"));
+        File globalFile = trans.translate("/opt/globaltestmodule.js");
+        assertTrue(globalFile.exists());
+        assertEquals(realFile.getCanonicalPath(), globalFile.getCanonicalPath());
+    }
+
+    @Test
+    public void testMountNoRoot()
+        throws IOException
+    {
+        File realFile = new File("./target/test-classes/global/globaltestmodule.js");
+        PathTranslator trans = new PathTranslator();
+        trans.mount("/opt", new File("./target/test-classes/global"));
+        File globalFile = trans.translate("/opt/globaltestmodule.js");
+        assertTrue(globalFile.exists());
+        assertEquals(realFile.getCanonicalPath(), globalFile.getCanonicalPath());
+    }
+
+    @Test
+    public void testMultiMount()
+        throws IOException
+    {
+        PathTranslator trans = new PathTranslator();
+        trans.mount("/opt", new File("./target/test-classes/global"));
+        trans.mount("/usr/local/lib", new File("./target"));
+
+        File realFile = new File("./target/test-classes/global/globaltestmodule.js");
+        File globalFile = trans.translate("/opt/globaltestmodule.js");
+        assertTrue(globalFile.exists());
+        assertEquals(realFile.getCanonicalPath(), globalFile.getCanonicalPath());
+
+        realFile = new File("./target/test-classes/logback.xml");
+        globalFile = trans.translate("/usr/local/lib/test-classes/logback.xml");
+        assertTrue(globalFile.exists());
+        assertEquals(realFile.getCanonicalPath(), globalFile.getCanonicalPath());
+    }
 }

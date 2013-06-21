@@ -36,6 +36,7 @@ import java.nio.channels.Selector;
 import java.util.HashMap;
 import java.util.IdentityHashMap;
 import java.util.Iterator;
+import java.util.Map;
 import java.util.PriorityQueue;
 import java.util.concurrent.Callable;
 import java.util.concurrent.ConcurrentLinkedQueue;
@@ -133,15 +134,14 @@ public class ScriptRunner
 
         this.args = args;
         this.sandbox = sandbox;
+        this.pathTranslator = new PathTranslator();
 
         if ((sandbox != null) && (sandbox.getFilesystemRoot() != null)) {
             try {
-                this.pathTranslator = new PathTranslator(sandbox.getFilesystemRoot());
+                pathTranslator.setRoot(sandbox.getFilesystemRoot());
             } catch (IOException ioe) {
                 throw new AssertionError("Unexpected I/O error setting filesystem root: " + ioe);
             }
-        } else {
-            this.pathTranslator = new PathTranslator();
         }
 
         if ((sandbox != null) && (sandbox.getWorkingDirectory() != null)) {
@@ -157,6 +157,12 @@ public class ScriptRunner
             this.asyncPool = sandbox.getAsyncThreadPool();
         } else {
             this.asyncPool = env.getAsyncPool();
+        }
+
+        if ((sandbox != null) && (sandbox.getMounts() != null)) {
+            for (Map.Entry<String, String> mount : sandbox.getMounts()) {
+                pathTranslator.mount(mount.getKey(), new File(mount.getValue()));
+            }
         }
 
         try {

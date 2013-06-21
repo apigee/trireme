@@ -5,6 +5,11 @@ import org.slf4j.LoggerFactory;
 
 import java.io.File;
 import java.io.IOException;
+import java.util.AbstractMap;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.List;
+import java.util.Map;
 import java.util.regex.Pattern;
 
 /**
@@ -17,9 +22,10 @@ public class PathTranslator
     private static final Logger log = LoggerFactory.getLogger(PathTranslator.class.getName());
     private static final Pattern separator = Pattern.compile("\\" + File.separatorChar);
 
-    private final File root;
-    private final String canonicalRoot;
+    private File root;
+    private String canonicalRoot;
     private File workingDir;
+    private List<Map.Entry<String, File>> mounts = Collections.emptyList();
 
     public PathTranslator()
     {
@@ -30,16 +36,36 @@ public class PathTranslator
     public PathTranslator(String root)
         throws IOException
     {
-        this.root = new File(root);
-        this.canonicalRoot = this.root.getCanonicalPath();
+        setRoot(root);
     }
 
     public void setWorkingDir(String wd) {
         this.workingDir = new File(wd);
     }
 
+    public void setRoot(String root)
+        throws IOException
+    {
+        this.root = new File(root);
+        this.canonicalRoot = this.root.getCanonicalPath();
+    }
+
     public String getRoot() {
         return (root == null ? null : root.getPath());
+    }
+
+    /**
+     * Mount an actual filesystem path on the virtual file system. This method works just like "mount" on a
+     * real OS -- the filesystem tree under "path" appears on "prefix". (For instance, you can mount
+     * "./foo/bar" as "/usr/lib/bar". This method does not account for absolutely every permutation of path --
+     * in order for it to work, "prefix" should be an absolute path delimited by "/" characters.
+     */
+    public void mount(String prefix, File path)
+    {
+        if (mounts.isEmpty()) {
+            mounts = new ArrayList<Map.Entry<String, File>>();
+        }
+        mounts.add(new AbstractMap.SimpleEntry<String, File>(prefix, path));
     }
 
     /**
@@ -55,9 +81,26 @@ public class PathTranslator
             path = new File(workingDir, pathStr);
         }
 
+        // Calculate mounted filesystems. These must be absolute paths or it doesn't work.
+        for (Map.Entry<String, File> mount : mounts) {
+            if (path.getPath().startsWith(mount.getKey())) {
+                // We hit one of the "mounted filesystems," so take off the path and re-calculate.
+                // Then the rest of the filesystem stuff doesn't matter -- we have found our path.
+                String remaining;
+                if (path.getPath().length() == mount.getKey().length()) {
+                    remaining = ".";
+                } else {
+                    remaining = path.getPath().substring(mount.getKey().length());
+                }
+                return new File(mount.getValue(), remaining);
+            }
+        }
+
         if (root == null) {
             return path;
         }
+
+        // Now we process the "chmod" stuff.
         String[] components = separator.split(path.getPath());
         int depth = 0;
         for (String c : components) {

@@ -31,5 +31,5 @@ public interface HttpServerStub
     /**
      * This method is called when the server is finally shut down.
      */
-    void onClose(HttpRequestAdapter request);
+    void onClose(HttpRequestAdapter request, HttpResponseAdapter response);
 }

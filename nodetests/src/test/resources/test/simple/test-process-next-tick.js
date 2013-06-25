@@ -27,7 +27,6 @@ var exceptionCount = 0;
 
 function cb() {
   ++tickCount;
-  console.log('Iteration %d', tickCount);
   throw new Error();
 }
 
@@ -37,7 +36,6 @@ for (var i = 0; i < N; ++i) {
 
 process.on('uncaughtException', function() {
   ++exceptionCount;
-  console.log('Caught %d', exceptionCount);
 });
 
 process.on('exit', function() {

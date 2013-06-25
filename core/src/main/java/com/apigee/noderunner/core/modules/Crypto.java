@@ -31,6 +31,9 @@ public class Crypto
 {
     public static final String MODULE_NAME = "crypto";
 
+    /** This is a maximum value for a byte buffer that seems to be part of V8. Used to make tests pass. */
+    public static final long MAX_BUFFER_LEN = 0x3fffffffL;
+
     @Override
     public String getModuleName()
     {
@@ -118,21 +121,21 @@ public class Crypto
 
             // the tests are picky about what can be passed in as size -- only a valid number
             Number sizeNum = objArg(args, 0, Number.class, false);
-            int size = 0;
 
             // TypeErrors are thrown on call, not returned in callback
             if (sizeNum == null) {
                 throw Utils.makeTypeError(cx, thisObj, "size must be a number");
             } else {
-                size = sizeNum.intValue();
-                if (size < 0) {
+                if (sizeNum.longValue() < 0) {
                     throw Utils.makeTypeError(cx, thisObj, "size must be >= 0");
+                } else if (sizeNum.longValue() > MAX_BUFFER_LEN) {
+                    throw Utils.makeTypeError(cx, thisObj, "size must be a valid integer");
                 }
             }
 
             Function callback = objArg(args, 1, Function.class, false);
 
-            byte[] randomBytes = new byte[size];
+            byte[] randomBytes = new byte[sizeNum.intValue()];
             randomImpl.nextBytes(randomBytes);
             Buffer.BufferImpl randomBytesBuffer = Buffer.BufferImpl.newBuffer(cx, thisObj, randomBytes);
 

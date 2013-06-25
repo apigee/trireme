@@ -263,17 +263,16 @@ public class Process
             throw new NodeExitException(NodeExitException.Reason.FATAL);
         }
 
-        // TODO chdir
+        @JSFunction
+        public void chdir(String cd)
+        {
+            runner.setWorkingDirectory(cd);
+        }
 
         @JSFunction
         public String cwd()
         {
-            PathTranslator trans = runner.getPathTranslator();
-            if (trans == null) {
-                return System.getProperty("user.dir");
-            } else {
-                return "/";
-            }
+            return runner.getWorkingDirectory();
         }
 
         @JSGetter("env")

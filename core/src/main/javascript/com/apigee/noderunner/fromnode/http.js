@@ -780,14 +780,32 @@ OutgoingMessage.prototype.write = function(chunk, encoding) {
     throw new TypeError('first argument must be a string or Buffer');
   }
 
-  if (chunk.length === 0) return false;
+  // If we get an empty string or buffer, then just do nothing, and
+  // signal the user to keep writing.
+  if (chunk.length === 0) return true;
+
+  // TODO(bnoordhuis) Temporary optimization hack, remove in v0.11. We only
+  // want to convert the buffer when we're sending:
+  //
+  //   a) Transfer-Encoding chunks, because it lets us pack the chunk header
+  //      and the chunk into a single write(), or
+  //
+  //   b) the first chunk of a fixed-length request, because it lets us pack
+  //      the request headers and the chunk into a single write().
+  //
+  // Converting to strings is expensive, CPU-wise, but reducing the number
+  // of write() calls more than makes up for that because we're dramatically
+  // reducing the number of TCP roundtrips.
+  if (chunk instanceof Buffer && (this.chunkedEncoding || !this._headerSent)) {
+    chunk = chunk.toString('binary');
+    encoding = 'binary';
+  }
 
   var len, ret;
   if (this.chunkedEncoding) {
     if (typeof(chunk) === 'string' &&
         encoding !== 'hex' &&
-        encoding !== 'base64' &&
-        encoding !== 'binary') {
+        encoding !== 'base64') {
       len = Buffer.byteLength(chunk, encoding);
       chunk = len.toString(16) + CRLF + chunk + CRLF;
       ret = this._send(chunk, encoding);

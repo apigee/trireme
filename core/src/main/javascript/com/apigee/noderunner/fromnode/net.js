@@ -249,9 +249,11 @@ function onSocketEnd() {
   this._readableState.ended = true;
   if (this._readableState.endEmitted) {
     this.readable = false;
+    maybeDestroy(this);
   } else {
     this.once('end', function() {
       this.readable = false;
+      maybeDestroy(this);
     });
     this.read(0);
   }
@@ -307,7 +309,7 @@ Socket.prototype.listen = function() {
 Socket.prototype.setTimeout = function(msecs, callback) {
   if (msecs > 0 && !isNaN(msecs) && isFinite(msecs)) {
     timers.enroll(this, msecs);
-    timers.active(this);
+    timers._unrefActive(this);
     if (callback) {
       this.once('timeout', callback);
     }
@@ -399,8 +401,20 @@ Socket.prototype.end = function(data, encoding) {
   // just in case we're waiting for an EOF.
   if (this.readable && !this._readableState.endEmitted)
     this.read(0);
-  return;
+  else
+    maybeDestroy(this);
 };
+
+
+// Call whenever we set writable=false or readable=false
+function maybeDestroy(socket) {
+  if (!socket.readable &&
+      !socket.writable &&
+      !socket.destroyed &&
+      !socket._connecting) {
+    socket.destroy();
+  }
+}
 
 
 Socket.prototype.destroySoon = function() {
@@ -481,7 +495,7 @@ function onread(buffer, offset, length) {
   var self = handle.owner;
   assert(handle === self._handle, 'handle != self._handle');
 
-  timers.active(self);
+  timers._unrefActive(self);
 
   var end = offset + length;
   debug('onread', process._errno, offset, length, end);
@@ -521,8 +535,10 @@ function onread(buffer, offset, length) {
   } else if (process._errno == 'EOF') {
     debug('EOF');
 
-    if (self._readableState.length === 0)
+    if (self._readableState.length === 0) {
       self.readable = false;
+      maybeDestroy(self);
+    }
 
     if (self.onend) self.once('end', self.onend);
 
@@ -612,7 +628,7 @@ Socket.prototype._write = function(data, encoding, cb) {
   this._pendingData = null;
   this._pendingEncoding = '';
 
-  timers.active(this);
+  timers._unrefActive(this);
 
   if (!this._handle) {
     this._destroy(new Error('This socket is closed.'), cb);
@@ -702,7 +718,7 @@ function afterWrite(status, handle, req) {
     return;
   }
 
-  timers.active(self);
+  timers._unrefActive(self);
 
   if (self !== process.stderr && self !== process.stdout)
     debug('afterWrite call cb');
@@ -783,7 +799,7 @@ Socket.prototype.connect = function(options, cb) {
     self.once('connect', cb);
   }
 
-  timers.active(this);
+  timers._unrefActive(this);
 
   self._connecting = true;
   self.writable = true;
@@ -814,7 +830,7 @@ Socket.prototype.connect = function(options, cb) {
           self._destroy();
         });
       } else {
-        timers.active(self);
+        timers._unrefActive(self);
 
         addressType = addressType || 4;
 
@@ -861,7 +877,7 @@ function afterConnect(status, handle, req, readable, writable) {
   if (status == 0) {
     self.readable = readable;
     self.writable = writable;
-    timers.active(self);
+    timers._unrefActive(self);
 
     self.emit('connect');
 

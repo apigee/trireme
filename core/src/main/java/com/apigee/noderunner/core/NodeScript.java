@@ -81,10 +81,10 @@ public class NodeScript
     /**
      * Set up a restricted environment. The specified Sandbox object can specify restrictions on which files
      * are opened, how standard input and output are handled, and what network I/O operations are allowed.
-     * The sandbox is checked when this call is made, so please set all parameters on the Sandbox object
-     * <i>before</i> calling this method. A Sandbox here overrides one set at the Environment level.
+     * The sandbox is checked when the script is executed, so please set all parameters on the Sandbox object
+     * <i>before</i> calling "execute". A Sandbox here overrides one set at the Environment level.
      * By default, the sandbox for a script is the one that is set on the Environment that was used to
-     * create the script.
+     * create the script, or null if none was set.
      */
     public void setSandbox(Sandbox box) {
         this.sandbox = box;

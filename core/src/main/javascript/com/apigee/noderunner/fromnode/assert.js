@@ -39,15 +39,13 @@ var assert = module.exports = ok;
 
 assert.AssertionError = function AssertionError(options) {
   this.name = 'AssertionError';
-  this.message = options.message;
   this.actual = options.actual;
   this.expected = options.expected;
   this.operator = options.operator;
+  this.message = options.message || getMessage(this);
   var stackStartFunction = options.stackStartFunction || fail;
-
-  if (Error.captureStackTrace) {
-    Error.captureStackTrace(this, stackStartFunction);
-  }
+  // TODO Noderunner not supported in Rhino yet.
+  //Error.captureStackTrace(this, stackStartFunction);
 };
 
 // assert.AssertionError instanceof Error
@@ -78,18 +76,11 @@ function truncate(s, n) {
   }
 }
 
-assert.AssertionError.prototype.toString = function() {
-  if (this.message) {
-    return [this.name + ':', this.message].join(' ');
-  } else {
-    return [
-      this.name + ':',
-      truncate(JSON.stringify(this.actual, replacer), 128),
-      this.operator,
-      truncate(JSON.stringify(this.expected, replacer), 128)
-    ].join(' ');
-  }
-};
+function getMessage(self) {
+  return truncate(JSON.stringify(self.actual, replacer), 128) + ' ' +
+         self.operator + ' ' +
+         truncate(JSON.stringify(self.expected, replacer), 128);
+}
 
 // At present only the three keys mentioned above are used and
 // understood by the spec. Implementations or sub modules can pass

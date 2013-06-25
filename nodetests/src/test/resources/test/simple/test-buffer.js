@@ -221,6 +221,16 @@ new Buffer(0);
 b.write('', 1024);
 b.write('', 2048);
 
+// throw when writing past bounds from the pool
+assert.throws(function() {
+  b.write('a', 2048);
+}, RangeError);
+
+// throw when writing to negative offset
+assert.throws(function() {
+  b.write('a', -1);
+}, RangeError);
+
 // try to copy 0 bytes worth of data into an empty buffer
 b.copy(new Buffer(0), 0, 0, 0);
 
@@ -908,6 +918,39 @@ assert.throws(function() {
   buf.writeFloatLE(0.0, -1);
 }, /offset is not uint/);
 
+// offset checks
+var buf = new Buffer(0);
+
+assert.throws(function() { buf.readUInt8(0); }, /beyond buffer length/);
+assert.throws(function() { buf.readInt8(0); }, /beyond buffer length/);
+
+[16, 32].forEach(function(bits) {
+  var buf = new Buffer(bits / 8 - 1);
+
+  assert.throws(
+    function() { buf['readUInt' + bits + 'BE'](0); },
+    /beyond buffer length/,
+    'readUInt' + bits + 'BE'
+  );
+
+  assert.throws(
+    function() { buf['readUInt' + bits + 'LE'](0); },
+    /beyond buffer length/,
+    'readUInt' + bits + 'LE'
+  );
+
+  assert.throws(
+    function() { buf['readInt' + bits + 'BE'](0); },
+    /beyond buffer length/,
+    'readInt' + bits + 'BE()'
+  );
+
+  assert.throws(
+    function() { buf['readInt' + bits + 'LE'](0); },
+    /beyond buffer length/,
+    'readInt' + bits + 'LE()'
+  );
+});
 
 // SlowBuffer sanity checks.
 assert.throws(function() {
@@ -946,3 +989,19 @@ assert.throws(function() {
     assert.equal(buf.slice(0, -i), s.slice(0, -i));
   }
 })();
+
+// Make sure byteLength properly checks for base64 padding
+assert.equal(Buffer.byteLength('aaa=', 'base64'), 2);
+assert.equal(Buffer.byteLength('aaaa==', 'base64'), 3);
+
+// Regression test for #5482: should throw but not assert in C++ land.
+assert.throws(function() {
+  Buffer('', 'buffer');
+}, TypeError);
+
+assert.doesNotThrow(function () {
+  var slow = new SlowBuffer(1);
+  assert(slow.write('', Buffer.poolSize * 10) === 0);
+  var fast = new Buffer(1);
+  assert(fast.write('', Buffer.poolSize * 10) === 0);
+});

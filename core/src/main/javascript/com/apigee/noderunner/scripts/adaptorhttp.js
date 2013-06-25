@@ -7,14 +7,8 @@
  * This module is normally initialized by Noderunner to load when the "http" module is included.
  */
 
-var util = require('util');
-var events = require('events');
-var stream = require('stream');
-var timers = require('timers');
-var NodeHttp = require('node_http');
 var HttpWrap = process.binding('http_wrap');
-var domain = require('domain');
-var assert = require('assert');
+var NodeHttp = require('node_http');
 
 var debug;
 if (process.env.NODE_DEBUG && /http/.test(process.env.NODE_DEBUG)) {
@@ -42,6 +36,13 @@ exports.Client = NodeHttp.Client;
 exports.createClient = NodeHttp.createClient;
 
 if (HttpWrap.hasServerAdapter()) {
+  var util = require('util');
+  var events = require('events');
+  var stream = require('stream');
+  var timers = require('timers');
+  var domain = require('domain');
+  var assert = require('assert');
+
   debug('Using server adapter');
 
   var END_OF_FILE = {};
@@ -313,7 +314,7 @@ if (HttpWrap.hasServerAdapter()) {
       debug('Adding ' + chunk.length + ' bytes to the push queue');
       self._pendings.push(chunk);
     }
-  };
+  }
 
   function pushChunk(self, chunk) {
     debug('Pushing ' + chunk.length + ' bytes directly');
@@ -337,7 +338,7 @@ if (HttpWrap.hasServerAdapter()) {
   };
 
   ServerRequest.prototype.clearTimeout = function(cb) {
-    this.connectio.clearTimeout(cb);
+    this.connection.clearTimeout(cb);
   };
 
   function Server(requestListener) {
@@ -378,32 +379,25 @@ if (HttpWrap.hasServerAdapter()) {
    * Error callback for domain. This gets invoked if the user's code throws an exception while processing
    * a request.
    */
-  function handleError(err, info) {
+  function handleError(err, response) {
     debug('Handling server error and sending to adapter');
     if (err.stack) {
       debug(err.message);
       debug(err.stack);
     }
-    if (info.outgoing.headersSent) {
+    if (response.headersSent) {
       debug('Response already sent -- closing');
-      info.destroy();
+      response.destroy();
 
     } else {
       var msg = getErrorMessage(err);
       var stack = err.stack ? err.stack : undefined;
-      info.fatalError(msg, stack);
+      response._adapter.fatalError(msg, stack);
     }
   }
 
-  /*
-   * Called directly by the adapter when a message arrives and all the headers have been received.
-   */
-  Server.prototype._onHeaders = function(info) {
-    debug('onHeadersComplete');
-    var headers = info.getRequestHeaders();
-    var url = info.requestUrl;
+  Server.prototype._makeSocket = function() {
     var self = this;
-
     var conn = new DummySocket();
     if (this.timeout && (this.timeout > 0)) {
       conn.setTimeout(this.timeout, function() {
@@ -411,82 +405,106 @@ if (HttpWrap.hasServerAdapter()) {
       });
     }
     conn.active();
+    return conn;
+  };
 
-    info.incoming = new ServerRequest(info, conn);
+  // An adapter can call this method at any time to create the ServerRequest object,
+  // backed by the supplied request adapter
+  Server.prototype._makeRequest = function(reqAdapter, conn) {
+    debug('_makeRequest');
+    var headers = reqAdapter.getRequestHeaders();
+
+    var ret = new ServerRequest(reqAdapter, conn);
 
     var n = headers.length;
 
     // If parser.maxHeaderPairs <= 0 - assume that there're no limit
     if (this.maxHeaderPairs > 0) {
+      // TODO but "parser" is never set?
       n = Math.min(n, parser.maxHeaderPairs);
     }
 
     for (var i = 0; i < n; i += 2) {
       var k = headers[i];
       var v = headers[i + 1];
-      info.incoming._addHeaderLine(k, v);
+      ret._addHeaderLine(k, v);
     }
 
-    info.incoming.method = info.requestMethod;
+    ret.method = reqAdapter.requestMethod;
+    return ret;
+  };
 
-    info.outgoing = new ServerResponse(info, conn);
-    conn._outgoing = info.outgoing;
+  // Make the JavaScript "response" object based on the same adapter
+  Server.prototype._makeResponse = function(respAdapter, conn) {
+    debug('_makeResponse');
+    var ret = new ServerResponse(respAdapter, conn);
+    conn._outgoing = ret;
+    return ret;
+  };
 
-    info.onchannelclosed = function() {
+  /*
+   * Called directly by the adapter when a message arrives and all the headers have been received.
+   */
+  Server.prototype._onHeaders = function(request, response) {
+    debug('onHeadersComplete');
+    var self = this;
+
+    response._adapter.onchannelclosed = function() {
       debug('Server channel closed');
-      if (!info.outgoing.ended) {
-        info.outgoing.emit('close');
+      if (!response.ended) {
+        response.emit('close');
       }
-      conn.close();
+      response.conn.close();
     };
 
-    info.onwritecomplete = function(err) {
-      debug('write complete: ' + err + ' outstanding: ' + info.outgoing._outstanding);
+    response._adapter.onwritecomplete = function(err) {
+      debug('write complete: ' + err + ' outstanding: ' + response._outstanding);
       if (err) {
-        info.outgoing.emit('error', err);
+        response.emit('error', err);
       }
     };
 
-    info.domain = domain.create();
-    info.domain.on('error', function(err) {
-      handleError(err, info);
+    request._adapter.domain = domain.create();
+    request._adapter.domain.on('error', function(err) {
+      handleError(err, response);
     });
-    info.domain.run(function() {
-      self.emit('request', info.incoming, info.outgoing);
+    request._adapter.domain.run(function() {
+      self.emit('request', request, response);
     });
   };
 
   /*
    * This is called directly by the adapter when data is received for the message body.
    */
-  function onBody(info, b) {
-    info.incoming.connection.active();
-    info.domain.run(function() {
-      addPending(info.incoming, b);
+  function onBody(request, b) {
+    request.connection.active();
+    request._adapter.domain.run(function() {
+      addPending(request, b);
     });
   }
 
   /*
    * This is called directly by the adapter when the complete message has been received.
    */
-  function onMessageComplete(info) {
-    info.incoming.connection.active();
-    var incoming = info.incoming;
-    if (!incoming.upgrade) {
-      info.domain.run(function() {
-        addPending(incoming, END_OF_FILE);
+  function onMessageComplete(request) {
+    request.connection.active();
+    if (!request.upgrade) {
+      request._adapter.domain.run(function() {
+        addPending(request, END_OF_FILE);
       });
     }
   }
 
-  function onClose(info) {
+  function onClose(request, response) {
     debug('onClose');
-    info.incoming.connection.close();
-    if (!info.outgoing.ended) {
-      info.domain.run(function() {
-        info.outgoing.ended = true;
-        info.incoming.emit('close');
-        info.outgoing.emit('close');
+    request.connection.close();
+    if (!request.ended) {
+      request._adapter.domain.run(function() {
+        request.ended = true;
+        request.emit('close');
+        if (response) {
+          response.emit('close');
+        }
       });
     }
   }
@@ -508,8 +526,17 @@ if (HttpWrap.hasServerAdapter()) {
       return;
     }
 
-    self._adapter.onheaders = function(info) {
-      self._onHeaders(info);
+    self._adapter.makeRequest = function(req, conn) {
+      return self._makeRequest(req, conn);
+    };
+    self._adapter.makeResponse = function(resp, conn) {
+      return self._makeResponse(resp, conn);
+    };
+    self._adapter.makeSocket = function() {
+      return self._makeSocket();
+    };
+    self._adapter.onheaders = function(request, response) {
+      self._onHeaders(request, response);
     };
     self._adapter.ondata = onBody;
     self._adapter.oncomplete = onMessageComplete;

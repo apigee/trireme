@@ -14,7 +14,6 @@ import com.apigee.noderunner.net.spi.HttpServerContainer;
 import com.apigee.noderunner.net.spi.HttpServerStub;
 import com.apigee.noderunner.net.spi.TLSParams;
 import org.mozilla.javascript.Context;
-import org.mozilla.javascript.EvaluatorException;
 import org.mozilla.javascript.Function;
 import org.mozilla.javascript.RhinoException;
 import org.mozilla.javascript.Scriptable;
@@ -58,7 +57,8 @@ public class HTTPWrap
         HttpImpl http = (HttpImpl) cx.newObject(scope, HttpImpl.CLASS_NAME);
         http.init(runner);
         ScriptableObject.defineClass(scope, ServerContainer.class);
-        ScriptableObject.defineClass(scope, AdapterRequest.class);
+        ScriptableObject.defineClass(scope, RequestAdapter.class);
+        ScriptableObject.defineClass(scope, ResponseAdapter.class);
         return http;
     }
 
@@ -112,6 +112,9 @@ public class HTTPWrap
         private NodeRuntime       runner;
         private HttpServerAdapter adapter;
 
+        private Function makeSocket;
+        private Function makeRequest;
+        private Function makeResponse;
         private Function onHeaders;
         private Function onData;
         private Function onComplete;
@@ -120,8 +123,8 @@ public class HTTPWrap
 
         private final AtomicInteger connectionCount = new AtomicInteger();
         private volatile boolean closed;
-        private final IdentityHashMap<AdapterRequest, AdapterRequest> pendingRequests =
-            new IdentityHashMap<AdapterRequest, AdapterRequest>();
+        private final IdentityHashMap<ResponseAdapter, ResponseAdapter> pendingRequests =
+            new IdentityHashMap<ResponseAdapter, ResponseAdapter>();
 
         @Override
         public String getClassName()
@@ -193,7 +196,7 @@ public class HTTPWrap
             if ((stack instanceof String) && !Context.getUndefinedValue().equals(stack)) {
                 stackStr = (String)stack;
             }
-            for (AdapterRequest ar : pendingRequests.keySet()) {
+            for (ResponseAdapter ar : pendingRequests.keySet()) {
                 try {
                     ar.fatalError(message, stackStr);
                 } catch (Throwable t) {
@@ -205,16 +208,8 @@ public class HTTPWrap
             pendingRequests.clear();
         }
 
-        private Scriptable buildIncoming(Context cx, HttpRequestAdapter request, HttpResponseAdapter response)
-        {
-            AdapterRequest ar = (AdapterRequest) cx.newObject(this, AdapterRequest.CLASS_NAME);
-            ar.init(request, response, this);
-            request.setAttachment(ar);
-            pendingRequests.put(ar, ar);
-            return ar;
-        }
 
-        void requestComplete(AdapterRequest ar)
+        void requestComplete(ResponseAdapter ar)
         {
             pendingRequests.remove(ar);
         }
@@ -225,23 +220,46 @@ public class HTTPWrap
             if (log.isDebugEnabled()) {
                 log.debug("Received HTTP onRequest: {} self contained = {}", request, request.isSelfContained());
             }
+
+            // Queue up a task to process the request
             runner.enqueueTask(new ScriptTask()
             {
                 @Override
                 public void execute(Context cx, Scriptable scope)
                 {
-                    callOnHeaders(cx, request, response);
+                    RequestAdapter reqAdapter =
+                        (RequestAdapter)cx.newObject(ServerContainer.this, RequestAdapter.CLASS_NAME);
+                    reqAdapter.init(request);
+
+                    ResponseAdapter respAdapter =
+                        (ResponseAdapter)cx.newObject(ServerContainer.this, ResponseAdapter.CLASS_NAME);
+                    respAdapter.init(response, ServerContainer.this);
+
+                    Scriptable socketObj = (Scriptable)makeSocket.call(cx, makeSocket, null, null);
+                    Scriptable requestObj = (Scriptable)makeRequest.call(cx, makeRequest, null,
+                                                                         new Object[] { reqAdapter, socketObj });
+                    Scriptable responseObj = (Scriptable)makeResponse.call(cx, makeResponse, null,
+                                                                           new Object[] { respAdapter, socketObj });
+
+                    request.setAttachment(requestObj);
+                    response.setAttachment(responseObj);
+
+                    onHeaders.call(cx, onHeaders, ServerContainer.this, new Object[] { requestObj, responseObj });
                 }
             });
+
             if (request.isSelfContained()) {
                 final ByteBuffer requestData =
                     (request.hasData() ? request.getData() : null);
+                // Queue up another task for the data. Noderunner guarantees that this will run after
+                // the previous task. However, do this in a separate tick because it's highly likely that
+                // the revious request to call "onHeaders" will register more event handlers
                 runner.enqueueTask(new ScriptTask()
                 {
                     @Override
                     public void execute(Context cx, Scriptable scope)
                     {
-                        callOnData(cx, scope, request, response, requestData);
+                        callOnData(cx, scope, request, requestData);
                     }
                 });
                 runner.enqueueTask(new ScriptTask()
@@ -249,7 +267,7 @@ public class HTTPWrap
                     @Override
                     public void execute(Context cx, Scriptable scope)
                     {
-                        callOnComplete(cx, request, response);
+                        callOnComplete(cx, request);
                     }
                 });
             }
@@ -268,7 +286,7 @@ public class HTTPWrap
                 @Override
                 public void execute(Context cx, Scriptable scope)
                 {
-                    callOnData(cx, scope, request, response, requestData);
+                    callOnData(cx, scope, request, requestData);
                 }
             });
             if (data.isLastChunk()) {
@@ -277,22 +295,13 @@ public class HTTPWrap
                     @Override
                     public void execute(Context cx, Scriptable scope)
                     {
-                        callOnComplete(cx, request, response);
+                        callOnComplete(cx, request);
                     }
                 });
             }
         }
 
-        private void callOnHeaders(Context cx, HttpRequestAdapter request, HttpResponseAdapter response)
-        {
-            Scriptable incoming = buildIncoming(cx, request, response);
-            if (log.isDebugEnabled()) {
-                log.debug("Calling onHeaders with {}", incoming);
-            }
-            onHeaders.call(cx, onHeaders, this, new Object[]{incoming});
-        }
-
-        private void callOnComplete(Context cx, HttpRequestAdapter request, HttpResponseAdapter response)
+        private void callOnComplete(Context cx, HttpRequestAdapter request)
         {
             Scriptable incoming = request.getAttachment();
             if (log.isDebugEnabled()) {
@@ -303,7 +312,7 @@ public class HTTPWrap
         }
 
         private void callOnData(Context cx, Scriptable scope,
-                                HttpRequestAdapter request, HttpResponseAdapter response,
+                                HttpRequestAdapter request,
                                 ByteBuffer requestData)
         {
             Scriptable incoming = request.getAttachment();
@@ -321,15 +330,22 @@ public class HTTPWrap
         }
 
         @Override
-        public void onClose(final HttpRequestAdapter request)
+        public void onClose(final HttpRequestAdapter request, final HttpResponseAdapter response)
         {
             if (request != null) {
                 runner.enqueueTask(new ScriptTask() {
                     @Override
                     public void execute(Context cx, Scriptable scope) {
-                        Scriptable incoming = request.getAttachment();
+                        Scriptable reqObject = request.getAttachment();
+                        Object respObject;
+                        if (response != null) {
+                            respObject = response.getAttachment();
+                        } else {
+                            respObject = Context.getUndefinedValue();
+                        }
+
                         onClose.call(cx, onClose, ServerContainer.this,
-                                     new Object[] { incoming });
+                                     new Object[] { reqObject, respObject });
                     }
                 });
             }
@@ -352,6 +368,42 @@ public class HTTPWrap
                 throw Utils.makeError(Context.getCurrentContext(), this, message, (RhinoException)cause);
             }
             throw Utils.makeError(Context.getCurrentContext(), this, cause.getMessage());
+        }
+
+        @JSGetter("makeSocket")
+        public Function getMakeSocket()
+        {
+            return makeSocket;
+        }
+
+        @JSSetter("makeSocket")
+        public void setMakeSocket(Function mr)
+        {
+            this.makeSocket = mr;
+        }
+
+        @JSGetter("makeRequest")
+        public Function getMakeRequest()
+        {
+            return makeRequest;
+        }
+
+        @JSSetter("makeRequest")
+        public void setMakeRequest(Function mr)
+        {
+            this.makeRequest = mr;
+        }
+
+        @JSGetter("makeResponse")
+        public Function getMakeResponse()
+        {
+            return makeResponse;
+        }
+
+        @JSSetter("makeResponse")
+        public void setMakeResponse(Function mr)
+        {
+            this.makeResponse = mr;
         }
 
         @JSGetter("onheaders")
@@ -445,19 +497,15 @@ public class HTTPWrap
     }
 
     /**
-     * This is a JavaScript object passed to the "adaptorhttp" module for each request. This is the object
-     * that the adapter uses to interact with the adapter for each request.
+     * This object is used by the "ServerRequest" object in the "adaptorhttp" module to interface with the
+     * Java runtime and with the HTTP adapter.
      */
-    public static class AdapterRequest
+    public static class RequestAdapter
         extends ScriptableObject
     {
-        public static final String CLASS_NAME = "_adapterRequestClass";
+        public static final String CLASS_NAME = "_httpRequestAdaptorClass";
 
         private HttpRequestAdapter request;
-        private HttpResponseAdapter response;
-        private ServerContainer server;
-        private Function onWriteComplete;
-        private Function onChannelClosed;
 
         @Override
         public String getClassName()
@@ -465,11 +513,9 @@ public class HTTPWrap
             return CLASS_NAME;
         }
 
-        void init(HttpRequestAdapter request, HttpResponseAdapter response, ServerContainer server)
+        void init(HttpRequestAdapter request)
         {
             this.request = request;
-            this.response = response;
-            this.server = server;
         }
 
         @JSGetter("requestUrl")
@@ -490,6 +536,57 @@ public class HTTPWrap
         @JSGetter("requestMethod")
         public String getRequestMethod() {
             return request.getMethod();
+        }
+
+        @JSFunction
+        public static Scriptable getRequestHeaders(Context cx, Scriptable thisObj, Object[] args, Function func)
+        {
+            RequestAdapter ar = (RequestAdapter)thisObj;
+            ArrayList<Object> headers = new ArrayList<Object>();
+            for (Map.Entry<String, String> hdr : ar.request.getHeaders()) {
+                headers.add(hdr.getKey());
+                headers.add(hdr.getValue());
+            }
+            return cx.newArray(thisObj, headers.toArray());
+        }
+
+        @JSFunction
+        public void pause()
+        {
+            request.pause();
+        }
+
+        @JSFunction
+        public void resume()
+        {
+            request.resume();
+        }
+    }
+
+    /**
+     * This is a JavaScript object passed to the "adaptorhttp" module for each request. This is the object
+     * that the adapter uses to interact with the adapter for each request.
+     */
+    public static class ResponseAdapter
+        extends ScriptableObject
+    {
+        public static final String CLASS_NAME = "_httpResponseAdapterClass";
+
+        private HttpResponseAdapter response;
+        private ServerContainer server;
+        private Function onWriteComplete;
+        private Function onChannelClosed;
+
+        @Override
+        public String getClassName()
+        {
+            return CLASS_NAME;
+        }
+
+        void init(HttpResponseAdapter response, ServerContainer server)
+        {
+            this.response = response;
+            this.server = server;
         }
 
         @JSGetter("onwritecomplete")
@@ -514,18 +611,6 @@ public class HTTPWrap
         public void setOnChannelClosed(Function cc)
         {
             this.onChannelClosed = cc;
-        }
-
-        @JSFunction
-        public static Scriptable getRequestHeaders(Context cx, Scriptable thisObj, Object[] args, Function func)
-        {
-            AdapterRequest ar = (AdapterRequest)thisObj;
-            ArrayList<Object> headers = new ArrayList<Object>();
-            for (Map.Entry<String, String> hdr : ar.request.getHeaders()) {
-                headers.add(hdr.getKey());
-                headers.add(hdr.getValue());
-            }
-            return cx.newArray(thisObj, headers.toArray());
         }
 
         private ByteBuffer gatherData(Object data, Object encoding)
@@ -620,15 +705,7 @@ public class HTTPWrap
             return future.isDone();
         }
 
-        @JSFunction
-        public void fatalError(String message, Object stack)
-        {
-            String stackStr = null;
-            if ((stack instanceof String) && !Context.getUndefinedValue().equals(stack)) {
-                stackStr = (String)stack;
-            }
-            response.fatalError(message, stackStr);
-        }
+
 
         @JSFunction
         public void destroy()
@@ -638,15 +715,13 @@ public class HTTPWrap
         }
 
         @JSFunction
-        public void pause()
+        public void fatalError(String message, Object stack)
         {
-            request.pause();
-        }
-
-        @JSFunction
-        public void resume()
-        {
-            request.resume();
+            String stackStr = null;
+            if ((stack instanceof String) && !Context.getUndefinedValue().equals(stack)) {
+                stackStr = (String)stack;
+            }
+            response.fatalError(message, stackStr);
         }
 
         private void addTrailers(Scriptable trailers, HttpResponseAdapter response)
@@ -696,16 +771,16 @@ public class HTTPWrap
                             Scriptable err = null;
                             // on an HTTP response, no need to get all upset about a close
                             if (closed) {
-                                AdapterRequest.this.onChannelClosed.call(cx, AdapterRequest.this.onChannelClosed,
-                                                                         AdapterRequest.this, null);
+                                ResponseAdapter.this.onChannelClosed.call(cx, ResponseAdapter.this.onChannelClosed,
+                                                                          ResponseAdapter.this, null);
                             } else {
                                 if (!success) {
-                                    err = Utils.makeErrorObject(cx, AdapterRequest.this,
+                                    err = Utils.makeErrorObject(cx, ResponseAdapter.this,
                                                                 (cause == null) ? null : cause.toString());
                                 }
-                                AdapterRequest.this.onWriteComplete.call(cx, AdapterRequest.this.onWriteComplete,
-                                                                     AdapterRequest.this,
-                                                                     new Object[] { err });
+                                ResponseAdapter.this.onWriteComplete.call(cx, ResponseAdapter.this.onWriteComplete,
+                                                                          ResponseAdapter.this,
+                                                                          new Object[] { err });
                             }
                         }
                     }, domain);

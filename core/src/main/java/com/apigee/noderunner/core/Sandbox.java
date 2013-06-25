@@ -4,6 +4,10 @@ import org.mozilla.javascript.Scriptable;
 
 import java.io.InputStream;
 import java.io.OutputStream;
+import java.util.AbstractMap;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Map;
 import java.util.concurrent.ExecutorService;
 
 /**
@@ -20,9 +24,11 @@ public class Sandbox
     private Scriptable      stdinStream;
     private Scriptable      stderrStream;
     private String          filesystemRoot;
+    private String          workingDirectory;
     private ExecutorService asyncPool;
     private NetworkPolicy   networkPolicy;
     private SubprocessPolicy processPolicy;
+    private List<Map.Entry<String, String>> mounts;
 
     /**
      * Create a new sandbox that will not affect anything in any way.
@@ -45,9 +51,13 @@ public class Sandbox
             this.stdinStream = parent.stdinStream;
             this.stderrStream = parent.stderrStream;
             this.filesystemRoot = parent.filesystemRoot;
+            this.workingDirectory = parent.workingDirectory;
             this.asyncPool = parent.asyncPool;
             this.networkPolicy = parent.networkPolicy;
             this.processPolicy = parent.processPolicy;
+            if (parent.mounts != null) {
+                this.mounts = new ArrayList<Map.Entry<String, String>>(parent.mounts);
+            }
         }
     }
 
@@ -68,6 +78,43 @@ public class Sandbox
 
     public String getFilesystemRoot() {
         return filesystemRoot;
+    }
+
+    /**
+     * Mount a location on the local filesystem at a virtual path. This works in a similar way to "mount"
+     * in an OS in that everything in the directory tree under the path is directed to the mounted
+     * location. In other words, if "/foo/bar" is mounted as "/usr/lib/bar," then "/usr/lib/bar/baz" will
+     * be translated to "/foo/bar/baz".
+     *
+     * @param prefix where to mount, such as "/opt". This must be an absolute path.
+     * @param target what to mount there, which may be a relative or absolute path.
+     */
+    public void mount(String prefix, String target)
+    {
+        if (mounts == null) {
+            mounts = new ArrayList<Map.Entry<String, String>>();
+        }
+        mounts.add(new AbstractMap.SimpleEntry<String, String>(prefix, target));
+    }
+
+    public List<Map.Entry<String, String>> getMounts() {
+        return mounts;
+    }
+
+    /**
+     * Set the working directory of this script. This is the directory for relative paths and for "process.cwd()".
+     * This directory is relative to the filesystem root set in "setFilesystemRoot".
+     * By default if "setFilesystemRoot" was called then the directory defaults to that, and otherwise to the
+     * user's working directory.
+     */
+    public Sandbox setWorkingDirectory(String wd)
+    {
+        this.workingDirectory = wd;
+        return this;
+    }
+
+    public String getWorkingDirectory() {
+        return workingDirectory;
     }
 
     /**

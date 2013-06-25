@@ -222,7 +222,7 @@ exports.setTimeout = function(callback, after) {
 exports.clearTimeout = function(timer) {
   if (timer && (timer.ontimeout || timer._onTimeout)) {
     timer.ontimeout = timer._onTimeout = null;
-    if (timer instanceof Timer || timer instanceof Timeout) {
+    if (timer instanceof Timeout) {
       timer.close(); // for after === 0
     } else {
       exports.unenroll(timer);
@@ -232,32 +232,44 @@ exports.clearTimeout = function(timer) {
 
 
 exports.setInterval = function(callback, repeat) {
-  var timer = new Timer();
-
-  if (process.domain) timer.domain = process.domain;
-
   repeat *= 1; // coalesce to number or NaN
 
   if (!(repeat >= 1 && repeat <= TIMEOUT_MAX)) {
     repeat = 1; // schedule on next tick, follows browser behaviour
   }
 
+  var timer = new Timeout(repeat);
   var args = Array.prototype.slice.call(arguments, 2);
-  timer.ontimeout = function() {
-    callback.apply(timer, args);
-  }
+  timer._onTimeout = wrapper;
+  timer._repeat = true;
 
-  timer.start(repeat, repeat);
+  if (process.domain) timer.domain = process.domain;
+  exports.active(timer);
+
   return timer;
+
+  function wrapper() {
+    callback.apply(this, args);
+    // If callback called clearInterval().
+    if (timer._repeat === false) return;
+    // If timer is unref'd (or was - it's permanently removed from the list.)
+    if (this._handle) {
+      this._handle.start(repeat, 0);
+    } else {
+      timer._idleTimeout = repeat;
+      exports.active(timer);
+    }
+  }
 };
 
 
 exports.clearInterval = function(timer) {
-  if (timer instanceof Timer) {
-    timer.ontimeout = null;
-    timer.close();
+  if (timer && timer._repeat) {
+    timer._repeat = false;
+    clearTimeout(timer);
   }
 };
+
 
 var Timeout = function(after) {
   this._idleTimeout = after;
@@ -265,6 +277,7 @@ var Timeout = function(after) {
   this._idleNext = this;
   this._idleStart = null;
   this._onTimeout = null;
+  this._repeat = false;
 };
 
 Timeout.prototype.unref = function() {
@@ -359,4 +372,112 @@ exports.clearImmediate = function(immediate) {
   if (L.isEmpty(immediateQueue)) {
     process._needImmediateCallback = false;
   }
+};
+
+
+// Internal APIs that need timeouts should use timers._unrefActive isntead of
+// timers.active as internal timeouts shouldn't hold the loop open
+
+var unrefList, unrefTimer;
+
+
+function unrefTimeout() {
+  var now = Date.now();
+
+  debug('unrefTimer fired');
+
+  var first;
+  while (first = L.peek(unrefList)) {
+    var diff = now - first._idleStart;
+
+    if (diff < first._idleTimeout) {
+      diff = first._idleTimeout - diff;
+      unrefTimer.start(diff, 0);
+      unrefTimer.when = now + diff;
+      debug('unrefTimer rescheudling for later');
+      return;
+    }
+
+    L.remove(first);
+
+    var domain = first.domain;
+
+    if (!first._onTimeout) continue;
+    if (domain && domain._disposed) continue;
+
+    try {
+      if (domain) domain.enter();
+      var threw = true;
+      debug('unreftimer firing timeout');
+      first._onTimeout();
+      threw = false;
+      if (domain) domain.exit();
+    } finally {
+      if (threw) process.nextTick(unrefTimeout);
+    }
+  }
+
+  debug('unrefList is empty');
+  unrefTimer.when = -1;
+}
+
+
+exports._unrefActive = function(item) {
+  var msecs = item._idleTimeout;
+  if (!msecs || msecs < 0) return;
+  assert(msecs >= 0);
+
+  L.remove(item);
+
+  if (!unrefList) {
+    debug('unrefList initialized');
+    unrefList = {};
+    L.init(unrefList);
+
+    debug('unrefTimer initialized');
+    unrefTimer = new Timer();
+    unrefTimer.unref();
+    unrefTimer.when = -1;
+    unrefTimer.ontimeout = unrefTimeout;
+  }
+
+  var now = Date.now();
+  item._idleStart = now;
+
+  if (L.isEmpty(unrefList)) {
+    debug('unrefList empty');
+    L.append(unrefList, item);
+
+    unrefTimer.start(msecs, 0);
+    unrefTimer.when = now + msecs;
+    debug('unrefTimer scheduled');
+    return;
+  }
+
+  var when = now + msecs;
+
+  debug('unrefList find where we can insert');
+
+  var cur, them;
+
+  for (cur = unrefList._idlePrev; cur != unrefList; cur = cur._idlePrev) {
+    them = cur._idleStart + cur._idleTimeout;
+
+    if (when < them) {
+      debug('unrefList inserting into middle of list');
+
+      L.append(cur, item);
+
+      if (unrefTimer.when > when) {
+        debug('unrefTimer is scheduled to fire too late, reschedule');
+        unrefTimer.start(msecs, 0);
+        unrefTimer.when = when;
+      }
+
+      return;
+    }
+  }
+
+  debug('unrefList append to end');
+  L.append(unrefList, item);
 };

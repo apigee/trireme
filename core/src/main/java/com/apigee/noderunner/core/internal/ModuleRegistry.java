@@ -7,6 +7,8 @@ import org.mozilla.javascript.Script;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.io.IOException;
+import java.io.InputStream;
 import java.util.HashMap;
 import java.util.ServiceLoader;
 
@@ -50,6 +52,7 @@ public class ModuleRegistry
 
     public void load(Context cx)
     {
+        // Load all native Java modules implemented using the "NodeModule" interface
         ServiceLoader<NodeModule> loader = ServiceLoader.load(NodeModule.class);
         for (NodeModule mod : loader) {
             if (mod instanceof InternalNodeModule) {
@@ -59,13 +62,22 @@ public class ModuleRegistry
             }
         }
 
+        // Load all JavaScript moduiles implemented using "NodeScriptModule"
         ServiceLoader<NodeScriptModule> scriptLoader = ServiceLoader.load(NodeScriptModule.class);
         for (NodeScriptModule mod: scriptLoader) {
-            compileAndAdd(cx, mod.getModuleName(), mod.getModuleScript());
+            for (String[] src : mod.getScriptSources()) {
+                if (src.length != 2) {
+                    throw new AssertionError("Script module " + mod.getClass().getName() +
+                                             " returned script source arrays that do not have two elements");
+                }
+                compileAndAdd(cx, mod, src[0], src[1]);
+            }
         }
 
+        // Load the default Node modules, built-in to the runtime.
         // These classes are compiled using the "Rhino Compiler" module, which is a Maven plug-in that's part
         // of noderunner.
+        // These modules are all taken directly from Node.js source code
         addCompiledModule("_debugger", "com.apigee.noderunner.fromnode._debugger");
         addCompiledModule("_linklist", "com.apigee.noderunner.fromnode._linklist");
         addCompiledModule("_stream_duplex", "com.apigee.noderunner.fromnode._stream_duplex");
@@ -100,6 +112,8 @@ public class ModuleRegistry
         addCompiledModule("util", "com.apigee.noderunner.fromnode.util");
         addCompiledModule("zlib", "com.apigee.noderunner.fromnode.zlib");
 
+        // These modules are Noderunner-specific built-in modules that either replace regular Node
+        // functionality or add to it.
         addCompiledModule("bootstrap", "com.apigee.noderunner.scripts.bootstrap");
         addCompiledModule("_fatal_handler", "com.apigee.noderunner.scripts._fatal_handler");
         addCompiledModule("http", "com.apigee.noderunner.scripts.adaptorhttp");
@@ -113,10 +127,26 @@ public class ModuleRegistry
         addCompiledModule("vm", "com.apigee.noderunner.scripts.vm");
     }
 
-    private void compileAndAdd(Context cx, String name, String script)
+    private void compileAndAdd(Context cx, Object impl, String name, String path)
     {
-        String finalScript = CODE_PREFIX + script + CODE_POSTFIX;
-        Script compiled = cx.compileString(finalScript, name, 1, null);
+        String scriptSource;
+        InputStream is = impl.getClass().getResourceAsStream(path);
+        if (is == null) {
+            throw new AssertionError("Script " + path + " cannot be found for module " + name);
+        }
+        try {
+            scriptSource = Utils.readStream(is);
+        } catch (IOException ioe) {
+            throw new AssertionError("Error reading script " + path + " for module " + name);
+        } finally {
+            try {
+                is.close();
+            } catch (IOException ignore) {
+            }
+        }
+
+        String finalSource = CODE_PREFIX + scriptSource + CODE_POSTFIX;
+        Script compiled = cx.compileString(finalSource, name, 1, null);
         compiledModules.put(name, compiled);
     }
 

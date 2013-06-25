@@ -267,11 +267,15 @@ public class Filesystem
                 }
                 if (((flags & Constants.O_CREAT) != 0) &&
                     ((flags & Constants.O_EXCL) != 0)) {
-                    throw new NodeOSException(Constants.EEXIST);
+                    NodeOSException ne = new NodeOSException(Constants.EEXIST);
+                    ne.setPath(pathStr);
+                    throw ne;
                 }
             } else {
                 if ((flags & Constants.O_CREAT) == 0) {
-                    throw new NodeOSException(Constants.ENOENT);
+                    NodeOSException ne = new NodeOSException(Constants.ENOENT);
+                    ne.setPath(pathStr);
+                    throw ne;
                 }
                 try {
                     createFile(path, mode);
@@ -546,11 +550,15 @@ public class Filesystem
         {
             File oldFile = translatePath(oldPath);
             if (!oldFile.exists()) {
-                throw new NodeOSException(Constants.ENOENT);
+                NodeOSException ne = new NodeOSException(Constants.ENOENT);
+                ne.setPath(oldPath);
+                throw ne;
             }
             File newFile = translatePath(newPath);
             if ((newFile.getParentFile() != null) && !newFile.getParentFile().exists()) {
-                throw new NodeOSException(Constants.ENOENT);
+                NodeOSException ne = new NodeOSException(Constants.ENOENT);
+                ne.setPath(newPath);
+                throw ne;
             }
             if (!oldFile.renameTo(newFile)) {
                 throw new NodeOSException(Constants.EIO);
@@ -611,10 +619,14 @@ public class Filesystem
         {
             File file = translatePath(path);
             if (!file.exists()) {
-                throw new NodeOSException(Constants.ENOENT);
+                NodeOSException ne = new NodeOSException(Constants.ENOENT);
+                ne.setPath(path);
+                throw ne;
             }
             if (!file.isDirectory()) {
-                throw new NodeOSException(Constants.ENOTDIR);
+                NodeOSException ne = new NodeOSException(Constants.ENOTDIR);
+                ne.setPath(path);
+                throw ne;
             }
             if (!file.delete()) {
                 throw new NodeOSException(Constants.EIO);
@@ -644,7 +656,9 @@ public class Filesystem
         {
             File file = translatePath(path);
             if (!file.exists()) {
-                throw new NodeOSException(Constants.ENOENT);
+                NodeOSException ne = new NodeOSException(Constants.ENOENT);
+                ne.setPath(path);
+                throw ne;
             }
             if (!file.delete()) {
                 throw new NodeOSException(Constants.EIO);
@@ -676,7 +690,9 @@ public class Filesystem
         {
             File file = translatePath(path);
             if (file.exists()) {
-                throw new NodeOSException(Constants.EEXIST);
+                NodeOSException ne = new NodeOSException(Constants.EEXIST);
+                ne.setPath(path);
+                throw ne;
             }
             if (!file.mkdir()) {
                 throw new NodeOSException(Constants.EIO);
@@ -746,15 +762,17 @@ public class Filesystem
             try {
                 File f = translatePath(fn);
                 if (!f.exists()) {
-                    if (log.isDebugEnabled()) {
-                        log.debug("stat {} = {}", f.getPath(), Constants.ENOENT);
+                    if (log.isTraceEnabled()) {
+                        log.trace("stat {} = {}", f.getPath(), Constants.ENOENT);
                     }
-                    throw new NodeOSException(Constants.ENOENT);
+                    NodeOSException ne = new NodeOSException(Constants.ENOENT);
+                    ne.setPath(fn);
+                    throw ne;
                 }
                 StatsImpl s = (StatsImpl)cx.newObject(this, StatsImpl.CLASS_NAME);
                 s.setFile(f);
-                if (log.isDebugEnabled()) {
-                    log.debug("stat {} = {}", f.getPath(), s);
+                if (log.isTraceEnabled()) {
+                    log.trace("stat {} = {}", f.getPath(), s);
                 }
                 return new Object[] { Context.getUndefinedValue(), s };
             } finally {

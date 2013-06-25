@@ -85,7 +85,7 @@ public class NettyHttpServer
             log.debug("Listening on port {}", port);
         } catch (ChannelException ce) {
             stub.onError(ce.getMessage());
-            stub.onClose(null);
+            stub.onClose(null, null);
         }
     }
 
@@ -134,7 +134,7 @@ public class NettyHttpServer
     {
         log.debug("Closing HTTP server");
         server.close();
-        stub.onClose(null);
+        stub.onClose(null, null);
     }
 
     private SSLContext makeSSLContext(TLSParams p)
@@ -276,7 +276,7 @@ public class NettyHttpServer
             if (log.isDebugEnabled()) {
                 log.debug("Closed server-side connection {}", ctx.channel());
             }
-            stub.onClose(curRequest);
+            stub.onClose(curRequest, curResponse);
             ctx.fireChannelInactive();
         }
 

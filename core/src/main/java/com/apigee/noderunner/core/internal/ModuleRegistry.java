@@ -55,11 +55,15 @@ public class ModuleRegistry
         // Load all native Java modules implemented using the "NodeModule" interface
         ServiceLoader<NodeModule> loader = ServiceLoader.load(NodeModule.class);
         for (NodeModule mod : loader) {
-            if (mod instanceof InternalNodeModule) {
-                internalModules.put(mod.getModuleName(), (InternalNodeModule) mod);
-            } else {
-                modules.put(mod.getModuleName(), mod);
-            }
+            addNativeModule(mod);
+        }
+
+        // Load special modules that depend on the version of Java that we have.
+        // Load using reflection to avoid classloading in case we are on an old Java version
+        if (JavaVersion.get().hasAsyncFileIO()) {
+            loadModuleByName("com.apigee.noderunner.core.modules.AsyncFilesystem");
+        } else {
+            loadModuleByName("com.apigee.noderunner.core.modules.Filesystem");
         }
 
         // Load all JavaScript moduiles implemented using "NodeScriptModule"
@@ -148,6 +152,30 @@ public class ModuleRegistry
         String finalSource = CODE_PREFIX + scriptSource + CODE_POSTFIX;
         Script compiled = cx.compileString(finalSource, name, 1, null);
         compiledModules.put(name, compiled);
+    }
+
+    private void addNativeModule(NodeModule mod)
+    {
+        if (mod instanceof InternalNodeModule) {
+            internalModules.put(mod.getModuleName(), (InternalNodeModule) mod);
+        } else {
+            modules.put(mod.getModuleName(), mod);
+        }
+    }
+
+    private void loadModuleByName(String className)
+    {
+        try {
+            Class<NodeModule> klass = (Class<NodeModule>)Class.forName(className);
+            NodeModule mod = klass.newInstance();
+            addNativeModule(mod);
+        } catch (ClassNotFoundException e) {
+            throw new AssertionError(e);
+        } catch (InstantiationException e) {
+            throw new AssertionError(e);
+        } catch (IllegalAccessException e) {
+            throw new AssertionError(e);
+        }
     }
 
     private void addCompiledModule(String name, String className)

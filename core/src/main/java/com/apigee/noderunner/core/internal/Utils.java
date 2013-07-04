@@ -172,8 +172,20 @@ public class Utils
 
     public static Scriptable makeErrorObject(Context cx, Scriptable scope, String message, String code)
     {
+        return makeErrorObject(cx, scope, message, code, null);
+    }
+
+    public static Scriptable makeErrorObject(Context cx, Scriptable scope, String message, String code, String path)
+    {
         Scriptable err = cx.newObject(scope, "Error", new Object[] { message });
         err.put("code", err, code);
+        int errno = Constants.getErrno(code);
+        if (errno >= 0) {
+            err.put("errno", err, errno);
+        }
+        if (path != null) {
+            err.put("path", err, path);
+        }
         return err;
     }
 
@@ -189,18 +201,7 @@ public class Utils
 
     public static Scriptable makeErrorObject(Context cx, Scriptable scope, NodeOSException e)
     {
-        Scriptable err = cx.newObject(scope, "Error", new Object[] { e.getMessage() });
-        if (e.getPath() != null) {
-            err.put("path", err, e.getPath());
-        }
-        if (e.getCode() != null) {
-            err.put("code", err, e.getCode());
-            int errno = Constants.getErrno(e.getCode());
-            if (errno >= 0) {
-                err.put("errno", err, errno);
-            }
-        }
-        return err;
+        return makeErrorObject(cx, scope, e.getMessage(), e.getCode(), e.getPath());
     }
 
     public static RhinoException makeRangeError(Context cx, Scriptable scope, String message)

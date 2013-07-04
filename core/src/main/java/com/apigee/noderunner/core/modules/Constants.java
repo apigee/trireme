@@ -40,6 +40,7 @@ public class Constants
     public static final String EADDRINUSE = "EADDRINUSE";
     public static final String EBADF = "EBADF";
     public static final String ECONNREFUSED = "ECONNREFUSED";
+    public static final String EINTR = "EINTR";
     public static final String EEXIST = "EEXIST";
     public static final String EINVAL = "EINVAL";
     public static final String EIO = "EIO";
@@ -67,6 +68,7 @@ public class Constants
         errnos.put(EADDRINUSE, 48);
         errnos.put(EBADF, 9);
         errnos.put(ECONNREFUSED, 61);
+        errnos.put(EINTR, 4);
         errnos.put(EEXIST, 17);
         errnos.put(EINVAL, 22);
         errnos.put(EIO, 5);

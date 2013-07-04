@@ -8,6 +8,7 @@ import com.apigee.noderunner.core.NodeScript;
 import com.apigee.noderunner.core.Sandbox;
 import com.apigee.noderunner.core.ScriptStatus;
 import com.apigee.noderunner.core.ScriptTask;
+import com.apigee.noderunner.core.modules.AbstractFilesystem;
 import com.apigee.noderunner.core.modules.Buffer;
 import com.apigee.noderunner.core.modules.Filesystem;
 import com.apigee.noderunner.core.modules.NativeModule;
@@ -442,7 +443,7 @@ public class ScriptRunner
      */
     private void closeCloseables(Context cx)
     {
-        Filesystem.FSImpl fs = (Filesystem.FSImpl)requireInternal("fs", cx);
+        AbstractFilesystem fs = (AbstractFilesystem)requireInternal("fs", cx);
         fs.cleanup();
 
         for (Closeable c: openHandles.values()) {

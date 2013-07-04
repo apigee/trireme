@@ -5,7 +5,6 @@ com.apigee.noderunner.core.modules.DNS
 com.apigee.noderunner.core.modules.Evals
 com.apigee.noderunner.core.modules.Crypto
 com.apigee.noderunner.core.modules.EventEmitter
-com.apigee.noderunner.core.modules.Filesystem
 com.apigee.noderunner.core.modules.HTTPParser
 com.apigee.noderunner.core.modules.HTTPWrap
 com.apigee.noderunner.core.modules.NativeModule

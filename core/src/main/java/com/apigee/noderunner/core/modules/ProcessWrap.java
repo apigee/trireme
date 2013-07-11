@@ -32,6 +32,7 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.lang.reflect.InvocationTargetException;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.regex.Pattern;
@@ -49,6 +50,7 @@ public class ProcessWrap
     public static final String STDIO_IGNORE =    "ignore";
 
     private static final Pattern EQUALS = Pattern.compile("=");
+    private static final Pattern SPACE = Pattern.compile("\t ");
 
     @Override
     public String getModuleName()
@@ -391,7 +393,7 @@ public class ProcessWrap
             createInputStream(cx, stdio, 1, proc.getInputStream());
             createInputStream(cx, stdio, 2, proc.getErrorStream());
 
-            parent.runner.getAsyncPool().submit(new Runnable()
+            parent.runner.getUnboundedPool().submit(new Runnable()
             {
                 @Override
                 public void run()
@@ -537,17 +539,30 @@ public class ProcessWrap
             // TODO env
             // TODO stdio
 
-            if (execArgs.size() < 2) {
+            String scriptPath = null;
+            int i;
+            // Look at the args but slip the first one
+            for (i = 1; i < execArgs.size(); i++) {
+                if (!execArgs.get(i).startsWith("-")) {
+                    // Skip any parameters to "node" itself
+                    scriptPath = execArgs.get(i);
+                    i++;
+                    break;
+                }
+            }
+            if (scriptPath == null) {
                 throw new EvaluatorException("No script path to spawn");
             }
-            String scriptPath = execArgs.get(1);
+
             String[] args;
-            if (execArgs.size() == 2) {
+            if (i == execArgs.size()) {
                 args = null;
             } else {
-                args = new String[execArgs.size() - 2];
-                for (int i = 0; i < args.length; i++) {
-                    args[i] = execArgs.get(i + 2);
+                args = new String[execArgs.size() - i];
+                int t = 0;
+                for (; i < args.length; i++) {
+                    args[t] = execArgs.get(i);
+                    t++;
                 }
             }
 

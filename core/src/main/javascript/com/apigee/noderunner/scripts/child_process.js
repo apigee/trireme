@@ -5,8 +5,10 @@ var constants; // if (!constants) constants = process.binding('constants');
 var ProcessWrap = process.binding('noderunner_process_wrap');
 
 var debug;
+var isDebug;
 if (process.env.NODE_DEBUG && /child_process/.test(process.env.NODE_DEBUG)) {
   debug = function(x) { console.error('child_process: %s', x); };
+  isDebug = true;
 } else {
   debug = function() { };
 }
@@ -46,9 +48,19 @@ exports.exec = function(command /*, options, callback */) {
     callback = arguments[2];
   }
 
-  if (process.platform === 'win32') {
+  var splitArgs = command.split(' ');
+  if (isDebug) {
+    debug('exec(' + JSON.stringify(splitArgs) + ')');
+  }
+
+  if (splitArgs[0] === process.execPath) {
+    // Trying to exec Node -- catch that and split args into an array
+    file = process.execPath;
+    args = splitArgs.slice(1);
+
+  } else if (process.platform === 'win32') {
     file = 'cmd.exe';
-    args = ['/s', '/c', '"' + command + '"'];
+    args = ['/s', '/c', command];
     // Make a shallow copy before patching so we don't clobber the user's
     // options object.
     options = util._extend({}, options);
@@ -57,6 +69,7 @@ exports.exec = function(command /*, options, callback */) {
     file = '/bin/sh';
     args = ['-c', command];
   }
+
   return exports.execFile(file, args, options, callback);
 };
 

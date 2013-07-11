@@ -44,30 +44,6 @@
         <Description>Pipes are not supported in Noderunner or in Java.</Description>
     </Excluded>
     <Excluded>
-        <Name>test-fs-write-file-sync.js</Name>
-        <Description>Relies too much on Unix file permissions</Description>
-    </Excluded>
-    <Excluded>
-        <Name>test-fs-chmod.js</Name>
-        <Description>Relies too much on Unix file permissions</Description>
-    </Excluded>
-    <Excluded>
-        <Name>test-fs-error-messages.js</Name>
-        <Description>Tests stuff that we don't support like symlinks.</Description>
-    </Excluded>
-    <Excluded>
-        <Name>test-fs-symlink-.+\.js</Name>
-        <Description>No symlinks in Java.</Description>
-    </Excluded>
-    <Excluded>
-        <Name>test-fs-realpath.js</Name>
-        <Description>No symlinks in Java.</Description>
-    </Excluded>
-    <Excluded>
-        <Name>test-fs-utimes.js</Name>
-        <Description>Can't set utimes in Java.</Description>
-    </Excluded>
-    <Excluded>
         <Name>test-fs-watch.+</Name>
         <Description>Depends on native stuff.</Description>
     </Excluded>

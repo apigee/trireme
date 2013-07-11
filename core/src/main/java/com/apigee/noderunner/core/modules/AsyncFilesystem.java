@@ -14,7 +14,6 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.File;
-import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.io.RandomAccessFile;
 import java.lang.reflect.InvocationTargetException;
@@ -23,7 +22,8 @@ import java.nio.channels.AsynchronousFileChannel;
 import java.nio.channels.CompletionHandler;
 import java.nio.file.DirectoryNotEmptyException;
 import java.nio.file.FileAlreadyExistsException;
-import java.nio.file.FileSystems;
+import java.nio.file.FileVisitOption;
+import java.nio.file.FileVisitResult;
 import java.nio.file.Files;
 import java.nio.file.LinkOption;
 import java.nio.file.NoSuchFileException;
@@ -31,10 +31,19 @@ import java.nio.file.NotLinkException;
 import java.nio.file.OpenOption;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.nio.file.SimpleFileVisitor;
+import java.nio.file.StandardCopyOption;
 import java.nio.file.StandardOpenOption;
+import java.nio.file.attribute.BasicFileAttributeView;
+import java.nio.file.attribute.BasicFileAttributes;
+import java.nio.file.attribute.FileTime;
 import java.nio.file.attribute.PosixFileAttributeView;
 import java.nio.file.attribute.PosixFileAttributes;
 import java.nio.file.attribute.PosixFilePermission;
+import java.nio.file.attribute.PosixFilePermissions;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.EnumSet;
 import java.util.HashSet;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
@@ -47,6 +56,8 @@ import static com.apigee.noderunner.core.internal.ArgUtils.*;
 
 /**
  * An implementation of the "fs" internal Node module. The "fs.js" script depends on it.
+ * This is a Java-7-specific version of this module that uses the new NIO file APIs for async
+ * file I/O and for a wider variety of compatibility with native Node.
  */
 public class AsyncFilesystem
     implements InternalNodeModule
@@ -95,6 +106,7 @@ public class AsyncFilesystem
             this.pool = fsPool;
         }
 
+        @Override
         public void cleanup()
         {
             for (FileHandle handle : descriptors.values()) {
@@ -119,6 +131,10 @@ public class AsyncFilesystem
             return ret[1];
         }
 
+        /**
+         * This is a generic wrapper that executes an action in a thread pool if there is a
+         * callback function defined, or in the current thread if it is not.
+         */
         private Object runAction(final Context cx, final Function callback, final AsyncAction action)
         {
             if (callback == null) {
@@ -138,7 +154,7 @@ public class AsyncFilesystem
                 }
             }
 
-            final AsyncFilesystem.FSImpl self = this;
+            final FSImpl self = this;
             final Scriptable domain = runner.getDomain();
             runner.pin();
             pool.execute(new Runnable()
@@ -169,21 +185,14 @@ public class AsyncFilesystem
             return null;
         }
 
-        private void createFile(File f, int mode)
-            throws IOException, NodeOSException
-        {
-            f.createNewFile();
-            doChmod(f, mode);
-        }
-
-        private File translatePath(String path)
+        private Path translatePath(String path)
             throws NodeOSException
         {
             File trans = runner.translatePath(path);
             if (trans == null) {
-                throw new NodeOSException(Constants.ENOENT);
+                throw new NodeOSException(Constants.ENOENT, path);
             }
-            return trans;
+            return Paths.get(trans.getPath());
         }
 
         private FileHandle ensureHandle(int fd)
@@ -191,7 +200,7 @@ public class AsyncFilesystem
         {
             FileHandle handle = descriptors.get(fd);
             if (handle == null) {
-                throw new NodeOSException(Constants.EBADF, "Bad file handle");
+                throw new NodeOSException(Constants.EBADF);
             }
             return handle;
         }
@@ -201,10 +210,10 @@ public class AsyncFilesystem
         {
             FileHandle h = ensureHandle(fd);
             if (h.file == null) {
-                if (h.fileRef.isDirectory()) {
-                    throw new NodeOSException(Constants.EISDIR, "File is a directory");
+                if (Files.isDirectory(h.path)) {
+                    throw new NodeOSException(Constants.EISDIR);
                 }
-                throw new NodeOSException(Constants.EBADF, "Not a regular file");
+                throw new NodeOSException(Constants.EBADF);
             }
             return h;
         }
@@ -253,32 +262,21 @@ public class AsyncFilesystem
                 log.debug("open({}, {}, {})", pathStr, flags, mode);
             }
 
-            File path = translatePath(pathStr);
-
-            if (path.exists()) {
-                if (((flags & Constants.O_CREAT) != 0) &&
-                    ((flags & Constants.O_EXCL) != 0)) {
-                    NodeOSException ne = new NodeOSException(Constants.EEXIST);
-                    ne.setPath(pathStr);
-                    throw ne;
-                }
-            } else {
-                if ((flags & Constants.O_CREAT) == 0) {
-                    NodeOSException ne = new NodeOSException(Constants.ENOENT);
-                    ne.setPath(pathStr);
-                    throw ne;
-                }
-                try {
-                    createFile(path, mode);
-                } catch (IOException e) {
-                    throw new NodeOSException(Constants.EIO, e);
-                }
-            }
-
+            Path path = translatePath(pathStr);
             AsynchronousFileChannel file = null;
-            if (path.isFile()) {
-                // Only open the file if it's actually a file -- we can still have an FD to a directory
+
+            // To support "lchmod", we need to check "O_SYMLINK" here too
+            if (!Files.isDirectory(path)) {
+                // Open an AsynchronousFileChannel using all the relevant open options.
+                // But if we are opening a symbolic link or directory, just record the path and go on
                 HashSet<OpenOption> options = new HashSet<OpenOption>();
+                if ((flags & Constants.O_CREAT) != 0) {
+                    if ((flags & Constants.O_EXCL) != 0) {
+                        options.add(StandardOpenOption.CREATE_NEW);
+                    } else {
+                        options.add(StandardOpenOption.CREATE);
+                    }
+                }
                 if ((flags & Constants.O_RDWR) != 0) {
                     options.add(StandardOpenOption.READ);
                     options.add(StandardOpenOption.WRITE);
@@ -297,25 +295,30 @@ public class AsyncFilesystem
 
                 try {
                     if (log.isDebugEnabled()) {
-                        log.debug("Opening {} with {}", path.getPath(), options);
+                        log.debug("Opening {} with {}", path, options);
                     }
-                    file = AsynchronousFileChannel.open(FileSystems.getDefault().getPath(path.getPath()),
-                                                        options, pool);
+                    file = AsynchronousFileChannel.open(path, options, pool,
+                                                        PosixFilePermissions.asFileAttribute(modeToPerms(mode)));
 
-                } catch (FileNotFoundException fnfe) {
+                } catch (NoSuchFileException fnfe) {
                     log.debug("File not found");
-                    throw new NodeOSException(Constants.ENOENT);
+                    throw new NodeOSException(Constants.ENOENT, pathStr);
                 } catch (IOException ioe) {
                     if (log.isDebugEnabled()) {
                         log.debug("I/O error: {}", ioe);
                     }
-                    throw new NodeOSException(Constants.EIO, ioe);
+                    throw new NodeOSException(Constants.EIO, ioe, pathStr);
                 }
             }
 
-            Context.enter();
             try {
                 FileHandle fileHandle = new FileHandle(path, file);
+                // Replace this if we choose to support "lchmod"
+                /*
+                if ((flags & Constants.O_SYMLINK) != 0) {
+                    fileHandle.noFollow = true;
+                }
+                */
                 int fd = nextFd.getAndIncrement();
                 if (log.isDebugEnabled()) {
                     log.debug("  open({}) = {}", pathStr, fd);
@@ -332,9 +335,7 @@ public class AsyncFilesystem
                 if (log.isDebugEnabled()) {
                     log.debug("I/O error: {}", ioe);
                 }
-                throw new NodeOSException(Constants.EIO, ioe);
-            } finally {
-                Context.exit();
+                throw new NodeOSException(Constants.EIO, ioe, pathStr);
             }
         }
 
@@ -641,20 +642,14 @@ public class AsyncFilesystem
         private void doRename(String oldPath, String newPath)
             throws NodeOSException
         {
-            File oldFile = translatePath(oldPath);
-            if (!oldFile.exists()) {
-                NodeOSException ne = new NodeOSException(Constants.ENOENT);
-                ne.setPath(oldPath);
-                throw ne;
-            }
-            File newFile = translatePath(newPath);
-            if ((newFile.getParentFile() != null) && !newFile.getParentFile().exists()) {
-                NodeOSException ne = new NodeOSException(Constants.ENOENT);
-                ne.setPath(newPath);
-                throw ne;
-            }
-            if (!oldFile.renameTo(newFile)) {
-                throw new NodeOSException(Constants.EIO);
+            Path oldFile = translatePath(oldPath);
+            Path newFile = translatePath(newPath);
+
+            try {
+                Files.copy(oldFile, newFile, StandardCopyOption.REPLACE_EXISTING);
+
+            } catch (IOException ioe) {
+                throw new NodeOSException(Constants.EIO, ioe, oldPath);
             }
         }
 
@@ -688,7 +683,7 @@ public class AsyncFilesystem
                 FileHandle handle = ensureRegularFileHandle(fd);
                 if (len > handle.file.size()) {
                     // AsynchronousFileChannel doesn't actually extend the file size, so do it a different way
-                    RandomAccessFile tmp = new RandomAccessFile(handle.fileRef, "rw");
+                    RandomAccessFile tmp = new RandomAccessFile(handle.path.toFile(), "rw");
                     try {
                         tmp.setLength(len);
                     } finally {
@@ -726,19 +721,17 @@ public class AsyncFilesystem
             if (log.isDebugEnabled()) {
                 log.debug("rmdir({})", path);
             }
-            File file = translatePath(path);
-            if (!file.exists()) {
-                NodeOSException ne = new NodeOSException(Constants.ENOENT);
-                ne.setPath(path);
-                throw ne;
+            Path p = translatePath(path);
+            if (!Files.isDirectory(p)) {
+                throw new NodeOSException(Constants.ENOTDIR, path);
             }
-            if (!file.isDirectory()) {
-                NodeOSException ne = new NodeOSException(Constants.ENOTDIR);
-                ne.setPath(path);
-                throw ne;
-            }
-            if (!file.delete()) {
-                throw new NodeOSException(Constants.EIO);
+
+            try {
+                Files.delete(p);
+            } catch (NoSuchFileException nfe) {
+                throw new NodeOSException(Constants.ENOENT, nfe, path);
+            } catch (IOException ioe) {
+                throw new NodeOSException(Constants.EIO, ioe, path);
             }
         }
 
@@ -766,10 +759,10 @@ public class AsyncFilesystem
             if (log.isDebugEnabled()) {
                 log.debug("unlink({})", path);
             }
-            File file = translatePath(path);
+            Path p = translatePath(path);
 
             try {
-                Files.delete(Paths.get(file.getPath()));
+                Files.delete(p);
 
             } catch (NoSuchFileException nfe) {
                 throw new NodeOSException(Constants.ENOENT, nfe, path);
@@ -806,16 +799,18 @@ public class AsyncFilesystem
             if (log.isDebugEnabled()) {
                 log.debug("mkdir({})", path);
             }
-            File file = translatePath(path);
-            if (file.exists()) {
-                NodeOSException ne = new NodeOSException(Constants.EEXIST);
-                ne.setPath(path);
-                throw ne;
+            Path p  = translatePath(path);
+            Set<PosixFilePermission> perms = modeToPerms(mode);
+
+            try {
+                Files.createDirectory(p,
+                                      PosixFilePermissions.asFileAttribute(perms));
+
+            } catch (FileAlreadyExistsException fee) {
+                throw new NodeOSException(Constants.EEXIST, fee, path);
+            } catch (IOException ioe) {
+                throw new NodeOSException(Constants.EIO, ioe, path);
             }
-            if (!file.mkdir()) {
-                throw new NodeOSException(Constants.EIO);
-            }
-            doChmod(file, mode);
         }
 
         @JSFunction
@@ -837,27 +832,34 @@ public class AsyncFilesystem
         }
 
         private Object[] doReaddir(String dn)
+            throws NodeOSException
         {
+            Path sp = translatePath(dn);
             Context cx = Context.enter();
             try {
-                File f = translatePath(dn);
-                String[] files = f.list();
-                Scriptable fileList;
-                if (files == null) {
-                    fileList = cx.newArray(this, 0);
-                    if (log.isDebugEnabled()) {
-                        log.debug("readdir({}) = 0", dn);
-                    }
-                } else {
-                    Object[] objs = new Object[files.length];
-                    System.arraycopy(files, 0, objs, 0, files.length);
-                    fileList = cx.newArray(this, objs);
-                    if (log.isDebugEnabled()) {
-                        log.debug("readdir({}) = {}", dn, objs.length);
-                    }
-                }
+                final ArrayList<String> paths = new ArrayList<String>();
+                Set<FileVisitOption> options = Collections.emptySet();
+                Files.walkFileTree(sp, options, 1,
+                                   new SimpleFileVisitor<Path>() {
+                                       @Override
+                                       public FileVisitResult visitFile(Path child, BasicFileAttributes attrs)
+                                       {
+                                           paths.add(child.toString());
+                                           return FileVisitResult.CONTINUE;
+                                       }
+                                   });
 
+
+                Object[] objs = new Object[paths.size()];
+                paths.toArray(objs);
+                Scriptable fileList = cx.newArray(this, objs);
+                if (log.isDebugEnabled()) {
+                    log.debug("readdir({}) = {}", dn, objs.length);
+                }
                 return new Object[] { Context.getUndefinedValue(), fileList };
+
+            } catch (IOException ioe) {
+                throw new NodeOSException(Constants.EIO, ioe, dn);
             } finally {
                 Context.exit();
             }
@@ -876,42 +878,34 @@ public class AsyncFilesystem
                 public Object[] execute()
                     throws NodeOSException
                 {
-                    File f = fs.translatePath(path);
-                    return fs.doStat(f, true);
+                    Path p = fs.translatePath(path);
+                    return fs.doStat(p, false);
                 }
             });
         }
 
-        private Object[] doStat(File f, boolean followLinks)
+        private Object[] doStat(Path p, boolean noFollow)
         {
             Context cx = Context.enter();
             try {
-                PosixFileAttributeView attrs;
-                if (followLinks) {
-                    attrs = Files.getFileAttributeView(Paths.get(f.getPath()),
-                                                       PosixFileAttributeView.class);
+                PosixFileAttributes attrs;
+                try {
+                if (noFollow) {
+                    attrs = Files.readAttributes(p, PosixFileAttributes.class,
+                                                 LinkOption.NOFOLLOW_LINKS);
                 } else {
-                    attrs = Files.getFileAttributeView(Paths.get(f.getPath()),
-                                                       PosixFileAttributeView.class,
-                                                       LinkOption.NOFOLLOW_LINKS);
+                    attrs = Files.readAttributes(p, PosixFileAttributes.class);
                 }
-
-                if (attrs == null) {
-                    NodeOSException ne = new NodeOSException(Constants.ENOENT);
-                    ne.setPath(f.getPath());
-                    throw ne;
+                } catch (NoSuchFileException nfe) {
+                    throw new NodeOSException(Constants.ENOENT, nfe, p.toString());
+                } catch (IOException ioe) {
+                    throw new NodeOSException(Constants.EIO, ioe, p.toString());
                 }
 
                 StatsImpl s = (StatsImpl)cx.newObject(this, StatsImpl.CLASS_NAME);
-                try {
-                    s.setAttributes(attrs.readAttributes());
-                } catch (NoSuchFileException nfe) {
-                    throw new NodeOSException(Constants.ENOENT, nfe, f.getPath());
-                } catch (IOException ioe) {
-                    throw new NodeOSException(Constants.EIO, ioe, f.getPath());
-                }
+                s.setAttributes(attrs);
                 if (log.isTraceEnabled()) {
-                    log.trace("stat {} = {}", f.getPath(), s);
+                    log.trace("stat {} = {}", p, s);
                 }
                 return new Object[] { Context.getUndefinedValue(), s };
             } finally {
@@ -932,8 +926,8 @@ public class AsyncFilesystem
                 public Object[] execute()
                     throws NodeOSException
                 {
-                    File f = fs.translatePath(path);
-                    return fs.doStat(f, false);
+                    Path p = fs.translatePath(path);
+                    return fs.doStat(p, true);
                 }
             });
         }
@@ -952,7 +946,7 @@ public class AsyncFilesystem
                     throws NodeOSException
                 {
                     FileHandle fh = fs.ensureHandle(fd);
-                    return fs.doStat(fh.fileRef, true);
+                    return fs.doStat(fh.path, fh.noFollow);
                 }
             });
         }
@@ -960,13 +954,66 @@ public class AsyncFilesystem
         @JSFunction
         public static void utimes(Context cx, Scriptable thisObj, Object[] args, Function func)
         {
-            throw Utils.makeError(cx, thisObj, "Not implemented");
+            final String path = stringArg(args, 0);
+            final double atime = doubleArg(args, 1);
+            final double mtime = doubleArg(args, 2);
+            Function callback = functionArg(args, 3, false);
+            final FSImpl self = (FSImpl)thisObj;
+
+            self.runAction(cx, callback, new AsyncAction() {
+                @Override
+                public Object[] execute()
+                    throws NodeOSException
+                {
+                    Path p = self.translatePath(path);
+                    return self.doUTimes(p, atime, mtime, false);
+                }
+            });
         }
 
         @JSFunction
         public static void futimes(Context cx, Scriptable thisObj, Object[] args, Function func)
         {
-            throw Utils.makeError(cx, thisObj, "Not implemented");
+            final int fd = intArg(args, 0);
+            final double atime = doubleArg(args, 1);
+            final double mtime = doubleArg(args, 2);
+            Function callback = functionArg(args, 3, false);
+            final FSImpl self = (FSImpl)thisObj;
+
+            self.runAction(cx, callback, new AsyncAction() {
+                @Override
+                public Object[] execute()
+                    throws NodeOSException
+                {
+                    FileHandle fh = self.ensureHandle(fd);
+                    return self.doUTimes(fh.path, atime, mtime, fh.noFollow);
+                }
+            });
+        }
+
+        private Object[] doUTimes(Path path, double atime, double mtime, boolean nofollow)
+            throws NodeOSException
+        {
+            try {
+                BasicFileAttributeView attrView;
+                if (nofollow) {
+                    attrView = Files.getFileAttributeView(path, BasicFileAttributeView.class,
+                                                          LinkOption.NOFOLLOW_LINKS);
+                } else {
+                    attrView = Files.getFileAttributeView(path, BasicFileAttributeView.class);
+                }
+
+                BasicFileAttributes attrs = attrView.readAttributes();
+                // The timestamp seems to come from JavaScript as a decimal value of seconds
+                FileTime newATime = FileTime.fromMillis((long)(atime * 1000.0));
+                FileTime newMTime = FileTime.fromMillis((long)(mtime * 1000.0));
+                attrView.setTimes(newMTime, newATime, attrs.creationTime());
+            } catch (NoSuchFileException nfe) {
+                throw new NodeOSException(Constants.ENOENT, nfe, path.toString());
+            } catch (IOException ioe) {
+                throw new NodeOSException(Constants.EIO, ioe, path.toString());
+            }
+            return new Object[] { Context.getUndefinedValue(), Context.getUndefinedValue() };
         }
 
         @JSFunction
@@ -981,18 +1028,16 @@ public class AsyncFilesystem
                 @Override
                 public Object[] execute() throws NodeOSException
                 {
-                    File f = self.translatePath(path);
-                    return self.doChmod(f, mode);
+                    Path p = self.translatePath(path);
+                    return self.doChmod(p, mode, false);
                 }
             });
         }
 
-        private Object[] doChmod(File path, int mode)
-            throws NodeOSException
+        private static Set<PosixFilePermission> modeToPerms(int mode)
         {
-            Path p = Paths.get(path.getPath());
-
-            HashSet<PosixFilePermission> perms = new HashSet<PosixFilePermission>();
+            Set<PosixFilePermission> perms =
+                EnumSet.noneOf(PosixFilePermission.class);
             if ((mode & Constants.S_IXUSR) != 0) {
                 perms.add(PosixFilePermission.OWNER_EXECUTE);
             }
@@ -1020,18 +1065,29 @@ public class AsyncFilesystem
             if ((mode & Constants.S_IWOTH) != 0) {
                 perms.add(PosixFilePermission.OTHERS_WRITE);
             }
+            return perms;
+        }
+
+        private Object[] doChmod(Path path, int mode, boolean noFollow)
+            throws NodeOSException
+        {
+            Set<PosixFilePermission> perms = modeToPerms(mode);
 
             if (log.isDebugEnabled()) {
-                log.debug("chmod({}, {}) to {}", p, mode, perms);
+                log.debug("chmod({}, {}) to {}", path, mode, perms);
             }
 
             try {
-                Files.setAttribute(p, "posix:permissions", perms);
+                if (noFollow) {
+                    Files.setAttribute(path, "posix:permissions", perms, LinkOption.NOFOLLOW_LINKS);
+                } else {
+                    Files.setAttribute(path, "posix:permissions", perms);
+                }
                 return new Object[] { Context.getUndefinedValue(), Context.getUndefinedValue() };
             } catch (NoSuchFileException nfe) {
-                throw new NodeOSException(Constants.ENOENT, nfe, path.getPath());
+                throw new NodeOSException(Constants.ENOENT, nfe, path.toString());
             } catch (IOException ioe) {
-                throw new NodeOSException(Constants.EIO, ioe, path.getPath());
+                throw new NodeOSException(Constants.EIO, ioe, path.toString());
             }
         }
 
@@ -1048,7 +1104,7 @@ public class AsyncFilesystem
                 public Object[] execute() throws NodeOSException
                 {
                     FileHandle fh = self.ensureHandle(fd);
-                    return self.doChmod(fh.fileRef, mode);
+                    return self.doChmod(fh.path, mode, fh.noFollow);
                 }
             });
         }
@@ -1086,16 +1142,15 @@ public class AsyncFilesystem
         private Object[] doLink(String destPath, String srcPath)
             throws NodeOSException
         {
-            File dest = translatePath(destPath);
-            File src = translatePath(srcPath);
+            Path dest = translatePath(destPath);
+            Path src = translatePath(srcPath);
 
             try {
                 if (log.isDebugEnabled()) {
                     log.debug("link from {} to {}",
                               src, dest);
                 }
-                Files.createLink(Paths.get(dest.getPath()),
-                                 Paths.get(src.getPath()));
+                Files.createLink(dest, src);
                 return new Object[] { Context.getUndefinedValue(), Context.getUndefinedValue() };
 
             } catch (FileAlreadyExistsException fae) {
@@ -1132,8 +1187,8 @@ public class AsyncFilesystem
         private Object[] doSymlink(String destPath, String srcPath, String type)
             throws NodeOSException
         {
-            File dest = translatePath(destPath);
-            File src = translatePath(srcPath);
+            Path dest = translatePath(destPath);
+            Path src = translatePath(srcPath);
 
             try {
                 if (log.isDebugEnabled()) {
@@ -1141,8 +1196,7 @@ public class AsyncFilesystem
                               src, dest);
                 }
                 // TODO do we care about type?
-                Files.createSymbolicLink(Paths.get(dest.getPath()),
-                                         Paths.get(src.getPath()));
+                Files.createSymbolicLink(dest, src);
                 return new Object[] { Context.getUndefinedValue(), Context.getUndefinedValue() };
 
             } catch (FileAlreadyExistsException fae) {
@@ -1177,10 +1231,10 @@ public class AsyncFilesystem
         private Object[] doReadLink(String pathStr)
             throws NodeOSException
         {
-            File path = translatePath(pathStr);
+            Path path = translatePath(pathStr);
 
             try {
-                Path target = Files.readSymbolicLink(Paths.get(path.getPath()));
+                Path target = Files.readSymbolicLink(path);
                 if (log.isDebugEnabled()) {
                     log.debug("readLink({}) = {}", path, target);
                 }
@@ -1343,12 +1397,13 @@ public class AsyncFilesystem
         static final String KEY = "_fileHandle";
 
         AsynchronousFileChannel file;
-        File fileRef;
+        Path path;
         long position;
+        boolean noFollow;
 
-        FileHandle(File fileRef, AsynchronousFileChannel file)
+        FileHandle(Path path, AsynchronousFileChannel file)
         {
-            this.fileRef = fileRef;
+            this.path = path;
             this.file = file;
         }
     }

@@ -177,7 +177,7 @@ public class Utils
 
     public static Scriptable makeErrorObject(Context cx, Scriptable scope, String message, String code, String path)
     {
-        Scriptable err = cx.newObject(scope, "Error", new Object[] { code + ':' + message });
+        Scriptable err = cx.newObject(scope, "Error", new Object[] { message });
         err.put("code", err, code);
         int errno = Constants.getErrno(code);
         if (errno >= 0) {

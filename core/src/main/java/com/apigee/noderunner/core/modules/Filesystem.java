@@ -195,7 +195,7 @@ public class Filesystem
         {
             FileHandle handle = descriptors.get(fd);
             if (handle == null) {
-                throw new NodeOSException(Constants.EBADF, "Bad file handle");
+                throw new NodeOSException(Constants.EBADF);
             }
             return handle;
         }
@@ -205,7 +205,7 @@ public class Filesystem
         {
             FileHandle h = ensureHandle(fd);
             if (h.file == null) {
-                throw new NodeOSException(Constants.EBADF,"Not a regular file");
+                throw new NodeOSException(Constants.EBADF);
             }
             return h;
         }

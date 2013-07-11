@@ -13,26 +13,27 @@ public class NodeOSException
 
     public NodeOSException(String code)
     {
-        super("Error code " + code);
+        super(code);
         this.code = code;
     }
 
-    public NodeOSException(String code, String msg)
+    public NodeOSException(String code, String path)
     {
-        super(msg);
+        super(code + ':' + path);
         this.code = code;
+        this.path = path;
     }
 
     public NodeOSException(String code, Throwable cause)
     {
-        super(cause.toString());
+        super(code);
         this.code = code;
         initCause(cause);
     }
 
     public NodeOSException(String code, Throwable cause, String path)
     {
-        super(cause.toString());
+        super(code + ':' + path);
         this.code = code;
         this.path = path;
         initCause(cause);

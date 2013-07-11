@@ -22,7 +22,9 @@ public class Constants
     public static final int O_NOFOLLOW  = 0x0100;
     public static final int O_RDONLY    = 0x0000;
     public static final int O_RDWR      = 0x0002;
-    public static final int O_SYMLINK   = 0x200000;
+    // If this variable is present, "lchmod" is supported. It doesn't seem to fully work
+    // in Java 7 so we are disabling it.
+    // public static final int O_SYMLINK   = 0x200000;
     public static final int O_SYNC      = 0x0080;
     public static final int O_TRUNC     = 0x0400;
     public static final int O_WRONLY = 0x0001;
@@ -106,7 +108,8 @@ public class Constants
         exports.put("O_NOFOLLOW", exports, O_NOFOLLOW);
         exports.put("O_RDONLY", exports, O_RDONLY);
         exports.put("O_RDWR", exports, O_RDWR);
-        exports.put("O_SYMLINK", exports, O_SYMLINK);
+        // See above regarding "lchmod"
+        //exports.put("O_SYMLINK", exports, O_SYMLINK);
         exports.put("O_SYNC", exports, O_SYNC);
         exports.put("O_TRUNC", exports, O_TRUNC);
         exports.put("O_WRONLY", exports, O_WRONLY);

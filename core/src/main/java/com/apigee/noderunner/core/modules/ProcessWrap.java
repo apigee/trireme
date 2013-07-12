@@ -554,17 +554,14 @@ public class ProcessWrap
                 throw new EvaluatorException("No script path to spawn");
             }
 
-            String[] args;
-            if (i == execArgs.size()) {
-                args = null;
-            } else {
-                args = new String[execArgs.size() - i];
-                int t = 0;
-                for (; i < args.length; i++) {
-                    args[t] = execArgs.get(i);
-                    t++;
+            ArrayList<String> args = new ArrayList<String>(execArgs.size() - i);
+            for (; i < execArgs.size(); i++) {
+                String arg = execArgs.get(i);
+                if (arg != null) {
+                    args.add(arg);
                 }
             }
+
 
             if (!options.has("stdio", options)) {
                 throw new EvaluatorException("Missing stdio in options");
@@ -578,7 +575,8 @@ public class ProcessWrap
 
             try {
                 NodeScript newScript =
-                    parent.runner.getEnvironment().createScript(scriptPath, new File(scriptPath), args);
+                    parent.runner.getEnvironment().createScript(scriptPath, new File(scriptPath),
+                                                                args.toArray(new String[args.size()]));
                 newScript.setSandbox(scriptSandbox);
                 future = newScript.execute();
             } catch (NodeException ne) {

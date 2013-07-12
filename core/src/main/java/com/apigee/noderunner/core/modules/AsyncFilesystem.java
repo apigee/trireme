@@ -844,7 +844,7 @@ public class AsyncFilesystem
                                        @Override
                                        public FileVisitResult visitFile(Path child, BasicFileAttributes attrs)
                                        {
-                                           paths.add(child.toString());
+                                           paths.add(child.getFileName().toString());
                                            return FileVisitResult.CONTINUE;
                                        }
                                    });

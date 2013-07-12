@@ -17,8 +17,6 @@ if (module === require.main) {
   var tests = fs.readdirSync(dir);
   var spawn = require('child_process').spawn;
 
-  runBenchmarks();
-
   function runBenchmarks() {
     var test = tests.shift();
     if (!test)
@@ -40,6 +38,9 @@ if (module === require.main) {
       }
     });
   }
+
+  // Noderunner: Rhino doesn't seem to accept this code.
+  runBenchmarks();
 }
 
 exports.createBenchmark = function(fn, options) {

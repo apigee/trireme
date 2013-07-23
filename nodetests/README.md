@@ -22,6 +22,16 @@ mvn -DskipTests=false -DTestFile=test-http test
 To enable Noderunner debugging (that is, debugging of Noderunner's Java code), set the LOGLEVEL
 property to one of the supported SLF4J log levels such as INFO or DEBUG. The default is INFO.
 
+## Java Versions
+
+If the environment variables JAVA_HOME_6 and JAVA_HOME_7 are set to the locations of Java 6 and Java 7 on the
+local machine, then each test will be run twice, once under each Java version. Otherwise, all tests will run
+on whatever Java version is set in JAVA_HOME. If JAVA_HOME is not set then the tests will simply use the
+"java" command which will pick up whichever instance of Java is first on the path.
+
+## Notes
+
 Right now, the tests to be run are in src/test/resources/test/simple. Tests in other directories (including
 the "broken" directory) are not currently run.
+
 

@@ -1,6 +1,5 @@
 package com.apigee.noderunner.test;
 
-import com.apigee.noderunner.core.NodeEnvironment;
 import org.junit.AfterClass;
 import org.junit.BeforeClass;
 import org.junit.Test;
@@ -21,12 +20,10 @@ import java.io.FileInputStream;
 import java.io.FileOutputStream;
 import java.io.FilenameFilter;
 import java.io.IOException;
-import java.io.InputStream;
 import java.io.PrintWriter;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
-import java.util.HashSet;
 import java.util.Map;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -52,9 +49,33 @@ public class JavaScriptTest
 
     private final File fileName;
     private final String adapter;
+    private final String javaVersion;
 
-    private static NodeEnvironment env;
     private static PrintWriter resultWriter;
+
+    private static String java6Command;
+    private static String java7Command;
+    private static String javaCommand;
+    private static String[] javaVersions;
+
+    static {
+        java6Command = findJava("JAVA_HOME_6");
+        java7Command = findJava("JAVA_HOME_7");
+        javaCommand = findJava("JAVA_HOME");
+        if (javaCommand == null) {
+            javaCommand = "java";
+        }
+
+        System.out.println("Java 6:  " + java6Command);
+        System.out.println("Java 7:  " + java7Command);
+        System.out.println("Default: " + javaCommand);
+
+        if ((java6Command != null) && (java7Command != null)) {
+            javaVersions = new String[] { "6", "7" };
+        } else {
+            javaVersions = new String[] { "default" };
+        }
+    }
 
     @BeforeClass
     public static void setup()
@@ -67,6 +88,18 @@ public class JavaScriptTest
         }
 
         resultWriter = new PrintWriter(new FileOutputStream(RESULT_FILE));
+    }
+
+    private static String findJava(String javaHome)
+    {
+        String home = System.getenv(javaHome);
+        if (home != null) {
+            File javaFile = new File(home + "/bin/java");
+            if (javaFile.exists() && javaFile.canExecute()) {
+                return javaFile.getPath();
+            }
+        }
+        return null;
     }
 
     @AfterClass
@@ -86,7 +119,7 @@ public class JavaScriptTest
      * </ol>
      */
 
-    @Parameterized.Parameters(name="{index}: {0} ({1})")
+    @Parameterized.Parameters(name="{index}: {0} ({1}, {2})")
     public static Collection<Object[]> enumerateTests()
         throws IOException, SAXException, ParserConfigurationException
     {
@@ -139,12 +172,14 @@ public class JavaScriptTest
             return ret;
         }
         for (File f : files) {
-            if (adapter != null) {
-                ret.add(new Object[] { f, adapter });
-            } else {
-                ret.add(new Object[] { f, DEFAULT_ADAPTER });
-                if (isHttp.matcher(f.getName()).matches()) {
-                    ret.add(new Object[] { f, NETTY_ADAPTER });
+            for (String version : javaVersions) {
+                if (adapter != null) {
+                    ret.add(new Object[] { f, adapter, version });
+                } else {
+                    ret.add(new Object[] { f, DEFAULT_ADAPTER, version });
+                    if (isHttp.matcher(f.getName()).matches()) {
+                        ret.add(new Object[] { f, NETTY_ADAPTER, version });
+                    }
                 }
             }
         }
@@ -200,20 +235,30 @@ public class JavaScriptTest
         return s.toString();
     }
 
-    public JavaScriptTest(File fileName, String adapter)
+    public JavaScriptTest(File fileName, String adapter, String javaVersion)
     {
         this.fileName = fileName;
         this.adapter = adapter;
+        this.javaVersion = javaVersion;
     }
 
     @Test
     public void testJavaScript()
         throws IOException, InterruptedException
     {
-        System.out.println("**** Testing " + fileName.getName() + " (" + adapter + ")...");
+        System.out.println("**** Testing " + fileName.getName() + " (" + adapter + ", " + javaVersion + ")...");
+
+        String command;
+        if ("6".equals(javaVersion)) {
+            command = java6Command;
+        } else if ("7".equals(javaVersion)) {
+            command = java7Command;
+        } else {
+            command = javaCommand;
+        }
 
         String logLevel = System.getProperty("LOGLEVEL", "INFO");
-        ProcessBuilder pb = new ProcessBuilder("java",
+        ProcessBuilder pb = new ProcessBuilder(command,
                                                "-DLOGLEVEL=" + logLevel,
                                                "com.apigee.noderunner.test.TestRunner",
                                                fileName.getPath(),
@@ -233,13 +278,13 @@ public class JavaScriptTest
         } while (r > 0);
 
         int exitCode = proc.waitFor();
-        resultWriter.println(fileName.getName() + '\t' + adapter + '\t' + exitCode);
+        resultWriter.println(fileName.getName() + '\t' + adapter + '\t' + javaVersion + '\t' + exitCode);
         if (exitCode == 0) {
-            System.out.println("** " + fileName.getName() + " (" + adapter + ") SUCCESS");
+            System.out.println("** " + fileName.getName() + " (" + adapter + ", " + javaVersion + ") SUCCESS");
         } else {
-            System.out.println("** " + fileName.getName() + " (" + adapter + ") FAILURE = " + exitCode);
+            System.out.println("** " + fileName.getName() + " (" + adapter + ", " + javaVersion + ") FAILURE = " + exitCode);
         }
-        assertEquals(fileName.getName() + " (" + adapter + ") failed with =" + exitCode,
+        assertEquals(fileName.getName() + " (" + adapter + ", " + javaVersion + ") failed with =" + exitCode,
                      0, exitCode);
     }
 }

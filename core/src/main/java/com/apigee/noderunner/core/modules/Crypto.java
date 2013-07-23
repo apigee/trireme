@@ -1,5 +1,6 @@
 package com.apigee.noderunner.core.modules;
 
+import com.apigee.noderunner.core.internal.Charsets;
 import com.apigee.noderunner.core.internal.InternalNodeModule;
 import com.apigee.noderunner.core.internal.Utils;
 import com.apigee.noderunner.core.NodeRuntime;
@@ -16,6 +17,7 @@ import org.mozilla.javascript.annotations.JSFunction;
 import javax.crypto.Mac;
 import javax.crypto.spec.SecretKeySpec;
 import java.lang.reflect.InvocationTargetException;
+import java.nio.ByteBuffer;
 import java.security.InvalidKeyException;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
@@ -74,6 +76,13 @@ public class Crypto
 
         ScriptableObject.defineClass(export, HashImpl.class, false, true);
         ScriptableObject.defineClass(export, MacImpl.class, false, true);
+        ScriptableObject.defineClass(export, CipherImpl.class);
+        ScriptableObject.defineClass(export, DecipherImpl.class);
+        ScriptableObject.defineClass(export, SignImpl.class);
+        ScriptableObject.defineClass(export, VerifyImpl.class);
+        ScriptableObject.defineClass(export, SecureContext.class);
+        ScriptableObject.defineClass(export, DHImpl.class);
+        ScriptableObject.defineClass(export, DHGroupImpl.class);
 
         return export;
     }
@@ -162,6 +171,12 @@ public class Crypto
             return cx.newArray(thisObj, HashImpl.SUPPORTED_ALGORITHMS.toArray());
         }
 
+        @JSFunction
+        public static Scriptable doPBKFD2(Context cx, Scriptable thisObj, Object[] args, Function func)
+        {
+            throw Utils.makeError(cx, thisObj, "PBKDF2 is not supported in Noderunner.");
+        }
+
         private void setRuntime(NodeRuntime runtime) {
             this.runtime = runtime;
         }
@@ -224,17 +239,35 @@ public class Crypto
         public static void update(Context cx, Scriptable thisObj, Object[] args, Function func)
         {
             HashImpl thisClass = (HashImpl) thisObj;
-            Buffer.BufferImpl buf = objArg(args, 0, Buffer.BufferImpl.class, true);
+            ensureArg(args, 0);
+            String encoding = stringArg(args, 1, null);
 
-            thisClass.messageDigest.update(buf.getArray(), buf.getArrayOffset(), buf.getLength());
+            if (args[0] instanceof String) {
+                ByteBuffer bb =
+                    Utils.stringToBuffer(stringArg(args, 0),
+                                         Charsets.get().resolveCharset(encoding));
+                thisClass.messageDigest.update(bb.array(), bb.arrayOffset(),
+                                               bb.limit());
+            } else {
+                Buffer.BufferImpl buf = objArg(args, 0, Buffer.BufferImpl.class, true);
+                thisClass.messageDigest.update(buf.getArray(), buf.getArrayOffset(), buf.getLength());
+            }
         }
 
         @JSFunction
         public static Object digest(Context cx, Scriptable thisObj, Object[] args, Function func)
         {
             HashImpl thisClass = (HashImpl) thisObj;
+            String encoding = stringArg(args, 0, null);
+
             byte[] digest = thisClass.messageDigest.digest();
-            return Buffer.BufferImpl.newBuffer(cx, thisObj, digest);
+            if ((encoding == null) || "buffer".equals(encoding)) {
+                return Buffer.BufferImpl.newBuffer(cx, thisObj, digest);
+            }
+
+            ByteBuffer bb = ByteBuffer.wrap(digest);
+            return Utils.bufferToString(bb,
+                                        Charsets.get().resolveCharset(encoding));
         }
 
     }
@@ -294,17 +327,171 @@ public class Crypto
         public static void update(Context cx, Scriptable thisObj, Object[] args, Function func)
         {
             MacImpl thisClass = (MacImpl) thisObj;
-            Buffer.BufferImpl buf = objArg(args, 0, Buffer.BufferImpl.class, true);
+            ensureArg(args, 0);
+            String encoding = stringArg(args, 1, null);
 
-            thisClass.digest.update(buf.getArray(), buf.getArrayOffset(), buf.getLength());
+            if (args[0] instanceof String) {
+                ByteBuffer bb =
+                    Utils.stringToBuffer(stringArg(args, 0),
+                                         Charsets.get().resolveCharset(encoding));
+                thisClass.digest.update(bb.array(), bb.arrayOffset(),
+                                               bb.limit());
+            } else {
+                Buffer.BufferImpl buf = objArg(args, 0, Buffer.BufferImpl.class, true);
+                thisClass.digest.update(buf.getArray(), buf.getArrayOffset(), buf.getLength());
+            }
         }
 
         @JSFunction
         public static Object digest(Context cx, Scriptable thisObj, Object[] args, Function func)
         {
             MacImpl thisClass = (MacImpl) thisObj;
+            String encoding = stringArg(args, 0, null);
+
             byte[] digest = thisClass.digest.doFinal();
-            return Buffer.BufferImpl.newBuffer(cx, thisObj, digest);
+            if ((encoding == null) || "buffer".equals(encoding)) {
+                return Buffer.BufferImpl.newBuffer(cx, thisObj, digest);
+            }
+
+            ByteBuffer bb = ByteBuffer.wrap(digest);
+            return Utils.bufferToString(bb,
+                                        Charsets.get().resolveCharset(encoding));
+        }
+    }
+
+    /*
+     * To make Cipher and Decipher work, we have to do this:
+     * . Map algorithm names from OpenSSL to Java. We have some work for this in a branch.
+     * . Support "setAutoPadding" to select PKCS5 or "No" padding. Can't init cipher until then.
+     * . If the cipher requires it, hash the password and trim or expand to the right length. Node uses MD5 for this.
+     * . If the cipher requires it, generate a random IV and prepend it to the ciphertext.
+     * . If the cipher requires it, retrieve the IV from the ciphertext before decrypting.
+     * . Remember that you won't always get the first 16 bytes or whatever all at once.
+     * . After all that will the corresponding code be compatible with Node? Is that even possible given the
+     *   total lack of docs or specification? Should we even bother with this?
+     */
+    public static class CipherImpl
+        extends ScriptableObject
+    {
+        @Override
+        public String getClassName()
+        {
+            return "Cipher";
+        }
+
+        @JSConstructor
+        public static void construct(Context cx, Object[] args, Function ctor, boolean inNew)
+        {
+            throw Utils.makeError(cx, ctor, "Cipher is not supported in Noderunner");
+        }
+    }
+
+    public static class DecipherImpl
+        extends ScriptableObject
+    {
+        @Override
+        public String getClassName()
+        {
+            return "Decipher";
+        }
+
+        @JSConstructor
+        public static void construct(Context cx, Object[] args, Function ctor, boolean inNew)
+        {
+            throw Utils.makeError(cx, ctor, "Decipher is not supported in Noderunner");
+        }
+    }
+
+    /*
+     * To make this work, we will have to:
+     * . Address PEM encoding. We have code in a branch to transform PEM to and from DER.
+     * . Extract the RSA private key by decoding the ASN.1
+     * . Given that we should either add an optional module that uses Bouncy Castle (but optionally)
+     * . Or, we should think of something else...
+     */
+    public static class SignImpl
+        extends ScriptableObject
+    {
+        @Override
+        public String getClassName()
+        {
+            return "Sign";
+        }
+
+        @JSConstructor
+        public static void construct(Context cx, Object[] args, Function ctor, boolean inNew)
+        {
+            throw Utils.makeError(cx, ctor, "Sign is not supported in Noderunner");
+        }
+    }
+
+    public static class VerifyImpl
+        extends ScriptableObject
+    {
+        @Override
+        public String getClassName()
+        {
+            return "Verify";
+        }
+
+        @JSConstructor
+        public static void construct(Context cx, Object[] args, Function ctor, boolean inNew)
+        {
+            throw Utils.makeError(cx, ctor, "Verify is not supported in Noderunner");
+        }
+    }
+
+    /*
+     * This class seems to be used only by Node's implementation of TLS and we use SSLEngine for that anyway.
+     */
+    public static class SecureContext
+        extends ScriptableObject
+    {
+        @Override
+        public String getClassName()
+        {
+            return "SecureContext";
+        }
+
+        @JSConstructor
+        public static void construct(Context cx, Object[] args, Function ctor, boolean inNew)
+        {
+            throw Utils.makeError(cx, ctor, "SecureContext is not supported in Noderunner");
+        }
+    }
+
+    /*
+     * Haven't yet figured out what it'd mean to support this in Java.
+     */
+    public static class DHImpl
+        extends ScriptableObject
+    {
+        @Override
+        public String getClassName()
+        {
+            return "DiffieHellman";
+        }
+
+        @JSConstructor
+        public static void construct(Context cx, Object[] args, Function ctor, boolean inNew)
+        {
+            throw Utils.makeError(cx, ctor, "DiffieHellman is not supported in Noderunner");
+        }
+    }
+
+    public static class DHGroupImpl
+        extends ScriptableObject
+    {
+        @Override
+        public String getClassName()
+        {
+            return "DiffieHellmanGroup";
+        }
+
+        @JSConstructor
+        public static void construct(Context cx, Object[] args, Function ctor, boolean inNew)
+        {
+            throw Utils.makeError(cx, ctor, "DiffieHellmanGroup is not supported in Noderunner");
         }
     }
 }

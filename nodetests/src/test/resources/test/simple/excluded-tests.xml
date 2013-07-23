@@ -11,6 +11,19 @@
         <Name>test-cluster.+\.js</Name>
         <Description>cluster module support planned but not implemented.</Description>
     </Excluded>
+    <Excluded>
+        <Name>test-crypto-ecb.js</Name>
+        <Description>Cipher not yet implemented</Description>
+    </Excluded>
+    <Excluded>
+        <Name>test-crypto-padding-aes256.js</Name>
+        <Description>Cipher not yet implemented</Description>
+    </Excluded>
+    <Excluded>
+        <Name>test-crypto-padding.js</Name>
+        <Description>Cipher not yet implemented</Description>
+    </Excluded>
+
 
     <!-- NOT SUPPORTED
          These are modules and tests that we don't plan to implement in Noderunner

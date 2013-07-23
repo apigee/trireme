@@ -22,4 +22,8 @@
         <Name>test-tls-connect-memleak.js</Name>
         <Description>Depends on V8 GC behavior</Description>
     </Excluded>
+    <Excluded>
+        <Name>test-crypto-dh.js</Name>
+        <Description>Diffie-Hellman not yet implemented</Description>
+    </Excluded>
 </ExcludedTests>

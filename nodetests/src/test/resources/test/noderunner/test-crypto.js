@@ -43,6 +43,16 @@ var rsaKeyPem = fs.readFileSync(common.fixturesDir + '/test_rsa_privkey.pem',
 
 /*
  * Noderunner: Not supported yet
+ */
+
+assert.throws(function() {
+  crypto.createCredentials(
+                                             {key: keyPem,
+                                               cert: certPem,
+                                               ca: caPem});
+});
+
+/*
 try {
   var credentials = crypto.createCredentials(
                                              {key: keyPem,
@@ -497,6 +507,18 @@ assert.throws(function() {
 });
 
 /*
+ * Noderunner: not supported yet
+ */
+
+assert.throws(function() {
+  crypto.createSign('RSA-SHA1');
+});
+
+assert.throws(function() {
+  crypto.createVerify('RSA-SHA1');
+});
+
+/*
 // Test signing and verifying
 var s1 = crypto.createSign('RSA-SHA1')
                .update('Test123')
@@ -552,6 +574,17 @@ assert.strictEqual(verified, true, 'sign and verify (stream)');
 
 /*
  * Noderunner: Not yet
+ */
+
+assert.throws(function() {
+  crypto.createCipher('aes192', 'key');
+});
+
+assert.throws(function() {
+  crypto.createDecipher('aes192', 'key');
+});
+
+/*
 function testCipher1(key) {
   // Test encryption and decryption
   var plaintext = 'Keep this a secret? No! Tell everyone about node.js!';
@@ -669,14 +702,14 @@ testCipher3(new Buffer('0123456789abcd0123456789'), '12345678');
 testCipher3(new Buffer('0123456789abcd0123456789'), new Buffer('12345678'));
 
 testCipher4(new Buffer('0123456789abcd0123456789'), new Buffer('12345678'));
-
+*/
 
 // update() should only take buffers / strings
 assert.throws(function() {
   crypto.createHash('sha1').update({foo: 'bar'});
-}, /buffer/);
+}, /uffer/);
 
-
+/*
 // Test Diffie-Hellman with two parties sharing a secret,
 // using various encodings as we go along
 var dh1 = crypto.createDiffieHellman(256);

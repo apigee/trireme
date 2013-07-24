@@ -1,6 +1,8 @@
 package com.apigee.noderunner.core;
 
 import com.apigee.noderunner.core.internal.ScriptRunner;
+import org.mozilla.javascript.Scriptable;
+import org.mozilla.javascript.ScriptableObject;
 
 import java.io.File;
 import java.util.HashMap;
@@ -22,6 +24,7 @@ public class NodeScript
     private ScriptRunner runner;
     private Object attachment;
     private Sandbox sandbox;
+    private Scriptable parentProcess;
     private boolean pin;
     private Map<String, String> environment;
 
@@ -58,6 +61,7 @@ public class NodeScript
         } else {
             runner = new ScriptRunner(this, env, sandbox, scriptName, scriptFile, args);
         }
+        runner.setParentProcess(parentProcess);
         ScriptFuture future = new ScriptFuture(runner);
         runner.setFuture(future);
         if (pin) {
@@ -154,6 +158,29 @@ public class NodeScript
             environment = new HashMap<String, String>(System.getenv());
         }
         environment.put(name, value);
+    }
+
+    /**
+     * An internal method to identify the child process argument of the parent who forked this script.
+     */
+    public void _setParentProcess(Scriptable parent)
+    {
+        this.parentProcess = parent;
+        if (runner != null) {
+            runner.setParentProcess(parent);
+        }
+    }
+
+    /**
+     * An internal method to retrieve the "process" argument for sending events.
+     */
+    public Scriptable _getProcessObject()
+    {
+        if (runner == null) {
+            return null;
+        }
+        runner.awaitInitialization();
+        return runner.getProcess();
     }
 }
 

@@ -9,8 +9,10 @@ import com.apigee.noderunner.core.ScriptStatus;
 import com.apigee.noderunner.core.ScriptStatusListener;
 import com.apigee.noderunner.core.ScriptTask;
 import com.apigee.noderunner.core.SubprocessPolicy;
+import com.apigee.noderunner.core.internal.BitBucketInputStream;
 import com.apigee.noderunner.core.internal.BitBucketOutputStream;
 import com.apigee.noderunner.core.internal.InternalNodeModule;
+import com.apigee.noderunner.core.internal.NodeOSException;
 import com.apigee.noderunner.core.internal.ScriptRunner;
 import com.apigee.noderunner.core.internal.StreamPiper;
 import com.apigee.noderunner.core.internal.Utils;
@@ -22,6 +24,7 @@ import org.mozilla.javascript.ScriptableObject;
 import org.mozilla.javascript.annotations.JSFunction;
 import org.mozilla.javascript.annotations.JSGetter;
 import org.mozilla.javascript.annotations.JSSetter;
+import org.mozilla.javascript.json.JsonParser;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -35,6 +38,8 @@ import java.lang.reflect.InvocationTargetException;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.regex.Pattern;
 
 /**
@@ -48,9 +53,18 @@ public class ProcessWrap
     public static final String STDIO_PIPE =      "pipe";
     public static final String STDIO_FD =        "fd";
     public static final String STDIO_IGNORE =    "ignore";
+    public static final String STDIO_IPC =       "ipc";
 
     private static final Pattern EQUALS = Pattern.compile("=");
     private static final Pattern SPACE = Pattern.compile("\t ");
+
+    /**
+     * This is a global process table for all Noderunner processes in the same JVM. This way PIDs are
+     * portable across spawned processes, although not across VMs.
+     */
+    private static final ConcurrentHashMap<Integer, SpawnedProcess> processTable =
+        new ConcurrentHashMap<Integer, SpawnedProcess>();
+    private static final AtomicInteger nextPid = new AtomicInteger(1);
 
     @Override
     public String getModuleName()
@@ -73,6 +87,19 @@ public class ProcessWrap
         ProcessModuleImpl exports = (ProcessModuleImpl)cx.newObject(scope, ProcessModuleImpl.CLASS_NAME);
         exports.initialize(internalRunner);
         return exports;
+    }
+
+    public static void kill(Context cx, Scriptable scope, int pid, String signal)
+    {
+        SpawnedProcess proc = processTable.get(pid);
+        if (proc == null) {
+            throw Utils.makeError(cx, scope, new NodeOSException(Constants.ESRCH));
+        }
+
+        if (log.isDebugEnabled()) {
+            log.debug("Terminating pid {} ({}) with {}", pid, proc, signal);
+        }
+        proc.terminate(signal);
     }
 
     public static class ProcessModuleImpl
@@ -110,6 +137,9 @@ public class ProcessWrap
         private SpawnedProcess spawned;
         private Function onExit;
         private ScriptRunner runner;
+        private int pid;
+        private Scriptable childProcessObject;
+        private Function onMessage;
 
         @Override
         public String getClassName()
@@ -157,11 +187,13 @@ public class ProcessWrap
             }
 
             String procName = execArgs.get(0);
+            self.pid = nextPid.getAndIncrement();
             if ("node".equals(procName) || Process.EXECUTABLE_NAME.equals(procName)) {
                 self.spawned = new SpawnedNoderunnerProcess(self);
             } else {
                 self.spawned = new SpawnedOSProcess(self);
             }
+            processTable.put(self.pid, self.spawned);
             return self.spawned.spawn(cx, execArgs, options);
         }
 
@@ -171,6 +203,7 @@ public class ProcessWrap
                 log.debug("Process {} exited with code {} and signal {}", spawned, code, signal);
             }
             spawned.setFinished(true);
+            processTable.remove(pid);
             final Scriptable domain = runner.getDomain();
             runner.enqueueTask(new ScriptTask()
             {
@@ -194,6 +227,11 @@ public class ProcessWrap
             return null;
         }
 
+        @JSGetter("connected")
+        public boolean isConnected() {
+            return spawned == null ? false : spawned.isConnected();
+        }
+
         @JSGetter("onexit")
         public Function getOnExit() {
             return onExit;
@@ -202,6 +240,30 @@ public class ProcessWrap
         @JSSetter("onexit")
         public void setOnExit(Function onExit) {
             this.onExit = onExit;
+        }
+
+        @JSGetter("pid")
+        public int getPid() {
+            return pid;
+        }
+
+        @JSGetter("childProcess")
+        public Object getChildProcess()
+        {
+            if (childProcessObject == null) {
+                childProcessObject = (spawned == null ? null : spawned.getChildProcessObject());
+            }
+            return childProcessObject;
+        }
+
+        @JSSetter("onMessage")
+        public void setOnMessage(Function om) {
+            this.onMessage = om;
+        }
+
+        @JSGetter("onMessage")
+        public Function getOnMessage() {
+            return onMessage;
         }
     }
 
@@ -218,6 +280,14 @@ public class ProcessWrap
         abstract void terminate(String code);
         abstract void close();
         abstract Object spawn(Context cx, List<String> execArgs, Scriptable options);
+
+        protected Scriptable getChildProcessObject() {
+            return null;
+        }
+
+        protected boolean isConnected() {
+            return false;
+        }
 
         void setFinished(boolean finished) {
             this.finished = finished;
@@ -429,6 +499,8 @@ public class ProcessWrap
         extends SpawnedProcess
     {
         private ScriptFuture future;
+        private NodeScript script;
+        private boolean ipcEnabled;
 
         SpawnedNoderunnerProcess(ProcessImpl parent)
         {
@@ -471,6 +543,7 @@ public class ProcessWrap
                 Scriptable stream = (Scriptable)getPassthroughStream(cx).call(cx, parent, null, new Object[] {});
                 opts.put("socket", opts, stream);
                 return stream;
+
             } else if (STDIO_FD.equals(type)) {
                 int fd = getStdioFD(opts);
                 if (fd != 0) {
@@ -478,8 +551,15 @@ public class ProcessWrap
                 }
                 log.debug("Using standard input for script input");
                 return parent.runner.getStdinStream();
-                // TODO support ignore (implement using /dev/null or the equivalent)
-                // TODO support ipc
+
+            } else if (STDIO_IGNORE.equals(type)) {
+                return NativeOutputStreamAdapter.createNativeStream(cx, parent, parent.runner,
+                                                                    new BitBucketOutputStream(), false);
+
+            } else if (STDIO_IPC.equals(type)) {
+                ipcEnabled = true;
+                return null;
+
             } else {
                 throw new EvaluatorException("Noderunner unsupported stdio type " + type);
             }
@@ -501,6 +581,7 @@ public class ProcessWrap
                 Scriptable stream = (Scriptable)getPassthroughStream(cx).call(cx, parent, null, new Object[] {});
                 opts.put("socket", opts, stream);
                 return stream;
+
             } else if (STDIO_FD.equals(type)) {
                 int fd = getStdioFD(opts);
                 switch (fd) {
@@ -513,8 +594,15 @@ public class ProcessWrap
                 default:
                     throw new EvaluatorException("Child process only supported on fds 1 and 2");
                 }
-                // TODO support ignore
-                // TODO support ipc
+
+            } else if (STDIO_IGNORE.equals(type)) {
+                return NativeInputStreamAdapter.createNativeStream(cx, parent, parent.runner,
+                                                                   new BitBucketInputStream(), false);
+
+            } else if (STDIO_IPC.equals(type)) {
+                ipcEnabled = true;
+                return null;
+
             } else {
                 throw new EvaluatorException("Noderunner unsupported stdio type " + type);
             }
@@ -537,7 +625,6 @@ public class ProcessWrap
 
             // TODO cwd
             // TODO env
-            // TODO stdio
 
             String scriptPath = null;
             int i;
@@ -573,12 +660,31 @@ public class ProcessWrap
             scriptSandbox.setStdoutStream(createWritableStream(cx, stdio, 1));
             scriptSandbox.setStderrStream(createWritableStream(cx, stdio, 2));
 
+            for (int si = 3; ; si++) {
+                if (stdio.has(si, stdio)) {
+                    Scriptable stdioObj = getStdioObj(stdio, si);
+                    if (STDIO_IPC.equals(getStdioType(stdioObj))) {
+                        ipcEnabled = true;
+                    } else {
+                        throw Utils.makeError(cx, stdioObj, "Invalid stdio type " + getStdioType(stdioObj) +
+                                              " for stdio index " + si);
+                    }
+                } else {
+                    break;
+                }
+            }
+
             try {
-                NodeScript newScript =
+                script =
                     parent.runner.getEnvironment().createScript(scriptPath, new File(scriptPath),
                                                                 args.toArray(new String[args.size()]));
-                newScript.setSandbox(scriptSandbox);
-                future = newScript.execute();
+                script.setSandbox(scriptSandbox);
+
+                if (ipcEnabled) {
+                    script._setParentProcess(parent);
+                }
+
+                future = script.execute();
             } catch (NodeException ne) {
                 if (log.isDebugEnabled()) {
                     log.debug("Error starting internal script: {}", ne);
@@ -600,6 +706,11 @@ public class ProcessWrap
                 }
             });
             return Context.getUndefinedValue();
+        }
+
+        @Override
+        protected Scriptable getChildProcessObject() {
+            return script._getProcessObject();
         }
     }
 }

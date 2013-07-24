@@ -147,8 +147,8 @@ public class NativeModule
             // First try to find a native Java module
             Object exp = runner.initializeModule(name, false, cx, runner.getScriptScope());
             if (exp != null) {
-                if (log.isDebugEnabled()) {
-                    log.debug("Loaded {} from Java object {}", name, exp);
+                if (log.isTraceEnabled()) {
+                    log.trace("Loaded {} from Java object {}", name, exp);
                 }
                 ModuleImpl mod = ModuleImpl.newModule(cx, runner.getScriptScope(),
                                                       name, name);
@@ -162,8 +162,8 @@ public class NativeModule
             if (compiled != null) {
                 // We found a compiled script -- run it and register.
                 // Notice that to prevent cyclical dependencies we cache the "exports" first.
-                if (log.isDebugEnabled()) {
-                    log.debug("Loading {} from compiled script", name);
+                if (log.isTraceEnabled()) {
+                    log.trace("Loading {} from compiled script", name);
                 }
                 ModuleImpl mod = ModuleImpl.newModule(cx, runner.getScriptScope(),
                                                       name, name + ".js");

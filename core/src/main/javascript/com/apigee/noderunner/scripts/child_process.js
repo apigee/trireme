@@ -301,7 +301,6 @@ function maybeClose(subprocess) {
 ChildProcess.prototype.spawn = function(options) {
   var self = this,
       ipc,
-      ipcFd,
       // If no `stdio` option was given - use default
       stdio = options.stdio || 'pipe';
 
@@ -350,21 +349,9 @@ ChildProcess.prototype.spawn = function(options) {
       acc.push({type: 'ignore'});
     } else if (stdio === 'pipe' || typeof stdio === 'number' && stdio < 0) {
       acc.push({type: 'pipe'});
-      //acc.push({type: 'pipe', handle: createPipe()});
     } else if (stdio === 'ipc') {
-      throw Error('Child process ipc not supported in Noderunner');
-      /*
-      if (ipc !== undefined) {
-        // Cleanup previously created pipes
-        cleanup();
-        throw Error('Child process can have only one IPC pipe');
-      }
-
-      ipc = createPipe(true);
-      ipcFd = i;
-
-      acc.push({ type: 'pipe', handle: ipc, ipc: true });
-      */
+      acc.push({type: 'ipc'});
+      ipc = true;
     } else if (typeof stdio === 'number' || typeof stdio.fd === 'number') {
       var fd = stdio.fd || stdio;
       if (fd > 2) {
@@ -394,12 +381,6 @@ ChildProcess.prototype.spawn = function(options) {
   }, []);
 
   options.stdio = stdio;
-
-  if (ipc !== undefined) {
-    // Let child process know about opened IPC channel
-    options.envPairs = options.envPairs || [];
-    options.envPairs.push('NODE_CHANNEL_FD=' + ipcFd);
-  }
 
   var r = this._handle.spawn(options);
 
@@ -456,11 +437,57 @@ ChildProcess.prototype.spawn = function(options) {
   });
 
   // Add .send() method and start listening for IPC data
-  if (ipc !== undefined) setupChannel(this, ipc);
+  if (ipc !== undefined) setupChannel(this);
 
   return r;
 };
 
+function setupChannel(target) {
+  target.connected = true;
+
+  target.send = function(message, handle) {
+    if (typeof message === 'undefined') {
+      throw new TypeError('message cannot be undefined');
+    }
+
+    if (!target.connected) {
+      this.emit('error', new Error('channel closed'));
+      return;
+    }
+
+    if (handle) {
+      // Do some handle processing here!
+      throw new Error('Handles aren\'t supported yet');
+    }
+
+    // Use JSON to efficiently copy the object -- in theory we could send the original
+    // but we may live to regret it some say
+    var messageCopy = JSON.parse(JSON.stringify(message));
+    var processTarget = target._handle.childProcess;
+    processTarget.nextTick(function() {
+      // Make sure that this runs in the right event loop of the right script
+      processTarget.emit('message', messageCopy);
+    });
+  };
+
+  target.disconnect = function() {
+    if (!target.connected) {
+      this.emit('error', new Error('IPC channel is already disconnected'));
+      return;
+    }
+
+    target._handle.disconnect();
+    target.connected = false;
+  };
+
+  target._handle.onMessage = function(message) {
+    var messageCopy = JSON.parse(JSON.stringify(message));
+    process.nextTick(function() {
+      // Again, make sure that this runs in the right script thread
+      target.emit('message', messageCopy);
+    });
+  };
+}
 
 function errnoException(errorno, syscall, errmsg) {
   // TODO make this more compatible with ErrnoException from src/node.cc

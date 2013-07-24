@@ -41,6 +41,7 @@ import java.util.Map;
 import java.util.PriorityQueue;
 import java.util.concurrent.Callable;
 import java.util.concurrent.ConcurrentLinkedQueue;
+import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Future;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -69,6 +70,7 @@ public class ScriptRunner
     private final  HashMap<String, NativeModule.ModuleImpl> moduleCache = new HashMap<String, NativeModule.ModuleImpl>();
     private final  HashMap<String, Object> internalModuleCache = new HashMap<String, Object>();
     private        Future<ScriptStatus>    future;
+    private final  CountDownLatch          initialized = new CountDownLatch(1);
     private final  Sandbox                 sandbox;
     private final  PathTranslator          pathTranslator;
     private final  ExecutorService         asyncPool;
@@ -92,6 +94,7 @@ public class ScriptRunner
     private String              workingDirectory;
     private String              scriptFileName;
     private String              scriptDirName;
+    private Scriptable          parentProcess;
 
     private ScriptableObject    scope;
 
@@ -266,6 +269,29 @@ public class ScriptRunner
 
     public Scriptable getStderrStream() {
         return (Scriptable)process.getStderr();
+    }
+
+    public Scriptable getParentProcess() {
+        return parentProcess;
+    }
+
+    public Process.ProcessImpl getProcess() {
+        return process;
+    }
+
+    public void setParentProcess(Scriptable parentProcess) {
+        this.parentProcess = parentProcess;
+    }
+
+    /**
+     * We use this when spawning child scripts to avoid sending them messages before they are ready.
+     */
+    public void awaitInitialization()
+    {
+        try {
+            initialized.await();
+        } catch (InterruptedException ignore) {
+        }
     }
 
     /**
@@ -494,6 +520,8 @@ public class ScriptRunner
                 initGlobals(cx);
             } catch (NodeException ne) {
                 return new ScriptStatus(ne);
+            } finally {
+                initialized.countDown();
             }
 
             if (scriptFile == null) {

@@ -5,6 +5,7 @@ import com.apigee.noderunner.core.NodeRuntime;
 import com.apigee.noderunner.core.internal.NodeExitException;
 import com.apigee.noderunner.core.internal.PathTranslator;
 import com.apigee.noderunner.core.internal.ScriptRunner;
+import com.apigee.noderunner.core.internal.Utils;
 import com.apigee.noderunner.core.internal.Version;
 import org.mozilla.javascript.Context;
 import org.mozilla.javascript.EvaluatorException;
@@ -131,8 +132,8 @@ public class Process
             if (mod == null) {
                 try {
                     mod = runner.initializeModule(name, true, cx, runner.getScriptScope());
-                    if (log.isDebugEnabled()) {
-                        log.debug("Creating new instance {} of internal module {}",
+                    if (log.isTraceEnabled()) {
+                        log.trace("Creating new instance {} of internal module {}",
                                   System.identityHashCode(mod), name);
                     }
                     // Special handling of "buffer" which is available in more than one context
@@ -152,8 +153,8 @@ public class Process
                     throw new EvaluatorException("Error initializing module: " + e.toString());
                 }
                 runner.cacheInternalModule(name, mod);
-            } else if (log.isDebugEnabled()) {
-                log.debug("Returning cached copy {} of internal module {}",
+            } else if (log.isTraceEnabled()) {
+                log.trace("Returning cached copy {} of internal module {}",
                           System.identityHashCode(mod), name);
             }
             return mod;
@@ -332,9 +333,6 @@ public class Process
             return c;
         }
 
-        // TODO kill
-        // TODO pid
-
         @JSGetter("title")
         public String getTitle()
         {
@@ -362,12 +360,35 @@ public class Process
             return arch;
         }
 
+        @JSFunction
+        public static void kill(Context cx, Scriptable thisObj, Object[] args, Function func)
+        {
+            int pid = intArg(args, 0);
+            String signal = stringArg(args, 1, "TERM");
+
+            ProcessWrap.kill(cx, thisObj, pid, signal);
+        }
+
         @JSGetter("pid")
         public int getPid()
         {
             // Java doesn't give us the OS pid. However this is used for debug to show different Node scripts
             // on the same machine, so return a value that uniquely identifies this ScriptRunner.
             return System.identityHashCode(runner) % 65536;
+        }
+
+        @JSFunction
+        public static void send(Context cx, Scriptable thisObj, Object[] args, Function func)
+        {
+            Object message = objArg(args, 0, Object.class, true);
+            ProcessImpl self = (ProcessImpl)thisObj;
+
+            if (self.runner.getParentProcess() == null) {
+                throw Utils.makeError(cx, thisObj, "IPC is not enabled back to the parent");
+            }
+
+            ProcessWrap.ProcessImpl pw = (ProcessWrap.ProcessImpl)self.runner.getParentProcess();
+            pw.getOnMessage().call(cx, pw, pw, new Object[] { message });
         }
 
         @JSGetter("_errno")

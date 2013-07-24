@@ -52,6 +52,7 @@ public class Constants
     public static final String ENOTDIR = "ENOTDIR";
     public static final String EOF = "EOF";
     public static final String EPERM = "EPERM";
+    public static final String ESRCH = "ESRCH";
 
     public static final int S_IRUSR = 0000400;    /* R for owner */
     public static final int S_IWUSR = 0000200;    /* W for owner */
@@ -80,6 +81,7 @@ public class Constants
         errnos.put(ENOENT, 2);
         errnos.put(ENOTDIR, 20);
         errnos.put(EPERM, 1);
+        errnos.put(ESRCH, 3);
     }
 
 

@@ -15,17 +15,17 @@
     <dependency>
       <groupId>com.apigee.noderunner</groupId>
       <artifactId>noderunner-core</artifactId>
-      <version>${project.version}</version>
+      <version>0.6.2-SNAPSHOT</version>
     </dependency>
     <dependency>
       <groupId>com.apigee.noderunner</groupId>
       <artifactId>noderunner-net</artifactId>
-      <version>${project.version}</version>
+      <version>0.6.2-SNAPSHOT</version>
     </dependency>
     <dependency>
       <groupId>com.apigee.noderunner</groupId>
       <artifactId>noderunner-shell</artifactId>
-      <version>${project.version}</version>
+      <version>0.6.2-SNAPSHOT</version>
      </dependency>
 
     <dependency>

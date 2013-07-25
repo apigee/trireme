@@ -4,24 +4,24 @@
   <parent>
     <groupId>com.apigee.noderunner</groupId>
     <artifactId>noderunner</artifactId>
-    <version>0.6.2</version>
+    <version>0.6.2-SNAPSHOT</version>
   </parent>
 
   <name>app-tests</name>
   <artifactId>app-tests</artifactId>
-  <version>0.6.2</version>
+  <version>0.6.2-SNAPSHOT</version>
 
   <dependencies>
     <dependency>
       <groupId>com.apigee.noderunner</groupId>
       <artifactId>noderunner-core</artifactId>
-      <version>0.6.2</version>
+      <version>0.6.2-SNAPSHOT</version>
       <scope>test</scope>
     </dependency>
     <dependency>
       <groupId>com.apigee.noderunner</groupId>
       <artifactId>noderunner-net</artifactId>
-      <version>0.6.2</version>
+      <version>0.6.2-SNAPSHOT</version>
       <scope>test</scope>
     </dependency>
 

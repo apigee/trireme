@@ -4,18 +4,18 @@
   <parent>
     <groupId>com.apigee.noderunner</groupId>
     <artifactId>noderunner</artifactId>
-    <version>0.6.2-SNAPSHOT</version>
+    <version>0.6.2</version>
   </parent>
 
   <name>noderunner-core</name>
   <artifactId>noderunner-core</artifactId>
-  <version>0.6.2-SNAPSHOT</version>
+  <version>0.6.2</version>
 
   <dependencies>
     <dependency>
       <groupId>com.apigee.noderunner</groupId>
       <artifactId>rhino-compiler</artifactId>
-      <version>0.6.2-SNAPSHOT</version>
+      <version>0.6.2</version>
       <scope>provided</scope>
     </dependency>
 

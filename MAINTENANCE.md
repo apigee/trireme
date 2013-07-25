@@ -2,7 +2,7 @@
 
 Be sure that JAVA_HOME is set. On the Mac:
 
-        export JAVA_HOME=`/usr/libexec/java_home -v 1.6`
+        export JAVA_HOME=`/usr/libexec/java_home -v 1.7`
 
 	mvn -DautoVersionSubmodules=true release:prepare
 	mvn release:perform

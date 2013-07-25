@@ -127,8 +127,8 @@
 
   <distributionManagement>
     <repository>
-      <id>labdt</id>
-      <url>http://labdt1.svind.sonoasystems.com:8080/archiva/repository/gateway_prod</url>
+      <id>apigeeks</id>
+      <url>http://mavenrepo.eng.apigeeks.net:8081/nexus/content/repositories/apigeegw</url>
    </repository>
   </distributionManagement>
 </project>

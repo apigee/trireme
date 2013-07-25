@@ -10,10 +10,12 @@
 var HttpWrap = process.binding('http_wrap');
 var NodeHttp = require('node_http');
 
-var debug;
+var debug, debugOn;
 if (process.env.NODE_DEBUG && /http/.test(process.env.NODE_DEBUG)) {
+  debugOn = true;
   debug = function(x) { console.error('HTTP: %s', x); };
 } else {
+  debugOn = false;
   debug = function() { };
 }
 
@@ -50,20 +52,26 @@ if (HttpWrap.hasServerAdapter()) {
   function DummySocket() {
     if (!(this instanceof DummySocket)) return new DummySocket();
     events.EventEmitter.call(this);
+    // Need to make this socket "readable" or HTTP will assume that we are always at EOF
+    this.readable = true;
   }
 
   util.inherits(DummySocket, events.EventEmitter);
 
   DummySocket.prototype.setTimeout = function(msecs, callback) {
     if (msecs > 0 && !isNaN(msecs) && isFinite(msecs)) {
-      debug('Enrolling timeout in ' + msecs);
+      if (debugOn) {
+        debug('Enrolling timeout in ' + msecs);
+      }
       timers.enroll(this, msecs);
       timers._unrefActive(this);
       if (callback) {
         this.once('timeout', callback);
       }
     } else if (msecs === 0) {
-      debug('Unenrolling timeout');
+      if (debugOn) {
+        debug('Unenrolling timeout');
+      }
       timers.unenroll(this);
       if (callback) {
         this.removeListener('timeout', callback);
@@ -177,13 +185,17 @@ if (HttpWrap.hasServerAdapter()) {
     this.connection.active();
     if (!this.headersSent) {
       // Just send one additional chunk of data
-      debug('Sending http headers status = ' + this.statusCode +
-           ' data = ' + (data ? data.length : 0));
+      if (debugOn) {
+        debug('Sending http headers status = ' + this.statusCode +
+             ' data = ' + (data ? data.length : 0));
+      }
       // We should always get a buffer with no encoding in this case
       this._adapter.send(this.statusCode, this.sendDate, this._savedHeaders, data, encoding, null, false);
       this.headersSent = true;
     } else {
-      debug('Sending data = ' + (data ? data.length : 0));
+      if (debugOn) {
+        debug('Sending data = ' + (data ? data.length : 0));
+      }
       this._adapter.sendChunk(data, encoding, false);
     }
     // TODO register a future rather than accepting everything
@@ -295,7 +307,6 @@ if (HttpWrap.hasServerAdapter()) {
     NodeHttp.IncomingMessage.call(this);
 
     this._adapter = adapter;
-    this._pendings = [];
     this.httpVersionMajor = adapter.requestMajorVersion;
     this.httpVersionMinor = adapter.requestMinorVersion;
     this.httpVersion = adapter.requestMajorVersion + '.' + adapter.requestMinorVersion;
@@ -307,31 +318,18 @@ if (HttpWrap.hasServerAdapter()) {
   util.inherits(ServerRequest, NodeHttp.IncomingMessage);
 
   function addPending(self, chunk) {
+    // We are always readable in this implementation, so whenever we get incoming data,
+    // add it to the read queue. We don't care if _read was already called.
     self.connection.active();
-    if (self._readPending && !self._pendings.length) {
-      self._readPending = pushChunk(self, chunk);
-    } else {
-      debug('Adding ' + chunk.length + ' bytes to the push queue');
-      self._pendings.push(chunk);
+    if (debugOn) {
+      debug('Pushing ' + chunk.length + ' bytes to the request stream');
     }
-  }
-
-  function pushChunk(self, chunk) {
-    debug('Pushing ' + chunk.length + ' bytes directly');
     if (chunk === END_OF_FILE) {
       return self.push(null);
     } else {
       return self.push(chunk);
     }
   }
-
-  ServerRequest.prototype._read = function(maxLen) {
-    this._readPending = true;
-    while (this._readPending && this._pendings.length) {
-      var chunk = this._pendings.shift();
-      this._readPending = pushChunk(this, chunk);
-    }
-  };
 
   ServerRequest.prototype.setTimeout = function(timeout, cb) {
     this.connection.setTimeout(timeout, cb);
@@ -381,7 +379,7 @@ if (HttpWrap.hasServerAdapter()) {
    */
   function handleError(err, response) {
     debug('Handling server error and sending to adapter');
-    if (err.stack) {
+    if (err.stack && debugOn) {
       debug(err.message);
       debug(err.stack);
     }
@@ -454,11 +452,15 @@ if (HttpWrap.hasServerAdapter()) {
       if (!response.ended) {
         response.emit('close');
       }
-      response.conn.close();
+      if (response.conn) {
+        response.conn.close();
+      }
     };
 
     response._adapter.onwritecomplete = function(err) {
-      debug('write complete: ' + err + ' outstanding: ' + response._outstanding);
+      if (debugOn) {
+        debug('write complete: ' + err + ' outstanding: ' + response._outstanding);
+      }
       if (err) {
         response.emit('error', err);
       }
@@ -477,6 +479,7 @@ if (HttpWrap.hasServerAdapter()) {
    * This is called directly by the adapter when data is received for the message body.
    */
   function onBody(request, b) {
+    debug('onBody');
     request.connection.active();
     request._adapter.domain.run(function() {
       addPending(request, b);
@@ -487,6 +490,7 @@ if (HttpWrap.hasServerAdapter()) {
    * This is called directly by the adapter when the complete message has been received.
    */
   function onMessageComplete(request) {
+    debug('onMessageComplete');
     request.connection.active();
     if (!request.upgrade) {
       request._adapter.domain.run(function() {

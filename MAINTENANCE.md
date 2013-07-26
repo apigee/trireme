@@ -48,3 +48,6 @@ a "409" (conflict) status. You can fix this by using the Archiva web app to
 manually delete the artifacts and try again. I'm not sure of a better way
 to do this.
 
+* How to update the license:
+
+mvn -Dyear=2013 license:format

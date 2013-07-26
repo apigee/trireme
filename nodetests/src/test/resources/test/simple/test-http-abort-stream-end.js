@@ -21,31 +21,41 @@
 
 var common = require('../common');
 var assert = require('assert');
+
 var http = require('http');
 
-var server = http.createServer(function(req, res) {
-  console.log('got request. setting 1 second timeout');
-  req.connection.setTimeout(500);
+var maxSize = 1024;
+var size = 0;
 
-  req.connection.on('timeout', function() {
-    req.connection.destroy();
-    common.debug('TIMEOUT');
-    server.close();
-  });
+var s = http.createServer(function(req, res) {
+  this.close();
+
+  res.writeHead(200, {'Content-Type': 'text/plain'});
+  for (var i = 0; i < maxSize; i++) {
+    res.write('x' + i);
+  }
+  res.end();
 });
 
-server.listen(common.PORT, function() {
-  console.log('Server running at http://127.0.0.1:' + common.PORT + '/');
-
-  var errorTimer = setTimeout(function() {
-    throw new Error('Timeout was not successful');
-  }, 2000);
-
-  var x = http.get({port: common.PORT, path: '/'});
-  x.on('error', function() {
-    clearTimeout(errorTimer);
-    console.log('HTTP REQUEST COMPLETE (this is good)');
+var aborted = false;
+s.listen(common.PORT, function() {
+  var req = http.get('http://localhost:' + common.PORT, function(res) {
+    res.on('data', function(chunk) {
+      size += chunk.length;
+      assert(!aborted, 'got data after abort');
+      if (size > maxSize) {
+        aborted = true;
+        req.abort();
+        size = maxSize;
+      }
+    });
   });
-  x.end();
 
+  req.end();
+});
+
+process.on('exit', function() {
+  assert(aborted);
+  assert.equal(size, maxSize);
+  console.log('ok');
 });

@@ -19,43 +19,53 @@
 // OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE
 // USE OR OTHER DEALINGS IN THE SOFTWARE.
 
+if (!process.versions.openssl) {
+  console.error('Skipping because node compiled without OpenSSL.');
+  process.exit(0);
+}
 
-
-
-// This test is to assert that we can SIGINT a script which loops forever.
-// Ref(http):
-// groups.google.com/group/nodejs-dev/browse_thread/thread/e20f2f8df0296d3f
 var common = require('../common');
 var assert = require('assert');
-var spawn = require('child_process').spawn;
+var fs = require('fs');
+var tls = require('tls');
+var path = require('path');
 
-console.log('start');
+var cert = fs.readFileSync(path.join(common.fixturesDir, 'test_cert.pem'));
+var key = fs.readFileSync(path.join(common.fixturesDir, 'test_key.pem'));
 
-var c = spawn(process.execPath, ['-e', 'while(true) { console.log("hi"); }']);
+var errorEmitted = false;
 
-var sentKill = false;
-var gotChildExit = true;
+var server = tls.createServer({
+  cert: cert,
+  key: key
+}, function(c) {
+  // Nop
+  setTimeout(function() {
+    c.destroy();
+    server.close();
+  }, 20);
+}).listen(common.PORT, function() {
+  var conn = tls.connect({
+    cert: cert,
+    key: key,
+    rejectUnauthorized: false,
+    port: common.PORT
+  }, function() {
+    setTimeout(function() {
+      conn.destroy();
+    }, 20);
+  });
 
-c.stdout.on('data', function(s) {
-  // Prevent race condition:
-  // Wait for the first bit of output from the child process
-  // so that we're sure that it's in the V8 event loop and not
-  // just in the startup phase of execution.
-  if (!sentKill) {
-    c.kill('SIGINT');
-    console.log('SIGINT infinite-loop.js');
-    sentKill = true;
-  }
-});
+  // SSL_write() call's return value, when called 0 bytes, should not be
+  // treated as error.
+  conn.end('');
 
-c.on('exit', function(code) {
-  assert.ok(code !== 0);
-  console.log('killed infinite-loop.js');
-  gotChildExit = true;
+  conn.on('error', function(err) {
+    console.log(err);
+    errorEmitted = true;
+  });
 });
 
 process.on('exit', function() {
-  assert.ok(sentKill);
-  assert.ok(gotChildExit);
+  assert.ok(!errorEmitted);
 });
-

@@ -25,8 +25,8 @@ var http = require('http'),
     common = require('../common'),
     assert = require('assert'),
     options = {
-      keystore: common.fixturesDir + '/keys/agent1.jks',
-      passphrase: 'secure'
+      key: fs.readFileSync(common.fixturesDir + '/keys/agent1-key.pem'),
+      cert: fs.readFileSync(common.fixturesDir + '/keys/agent1-cert.pem')
     },
     httpServer = http.createServer(reqHandler),
     httpsServer = https.createServer(options, reqHandler);

@@ -41,7 +41,6 @@ function maybeMakeRequest() {
   cp.exec(cmd, function(err, stdout, stderr) {
     if (err) throw err;
     var hex = stdout.match(/([A-Fa-f0-9]{40})/)[0];
-    console.log('hex = %s', hex);
     assert.equal('8c206a1a87599f532ce68675536f0b1546900d7a', hex);
     console.log('got the correct response');
     fs.unlink(filename);

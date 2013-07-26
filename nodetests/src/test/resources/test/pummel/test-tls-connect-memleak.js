@@ -19,33 +19,38 @@
 // OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE
 // USE OR OTHER DEALINGS IN THE SOFTWARE.
 
+// Flags: --expose-gc
+
 var common = require('../common');
 var assert = require('assert');
-var http = require('http');
+var tls = require('tls');
+var fs = require('fs');
 
-var server = http.createServer(function(req, res) {
-  console.log('got request. setting 1 second timeout');
-  req.connection.setTimeout(500);
+assert(typeof gc === 'function', 'Run this test with --expose-gc');
 
-  req.connection.on('timeout', function() {
-    req.connection.destroy();
-    common.debug('TIMEOUT');
-    server.close();
+tls.createServer({
+  cert: fs.readFileSync(common.fixturesDir + '/test_cert.pem'),
+  key: fs.readFileSync(common.fixturesDir + '/test_key.pem')
+}).listen(common.PORT);
+
+(function() {
+  // 2**26 == 64M entries
+  for (var i = 0, junk = [0]; i < 26; ++i) junk = junk.concat(junk);
+
+  var options = { rejectUnauthorized: false };
+  tls.connect(common.PORT, '127.0.0.1', options, function() {
+    assert(junk.length != 0);  // keep reference alive
+    setTimeout(done, 10);
+    gc();
   });
-});
+})();
 
-server.listen(common.PORT, function() {
-  console.log('Server running at http://127.0.0.1:' + common.PORT + '/');
-
-  var errorTimer = setTimeout(function() {
-    throw new Error('Timeout was not successful');
-  }, 2000);
-
-  var x = http.get({port: common.PORT, path: '/'});
-  x.on('error', function() {
-    clearTimeout(errorTimer);
-    console.log('HTTP REQUEST COMPLETE (this is good)');
-  });
-  x.end();
-
-});
+function done() {
+  var before = process.memoryUsage().rss;
+  gc();
+  var after = process.memoryUsage().rss;
+  var reclaimed = (before - after) / 1024;
+  console.log('%d kB reclaimed', reclaimed);
+  assert(reclaimed > 256 * 1024);  // it's more like 512M on x64
+  process.exit();
+}

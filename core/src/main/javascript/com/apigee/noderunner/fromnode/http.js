@@ -22,6 +22,7 @@
 var util = require('util');
 var net = require('net');
 var Stream = require('stream');
+var timers = require('timers');
 var url = require('url');
 var EventEmitter = require('events').EventEmitter;
 var FreeList = require('freelist').FreeList;
@@ -274,12 +275,14 @@ function utcDate() {
   if (!dateCache) {
     var d = new Date();
     dateCache = d.toUTCString();
-    setTimeout(function() {
-      dateCache = undefined;
-    }, 1000 - d.getMilliseconds());
+    timers.enroll(utcDate, 1000 - d.getMilliseconds());
+    timers._unrefActive(utcDate);
   }
   return dateCache;
 }
+utcDate._onTimeout = function() {
+  dateCache = undefined;
+};
 
 
 /* Abstract base class for ServerRequest and ClientResponse. */
@@ -1426,6 +1429,14 @@ ClientRequest.prototype._implicitHeader = function() {
 };
 
 ClientRequest.prototype.abort = function() {
+  // If we're aborting, we don't care about any more response data.
+  if (this.res)
+    this.res._dump();
+  else
+    this.once('response', function(res) {
+      res._dump();
+    });
+
   if (this.socket) {
     // in-progress
     this.socket.destroy();

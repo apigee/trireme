@@ -240,7 +240,6 @@ function REPLServer(prompt, stream, eval_, useGlobal, ignoreUndefined) {
                 self.context,
                 'repl',
                 function(e, ret) {
-
             if (e && !isSyntaxError(e)) return finish(e);
 
             if (typeof ret === 'function' &&
@@ -921,7 +920,8 @@ function isSyntaxError(e) {
       // RegExp syntax error
       !e.match(/^SyntaxError: Invalid regular expression/) &&
       !e.match(/^SyntaxError: Invalid flags supplied to RegExp constructor/) &&
+      // "strict mode" syntax errors
+      !e.match(/^SyntaxError: .*strict mode.*/i) &&
       // JSON.parse() error
-      !(e.match(/^SyntaxError: Unexpected (token .*|end of input)/) &&
-      e.match(/\n    at Object.parse \(native\)\n/));
+      !e.match(/\n {4}at Object.parse \(native\)\n/);
 }

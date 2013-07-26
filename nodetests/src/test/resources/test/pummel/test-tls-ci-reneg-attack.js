@@ -24,7 +24,6 @@ var assert = require('assert');
 var spawn = require('child_process').spawn;
 var tls = require('tls');
 var fs = require('fs');
-var path = require('path');
 
 // renegotiation limits to test
 var LIMITS = [0, 1, 2, 3, 5, 10, 16];
@@ -46,8 +45,6 @@ if (process.platform === 'win32') {
 
 function test(next) {
   var options = {
-    keystore: path.join(common.fixturesDir + '/test.jks'),
-    passphrase: 'secure',
     cert: fs.readFileSync(common.fixturesDir + '/test_cert.pem'),
     key: fs.readFileSync(common.fixturesDir + '/test_key.pem')
   };
@@ -65,7 +62,7 @@ function test(next) {
   });
 
   server.listen(common.PORT, function() {
-    var args = ('s_client -no_tls1_2 -connect 127.0.0.1:' + common.PORT).split(' ');
+    var args = ('s_client -connect 127.0.0.1:' + common.PORT).split(' ');
     var child = spawn('openssl', args);
 
     child.stdout.pipe(process.stdout);

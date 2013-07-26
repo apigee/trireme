@@ -20,32 +20,42 @@
 // USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 var common = require('../common');
+var tls = require('tls');
+var net = require('net');
+var fs = require('fs');
 var assert = require('assert');
-var http = require('http');
 
-var server = http.createServer(function(req, res) {
-  console.log('got request. setting 1 second timeout');
-  req.connection.setTimeout(500);
+var options = {
+  key: fs.readFileSync(common.fixturesDir + '/test_key.pem'),
+  cert: fs.readFileSync(common.fixturesDir + '/test_cert.pem')
+};
 
-  req.connection.on('timeout', function() {
-    req.connection.destroy();
-    common.debug('TIMEOUT');
-    server.close();
+var bonkers = new Buffer(1024 * 1024);
+bonkers.fill(42);
+
+var server = tls.createServer(options, function(c) {
+
+}).listen(common.PORT, function() {
+  var client = net.connect(common.PORT, function() {
+    client.write(bonkers);
   });
-});
 
-server.listen(common.PORT, function() {
-  console.log('Server running at http://127.0.0.1:' + common.PORT + '/');
+  var once = false;
 
-  var errorTimer = setTimeout(function() {
-    throw new Error('Timeout was not successful');
-  }, 2000);
-
-  var x = http.get({port: common.PORT, path: '/'});
-  x.on('error', function() {
-    clearTimeout(errorTimer);
-    console.log('HTTP REQUEST COMPLETE (this is good)');
+  var writeAgain = setTimeout(function() {
+    client.write(bonkers);
   });
-  x.end();
 
+  client.on('error', function(err) {
+    if (!once) {
+      clearTimeout(writeAgain);
+      once = true;
+      client.destroy();
+      server.close();
+    }
+  });
+
+  client.on('close', function (hadError) {
+    assert.strictEqual(hadError, true, 'Client never errored');
+  });
 });

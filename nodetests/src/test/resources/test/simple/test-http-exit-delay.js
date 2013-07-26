@@ -19,53 +19,42 @@
 // OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE
 // USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-
-// SIGUSR1 and SIGHUP are not supported on Windows
-if (process.platform === 'win32') {
-  process.exit(0);
-}
-
-var common = require('../common');
 var assert = require('assert');
+var common = require('../common.js');
+var http = require('http');
 
-console.log('process.pid: ' + process.pid);
+var start;
+var server = http.createServer(function(req, res) {
+  req.resume();
+  req.on('end', function() {
+    res.end('Success');
+  });
 
-var first = 0,
-    second = 0;
-
-var sighup = false;
-
-process.on('SIGUSR1', function() {
-  console.log('Interrupted by SIGUSR1');
-  first += 1;
+  server.close(function() {
+    start = process.hrtime();
+  });
 });
 
-process.on('SIGUSR1', function() {
-  second += 1;
-  setTimeout(function() {
-    console.log('End.');
-    process.exit(0);
-  }, 5);
+server.listen(common.PORT, 'localhost', function() {
+  var interval_id = setInterval(function() {
+    if (new Date().getMilliseconds() > 100)
+      return;
+
+    var req = http.request({
+      'host': 'localhost',
+      'port': common.PORT,
+      'agent': false,
+      'method': 'PUT'
+    });
+
+    req.end('Test');
+    clearInterval(interval_id);
+  }, 10);
 });
-
-var i = 0;
-setInterval(function() {
-  console.log('running process...' + ++i);
-
-  if (i == 5) {
-    process.kill(process.pid, 'SIGUSR1');
-  }
-}, 1);
-
-// Test on condition where a watcher for SIGNAL
-// has been previously registered, and `process.listeners(SIGNAL).length === 1`
-process.on('SIGHUP', function() {});
-process.removeAllListeners('SIGHUP');
-process.on('SIGHUP', function() { sighup = true });
-process.kill(process.pid, 'SIGHUP');
 
 process.on('exit', function() {
-  assert.equal(1, first);
-  assert.equal(1, second);
-  assert.equal(true, sighup);
+  var d = process.hrtime(start);
+  assert.equal(d[0], 0);
+  assert(d[1] / 1e9 < 0.03);
+  console.log('ok');
 });

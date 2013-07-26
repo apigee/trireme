@@ -19,32 +19,6 @@
 // OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE
 // USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-var common = require('../common');
-var assert = require('assert');
-var tls = require('tls');
-var fs = require('fs');
-
-var clientConnected = 0;
-var serverConnected = 0;
-
-var options = {
-  keystore: common.fixturesDir + '/keys/agent1.jks',
-  passphrase: 'secure'
+exports.hello = function() {
+  return 'hello from module';
 };
-
-var server = tls.Server(options, function(socket) {
-  ++serverConnected;
-  server.close();
-});
-server.listen(common.PIPE, function() {
-  var options = { rejectUnauthorized: false };
-  var client = tls.connect(common.PIPE, options, function() {
-    ++clientConnected;
-    client.end();
-  });
-});
-
-process.on('exit', function() {
-  assert.equal(clientConnected, 1);
-  assert.equal(serverConnected, 1);
-});

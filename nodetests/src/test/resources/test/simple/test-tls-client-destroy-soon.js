@@ -19,34 +19,57 @@
 // OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE
 // USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-var common = require('../common');
-var assert = require('assert');
-var path = require('path');
-var match = false;
+// Create an ssl server.  First connection, validate that not resume.
+// Cache session and close connection.  Use session on second connection.
+// ASSERT resumption.
 
-var isDebug = process.features.debug;
-
-var debugPaths = [path.normalize(path.join(__dirname, '..', '..',
-                                           'out', 'Debug', 'node')),
-                  path.normalize(path.join(__dirname, '..', '..',
-                                           'Debug', 'node'))];
-var defaultPaths = [path.normalize(path.join(__dirname, '..', '..',
-                                             'out', 'Release', 'node')),
-                    path.normalize(path.join(__dirname, '..', '..',
-                                             'Release', 'node'))];
-
-console.error('debugPaths: ' + debugPaths);
-console.error('defaultPaths: ' + defaultPaths);
-console.error('process.execPath: ' + process.execPath);
-
-if (isDebug) {
-  debugPaths.forEach(function(path) {
-    match = match || process.execPath.indexOf(path) == 0;
-  });
-} else {
-  defaultPaths.forEach(function(path) {
-    match = match || process.execPath.indexOf(path) == 0;
-  });
+if (!process.versions.openssl) {
+  console.error('Skipping because node compiled without OpenSSL.');
+  process.exit(0);
 }
 
-assert.ok(match);
+var common = require('../common');
+var assert = require('assert');
+var tls = require('tls');
+var fs = require('fs');
+
+var options = {
+  key: fs.readFileSync(common.fixturesDir + '/keys/agent2-key.pem'),
+  cert: fs.readFileSync(common.fixturesDir + '/keys/agent2-cert.pem')
+};
+
+var big = new Buffer(2 * 1024 * 1024);
+var connections = 0;
+var bytesRead = 0;
+
+big.fill('Y');
+
+// create server
+var server = tls.createServer(options, function(socket) {
+  socket.end(big);
+  socket.destroySoon();
+  connections++;
+});
+
+// start listening
+server.listen(common.PORT, function() {
+  var client = tls.connect({
+    port: common.PORT,
+    rejectUnauthorized: false
+  }, function() {
+    client.on('readable', function() {
+      var d = client.read();
+      if (d)
+        bytesRead += d.length;
+    });
+
+    client.on('end', function() {
+      server.close();
+    });
+  });
+});
+
+process.on('exit', function() {
+  assert.equal(1, connections);
+  assert.equal(big.length, bytesRead);
+});

@@ -19,38 +19,50 @@
 // OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE
 // USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-
-
+if (!process.versions.openssl) {
+  console.error('Skipping because node compiled without OpenSSL.');
+  process.exit(0);
+}
 
 var common = require('../common');
+var common = require('../common');
+var tls = require('tls');
+var fs = require('fs');
 var assert = require('assert');
 
-var childKilled = false, done = false,
-    spawn = require('child_process').spawn,
-    util = require('util'),
-    child;
+var options = {
+  key: fs.readFileSync(common.fixturesDir + '/test_key.pem'),
+  cert: fs.readFileSync(common.fixturesDir + '/test_cert.pem')
+};
 
-var join = require('path').join;
+var gotError = 0,
+    gotRequest = 0,
+    connected = 0;
 
-child = spawn(process.argv[0], [join(common.fixturesDir, 'should_exit.js')]);
-child.on('exit', function() {
-  if (!done) childKilled = true;
+var server = tls.createServer(options, function(c) {
+  gotRequest++;
+  c.on('data', function(data) {
+    console.log(data.toString());
+  });
+
+  c.on('close', function() {
+    server.close();
+  });
+}).listen(common.PORT, function() {
+  var c = tls.connect(common.PORT, { rejectUnauthorized: false }, function() {
+    connected++;
+    c.pair.ssl.shutdown();
+    c.write('123');
+    c.destroy();
+  });
+
+  c.once('error', function() {
+    gotError++;
+  });
 });
 
-setTimeout(function() {
-  console.log('Sending SIGINT');
-  child.kill('SIGINT');
-  setTimeout(function() {
-    console.log('Chance has been given to die');
-    done = true;
-    if (!childKilled) {
-      // Cleanup
-      console.log('Child did not die on SIGINT, sending SIGTERM');
-      child.kill('SIGTERM');
-    }
-  }, 200);
-}, 200);
-
-process.on('exit', function() {
-  assert.ok(childKilled);
+process.once('exit', function() {
+  assert.equal(gotError, 1);
+  assert.equal(gotRequest, 1);
+  assert.equal(connected, 1);
 });

@@ -116,6 +116,27 @@
           </archive>
         </configuration>
       </plugin>
+      <plugin>
+        <groupId>com.mycila.maven-license-plugin</groupId>
+        <artifactId>maven-license-plugin</artifactId>
+        <version>1.9.0</version>
+        <configuration>
+          <basedir>${basedir}</basedir>
+          <header>./etc/license-header</header>
+          <strictCheck>true</strictCheck>
+          <failIfMissing>false</failIfMissing>
+          <includes>
+            <include>src/main/**/*.java</include>
+            <include>src/main/**/*.js</include>
+          </includes>
+          <excludes>
+            <exclude>**/fromnode/**</exclude>
+          </excludes>
+        </configuration>
+        <executions>
+          <execution><goals><goal>check</goal></goals></execution>
+        </executions>
+      </plugin>
     </plugins>
   </build>
 

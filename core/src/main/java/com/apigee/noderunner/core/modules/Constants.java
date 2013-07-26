@@ -52,7 +52,14 @@ public class Constants
     public static final String ENOTDIR = "ENOTDIR";
     public static final String EOF = "EOF";
     public static final String EPERM = "EPERM";
+    public static final String EPIPE = "EPIPE";
     public static final String ESRCH = "ESRCH";
+
+    public static final String SIGHUP = "SIGHUP";
+    public static final String SIGINT = "SIGINT";
+    public static final String SIGKILL = "SIGKILL";
+    public static final String SIGQUIT = "SIGQUIT";
+    public static final String SIGTERM = "SIGTERM";
 
     public static final int S_IRUSR = 0000400;    /* R for owner */
     public static final int S_IWUSR = 0000200;    /* W for owner */
@@ -81,6 +88,7 @@ public class Constants
         errnos.put(ENOENT, 2);
         errnos.put(ENOTDIR, 20);
         errnos.put(EPERM, 1);
+        errnos.put(EPIPE, 32);
         errnos.put(ESRCH, 3);
     }
 
@@ -125,6 +133,11 @@ public class Constants
         exports.put("S_IFSOCK", exports, S_IFSOCK);
         exports.put("S_IFMT", exports, S_IFMT);
 
+        exports.put("SIGHUP", exports, SIGHUP);
+        exports.put("SIGINT", exports, SIGINT);
+        exports.put("SIGKILL", exports, SIGKILL);
+        exports.put("SIGTERM", exports, SIGTERM);
+        exports.put("SIGQUIT", exports, SIGQUIT);
 
         return exports;
     }

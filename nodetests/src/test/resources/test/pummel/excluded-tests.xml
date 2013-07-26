@@ -3,6 +3,10 @@
          them. This lets us simply copy the Node test suite to ours rather than try to maintain a file synchronization,
          but we can exclude them here. -->
     <Excluded>
+        <Name>test-debug.+\.js</Name>
+        <Description>Debug module support requires V8 and won't be implemented.</Description>
+    </Excluded>
+    <Excluded>
         <Name>test-buffer-big.js</Name>
         <Description>Relies on internal V8 and Node classes.</Description>
     </Excluded>
@@ -19,11 +23,47 @@
         <Description>Relies on internal V8 and Node classes.</Description>
     </Excluded>
     <Excluded>
-        <Name>test-tls-connect-memleak.js</Name>
+        <Name>test-.+-connect-memleak.js</Name>
         <Description>Depends on V8 GC behavior</Description>
     </Excluded>
     <Excluded>
         <Name>test-crypto-dh.js</Name>
         <Description>Diffie-Hellman not yet implemented</Description>
+    </Excluded>
+    <Excluded>
+        <Name>test-fs-watch.+</Name>
+        <Description>Not implemented yet.</Description>
+    </Excluded>
+    <Excluded>
+       <Name>test-net-write-callbacks.js</Name>
+       <Description>Not sure that we care about order of callback delivery</Description>
+    </Excluded>
+    <Excluded>
+        <Name>test-net-pingpong.js</Name>
+        <Description>Needs some IPv6 support and testing</Description>
+    </Excluded>
+    <Excluded>
+        <Name>test-net-connect-econnrefused.js</Name>
+        <Description>Depends on "process" variable that is not implemented</Description>
+    </Excluded>
+    <Excluded>
+        <Name>test-tls.+\.js</Name>
+        <Description>TLS tests use Java key stores and are implemented in the "noderunner" directory.</Description>
+    </Excluded>
+    <Excluded>
+        <Name>test-https.+\.js</Name>
+        <Description>TLS tests use Java key stores and are implemented in the "noderunner" directory.</Description>
+    </Excluded>
+    <Excluded>
+        <Name>test-timer-wrap2.js</Name>
+        <Description>Tests internal "ref" behavior and class.</Description>
+    </Excluded>
+    <Excluded>
+        <Name>test-exec.js</Name>
+        <Description>Tests Unix-specific kill stuff.</Description>
+    </Excluded>
+    <Excluded>
+        <Name>test-keep-alive.js</Name>
+        <Description>Test based on "ab" doesn't seem to be very reliable.</Description>
     </Excluded>
 </ExcludedTests>

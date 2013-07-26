@@ -3,6 +3,7 @@ package com.apigee.noderunner.core.modules;
 import com.apigee.noderunner.core.NodeRuntime;
 import com.apigee.noderunner.core.ScriptTask;
 import com.apigee.noderunner.core.internal.InternalNodeModule;
+import com.apigee.noderunner.core.internal.NodeOSException;
 import com.apigee.noderunner.core.internal.Utils;
 import org.mozilla.javascript.Context;
 import org.mozilla.javascript.Function;
@@ -14,6 +15,7 @@ import org.slf4j.LoggerFactory;
 
 import static com.apigee.noderunner.core.internal.ArgUtils.*;
 
+import java.io.EOFException;
 import java.io.IOException;
 import java.io.InputStream;
 import java.lang.reflect.InvocationTargetException;
@@ -125,13 +127,18 @@ public class NativeInputStreamAdapter
                         if (log.isDebugEnabled()) {
                             log.debug("Error on read from {}: {}", in, ioe);
                         }
-                        fireError(callback, ioe, domain);
+                        if ((ioe instanceof EOFException) ||
+                            "Stream closed".equals(ioe.getMessage())) {
+                            fireData(callback, null, 0, 0, domain);
+                        } else {
+                            fireError(callback, new NodeOSException(Constants.EIO, ioe), domain);
+                        }
                     }
                 }
             });
         }
 
-        private void fireError(final Function callback, final Exception e, final Scriptable domain)
+        private void fireError(final Function callback, final NodeOSException e, final Scriptable domain)
         {
             runner.enqueueTask(new ScriptTask()
             {
@@ -139,7 +146,7 @@ public class NativeInputStreamAdapter
                 public void execute(Context cx, Scriptable scope)
                 {
                     callback.call(cx, scope, null,
-                                  new Object[] { Utils.makeError(cx, scope, e.toString(), Constants.EIO) });
+                                  new Object[] { Utils.makeErrorObject(cx, scope, e) });
                 }
             }, domain);
         }

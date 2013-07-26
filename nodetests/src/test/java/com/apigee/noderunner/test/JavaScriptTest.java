@@ -261,8 +261,9 @@ public class JavaScriptTest
         ProcessBuilder pb = new ProcessBuilder(command,
                                                "-DLOGLEVEL=" + logLevel,
                                                "com.apigee.noderunner.test.TestRunner",
-                                               fileName.getPath(),
+                                               fileName.getName(),
                                                adapter);
+        pb.directory(fileName.getParentFile());
         pb.redirectErrorStream(true);
         Map<String, String> envVars = pb.environment();
         envVars.put("CLASSPATH", System.getProperty("surefire.test.class.path"));

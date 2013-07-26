@@ -1,0 +1,45 @@
+<ExcludedTests>
+    <!-- NOT IMPLEMENTED YET -->
+    <Excluded>
+        <Name>test-tls-handshake-nohang.js</Name>
+        <Description>Uses SecurePair</Description>
+    </Excluded>
+    <Excluded>
+        <Name>test-tls-peer-certificate.+\.js</Name>
+        <Description>Complex multi-key certs and other verification not tested or complete yet.</Description>
+    </Excluded>
+    <Excluded>
+        <Name>test-tls-securepair.+\.js</Name>
+        <Description>SecurePair not implemented yet.</Description>
+    </Excluded>
+    <Excluded>
+        <Name>test-tls-session-cache.js</Name>
+        <Description>"newSession" not implemented yet.</Description>
+    </Excluded>
+    <Excluded>
+        <Name>test-tls-set-ciphers.js</Name>
+        <Description>Don't have the same set of ciphers as OpenSSL yet.</Description>
+    </Excluded>
+    <Excluded>
+        <Name>test-https-client-reject.js</Name>
+        <Description>socket.authorized doesn't work the same way.</Description>
+    </Excluded>
+    <Excluded>
+        <Name>test-https-pfx.js</Name>
+        <Description>socket.authorized doesn't work the same way.</Description>
+    </Excluded>
+    <Excluded>
+        <Name>test-https-foafssl.js</Name>
+        <Description>Honestly I'm not sure what this is supposed to do.</Description>
+    </Excluded>
+    <Excluded>
+        <Name>test-https-localaddress.js</Name>
+        <Description>Relies on a specific local configuration.</Description>
+    </Excluded>
+    <Excluded>
+        <Name>test-https-strict.js</Name>
+        <Description>Not all CA validation mechanisms are supported yet.</Description>
+    </Excluded>
+
+    <!-- OTHER ISSUES -->
+</ExcludedTests>

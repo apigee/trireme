@@ -395,8 +395,14 @@ public class AsyncFilesystem
 
             try {
                 return mapResponse(fs.doRead(cx, fd, buf, off, len, pos, callback));
+
             } catch (NodeOSException ne) {
-                throw Utils.makeError(cx, thisObj, ne);
+                Object err = Utils.makeErrorObject(cx, thisObj, ne);
+                if (callback == null) {
+                    return err;
+                }
+                fs.runner.enqueueCallback(callback, callback, null, fs.runner.getDomain(), new Object[] { err });
+                return null;
             }
         }
 
@@ -494,8 +500,14 @@ public class AsyncFilesystem
 
             try {
                 return mapResponse(fs.doWrite(cx, fd, buf, off, len, pos, callback));
+
             } catch (NodeOSException ne) {
-                throw Utils.makeError(cx, thisObj, ne);
+                Object err = Utils.makeErrorObject(cx, thisObj, ne);
+                if (callback == null) {
+                    return err;
+                }
+                fs.runner.enqueueCallback(callback, callback, null, fs.runner.getDomain(), new Object[] { err });
+                return null;
             }
         }
 

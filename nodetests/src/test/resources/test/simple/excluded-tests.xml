@@ -65,6 +65,10 @@
         <Description>Can't set that in Java.</Description>
     </Excluded>
     <Excluded>
+        <Name>test-fs-write-file-sync.js</Name>
+        <Description>Depends on umask.</Description>
+    </Excluded>
+    <Excluded>
         <Name>test-net-listen-fd0.js</Name>
         <Description>Listening on a file descriptor is not supported in Noderunner or Java.</Description>
     </Excluded>
@@ -75,6 +79,10 @@
     <Excluded>
         <Name>test-net-pipe-connect-errors.js</Name>
         <Description>No pipes in NR or Java.</Description>
+    </Excluded>
+    <Excluded>
+        <Name>test-process-config.js</Name>
+        <Description>Not implemented. Supposed to return the compilation params.</Description>
     </Excluded>
 
     <!-- DIFFERENT TESTS
@@ -132,6 +140,22 @@
         <Name>test-process-wrap.js</Name>
         <Description>Internal Node module.</Description>
     </Excluded>
+    <Excluded>
+        <Name>test-net-buffersize.js</Name>
+        <Description>We don't track buffers the same way</Description>
+    </Excluded>
+    <Excluded>
+        <Name>test-process-active-wraps.js</Name>
+        <Description>Tests internal attributes of "process"</Description>
+    </Excluded>
+    <Excluded>
+        <Name>test-process-exec-argv.js</Name>
+        <Description>Tests some node command-line properties.</Description>
+    </Excluded>
+    <Excluded>
+        <Name>test-http-parser-bad-ref.js</Name>
+        <Excluded>Uses V8 "gc" method.</Excluded>
+    </Excluded>
 
     <!-- MISCELLANEOUS
          Tests that just don't work in Noderunner for other good reasons
@@ -156,5 +180,29 @@
     <Excluded>
         <Name>test-require-json.js</Name>
         <Reason>Checks against an error message when trying to parse JSON; Rhino and v8 generate different ones</Reason>
+    </Excluded>
+    <Excluded>
+        <Name>test-fs-readfile-pipe.js</Name>
+        <Reason>Depends on reading from /dev/stdin</Reason>
+    </Excluded>
+    <Excluded>
+        <Name>test-net-GH-5504.js</Name>
+        <Description>This is a complicated console-based test. Figure it out later.</Description>
+    </Excluded>
+    <Excluded>
+        <Name>test-http-byteswritten.js</Name>
+        <Description>Doesn't work exactly the same as Node yet.</Description>
+    </Excluded>
+    <Excluded>
+        <Name>test-http-full-response.js</Name>
+        <Description>Relies on ab which is hard to make portable.</Description>
+    </Excluded>
+
+    <!-- DEPRECATION
+         These tests depend on the "&amp;&amp;throw-deprecation" feature of Node, not implemented here.
+    -->
+    <Excluded>
+        <Name>test-fs-readfile-error.js</Name>
+        <Reason>Depends on --throw-deprecation</Reason>
     </Excluded>
 </ExcludedTests>

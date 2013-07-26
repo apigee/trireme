@@ -124,7 +124,7 @@ public class NativeOutputStreamAdapter
                 }
                 if (callback != null) {
                     callback.call(cx, thisObj, thisObj,
-                                  new Object[] { Utils.makeError(cx, thisObj, ioe.toString(), Constants.EIO) });
+                                  new Object[] { Utils.makeErrorObject(cx, thisObj, ioe.toString(), Constants.EIO) });
                 }
             }
         }

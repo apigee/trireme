@@ -489,10 +489,11 @@ public class Process
         // TODO umask
 
         @JSFunction
-        public long uptime()
+        public static Object uptime(Context cx, Scriptable thisObj, Object[] args, Function func)
         {
-            long up = (System.currentTimeMillis() - startTime) / 1000L;
-            return up;
+            ProcessImpl self = (ProcessImpl)thisObj;
+            long up = (System.currentTimeMillis() - self.startTime) / 1000L;
+            return Context.javaToJS(up, thisObj);
         }
 
         @JSFunction

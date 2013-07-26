@@ -35,6 +35,10 @@
         <Description>Not implemented yet.</Description>
     </Excluded>
     <Excluded>
+        <Name>test-watch.+</Name>
+        <Description>Not implemented yet.</Description>
+    </Excluded>
+    <Excluded>
        <Name>test-net-write-callbacks.js</Name>
        <Description>Not sure that we care about order of callback delivery</Description>
     </Excluded>
@@ -65,5 +69,17 @@
     <Excluded>
         <Name>test-keep-alive.js</Name>
         <Description>Test based on "ab" doesn't seem to be very reliable.</Description>
+    </Excluded>
+    <Excluded>
+        <Name>test-dh.*\.js</Name>
+        <Description>No DH implemented in crypto yet.</Description>
+    </Excluded>
+    <Excluded>
+        <Name>test-regress.+\.js</Name>
+        <Description>These are a variety of tests that sometimes test stuff that's not supported.</Description>
+    </Excluded>
+    <Excluded>
+        <Name>test-vm-memleak.js</Name>
+        <Description>Memory threshold (50mb) is too low.</Description>
     </Excluded>
 </ExcludedTests>

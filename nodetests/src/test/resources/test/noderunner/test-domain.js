@@ -73,12 +73,7 @@ d.on('error', function(er) {
       //assert.equal(er.domainThrown, true);
       break;
 
-    case "ENOENT":
-      // Right now NR doesn't throw exact same FS exceptions
-      assert.equal(er.domain, d);
-      break;
-
-    case "ENOENT, open 'this file does not exist'":
+    case "ENOENT:this file does not exist":
       assert.equal(er.domain, d);
       assert.equal(er.domainThrown, false);
       assert.equal(typeof er.domainBound, 'function');

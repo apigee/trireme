@@ -23,7 +23,18 @@
         <Name>test-crypto-padding.js</Name>
         <Description>Cipher not yet implemented</Description>
     </Excluded>
-
+    <Excluded>
+        <Name>test-domain-crypto.js</Name>
+        <Description>Not all of crypto implemented.</Description>
+    </Excluded>
+    <Excluded>
+        <Name>test-dgram.*address.*\.js</Name>
+        <Description>Can't support IPv6 addresses yet.</Description>
+    </Excluded>
+    <Excluded>
+        <Name>test-chdir.js</Name>
+        <Description>Not yet</Description>
+    </Excluded>
 
     <!-- NOT SUPPORTED
          These are modules and tests that we don't plan to implement in Noderunner
@@ -36,12 +47,22 @@
         <Name>test-c-ares.js</Name>
         <Description>This is a wrapper around some native code.</Description>
     </Excluded>
+    <Excluded>
+        <Name>test-.*repl.*\.js</Name>
+        <Description>repl is only partially implemented</Description>
+    </Excluded>
 
     <Excluded>
         <Name>test-dgram-multicast-multi-process.js</Name>
+        <Description>Haven't tested or done infrastructure for multicast</Description>
     </Excluded>
     <Excluded>
         <Name>test-dgram-multicast-setTTL.js</Name>
+        <Description>Haven't tested or done infrastructure for multicast</Description>
+    </Excluded>
+    <Excluded>
+        <Name>test-dgram-broadcast-multi-process.js</Name>
+        <Description>Can't test broadcast yet.</Description>
     </Excluded>
 
     <Excluded>
@@ -59,6 +80,10 @@
     <Excluded>
         <Name>test-fs-watch.+</Name>
         <Description>Depends on native stuff.</Description>
+    </Excluded>
+    <Excluded>
+        <Name>test-watch.*\.js</Name>
+        <Description>File watching isn't implemented yet.</Description>
     </Excluded>
     <Excluded>
         <Name>test-umask.js</Name>
@@ -84,6 +109,26 @@
         <Name>test-process-config.js</Name>
         <Description>Not implemented. Supposed to return the compilation params.</Description>
     </Excluded>
+    <Excluded>
+        <Name>test-typed-arrays.js</Name>
+        <Description>Not supported in Rhino.</Description>
+    </Excluded>
+    <Excluded>
+        <Name>test-arraybuffer.*\.js</Name>
+        <Description>Not supported in Rhino.</Description>
+    </Excluded>
+    <Excluded>
+        <Name>test-listen-fd.*\.js</Name>
+        <Description>No network IO on fds or pipes.</Description>
+    </Excluded>
+    <Excluded>
+        <Name>test-tty.*\.js</Name>
+        <Description>Requires some tty support.</Description>
+    </Excluded>
+    <Excluded>
+        <Name>test-deprecation.*\.js</Name>
+        <Description>Rely on node process arguments.</Description>
+    </Excluded>
 
     <!-- DIFFERENT TESTS
          We have different versions of these tests in the "noderunner" directory because they must
@@ -92,6 +137,10 @@
     <Excluded>
         <Name>test-crypto.js</Name>
         <Description>Noderunner version supports only Java ciphers and other stuff for now.</Description>
+    </Excluded>
+    <Excluded>
+        <Name>test-dh.*\.js</Name>
+        <Description>No DH implemented in crypto yet.</Description>
     </Excluded>
     <Excluded>
         <Name>test-tls-.+\.js</Name>
@@ -120,9 +169,25 @@
         <Reason>UNIX sockets are not supported in Noderunner or in Java.</Reason>
     </Excluded>
     <Excluded>
+        <Name>test-pipe-stream.js</Name>
+        <Reason>UNIX sockets are not supported in Noderunner or in Java.</Reason>
+    </Excluded>
+    <Excluded>
+        <Name>test-pipe-unref.js</Name>
+        <Reason>UNIX sockets are not supported in Noderunner or in Java.</Reason>
+    </Excluded>
+    <Excluded>
         <Name>test-http-client-timeout-event.js</Name>
         <Description>Timeouts are too short -- assumes connection is opened in 1 ms. Change second timeout
         to 100 ms and it works fine.</Description>
+    </Excluded>
+    <Excluded>
+        <Name>test-domain.js</Name>
+        <Description>Needs slightly different error messages to be tested, look in "noderunner".</Description>
+    </Excluded>
+    <Excluded>
+        <Name>test-util-inspect.js</Name>
+        <Description>Tries to modify objects that are sealed in Noderunner.</Description>
     </Excluded>
 
     <!-- INTERNAL TESTS
@@ -160,6 +225,10 @@
     <!-- MISCELLANEOUS
          Tests that just don't work in Noderunner for other good reasons
     -->
+    <Exluded>
+        <Name>test-regress.+\.js</Name>
+        <Description>These are a variety of tests that sometimes test stuff that's not supported.</Description>
+    </Exluded>
     <Excluded>
         <Name>test-cli-eval.js</Name>
         <Description>Depends on different command-line params.</Description>
@@ -196,6 +265,22 @@
     <Excluded>
         <Name>test-http-full-response.js</Name>
         <Description>Relies on ab which is hard to make portable.</Description>
+    </Excluded>
+    <Excluded>
+        <Name>test-script-context.js</Name>
+        <Description>Depends on specific Node error messages.</Description>
+    </Excluded>
+    <Excluded>
+        <Name>test-pipe.js</Name>
+        <Description>This is way broken now and needs to be disabled so others tests can run.</Description>
+    </Excluded>
+    <Excluded>
+        <Name>test-signal.*\.js</Name>
+        <Description>No signal handling.</Description>
+    </Excluded>
+     <Excluded>
+        <Name>test-sigint.*\.js</Name>
+        <Description>No signal handling.</Description>
     </Excluded>
 
     <!-- DEPRECATION

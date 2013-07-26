@@ -54,7 +54,8 @@ public class NativeModule
     protected static final Logger log = LoggerFactory.getLogger(NativeModule.class);
 
     public static final String MODULE_NAME = "native_module";
-    public static final String SCRIPT_BASE = "/com/apigee/noderunner/scripts/";
+    public static final String NODE_SCRIPT_BASE = "/com/apigee/noderunner/fromnode/";
+    public static final String NR_SCRIPT_BASE = "/com/apigee/noderunner/scripts/";
     public static final String SCRIPT_SUFFIX = ".js";
 
     @Override
@@ -227,7 +228,8 @@ public class NativeModule
             String name = stringArg(args, 0);
             NativeImpl self = (NativeImpl)thisObj;
             return self.runner.isNativeModule(name) ||
-                   (NativeImpl.class.getResource(SCRIPT_BASE + name + SCRIPT_SUFFIX) != null);
+                   (NativeImpl.class.getResource(NODE_SCRIPT_BASE + name + SCRIPT_SUFFIX) != null) ||
+                   (NativeImpl.class.getResource(NR_SCRIPT_BASE + name + SCRIPT_SUFFIX) != null);
         }
 
         @JSFunction
@@ -241,7 +243,10 @@ public class NativeModule
         {
             String name = stringArg(args, 0);
 
-            InputStream in = NativeImpl.class.getResourceAsStream(SCRIPT_BASE + name + SCRIPT_SUFFIX);
+            InputStream in = NativeImpl.class.getResourceAsStream(NODE_SCRIPT_BASE + name + SCRIPT_SUFFIX);
+            if (in == null) {
+                in = NativeImpl.class.getResourceAsStream(NR_SCRIPT_BASE + name + SCRIPT_SUFFIX);
+            }
             if (in == null) {
                 return Context.getUndefinedValue();
             }

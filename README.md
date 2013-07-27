@@ -44,7 +44,7 @@ although it may not necessarily pass all the node.js tests.
   <tr><td>fs</td><td>Complete</td><td>node.js + Noderunner</td></tr>
   <tr><td>globals</td><td>Complete</td><td>node.js + Noderunner</td></tr>
   <tr><td>http</td><td>Complete</td><td>node.js + Noderunner</td></tr>
-  <tr><td>https</td><td>Complete</td><td>Noderunner</td></tr>
+  <tr><td>https</td><td>Partial</td><td>Noderunner</td></tr>
   <tr><td>module</td><td>Complete</td><td>node.js</td></tr>
   <tr><td>net</td><td>Complete</td><td>node.js + Noderunner</td></tr>
   <tr><td>os</td><td>Partial</td><td>Noderunner</td></tr>

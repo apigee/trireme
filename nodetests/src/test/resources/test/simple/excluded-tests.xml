@@ -12,6 +12,10 @@
         <Description>cluster module support planned but not implemented.</Description>
     </Excluded>
     <Excluded>
+        <Name>test-child-process.+\.js</Name>
+        <Description>Support for handles and sockets not done yet.</Description>
+    </Excluded>
+    <Excluded>
         <Name>test-crypto-ecb.js</Name>
         <Description>Cipher not yet implemented</Description>
     </Excluded>
@@ -34,6 +38,10 @@
     <Excluded>
         <Name>test-chdir.js</Name>
         <Description>Not yet</Description>
+    </Excluded>
+    <Excluded>
+        <Name>test-http-server-stale-close.js</Name>
+        <Description>Depends on us adding environment variable support to "fork".</Description>
     </Excluded>
 
     <!-- NOT SUPPORTED
@@ -129,6 +137,18 @@
         <Name>test-deprecation.*\.js</Name>
         <Description>Rely on node process arguments.</Description>
     </Excluded>
+    <Excluded>
+        <Name>test-child-process-fork-exec-path.js</Name>
+        <Description>Relies on making a copy of a file called "node" and executing it.</Description>
+    </Excluded>
+    <Excluded>
+        <Name>test-signal.*\.js</Name>
+        <Description>No signal handling.</Description>
+    </Excluded>
+     <Excluded>
+        <Name>test-sigint.*\.js</Name>
+        <Description>No signal handling.</Description>
+    </Excluded>
 
     <!-- DIFFERENT TESTS
          We have different versions of these tests in the "noderunner" directory because they must
@@ -189,6 +209,11 @@
         <Name>test-util-inspect.js</Name>
         <Description>Tries to modify objects that are sealed in Noderunner.</Description>
     </Excluded>
+    <Excluded>
+        <Name>test-http-upgrade-.+\.js</Name>
+        <Description>Assumes that all data on the socket after the upgrade comes in in one chunk.</Description>
+    </Excluded>
+
 
     <!-- INTERNAL TESTS
          Tests that exercise internal, undocumented APIs in the original Node implementation.
@@ -225,10 +250,10 @@
     <!-- MISCELLANEOUS
          Tests that just don't work in Noderunner for other good reasons
     -->
-    <Exluded>
+    <Excluded>
         <Name>test-regress.+\.js</Name>
         <Description>These are a variety of tests that sometimes test stuff that's not supported.</Description>
-    </Exluded>
+    </Excluded>
     <Excluded>
         <Name>test-cli-eval.js</Name>
         <Description>Depends on different command-line params.</Description>
@@ -275,12 +300,8 @@
         <Description>This is way broken now and needs to be disabled so others tests can run.</Description>
     </Excluded>
     <Excluded>
-        <Name>test-signal.*\.js</Name>
-        <Description>No signal handling.</Description>
-    </Excluded>
-     <Excluded>
-        <Name>test-sigint.*\.js</Name>
-        <Description>No signal handling.</Description>
+        <Name>test-http-localaddress-bind-error.js</Name>
+        <Description>Race condition in closing the server socket when it may have been closed already.</Description>
     </Excluded>
 
     <!-- DEPRECATION

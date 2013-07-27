@@ -43,7 +43,7 @@ if (process.env.NODE_DEBUG && /tls/.test(process.env.NODE_DEBUG)) {
 }
 
 var END_SENTINEL = {};
-var DEFAULT_REJECT_UNAUTHORIZED = true;
+var DEFAULT_REJECT_UNAUTHORIZED = ('0' !== process.env.NODE_TLS_REJECT_UNAUTHORIZED);
 var DEFAULT_HANDSHAKE_TIMEOUT = 60000;
 
 // Store the SSL context for a client. We could do some caching here to speed up clients.

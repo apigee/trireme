@@ -255,7 +255,7 @@ public class HTTPParsingMachine
                 Matcher m = HTTPGrammar.HEADER_PATTERN.matcher(line);
                 if (m.matches() && (m.groupCount() == 2)) {
                     Map.Entry<String, String> hdr =
-                        new AbstractMap.SimpleEntry<String, String>(m.group(1), m.group(2));
+                        new AbstractMap.SimpleEntry<String, String>(m.group(1), m.group(2).trim());
                     headers.add(hdr);
                     lastHeader = hdr;
                     if (!processHeader(hdr.getKey(), hdr.getValue())) {
@@ -363,9 +363,12 @@ public class HTTPParsingMachine
      */
     private boolean processBody(ByteBuffer buf, Result r)
     {
-        if ((mode == ParsingMode.REQUEST) && (bodyMode == BodyMode.UNDELIMITED)) {
-            // A request with no content length and no content-length has length zero.
+        if ((bodyMode == BodyMode.UNDELIMITED) &&
+            ((mode == ParsingMode.REQUEST) ||
+             ((mode == ParsingMode.RESPONSE) && (statusCode == 204)))) {
+            // A request with no content length and no chunking has length zero.
             // But in the case of a response we read until EOF.
+            // Furthermore, if it's a response and the status is 204, then assume no content either.
             contentLength = 0;
             bodyMode = BodyMode.LENGTH;
         }

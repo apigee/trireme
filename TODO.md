@@ -3,9 +3,6 @@
 Support "multitenant" ScriptRunners, so that lots and lots of scripts
 can share an event loop.
 
-Build Java 7 versions of TCPWrap and Filesystem and load them
-conditionally.
-
 Pre-process the built-in scripts like Node does to:
 * Strip out "assert" calls
 * Strip out "debug" calls
@@ -28,7 +25,5 @@ repl:
   Partially coded but really not working.
 dns:
   Probably won't be used directly. Implemented "lookup" so far.
-dgram:
-  Not gonna be relevant in the cloud -- low priority.
 debugger:
   Perhaps we can use the hooks in Rhino? Unlikely.

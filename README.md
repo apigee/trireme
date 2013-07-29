@@ -243,7 +243,7 @@ The "jar" module builds a self-contained JAR that may be used to launch Noderunn
 line just like regular Node.js:
 
     mvn install
-    java jar jar/target/noderunner.X.Y.Z.jar <script name>
+    java -jar jar/target/noderunner.X.Y.Z.jar <script name>
 
 (and with no arguments it will launch the "repl" but that implementation is not complete)
 

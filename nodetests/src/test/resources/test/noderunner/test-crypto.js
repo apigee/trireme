@@ -506,19 +506,6 @@ assert.throws(function() {
   crypto.createHash('xyzzy');
 });
 
-/*
- * Noderunner: not supported yet
- */
-
-assert.throws(function() {
-  crypto.createSign('RSA-SHA1');
-});
-
-assert.throws(function() {
-  crypto.createVerify('RSA-SHA1');
-});
-
-/*
 // Test signing and verifying
 var s1 = crypto.createSign('RSA-SHA1')
                .update('Test123')
@@ -570,7 +557,6 @@ verStream.write('t12');
 verStream.end('3');
 verified = verStream.verify(certPem, s3);
 assert.strictEqual(verified, true, 'sign and verify (stream)');
-*/
 
 /*
  * Noderunner: Not yet
@@ -761,6 +747,8 @@ assert.throws(function() {
   crypto.createDiffieHellman(p, 'hex');
 });
 
+*/
+
 // Test RSA key signing/verification
 var rsaSign = crypto.createSign('RSA-SHA1');
 var rsaVerify = crypto.createVerify('RSA-SHA1');
@@ -811,7 +799,8 @@ assert.strictEqual(rsaVerify.verify(rsaPubPem, rsaSignature, 'hex'), true);
   assert.strictEqual(verify.verify(publicKey, signature, 'hex'), true);
 })();
 
-
+/* 
+ * Noderunner: Don't understand DSA fully yet
 //
 // Test DSA signing and verification
 //
@@ -826,17 +815,19 @@ assert.strictEqual(rsaVerify.verify(rsaPubPem, rsaSignature, 'hex'), true);
 
   // DSA signatures vary across runs so there is no static string to verify
   // against
-  var sign = crypto.createSign('DSS1');
+  var sign = crypto.createSign('DSA-SHA1');
   sign.update(input);
   var signature = sign.sign(privateKey, 'hex');
 
-  var verify = crypto.createVerify('DSS1');
+  var verify = crypto.createVerify('DSA-SHA1');
   verify.update(input);
 
   assert.strictEqual(verify.verify(publicKey, signature, 'hex'), true);
 })();
+*/
 
-
+/*
+ * Noderunner: Not yet
 //
 // Test PBKDF2 with RFC 6070 test vectors (except #4)
 //

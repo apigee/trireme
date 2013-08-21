@@ -22,7 +22,10 @@
 package com.apigee.noderunner.core.modules;
 
 import com.apigee.noderunner.core.internal.Charsets;
+import com.apigee.noderunner.core.internal.CryptoException;
+import com.apigee.noderunner.core.internal.CryptoService;
 import com.apigee.noderunner.core.internal.InternalNodeModule;
+import com.apigee.noderunner.core.internal.SignatureAlgorithms;
 import com.apigee.noderunner.core.internal.Utils;
 import com.apigee.noderunner.core.NodeRuntime;
 import org.mozilla.javascript.Context;
@@ -34,28 +37,52 @@ import org.mozilla.javascript.ScriptableObject;
 import org.mozilla.javascript.Undefined;
 import org.mozilla.javascript.annotations.JSConstructor;
 import org.mozilla.javascript.annotations.JSFunction;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import javax.crypto.Mac;
 import javax.crypto.spec.SecretKeySpec;
+import java.io.ByteArrayInputStream;
+import java.io.IOException;
 import java.lang.reflect.InvocationTargetException;
 import java.nio.ByteBuffer;
+import java.nio.charset.Charset;
+import java.security.GeneralSecurityException;
 import java.security.InvalidKeyException;
+import java.security.KeyPair;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
+import java.security.PublicKey;
 import java.security.SecureRandom;
+import java.security.Signature;
+import java.security.cert.Certificate;
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.Random;
+import java.util.ServiceLoader;
 import java.util.Set;
 
 import static com.apigee.noderunner.core.internal.ArgUtils.*;
 
+/**
+ * This class implements the internal "crypto" module. It is in turn used by crypto.js, which is the core
+ * Node.js crypto package. This module supports only the crypto mechanisms that are available in native
+ * Java 6 or 7. The "noderunner-crypto" module depends on Bouncy Castle. This module uses the ServiceLocator
+ * interface to load that service, so that it becomes available when added to the class path but
+ * fails gracefully otherwise.
+ */
+
 public class Crypto
     implements InternalNodeModule
 {
+    private static final Logger log = LoggerFactory.getLogger(Crypto.class);
+
     public static final String MODULE_NAME = "crypto";
 
     /** This is a maximum value for a byte buffer that seems to be part of V8. Used to make tests pass. */
     public static final long MAX_BUFFER_LEN = 0x3fffffffL;
+
+    protected static CryptoService cryptoService;
 
     @Override
     public String getModuleName()
@@ -67,6 +94,8 @@ public class Crypto
     public Scriptable registerExports(Context cx, Scriptable scope, NodeRuntime runtime)
         throws InvocationTargetException, IllegalAccessException, InstantiationException
     {
+        loadCryptoService();
+
         ScriptableObject.defineClass(scope, CryptoImpl.class);
         CryptoImpl export = (CryptoImpl) cx.newObject(scope, CryptoImpl.CLASS_NAME);
         export.setRuntime(runtime);
@@ -108,6 +137,38 @@ public class Crypto
         return export;
     }
 
+    private static void loadCryptoService()
+    {
+        ServiceLoader<CryptoService> loc = ServiceLoader.load(CryptoService.class);
+        if (loc.iterator().hasNext()) {
+            if (log.isDebugEnabled()) {
+                log.debug("Using crypto service implementation {}", cryptoService);
+            }
+            cryptoService = loc.iterator().next();
+        } else if (log.isDebugEnabled()) {
+            log.debug("No crypto service available");
+        }
+    }
+
+    protected static ByteBuffer convertString(Object o, String encoding, Context cx, Scriptable scope)
+    {
+        if (o instanceof String) {
+            Charset cs = Charsets.get().resolveCharset(encoding);
+            return Utils.stringToBuffer((String)o, cs);
+        } else if (o instanceof Buffer.BufferImpl) {
+            return ((Buffer.BufferImpl)o).getBuffer();
+        } else {
+            throw Utils.makeError(cx, scope, "argument must be a String or Buffer");
+        }
+    }
+
+    protected static void ensureCryptoService(Context cx, Scriptable scope)
+    {
+        if (cryptoService == null) {
+            throw Utils.makeError(cx, scope, "Crypto service not available");
+        }
+    }
+
     public static class CryptoImpl
         extends ScriptableObject
     {
@@ -117,16 +178,6 @@ public class Crypto
         private static final Random pseudoRandom = new Random();
 
         private NodeRuntime runtime;
-
-        // TODO: SecureContext
-        // TODO: Hmac
-        // TODO: Cipher
-        // TODO: Decipher
-        // TODO: Sign
-        // TODO: Verify
-        // TODO: DiffieHellman
-        // TODO: DiffieHellmanGroup
-        // TODO: PBKDF2
 
         @Override
         public String getClassName()
@@ -423,42 +474,196 @@ public class Crypto
         }
     }
 
-    /*
-     * To make this work, we will have to:
-     * . Address PEM encoding. We have code in a branch to transform PEM to and from DER.
-     * . Extract the RSA private key by decoding the ASN.1
-     * . Given that we should either add an optional module that uses Bouncy Castle (but optionally)
-     * . Or, we should think of something else...
-     */
     public static class SignImpl
         extends ScriptableObject
     {
+        private SignatureAlgorithms.Algorithm algorithm;
+        private ArrayList<ByteBuffer> buffers = new ArrayList<ByteBuffer>();
+
         @Override
         public String getClassName()
         {
             return "Sign";
         }
 
-        @JSConstructor
-        public static void construct(Context cx, Object[] args, Function ctor, boolean inNew)
+        @JSFunction
+        public static void init(Context cx, Scriptable thisObj, Object[] args, Function func)
         {
-            throw Utils.makeError(cx, ctor, "Sign is not supported in Noderunner");
+            ensureCryptoService(cx, thisObj);
+            String algorithm = stringArg(args, 0);
+            SignImpl self = (SignImpl)thisObj;
+
+            self.algorithm = SignatureAlgorithms.get().get(algorithm);
+            if (self.algorithm == null) {
+                throw Utils.makeError(cx, thisObj,
+                                      "Invalid signature algorithm " + algorithm);
+            }
+        }
+
+        @JSFunction
+        public static void update(Context cx, Scriptable thisObj, Object[] args, Function func)
+        {
+            ensureArg(args, 0);
+            String encoding = stringArg(args, 1, null);
+            ByteBuffer buf = convertString(args[0], encoding, cx, thisObj);
+            SignImpl self = (SignImpl)thisObj;
+
+            // Java and BouncyCastle requires before passing in any data. Node.js does not.
+            // So sadly we have to save all the buffers here.
+            self.buffers.add(buf);
+        }
+
+        @JSFunction
+        public static Object sign(Context cx, Scriptable thisObj, Object[] args, Function func)
+        {
+            Buffer.BufferImpl keyBuf = objArg(args, 0, Buffer.BufferImpl.class, true);
+            String format = stringArg(args, 1, null);
+            SignImpl self = (SignImpl)thisObj;
+
+            KeyPair pair;
+            ByteArrayInputStream bis =
+                new ByteArrayInputStream(keyBuf.getArray(), keyBuf.getArrayOffset(),
+                                         keyBuf.getLength());
+            try {
+                pair = cryptoService.readKeyPair(self.algorithm.getKeyFormat(), bis, null);
+            } catch (IOException ioe) {
+                throw Utils.makeError(cx, thisObj, "error reading key: " + ioe);
+            } catch (CryptoException ce) {
+                throw Utils.makeError(cx, thisObj, "invalid key: " + ce);
+            } finally {
+                try {
+                    bis.close();
+                } catch (IOException ignore) { /* Ignore */ }
+            }
+
+            byte[] result;
+            try {
+                Signature signer = Signature.getInstance(self.algorithm.getJavaName());
+                signer.initSign(pair.getPrivate());
+
+                for (ByteBuffer bb : self.buffers) {
+                    signer.update(bb);
+                }
+                result = signer.sign();
+
+            } catch (GeneralSecurityException gse) {
+                throw Utils.makeError(cx, thisObj, "error signing: " + gse);
+            }
+
+            Buffer.BufferImpl buf = Buffer.BufferImpl.newBuffer(cx, thisObj, result);
+            if (format == null) {
+                return buf;
+            }
+            return buf.getString(format);
         }
     }
 
     public static class VerifyImpl
         extends ScriptableObject
     {
+        private SignatureAlgorithms.Algorithm algorithm;
+        private ArrayList<ByteBuffer> buffers = new ArrayList<ByteBuffer>();
+
+
         @Override
         public String getClassName()
         {
             return "Verify";
         }
 
-        @JSConstructor
-        public static void construct(Context cx, Object[] args, Function ctor, boolean inNew)
+        @JSFunction
+        public static void init(Context cx, Scriptable thisObj, Object[] args, Function func)
         {
-            throw Utils.makeError(cx, ctor, "Verify is not supported in Noderunner");
+            ensureCryptoService(cx, thisObj);
+            String algorithm = stringArg(args, 0);
+            VerifyImpl self = (VerifyImpl)thisObj;
+
+            self.algorithm = SignatureAlgorithms.get().get(algorithm);
+            if (self.algorithm == null) {
+                throw Utils.makeError(cx, thisObj,
+                                      "Invalid verify algorithm " + algorithm);
+            }
+        }
+
+        @JSFunction
+        public static void update(Context cx, Scriptable thisObj, Object[] args, Function func)
+        {
+            ensureArg(args, 0);
+            String encoding = stringArg(args, 1, null);
+            ByteBuffer buf = convertString(args[0], encoding, cx, thisObj);
+            VerifyImpl self = (VerifyImpl)thisObj;
+
+            // Java and BouncyCastle requires before passing in any data. Node.js does not.
+            // So sadly we have to save all the buffers here.
+            self.buffers.add(buf);
+        }
+
+        @JSFunction
+        public static boolean verify(Context cx, Scriptable thisObj, Object[] args, Function func)
+        {
+            Buffer.BufferImpl certBuf = objArg(args, 0, Buffer.BufferImpl.class, true);
+            Buffer.BufferImpl sigBuf = objArg(args, 1, Buffer.BufferImpl.class, true);
+            VerifyImpl self = (VerifyImpl)thisObj;
+
+            Certificate cert = null;
+            PublicKey pubKey = null;
+
+            ByteArrayInputStream bis =
+                new ByteArrayInputStream(certBuf.getArray(), certBuf.getArrayOffset(),
+                                         certBuf.getLength());
+
+            try {
+                try {
+                    pubKey = cryptoService.readPublicKey(self.algorithm.getKeyFormat(), bis);
+                } catch (CryptoException ce) {
+                    // It might not be a key
+                }
+
+                if (pubKey == null) {
+                    bis.reset();
+                    try {
+                         KeyPair pair = cryptoService.readKeyPair(self.algorithm.getKeyFormat(), bis, null);
+                        pubKey = pair.getPublic();
+                    } catch (CryptoException ce) {
+                        // And it might not be a key pair either
+                    }
+                }
+
+                if (pubKey == null) {
+                    bis.reset();
+                    cert = cryptoService.readCertificate(bis);
+
+                    if (cert == null) {
+                        throw Utils.makeError(cx, thisObj, "no certificates available");
+                    }
+                }
+            } catch (IOException ioe) {
+                throw Utils.makeError(cx, thisObj, "error reading key: " + ioe);
+            } catch (CryptoException ce) {
+                throw Utils.makeError(cx, thisObj, "invalid key: " + ce);
+            } finally {
+                try {
+                    bis.close();
+                } catch (IOException ignore) { /* Ignore */ }
+            }
+
+            try {
+                Signature verifier = Signature.getInstance(self.algorithm.getJavaName());
+                if (pubKey == null) {
+                    verifier.initVerify(cert);
+                } else {
+                    verifier.initVerify(pubKey);
+                }
+
+                for (ByteBuffer bb : self.buffers) {
+                    verifier.update(bb);
+                }
+                return verifier.verify(sigBuf.getArray(), sigBuf.getArrayOffset(),
+                                       sigBuf.getLength());
+
+            } catch (GeneralSecurityException gse) {
+                throw Utils.makeError(cx, thisObj, "error verifying: " + gse);
+            }
         }
     }
 

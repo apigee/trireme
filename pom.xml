@@ -24,13 +24,14 @@
   </licenses>
   
   <modules>
+    <module>apptests</module>
     <module>core</module>
     <module>compiler</module>
+    <module>crypto</module>
     <module>jar</module>
     <module>net</module>
     <module>nodetests</module>
     <module>shell</module>
-    <module>apptests</module>
   </modules>
    
   <dependencyManagement>
@@ -85,6 +86,16 @@
         <artifactId>commons-io</artifactId>
         <version>2.4</version>
       </dependency>
+      <dependency>
+          <groupId>org.bouncycastle</groupId>
+          <artifactId>bcprov-jdk15on</artifactId>
+          <version>1.49</version>
+        </dependency>
+        <dependency>
+            <groupId>org.bouncycastle</groupId>
+            <artifactId>bcpkix-jdk15on</artifactId>
+            <version>1.49</version>
+        </dependency>
     </dependencies>
   </dependencyManagement>
 

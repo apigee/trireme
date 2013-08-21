@@ -154,15 +154,6 @@ public class SSLWrap
             ctx.init(self.runner);
             return ctx;
         }
-
-        @JSFunction
-        public static Object createDefaultContext(Context cx, Scriptable thisObj, Object[] args, Function func)
-        {
-            WrapperImpl self = (WrapperImpl)thisObj;
-            ContextImpl ctx = (ContextImpl)cx.newObject(thisObj, ContextImpl.CLASS_NAME);
-            ctx.initDefault(self.runner);
-            return ctx;
-        }
     }
 
     public static class ContextImpl
@@ -181,6 +172,9 @@ public class SSLWrap
         private X509Certificate[] certChain;
         private TrustManager[] trustManagers;
         private X509CRL crl;
+        private KeyStore trustedCertStore;
+        private X509TrustManager trustedCertManager;
+        private boolean trustStoreValidation;
 
         public String getClassName() {
             return CLASS_NAME;
@@ -189,11 +183,6 @@ public class SSLWrap
         void init(NodeRuntime runner)
         {
             this.runner = runner;
-            try {
-                context = SSLContext.getInstance("TLS");
-            } catch (NoSuchAlgorithmException nse) {
-                throw new AssertionError(nse);
-            }
         }
 
         @JSFunction
@@ -263,6 +252,9 @@ public class SSLWrap
                     new ByteArrayInputStream(keyBuf.getArray(), keyBuf.getArrayOffset(),
                                              keyBuf.getLength());
                 X509Certificate cert = cryptoService.readCertificate(bis);
+                if (log.isDebugEnabled()) {
+                    log.debug("My SSL certificate is {}", cert.getSubjectDN());
+                }
                 // TODO need to read the whole chain here!...
                 self.certChain = new X509Certificate[] { cert };
             } catch (CryptoException ce) {
@@ -283,6 +275,7 @@ public class SSLWrap
                     TrustManagerFactory trustFactory = TrustManagerFactory.getInstance("SunX509");
                     trustFactory.init(trustStore);
                     trustManagers = trustFactory.getTrustManagers();
+                    trustStoreValidation = true;
                 } finally {
                     keyIn.close();
                 }
@@ -295,41 +288,77 @@ public class SSLWrap
         }
 
         @JSFunction
-        public void setCRL(String fileName)
+        public static void addTrustedCert(Context cx, Scriptable thisObj, Object[] args, Function func)
         {
-            FileInputStream crlFile;
-            try {
-                crlFile = new FileInputStream(fileName);
-            } catch (IOException ioe) {
-                throw Utils.makeError(Context.getCurrentContext(), this, "Can't open CRL file: " + ioe);
+            if (cryptoService == null) {
+                throw Utils.makeError(cx, thisObj, "No crypto service available to read cert");
+            }
+            int sequence = intArg(args, 0);
+            ensureArg(args, 1);
+            ContextImpl self = (ContextImpl)thisObj;
+
+            Buffer.BufferImpl certBuf = null;
+            if (args[1] != null) {
+                certBuf = objArg(args, 1, Buffer.BufferImpl.class, true);
             }
 
             try {
+                if (self.trustedCertStore == null) {
+                    self.trustedCertStore = cryptoService.createPemKeyStore();
+                    self.trustedCertStore.load(null, null);
+                }
+
+                if (certBuf != null) {
+                    ByteArrayInputStream bis =
+                        new ByteArrayInputStream(certBuf.getArray(), certBuf.getArrayOffset(),
+                                                 certBuf.getLength());
+                    Certificate cert = cryptoService.readCertificate(bis);
+                    if (log.isDebugEnabled()) {
+                        log.debug("Adding trusted CA cert {}");
+                    }
+                    self.trustedCertStore.setCertificateEntry("Cert " + sequence, cert);
+                }
+
+            } catch (GeneralSecurityException gse) {
+                throw Utils.makeError(cx, thisObj, gse.toString());
+            } catch (CryptoException ce) {
+                throw Utils.makeError(cx, thisObj, ce.toString());
+            } catch (IOException ioe) {
+                throw Utils.makeError(cx, thisObj, ioe.toString());
+            }
+        }
+
+        @JSFunction
+        public static void setCRL(Context cx, Scriptable thisObj, Object[] args, Function func)
+        {
+            Buffer.BufferImpl crlBuf = objArg(args, 0, Buffer.BufferImpl.class, true);
+            ContextImpl self = (ContextImpl)thisObj;
+
+            ByteArrayInputStream bis =
+                    new ByteArrayInputStream(crlBuf.getArray(), crlBuf.getArrayOffset(),
+                                             crlBuf.getLength());
+
+            try {
                 CertificateFactory certFactory = CertificateFactory.getInstance("X.509");
-                crl = (X509CRL)certFactory.generateCRL(crlFile);
+                self.crl = (X509CRL)certFactory.generateCRL(bis);
 
             } catch (CertificateException e) {
-                throw Utils.makeError(Context.getCurrentContext(), this, "Error reading CRL: " + e);
+                throw Utils.makeError(Context.getCurrentContext(), thisObj, "Error reading CRL: " + e);
             } catch (CRLException e) {
-                throw Utils.makeError(Context.getCurrentContext(), this, "Error reading CRL: " + e);
-            } finally {
-                try {
-                    crlFile.close();
-                } catch (IOException ioe) {
-                    // Ignore
-                }
+                throw Utils.makeError(Context.getCurrentContext(), thisObj, "Error reading CRL: " + e);
             }
         }
 
         @JSFunction
         public static void init(Context cx, Scriptable thisObj, Object[] args, Function func)
         {
-            if (cryptoService == null) {
-                throw Utils.makeError(cx, thisObj, "No crypto service available");
-            }
             ContextImpl self = (ContextImpl)thisObj;
-            if (self.keyManagers == null) {
+            // Set up the key managers, either to what was already set or create one using PEM
+            if ((self.keyManagers == null) && (self.privateKey != null)) {
                 // A Java key store was not already loaded
+                if (cryptoService == null) {
+                    throw Utils.makeError(cx, thisObj, "No crypto service available");
+                }
                 KeyStore pemKs = cryptoService.createPemKeyStore();
 
                 try {
@@ -345,15 +374,56 @@ public class SSLWrap
                 }
             }
 
+            // Set up the trust manager, either to what was already set or create one using the loaded CAs.
+            // The trust manager may have already been set to "all trusting" for instance
+            if ((self.trustedCertStore != null) && (self.trustManagers == null)) {
+                // CAs were added to validate the client, and "rejectUnauthorized" was also set --
+                // in this case, use SSLEngine to automatically reject unauthorized clients
+                try {
+                    TrustManagerFactory factory = TrustManagerFactory.getInstance("SunX509");
+                    factory.init(self.trustedCertStore);
+                    self.trustManagers = factory.getTrustManagers();
+                    self.trustStoreValidation = true;
+                } catch (GeneralSecurityException gse) {
+                    throw Utils.makeError(cx, thisObj, gse.toString());
+                }
+            }
+            // Add the CRL check if it was specified
             TrustManager[] tms = self.trustManagers;
             if ((self.trustManagers != null) && (self.crl != null)) {
                 tms[0] = new CompositeTrustManager((X509TrustManager)self.trustManagers[0], self.crl);
             }
 
+            // On a client, we may want to use the default SSL context, which will automatically check
+            // servers against a built-in CA list. We should only get here if "rejectUnauthorized" is true
+            // and there is no client-side cert and no explicit set of CAs to trust
             try {
-                self.context.init(self.keyManagers, tms, null);
+                if ((self.keyManagers == null) && (tms == null)) {
+                    self.context = SSLContext.getDefault();
+                } else {
+                    self.context = SSLContext.getInstance("TLS");
+                    self.context.init(self.keyManagers, tms, null);
+                }
+            } catch (NoSuchAlgorithmException nse) {
+                throw new AssertionError(nse);
             } catch (KeyManagementException kme) {
-                throw new EvaluatorException("Error initializing SSL context: " + kme);
+                throw Utils.makeError(cx, thisObj, "Error initializing SSL context: " + kme);
+            }
+
+            // If "rejectUnauthorized" was set to false, and at the same time we have a bunch of CAs that
+            // were supplied, set up a second trust manager that we will check manually to set the
+            // "authorized" flag that Node.js insists on supporting.
+            if (self.trustedCertStore != null) {
+                try {
+                    TrustManagerFactory factory = TrustManagerFactory.getInstance("SunX509");
+                    factory.init(self.trustedCertStore);
+                    self.trustedCertManager = (X509TrustManager)factory.getTrustManagers()[0];
+                    if (self.crl != null) {
+                        self.trustedCertManager = new CompositeTrustManager(self.trustedCertManager, self.crl);
+                    }
+                } catch (GeneralSecurityException gse) {
+                    throw Utils.makeError(cx, thisObj, gse.toString());
+                }
             }
         }
 
@@ -363,23 +433,13 @@ public class SSLWrap
             trustManagers = new TrustManager[] { AllTrustingManager.INSTANCE };
         }
 
-        void initDefault(NodeRuntime runner)
-        {
-            this.runner = runner;
-            try {
-                context = SSLContext.getDefault();
-            } catch (NoSuchAlgorithmException e) {
-                throw new EvaluatorException("Error initializing SSL context: " + e);
-            }
-        }
-
         @JSFunction
         public static Object createEngine(Context cx, Scriptable thisObj, Object[] args, Function func)
         {
             boolean clientMode = booleanArg(args, 0);
             ContextImpl self = (ContextImpl)thisObj;
             EngineImpl engine = (EngineImpl)cx.newObject(thisObj, EngineImpl.CLASS_NAME);
-            engine.init(self.runner, self.context, clientMode);
+            engine.init(self.runner, self.context, clientMode, self.trustStoreValidation, self.trustedCertManager);
             return engine;
         }
     }
@@ -402,6 +462,11 @@ public class SSLWrap
 
         private SSLEngine engine;
         private NodeRuntime runner;
+        private X509TrustManager trustManager;
+        private boolean peerAuthorized;
+        private Scriptable authorizationError;
+        private boolean trustStoreValidation;
+
         private ByteBuffer toWrap;
         private ByteBuffer fromWrap;
         private ByteBuffer toUnwrap;
@@ -412,9 +477,13 @@ public class SSLWrap
             return CLASS_NAME;
         }
 
-        void init(NodeRuntime runner, SSLContext ctx, boolean clientMode)
+        void init(NodeRuntime runner, SSLContext ctx, boolean clientMode, boolean trustStoreValidation,
+                  X509TrustManager trustManager)
         {
             this.runner = runner;
+            this.trustManager = trustManager;
+            this.trustStoreValidation = trustStoreValidation;
+
             engine = ctx.createSSLEngine();
             engine.setUseClientMode(clientMode);
             toWrap = ByteBuffer.allocate(DEFAULT_BUFFER_SIZE);
@@ -439,6 +508,20 @@ public class SSLWrap
             b.flip();
             ret.put(b);
             return ret;
+        }
+
+        @JSGetter("peerAuthorized")
+        public boolean isPeerAuthorized() {
+            return peerAuthorized;
+        }
+
+        @JSGetter("authorizationError")
+        public Object getAuthorizationError()
+        {
+            if (authorizationError == null) {
+                return Context.getUndefinedValue();
+            }
+            return authorizationError;
         }
 
         @JSFunction
@@ -582,6 +665,7 @@ public class SSLWrap
             result.put("remaining", result, inBuf.remaining());
             if (justHandshaked) {
                 result.put("justHandshaked", result, Boolean.TRUE);
+                checkPeerAuthorization(cx);
             }
             return result;
         }
@@ -650,6 +734,57 @@ public class SSLWrap
         private void fireFunction(Function callback, Scriptable domain)
         {
             runner.enqueueCallback(callback, this, this, domain, null);
+        }
+
+        private void checkPeerAuthorization(Context cx)
+        {
+            Certificate[] certChain;
+
+            try {
+                certChain = engine.getSession().getPeerCertificates();
+            } catch (SSLPeerUnverifiedException unver) {
+                if (log.isDebugEnabled()) {
+                    log.debug("Peer is unverified");
+                }
+                peerAuthorized = false;
+                return;
+            }
+
+            if (certChain == null) {
+                // No certs -- same thing
+                if (log.isDebugEnabled()) {
+                    log.debug("Peer has no client- or server-side certs");
+                }
+                peerAuthorized = false;
+                return;
+            }
+
+            if (trustManager == null) {
+                // Either the trust was already checked by SSL engine, so we wouldn't be here without
+                // authorization, in which case "trustStoreValidation" is true,
+                // or, the trust was not checked and we have no additional trust manager
+                peerAuthorized = trustStoreValidation;
+                return;
+            }
+
+            try {
+                if (engine.getUseClientMode()) {
+                    trustManager.checkServerTrusted((X509Certificate[])certChain, "RSA");
+                } else {
+                    trustManager.checkClientTrusted((X509Certificate[])certChain, "RSA");
+                }
+                peerAuthorized = true;
+                if (log.isDebugEnabled()) {
+                    log.debug("SSL peer is valid");
+                }
+            } catch (CertificateException e) {
+                if (log.isDebugEnabled()) {
+                    log.debug("Error verifying SSL peer: {}", e);
+                }
+                authorizationError =
+                    Utils.makeErrorObject(cx, this, e.toString());
+                peerAuthorized = false;
+            }
         }
 
         @JSFunction
@@ -744,15 +879,15 @@ public class SSLWrap
             //ret.put("fingerprint", ret, null);
 
             try {
-                addAltNames(cx, ret, "subjectAltNames", cert.getSubjectAlternativeNames());
-                addAltNames(cx, ret, "issuerAltNames", cert.getIssuerAlternativeNames());
+                addAltNames(cx, ret, "subject", "subjectAltNames", cert.getSubjectAlternativeNames());
+                addAltNames(cx, ret, "issuer", "issuerAltNames", cert.getIssuerAlternativeNames());
             } catch (CertificateParsingException e) {
                 log.debug("Error getting all the cert names: {}", e);
             }
             return ret;
         }
 
-        private void addAltNames(Context cx, Scriptable s, String type, Collection<List<?>> altNames)
+        private void addAltNames(Context cx, Scriptable s, String attachment, String type, Collection<List<?>> altNames)
         {
             if (altNames == null) {
                 return;
@@ -780,6 +915,9 @@ public class SSLWrap
                     o.put(typeName, s, an.get(1));
                 }
             }
+
+            Scriptable subject = (Scriptable)s.get(attachment, s);
+            subject.put(type, subject, o);
         }
 
         @JSFunction

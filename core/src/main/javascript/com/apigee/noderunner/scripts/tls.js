@@ -57,41 +57,43 @@ function toBuf(b) {
 
 // Store the SSL context for a client. We could do some caching here to speed up clients.
 function getContext(opts, rejectUnauthorized) {
-  var ctx;
-  if (!opts ||
-      (!opts.keystore && !opts.key && !opts.truststore && rejectUnauthorized)) {
-    debug('Creating default SSL context');
-    ctx = wrap.createDefaultContext();
+  var ctx = wrap.createContext();
 
-  } else {
-    ctx = wrap.createContext();
-
-    if (!rejectUnauthorized) {
-      debug('Using SSL context that trusts everyone');
-      ctx.setTrustEverybody();
-    } else if (opts.truststore) {
-      debug('Using trust store ' + opts.truststore);
-      ctx.setTrustStore(opts.truststore);
-    } else {
-      debug('Context will not trust anybody');
-    }
-
-    if (opts.keystore) {
-      debug('Client using key store ' + opts.keystore);
-      ctx.setKeyStore(opts.keystore, opts.passphrase);
-    } else {
-      if (opts.key) {
-        debug('Client using PEM key');
-        ctx.setKey(toBuf(opts.key), opts.passphrase);
-      }
-      if (opts.cert) {
-        debug('Client using PEM cert');
-        ctx.setCert(toBuf(opts.cert));
-      }
-    }
-
-    ctx.init();
+  if (!rejectUnauthorized) {
+    debug('Using SSL context that trusts everyone');
+    ctx.setTrustEverybody();
+  } else if (opts.truststore) {
+    debug('Using Java trust store ' + opts.truststore);
+    ctx.setTrustStore(opts.truststore);
   }
+
+  if (opts.ca) {
+    debug('Client using array of ' + opts.ca.length + ' certs');
+    if (opts.ca.length === 0) {
+      // Special case
+      ctx.addTrustedCert(0, null);
+    } else {
+      for (var i = 0; i < opts.ca.length; i++) {
+        ctx.addTrustedCert(i, toBuf(opts.ca[i]));
+      }
+    }
+  }
+
+  if (opts.keystore) {
+    debug('Client using key store ' + opts.keystore);
+    ctx.setKeyStore(opts.keystore, opts.passphrase);
+  } else {
+    if (opts.key) {
+      debug('Client using PEM key');
+      ctx.setKey(toBuf(opts.key), opts.passphrase);
+    }
+    if (opts.cert) {
+      debug('Client using PEM cert');
+      ctx.setCert(toBuf(opts.cert));
+    }
+  }
+
+  ctx.init();
   return ctx;
 }
 
@@ -113,6 +115,11 @@ function Server() {
   }
   self.closed = false;
 
+  self.rejectUnauthorized = options.rejectUnauthorized;
+  if (self.rejectUnauthorized === undefined) {
+    self.rejectUnauthorized = DEFAULT_REJECT_UNAUTHORIZED;
+  }
+
   self.context = wrap.createContext();
 
   if (options.keystore) {
@@ -128,16 +135,40 @@ function Server() {
       self.context.setCert(toBuf(options.cert));
     }
   }
+  if (!options.keystore && !options.cert) {
+    throw 'Missing certificate';
+  }
+  if (!options.keystore && !options.key) {
+    throw 'Missing key';
+  }
   // TODO PFX
 
   if (options.truststore) {
+    // Use an explicit Java trust store
     debug('Server using trust store ' + options.truststore);
     self.context.setTrustStore(options.truststore);
+  } else if (!self.rejectUnauthorized || !options.requestCert) {
+    // Client cert requested but we shouldn't reject everyone right away, but set "authorized".
+    // Do this using an all-trusting trust manager
+    self.context.setTrustEverybody();
+  }
+  // Otherwise, in "init" we will set up a Java trust manager only for the supplied CAs
+
+  if (options.ca) {
+    debug('Server using array of ' + options.ca.length + ' certs');
+    if (options.ca.length === 0) {
+      // Special case
+      self.context.addTrustedCert(0, null);
+    } else {
+      for (var i = 0; i < options.ca.length; i++) {
+        self.context.addTrustedCert(i, toBuf(options.ca[i]));
+      }
+    }
   }
 
   if (options.crl) {
     debug('Server using CRL');
-    self.context.setCRL(options.crl);
+    self.context.setCRL(toBuf(options.crl));
   }
 
   self.context.init();
@@ -157,7 +188,7 @@ function Server() {
   self.netServer = net.createServer(options, function(connection) {
     var engine = self.context.createEngine(false);
     if (options.requestCert) {
-      if (options.rejectUnauthorized) {
+      if (self.rejectUnauthorized) {
         debug('Client auth required');
         engine.setClientAuthRequired(true);
       } else {
@@ -172,6 +203,7 @@ function Server() {
     var clearStream = new CleartextStream();
     clearStream.init(true, self, connection, engine);
     clearStream.setHandshakeTimeout(handshakeTimeout);
+    clearStream.rejectUnauthorized = self.rejectUnauthorized && options.requestCert;
   });
   return self;
 }
@@ -538,12 +570,10 @@ CleartextStream.prototype.justHandshaked = function() {
     clearTimeout(this.handshakeTimeout);
   }
   this.readable = this.writable = true;
+
+  this.authorized = this.engine.peerAuthorized;
+  this.authorizationError = this.engine.authorizationError;
   this.handshakeComplete = true;
-  if (this.engine.getPeerCertificate()) {
-    this.authorized = true;
-  } else {
-    this.authorized = false;
-  }
 
   if (this.serverMode) {
     this.server.emit('secureConnection', this);

@@ -211,6 +211,14 @@
         <Name>test-http-upgrade-.+\.js</Name>
         <Description>Assumes that all data on the socket after the upgrade comes in in one chunk.</Description>
     </Excluded>
+    <Excluded>
+        <Name>test-tls-server-verify.js</Name>
+        <Description>Needs the "tls1" option to openssl because Java 6 does not support it</Description>
+    </Excluded>
+    <Excluded>
+        <Name>test-tls-client-reject.js</Name>
+        <Description>In Java, when "rejectUnauthorized" is true, the server never sees the client.</Description>
+    </Excluded>
 
 
     <!-- INTERNAL TESTS
@@ -243,6 +251,14 @@
     <Excluded>
         <Name>test-http-parser-bad-ref.js</Name>
         <Excluded>Uses V8 "gc" method.</Excluded>
+    </Excluded>
+    <Excluded>
+        <Name>test-tls-set-encoding.js</Name>
+        <Excluded>Depends on "readyState"</Excluded>
+    </Excluded>
+    <Excluded>
+        <Name>test-tls-server-slab.js</Name>
+        <Excluded>Depends on internal "slab buffer size"</Excluded>
     </Excluded>
 
     <!-- MISCELLANEOUS

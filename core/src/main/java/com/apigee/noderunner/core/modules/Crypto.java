@@ -41,6 +41,9 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import javax.crypto.Mac;
+import javax.crypto.SecretKey;
+import javax.crypto.SecretKeyFactory;
+import javax.crypto.spec.PBEKeySpec;
 import javax.crypto.spec.SecretKeySpec;
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
@@ -57,6 +60,7 @@ import java.security.SecureRandom;
 import java.security.Signature;
 import java.security.cert.Certificate;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.HashMap;
 import java.util.Random;
 import java.util.ServiceLoader;
@@ -244,9 +248,44 @@ public class Crypto
         }
 
         @JSFunction
-        public static Scriptable doPBKFD2(Context cx, Scriptable thisObj, Object[] args, Function func)
+        public static Scriptable PBKDF2(Context cx, Scriptable thisObj, Object[] args, Function func)
         {
-            throw Utils.makeError(cx, thisObj, "PBKDF2 is not supported in Noderunner.");
+            String pw = stringArg(args, 0);
+            String saltStr = stringArg(args, 1);
+            int iterations = intArg(args, 2);
+            int keyLen = intArg(args, 3);
+            Function callback = functionArg(args, 4, false);
+            SecretKey key;
+
+            try {
+                SecretKeyFactory kf = SecretKeyFactory.getInstance("PBKDF2WithHmacSHA1");
+                char[] passphrase = pw.toCharArray();
+                byte[] salt = saltStr.getBytes(Charsets.UTF8);
+                PBEKeySpec spec = new PBEKeySpec(passphrase, salt, iterations, keyLen * 8);
+
+                try {
+                    key = kf.generateSecret(spec);
+                } finally {
+                    Arrays.fill(passphrase, '\0');
+                }
+
+            } catch (GeneralSecurityException gse) {
+                if (callback == null) {
+                    throw Utils.makeError(cx, thisObj, gse.toString());
+                } else {
+                    callback.call(cx, thisObj, null,
+                                  new Object[] { Utils.makeErrorObject(cx, thisObj, gse.toString()) });
+                    return null;
+                }
+            }
+
+            Buffer.BufferImpl keyBuf = Buffer.BufferImpl.newBuffer(cx, thisObj, key.getEncoded());
+            if (callback == null) {
+                return keyBuf;
+            }
+            callback.call(cx, thisObj, null,
+                          new Object[] { Context.getUndefinedValue(), keyBuf });
+            return null;
         }
 
         private void setRuntime(NodeRuntime runtime) {

@@ -827,12 +827,15 @@ assert.strictEqual(rsaVerify.verify(rsaPubPem, rsaSignature, 'hex'), true);
 */
 
 /*
- * Noderunner: Not yet
+ * Noderunner: PBKDF2 is implemented, but it seems to use a 
+ * different algorithm. Need to research what Node.js does.
 //
 // Test PBKDF2 with RFC 6070 test vectors (except #4)
 //
 function testPBKDF2(password, salt, iterations, keylen, expected) {
   var actual = crypto.pbkdf2Sync(password, salt, iterations, keylen);
+  console.log('Expected %s', new Buffer(expected).toString('base64'));
+  console.log('Got      %s', actual.toString('base64'));
   assert.equal(actual.toString('binary'), expected);
 
   crypto.pbkdf2(password, salt, iterations, keylen, function(err, actual) {

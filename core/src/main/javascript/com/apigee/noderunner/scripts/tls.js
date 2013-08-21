@@ -46,14 +46,26 @@ var END_SENTINEL = {};
 var DEFAULT_REJECT_UNAUTHORIZED = ('0' !== process.env.NODE_TLS_REJECT_UNAUTHORIZED);
 var DEFAULT_HANDSHAKE_TIMEOUT = 60000;
 
+function toBuf(b) {
+  if (typeof b === 'string') {
+    return new Buffer(b, 'ascii');
+  } else if (b instanceof Buffer) {
+    return b;
+  }
+  throw 'Argument must be a string or a buffer';
+}
+
 // Store the SSL context for a client. We could do some caching here to speed up clients.
 function getContext(opts, rejectUnauthorized) {
   var ctx;
-  if (!opts || (!opts.keystore && !opts.truststore && rejectUnauthorized)) {
+  if (!opts ||
+      (!opts.keystore && !opts.key && !opts.truststore && rejectUnauthorized)) {
     debug('Creating default SSL context');
     ctx = wrap.createDefaultContext();
+
   } else {
     ctx = wrap.createContext();
+
     if (!rejectUnauthorized) {
       debug('Using SSL context that trusts everyone');
       ctx.setTrustEverybody();
@@ -63,9 +75,19 @@ function getContext(opts, rejectUnauthorized) {
     } else {
       debug('Context will not trust anybody');
     }
+
     if (opts.keystore) {
       debug('Client using key store ' + opts.keystore);
       ctx.setKeyStore(opts.keystore, opts.passphrase);
+    } else {
+      if (opts.key) {
+        debug('Client using PEM key');
+        ctx.setKey(toBuf(opts.key), opts.passphrase);
+      }
+      if (opts.cert) {
+        debug('Client using PEM cert');
+        ctx.setCert(toBuf(opts.cert));
+      }
     }
 
     ctx.init();
@@ -86,23 +108,35 @@ function Server() {
   if (!(this instanceof Server)) return new Server(options, listener);
 
   var self = this;
-  if ((options == undefined) || (options.keystore == undefined)) {
-    throw 'missing keystore (must be in Java JKS format)';
-  }
   if (listener) {
     self.on('secureConnection', listener);
   }
   self.closed = false;
 
   self.context = wrap.createContext();
-  debug('Server using key store ' + options.keystore);
-  self.context.setKeyStore(options.keystore, options.passphrase);
+
+  if (options.keystore) {
+    debug('Server using Java key store ' + options.keystore);
+    self.context.setKeyStore(options.keystore, options.passphrase);
+  } else {
+    if (options.key) {
+      debug('Server using PEM key');
+      self.context.setKey(toBuf(options.key), options.passphrase);
+    }
+    if (options.cert) {
+      debug('Server using PEM cert');
+      self.context.setCert(toBuf(options.cert));
+    }
+  }
+  // TODO PFX
+
   if (options.truststore) {
     debug('Server using trust store ' + options.truststore);
     self.context.setTrustStore(options.truststore);
   }
+
   if (options.crl) {
-    debug('Server using CRL ' + options.crl);
+    debug('Server using CRL');
     self.context.setCRL(options.crl);
   }
 
@@ -505,7 +539,11 @@ CleartextStream.prototype.justHandshaked = function() {
   }
   this.readable = this.writable = true;
   this.handshakeComplete = true;
-  this.authorized = true;
+  if (this.engine.getPeerCertificate()) {
+    this.authorized = true;
+  } else {
+    this.authorized = false;
+  }
 
   if (this.serverMode) {
     this.server.emit('secureConnection', this);

@@ -149,6 +149,10 @@
         <Name>test-sigint.*\.js</Name>
         <Description>No signal handling.</Description>
     </Excluded>
+    <Excluded>
+        <Name>test-tls-connect-pipe.js</Name>
+        <Description>No pipes in TLS</Description>
+    </Excluded>
 
     <!-- DIFFERENT TESTS
          We have different versions of these tests in the "noderunner" directory because they must
@@ -161,12 +165,6 @@
     <Excluded>
         <Name>test-dh.*\.js</Name>
         <Description>No DH implemented in crypto yet.</Description>
-    </Excluded>
-    <Excluded>
-        <Name>test-tls-.+\.js</Name>
-        <Description>All TLS tests are run from the "noderunner" directory because they
-                     use a different keystore format.
-        </Description>
     </Excluded>
     <Excluded>
         <Name>test-buffer.js</Name>

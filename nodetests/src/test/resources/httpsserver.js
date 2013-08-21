@@ -1,8 +1,9 @@
 var https = require('https');
+var fs = require('fs');
 
 var options = {
-  keystore: 'src/test/resources/test/fixtures/keys/agent1.jks',
-  passphrase: 'secure'
+  key: fs.readFileSync('./test/fixtures/keys/agent1-key.pem'),
+  cert: fs.readFileSync('./test/fixtures/keys/agent1-cert.pem')
 };
 
 https.createServer(options, function (request, response) {

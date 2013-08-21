@@ -7,9 +7,7 @@ import org.bouncycastle.openssl.PEMDecryptorProvider;
 import org.bouncycastle.openssl.PEMEncryptedKeyPair;
 import org.bouncycastle.openssl.PEMKeyPair;
 import org.bouncycastle.openssl.PEMParser;
-import org.bouncycastle.openssl.jcajce.JcaPEMKeyConverter;
 import org.bouncycastle.openssl.jcajce.JcePEMDecryptorProviderBuilder;
-import org.bouncycastle.util.io.pem.PemObject;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -19,6 +17,9 @@ import java.io.InputStreamReader;
 import java.nio.charset.Charset;
 import java.security.GeneralSecurityException;
 import java.security.KeyPair;
+import java.security.KeyStore;
+import java.security.KeyStoreException;
+import java.security.NoSuchProviderException;
 import java.security.PublicKey;
 import java.security.cert.CertificateFactory;
 import java.security.cert.X509Certificate;
@@ -81,7 +82,7 @@ public class CryptoServiceImpl
             }
 
             if (po instanceof SubjectPublicKeyInfo) {
-                return convertPublicKey(algorithm, (SubjectPublicKeyInfo)po);
+                return convertPublicKey(algorithm, (SubjectPublicKeyInfo) po);
             }
             throw new CryptoException("Input data does not contain a public key");
         } finally {
@@ -107,6 +108,19 @@ public class CryptoServiceImpl
             return (X509Certificate)cf.generateCertificate(is);
         } catch (GeneralSecurityException gse) {
             throw new CryptoException(gse);
+        }
+    }
+
+    @Override
+    public KeyStore createPemKeyStore()
+    {
+        ProviderLoader.get().ensureLoaded();
+        try {
+            return KeyStore.getInstance(NoderunnerProvider.ALGORITHM, NoderunnerProvider.NAME);
+        } catch (KeyStoreException e) {
+            throw new AssertionError(e);
+        } catch (NoSuchProviderException e) {
+            throw new AssertionError(e);
         }
     }
 }

@@ -3,6 +3,7 @@ package com.apigee.noderunner.core.internal;
 import java.io.IOException;
 import java.io.InputStream;
 import java.security.KeyPair;
+import java.security.KeyStore;
 import java.security.PublicKey;
 import java.security.cert.X509Certificate;
 
@@ -22,4 +23,6 @@ public interface CryptoService
 
     X509Certificate readCertificate(InputStream is)
         throws IOException, CryptoException;
+
+    KeyStore createPemKeyStore();
 }

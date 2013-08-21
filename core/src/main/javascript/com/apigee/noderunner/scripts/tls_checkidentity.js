@@ -47,15 +47,21 @@
 
 var net = require('net');
 var url = require('url');
+var util = require('util');
 
 var debug;
+var debugEnabled;
 if (process.env.NODE_DEBUG && /tls/.test(process.env.NODE_DEBUG)) {
   debug = function(x) { console.error('TLS:', x); };
+  debugEnabled = true;
 } else {
   debug = function() { };
 }
 
 function checkServerIdentity(host, cert) {
+  if (debugEnabled) {
+    debug('checkServerIdentity: (' + host + ', ' + util.inspect(cert));
+  }
   // Create regexp to much hostnames
   function regexpify(host, wildcards) {
     // Add trailing dot (make hostnames uniform)
@@ -64,7 +70,14 @@ function checkServerIdentity(host, cert) {
     // The same applies to hostname with more than one wildcard,
     // if hostname has wildcard when wildcards are not allowed,
     // or if there are less than two dots after wildcard (i.e. *.com or *d.com)
-    if (/\*.*\*/.test(host) || !wildcards && /\*/.test(host) ||
+    //
+    // also
+    //
+    // "The client SHOULD NOT attempt to match a presented identifier in
+    // which the wildcard character comprises a label other than the
+    // left-most label (e.g., do not match bar.*.example.net)."
+    // RFC6125
+    if (!wildcards && /\*/.test(host) || /[\.\*].*\*/.test(host) ||
         /\*/.test(host) && !/\*.*\..+\..+/.test(host)) {
       return /$./;
     }
@@ -85,6 +98,7 @@ function checkServerIdentity(host, cert) {
   var dnsNames = [],
       uriNames = [],
       ips = [],
+      matchCN = true,
       valid = false;
 
   // There're several names to perform check against:
@@ -128,15 +142,25 @@ function checkServerIdentity(host, cert) {
 
     dnsNames = dnsNames.concat(uriNames);
 
-    // And only after check if hostname matches CN
-    // (because CN is deprecated, but should be used for compatiblity anyway)
-    var commonNames = cert.subject.CN;
-    if (Array.isArray(commonNames)) {
-      for (var i = 0, k = commonNames.length; i < k; ++i) {
-        dnsNames.push(regexpify(commonNames[i], false));
+    if (dnsNames.length > 0) matchCN = false;
+
+    // Match against Common Name (CN) only if no supported identifiers are
+    // present.
+    //
+    // "As noted, a client MUST NOT seek a match for a reference identifier
+    //  of CN-ID if the presented identifiers include a DNS-ID, SRV-ID,
+    //  URI-ID, or any application-specific identifier types supported by the
+    //  client."
+    // RFC6125
+    if (matchCN) {
+      var commonNames = cert.subject.CN;
+      if (Array.isArray(commonNames)) {
+        for (var i = 0, k = commonNames.length; i < k; ++i) {
+          dnsNames.push(regexpify(commonNames[i], true));
+        }
+      } else {
+        dnsNames.push(regexpify(commonNames, true));
       }
-    } else {
-      dnsNames.push(regexpify(commonNames, false));
     }
 
     valid = dnsNames.some(function(re) {
@@ -150,7 +174,7 @@ exports.checkServerIdentity = checkServerIdentity;
 
 function parseCertString(s) {
   var out = {};
-  var parts = s.split(',');
+  var parts = s.split('\n');
   for (var i = 0, len = parts.length; i < len; i++) {
     var sepIndex = parts[i].indexOf('=');
     if (sepIndex > 0) {

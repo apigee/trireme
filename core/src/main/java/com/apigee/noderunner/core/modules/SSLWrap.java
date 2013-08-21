@@ -23,7 +23,10 @@ package com.apigee.noderunner.core.modules;
 
 import com.apigee.noderunner.core.NodeRuntime;
 import com.apigee.noderunner.core.internal.CompositeTrustManager;
+import com.apigee.noderunner.core.internal.CryptoException;
+import com.apigee.noderunner.core.internal.CryptoService;
 import com.apigee.noderunner.core.internal.InternalNodeModule;
+import com.apigee.noderunner.core.internal.SimpleKeyManager;
 import com.apigee.noderunner.core.internal.Utils;
 import org.mozilla.javascript.Context;
 import org.mozilla.javascript.EvaluatorException;
@@ -49,14 +52,17 @@ import javax.net.ssl.TrustManager;
 import javax.net.ssl.TrustManagerFactory;
 import javax.net.ssl.X509TrustManager;
 import javax.security.auth.x500.X500Principal;
+import java.io.ByteArrayInputStream;
 import java.io.FileInputStream;
 import java.io.IOException;
 import java.lang.reflect.InvocationTargetException;
 import java.nio.ByteBuffer;
 import java.security.GeneralSecurityException;
 import java.security.KeyManagementException;
+import java.security.KeyPair;
 import java.security.KeyStore;
 import java.security.NoSuchAlgorithmException;
+import java.security.PrivateKey;
 import java.security.cert.CRLException;
 import java.security.cert.Certificate;
 import java.security.cert.CertificateException;
@@ -71,6 +77,7 @@ import java.util.Arrays;
 import java.util.Collection;
 import java.util.HashSet;
 import java.util.List;
+import java.util.ServiceLoader;
 import java.util.regex.Pattern;
 
 /**
@@ -85,6 +92,7 @@ public class SSLWrap
 
     protected static final Pattern COLON = Pattern.compile(":");
     protected static final DateFormat X509_DATE = new SimpleDateFormat("MMM dd HH:mm:ss yyyy zzz");
+    protected static CryptoService cryptoService;
 
     public static final int BUFFER_SIZE = 8192;
 
@@ -103,7 +111,21 @@ public class SSLWrap
         ScriptableObject.defineClass(scope, ContextImpl.class);
         WrapperImpl wrapper = (WrapperImpl)cx.newObject(scope, WrapperImpl.CLASS_NAME);
         wrapper.init(runner);
+        loadCryptoService();
         return wrapper;
+    }
+
+    private static void loadCryptoService()
+    {
+        ServiceLoader<CryptoService> loc = ServiceLoader.load(CryptoService.class);
+        if (loc.iterator().hasNext()) {
+            if (log.isDebugEnabled()) {
+                log.debug("Using crypto service implementation {}", cryptoService);
+            }
+            cryptoService = loc.iterator().next();
+        } else if (log.isDebugEnabled()) {
+            log.debug("No crypto service available");
+        }
     }
 
     public static class WrapperImpl
@@ -148,10 +170,15 @@ public class SSLWrap
     {
         public static final String CLASS_NAME = "_sslContextClass";
 
+        private static final String DEFAULT_KEY_ENTRY = "key";
+        private static final String DEFAULT_CERT_ENTRY = "cert";
+
         private SSLContext context;
         private NodeRuntime runner;
 
         private KeyManager[] keyManagers;
+        private PrivateKey privateKey;
+        private X509Certificate[] certChain;
         private TrustManager[] trustManagers;
         private X509CRL crl;
 
@@ -183,7 +210,7 @@ public class SSLWrap
                     keyManagers = keyFactory.getKeyManagers();
                 } finally {
                     if (passphrase != null) {
-                        Arrays.fill(passphrase, ' ');
+                        Arrays.fill(passphrase, '\0');
                     }
                     keyIn.close();
                 }
@@ -192,6 +219,56 @@ public class SSLWrap
                 throw new EvaluatorException("Error opening key store: " + gse);
             } catch (IOException ioe) {
                 throw new EvaluatorException("I/O error reading key store: " + ioe);
+            }
+        }
+
+        @JSFunction
+        public static void setKey(Context cx, Scriptable thisObj, Object[] args, Function func)
+        {
+            if (cryptoService == null) {
+                throw Utils.makeError(cx, thisObj, "No crypto service available to read PEM key");
+            }
+            Buffer.BufferImpl keyBuf = objArg(args, 0, Buffer.BufferImpl.class, true);
+            String p = stringArg(args, 1, null);
+            char[] passphrase = (p == null ? null : p.toCharArray());
+            ContextImpl self = (ContextImpl)thisObj;
+
+            try {
+                ByteArrayInputStream bis =
+                    new ByteArrayInputStream(keyBuf.getArray(), keyBuf.getArrayOffset(),
+                                             keyBuf.getLength());
+                KeyPair kp = cryptoService.readKeyPair("RSA", bis, passphrase);
+                self.privateKey = kp.getPrivate();
+
+            } catch (CryptoException ce) {
+                throw Utils.makeError(cx, thisObj, ce.toString());
+            } catch (IOException ioe) {
+                throw Utils.makeError(cx, thisObj, ioe.toString());
+            } finally {
+                Arrays.fill(passphrase, '\0');
+            }
+        }
+
+        @JSFunction
+        public static void setCert(Context cx, Scriptable thisObj, Object[] args, Function func)
+        {
+            if (cryptoService == null) {
+                throw Utils.makeError(cx, thisObj, "No crypto service available to read PEM key");
+            }
+            Buffer.BufferImpl keyBuf = objArg(args, 0, Buffer.BufferImpl.class, true);
+            ContextImpl self = (ContextImpl)thisObj;
+
+            try {
+                ByteArrayInputStream bis =
+                    new ByteArrayInputStream(keyBuf.getArray(), keyBuf.getArrayOffset(),
+                                             keyBuf.getLength());
+                X509Certificate cert = cryptoService.readCertificate(bis);
+                // TODO need to read the whole chain here!...
+                self.certChain = new X509Certificate[] { cert };
+            } catch (CryptoException ce) {
+                throw Utils.makeError(cx, thisObj, ce.toString());
+            } catch (IOException ioe) {
+                throw Utils.makeError(cx, thisObj, ioe.toString());
             }
         }
 
@@ -245,15 +322,36 @@ public class SSLWrap
         }
 
         @JSFunction
-        public void init()
+        public static void init(Context cx, Scriptable thisObj, Object[] args, Function func)
         {
-            TrustManager[] tms = trustManagers;
-            if ((trustManagers != null) && (crl != null)) {
-                tms[0] = new CompositeTrustManager((X509TrustManager)trustManagers[0], crl);
+            if (cryptoService == null) {
+                throw Utils.makeError(cx, thisObj, "No crypto service available");
+            }
+            ContextImpl self = (ContextImpl)thisObj;
+            if (self.keyManagers == null) {
+                // A Java key store was not already loaded
+                KeyStore pemKs = cryptoService.createPemKeyStore();
+
+                try {
+                    pemKs.load(null, null);
+                    pemKs.setKeyEntry(DEFAULT_KEY_ENTRY, self.privateKey, null, self.certChain);
+                    KeyManagerFactory keyFactory = KeyManagerFactory.getInstance("SunX509");
+                    keyFactory.init(pemKs, null);
+                    self.keyManagers = keyFactory.getKeyManagers();
+                } catch (GeneralSecurityException gse) {
+                    throw Utils.makeError(cx, thisObj, gse.toString());
+                } catch (IOException ioe) {
+                    throw Utils.makeError(cx, thisObj, ioe.toString());
+                }
+            }
+
+            TrustManager[] tms = self.trustManagers;
+            if ((self.trustManagers != null) && (self.crl != null)) {
+                tms[0] = new CompositeTrustManager((X509TrustManager)self.trustManagers[0], self.crl);
             }
 
             try {
-                context.init(keyManagers, tms, null);
+                self.context.init(self.keyManagers, tms, null);
             } catch (KeyManagementException kme) {
                 throw new EvaluatorException("Error initializing SSL context: " + kme);
             }

@@ -26,7 +26,6 @@ import com.apigee.noderunner.core.internal.CompositeTrustManager;
 import com.apigee.noderunner.core.internal.CryptoException;
 import com.apigee.noderunner.core.internal.CryptoService;
 import com.apigee.noderunner.core.internal.InternalNodeModule;
-import com.apigee.noderunner.core.internal.SimpleKeyManager;
 import com.apigee.noderunner.core.internal.Utils;
 import org.mozilla.javascript.Context;
 import org.mozilla.javascript.EvaluatorException;
@@ -458,7 +457,7 @@ public class SSLWrap
         public static final int STATUS_CLOSED =        6;
         public static final int STATUS_ERROR =         7;
 
-        private static final int DEFAULT_BUFFER_SIZE = 8192;
+        private static final int MIN_BUFFER_SIZE =     128;
 
         private SSLEngine engine;
         private NodeRuntime runner;
@@ -467,10 +466,7 @@ public class SSLWrap
         private Scriptable authorizationError;
         private boolean trustStoreValidation;
 
-        private ByteBuffer toWrap;
-        private ByteBuffer fromWrap;
-        private ByteBuffer toUnwrap;
-        private ByteBuffer fromUnwrap;
+        private static final ByteBuffer EMPTY_BUF = ByteBuffer.allocate(0);
 
         @Override
         public String getClassName() {
@@ -486,20 +482,6 @@ public class SSLWrap
 
             engine = ctx.createSSLEngine();
             engine.setUseClientMode(clientMode);
-            toWrap = ByteBuffer.allocate(DEFAULT_BUFFER_SIZE);
-            fromWrap = ByteBuffer.allocate(DEFAULT_BUFFER_SIZE);
-            toUnwrap = ByteBuffer.allocate(DEFAULT_BUFFER_SIZE);
-            fromUnwrap = ByteBuffer.allocate(DEFAULT_BUFFER_SIZE);
-        }
-
-        private static ByteBuffer append(ByteBuffer buf, ByteBuffer newData)
-        {
-            ByteBuffer target = buf;
-            while (newData.remaining() > target.remaining()) {
-                target = doubleBuffer(target);
-            }
-            target.put(newData);
-            return target;
         }
 
         private static ByteBuffer doubleBuffer(ByteBuffer b)
@@ -508,6 +490,11 @@ public class SSLWrap
             b.flip();
             ret.put(b);
             return ret;
+        }
+
+        private ByteBuffer makeOutputBuffer(int srcLen)
+        {
+
         }
 
         @JSGetter("peerAuthorized")
@@ -527,31 +514,38 @@ public class SSLWrap
         @JSFunction
         public static Object wrap(Context cx, Scriptable thisObj, Object[] args, Function func)
         {
+            Buffer.BufferImpl buf = objArg(args, 0, Buffer.BufferImpl.class, false);
+            int offset = intArg(args, 1, 0);
             EngineImpl self = (EngineImpl)thisObj;
 
-            if ((args.length > 0) && (args[0] != Context.getUndefinedValue())) {
-                Buffer.BufferImpl buf = (Buffer.BufferImpl)args[0];
-                ByteBuffer newData = buf.getBuffer();
-                self.toWrap = append(self.toWrap, newData);
+            ByteBuffer toWrap = EMPTY_BUF;
+            if (buf != null) {
+                toWrap = buf.getBuffer();
+                toWrap.position(toWrap.position() + offset);
             }
+            // For wrapping, SSLEngine will not write even a single byte until the whole output buffer
+            // is the appropriate size.
+            // This ends up allocating a new ~16K ByteBuffer for each SSL
+            // packet, but it is passed to JS with zero copying.
+            // Possible performance tweak: Pre-allocate a buffer once during the lifetime of the SSLengine,
+            // and copy to a (usually smaller) JS buffer.
+            ByteBuffer fromWrap = ByteBuffer.allocate(self.engine.getSession().getPacketBufferSize());
 
             Scriptable result = cx.newObject(thisObj);
             SSLEngineResult sslResult;
             try {
-                self.toWrap.flip();
                 do {
                     if (log.isDebugEnabled()) {
-                        log.debug("SSLEngine wrap {} -> {}", self.toWrap, self.fromWrap);
+                        log.debug("SSLEngine wrap {} -> {}", toWrap, fromWrap);
                     }
-                    sslResult = self.engine.wrap(self.toWrap, self.fromWrap);
+                    sslResult = self.engine.wrap(toWrap, fromWrap);
                     if (log.isDebugEnabled()) {
-                        log.debug("  wrap {} -> {} = {}", self.toWrap, self.fromWrap, sslResult);
+                        log.debug("  wrap {} -> {} = {}", toWrap, fromWrap, sslResult);
                     }
                     if (sslResult.getStatus() == SSLEngineResult.Status.BUFFER_OVERFLOW) {
-                        self.fromWrap = doubleBuffer(self.fromWrap);
+                        fromWrap = doubleBuffer(fromWrap);
                     }
                 } while (sslResult.getStatus() == SSLEngineResult.Status.BUFFER_OVERFLOW);
-                self.toWrap.compact();
             } catch (SSLException ssle) {
                 if (log.isDebugEnabled()) {
                     log.debug("SSLException: {}", ssle);
@@ -559,39 +553,42 @@ public class SSLWrap
                 return self.makeException(result, ssle);
             }
 
-            return self.makeResult(cx, self.toWrap, self.fromWrap, sslResult, result);
+            return self.makeResult(cx, toWrap, fromWrap, sslResult, result);
         }
 
         @JSFunction
         public static Object unwrap(Context cx, Scriptable thisObj, Object[] args, Function func)
         {
+            Buffer.BufferImpl buf = objArg(args, 0, Buffer.BufferImpl.class, false);
+            int offset = intArg(args, 1, 0);
             EngineImpl self = (EngineImpl)thisObj;
 
-            if ((args.length > 0) && (args[0] != Context.getUndefinedValue())) {
-                Buffer.BufferImpl buf = (Buffer.BufferImpl)args[0];
-                if (buf != null) {
-                    ByteBuffer newData = buf.getBuffer();
-                    self.toUnwrap = append(self.toUnwrap, newData);
-                }
+            ByteBuffer toUnwrap = EMPTY_BUF;
+            if (buf != null) {
+                toUnwrap = buf.getBuffer();
+                toUnwrap.position(toUnwrap.position() + offset);
             }
+
+            // For unwrapping, calculate an output buffer no bigger than what SSLEngine might give us
+            int bufLen = Math.max(toUnwrap.remaining(), MIN_BUFFER_SIZE);
+            bufLen = Math.min(bufLen, self.engine.getSession().getApplicationBufferSize());
+            ByteBuffer fromUnwrap = ByteBuffer.allocate(bufLen);
 
             Scriptable result = cx.newObject(thisObj);
             SSLEngineResult sslResult;
             try {
-                self.toUnwrap.flip();
                 do {
                     if (log.isDebugEnabled()) {
-                        log.debug("SSLEngine unwrap {} -> {}", self.toUnwrap, self.fromUnwrap);
+                        log.debug("SSLEngine unwrap {} -> {}", toUnwrap, fromUnwrap);
                     }
-                    sslResult = self.engine.unwrap(self.toUnwrap, self.fromUnwrap);
+                    sslResult = self.engine.unwrap(toUnwrap, fromUnwrap);
                     if (log.isDebugEnabled()) {
-                        log.debug("  unwrap {} -> {} = {}", self.toUnwrap, self.fromUnwrap, sslResult);
+                        log.debug("  unwrap {} -> {} = {}", toUnwrap, fromUnwrap, sslResult);
                     }
                     if (sslResult.getStatus() == SSLEngineResult.Status.BUFFER_OVERFLOW) {
-                        self.fromUnwrap = ByteBuffer.allocate(self.fromUnwrap.capacity() * 2);
+                        fromUnwrap = ByteBuffer.allocate(fromUnwrap.capacity() * 2);
                     }
                 } while (sslResult.getStatus() == SSLEngineResult.Status.BUFFER_OVERFLOW);
-                self.toUnwrap.compact();
             } catch (SSLException ssle) {
                 if (log.isDebugEnabled()) {
                     log.debug("SSLException: {}", ssle);
@@ -599,7 +596,7 @@ public class SSLWrap
                 return self.makeException(result, ssle);
             }
 
-            return self.makeResult(cx, self.toUnwrap, self.fromUnwrap, sslResult, result);
+            return self.makeResult(cx, toUnwrap, fromUnwrap, sslResult, result);
         }
 
         private Scriptable makeException(Scriptable r, Exception e)
@@ -656,7 +653,8 @@ public class SSLWrap
 
             if (outBuf.position() > 0) {
                 outBuf.flip();
-                Buffer.BufferImpl resultBuf = Buffer.BufferImpl.newBuffer(cx, this, outBuf, true);
+                // Reference the bytes in the buffer that we made so far -- don't copy them
+                Buffer.BufferImpl resultBuf = Buffer.BufferImpl.newBuffer(cx, this, outBuf, false);
                 outBuf.clear();
                 result.put("data", result, resultBuf);
             }

@@ -445,8 +445,7 @@ CleartextStream.prototype._write = function(data, encoding, cb) {
 };
 
 function writeData(self, data, offset, cb) {
-  var chunk = offset ? data.slice(offset) : data;
-  writeCleartext(self, chunk, function(written) {
+  writeCleartext(self, data, offset, function(written) {
     debug(self.id + ' Net wrote ' + written + ' bytes from ' + data.length);
     var newOffset = offset + written;
     if (newOffset < data.length) {
@@ -496,17 +495,40 @@ function handleReadable(self) {
   }
 }
 
-function readLoop(self) {
-  var data;
-  do {
-    data = self.socket.read();
-    debug(self.id + ' Read ' + (data == null ? 0 : data.length) + ' from the socket');
-    if (data === null) {
-      this._socketReadable = false;
+// Call readCiphertext, which might take multiple calls and be async, until it reads everything
+function processReading(self, d, offset, cb) {
+  var newOffset = offset;
+
+  var readData = d;
+  if (self._underflowBuf) {
+    readData = Buffer.concat([ self._underflowBuf, d ]);
+    self._underflowBuf = undefined;
+  }
+
+  debug(self.id + ' processReading');
+  readCiphertext(self, readData, newOffset, function(readCount, underflow) {
+    newOffset += readCount;
+    if (underflow) {
+      self._underflowBuf = readData.slice(newOffset);
+      cb();
+    } else if (newOffset < readData.length) {
+      processReading(self, readData, newOffset, cb);
     } else {
-      readCiphertext(self, data);
+      cb();
     }
-  } while (data !== null);
+  });
+}
+
+function readLoop(self) {
+  var data = self.socket.read();
+  debug(self.id + ' Read ' + (data == null ? 0 : data.length) + ' from the socket');
+  if (data === null) {
+    this._socketReadable = false;
+  } else {
+    processReading(self, data, 0, function() {
+      readLoop(self);
+    });
+  }
 }
 
 CleartextStream.prototype._read = function(maxLen) {
@@ -655,15 +677,13 @@ CleartextStream.prototype.getPeerCertificate = function() {
   return cert;
 };
 
-function readCiphertext(self, d, offset, end) {
-  var data;
-  if (offset || end) {
-    data = d.slice(offset, end);
-  } else {
-    data = d;
-  }
-  var sslResult = self.engine.unwrap(data);
-  debug(self.id + ' readCiphertext(' + (data ? data.length : 0) + '): SSL status ' + sslResult.status +
+function readCiphertext(self, data, offset, cb) {
+  var newOffset = offset;
+  var sslResult = self.engine.unwrap(data, offset);
+  var bytesConsumed = sslResult.consumed;
+  newOffset += bytesConsumed;
+
+  debug(self.id + ' readCiphertext(' + (data ? data.length : 0) + ', ' + offset + '): SSL status ' + sslResult.status +
         ' consumed ' + sslResult.consumed + ' produced ' + (sslResult.data ? sslResult.data.length : 0));
   if (sslResult.justHandshaked) {
     setImmediate(function() {
@@ -671,29 +691,46 @@ function readCiphertext(self, d, offset, end) {
     });
   }
 
+  var lcb;
+  var underflow;
   switch (sslResult.status) {
     case self.engine.NEED_WRAP:
-      writeCleartext(self);
+      lcb = cb;
+      cb = undefined;
+      writeCleartext(self, data, newOffset, function() {
+        if (lcb) {
+          lcb(bytesConsumed);
+        }
+      });
       break;
     case self.engine.NEED_UNWRAP:
-      // Sometimes we need to unwrap while we're unwrapping I guess
-      readCiphertext(self);
+      lcb = cb;
+      cb = undefined;
+      readCiphertext(self, data, newOffset, function(readCount) {
+        if (lcb) {
+          lcb(readCount + bytesConsumed);
+        }
+      });
       break;
     case self.engine.NEED_TASK:
+      lcb = cb;
+      cb = undefined;
       self.engine.runTask(function() {
-        readCiphertext(self);
+        debug(self.id + ' task complete from read');
+        readCiphertext(self, data, newOffset, function(readCount) {
+          if (lcb) {
+            lcb(readCount + bytesConsumed);
+          }
+        });
       });
       break;
     case self.engine.UNDERFLOW:
       // Nothing to do -- wait until we get more data
+      underflow = true;
       break;
     case self.engine.OK:
       if (sslResult.data) {
         pushRead(self, sslResult.data);
-      }
-      if (sslResult.remaining > 0) {
-        // Once handshaking is done, we might need to unwrap again with the same data
-        readCiphertext(self);
       }
       break;
     case self.engine.CLOSED:
@@ -712,39 +749,70 @@ function readCiphertext(self, d, offset, end) {
     default:
       throw 'Unexpected SSL engine status ' + sslResult.status;
   }
+
+  if (cb) {
+    cb(bytesConsumed, underflow);
+  }
+  return bytesConsumed;
 }
 
-function writeCleartext(self, data, cb) {
-  var sslResult = self.engine.wrap(data);
+function writeCleartext(self, data, offset, cb) {
+  var newOffset = offset;
+  var sslResult = self.engine.wrap(data, offset);
   var bytesConsumed = sslResult.consumed;
-  debug(self.id + ' writeCleartext(' + (data ? data.length : 0) + '): SSL status ' + sslResult.status +
+  newOffset += sslResult.consumed;
+
+  debug(self.id + ' writeCleartext(' + (data ? data.length : 0) + ', ' + offset + '): SSL status ' + sslResult.status +
         ' length ' + (sslResult.data ? sslResult.data.length : 0) + ' consumed ' + bytesConsumed);
 
   if (sslResult.data) {
     debug(self.id + ' Writing ' + sslResult.data.length);
     self.socket.write(sslResult.data, function() {
-      debug(self.id + ' Write complete');
-      if (cb) {
-        cb(bytesConsumed);
-      }
+      debug(self.id + ' write complete');
+      continueWriteCleartext(self, sslResult.status, data, newOffset, bytesConsumed, cb);
     });
+  } else {
+    continueWriteCleartext(self, sslResult.status, data, newOffset, bytesConsumed, cb);
   }
   if (sslResult.justHandshaked) {
     setImmediate(function() {
         self.justHandshaked();
     });
   }
+}
 
-  switch (sslResult.status) {
+function continueWriteCleartext(self, status, data, offset, bytesConsumed, c) {
+  var cb = c;
+  var lcb;
+  switch (status) {
     case self.engine.NEED_WRAP:
-      bytesConsumed += writeCleartext(self);
+      lcb = cb;
+      cb = undefined;
+      writeCleartext(self, data, offset, function(writeCount) {
+        if (lcb) {
+          lcb(writeCount + bytesConsumed);
+        }
+      });
       break;
     case self.engine.NEED_UNWRAP:
-      readCiphertext(self);
+      lcb = cb;
+      cb = undefined;
+      readCiphertext(self, data, offset, function() {
+        if (lcb) {
+          lcb(bytesConsumed);
+        }
+      });
       break;
     case self.engine.NEED_TASK:
+      lcb = cb;
+      cb = undefined;
       self.engine.runTask(function() {
-        writeCleartext(self);
+        debug(self.id + ' task complete from write');
+        writeCleartext(self, data, offset, function(writeCount) {
+          if (lcb) {
+            lcb(writeCount + bytesConsumed);
+          }
+        });
       });
       break;
     case self.engine.UNDERFLOW:
@@ -765,6 +833,10 @@ function writeCleartext(self, data, cb) {
       break;
     default:
       throw 'Unexpected SSL engine status ' + sslResult.status;
+  }
+
+  if (cb) {
+    cb(bytesConsumed);
   }
   return bytesConsumed;
 }

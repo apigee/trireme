@@ -492,11 +492,6 @@ public class SSLWrap
             return ret;
         }
 
-        private ByteBuffer makeOutputBuffer(int srcLen)
-        {
-
-        }
-
         @JSGetter("peerAuthorized")
         public boolean isPeerAuthorized() {
             return peerAuthorized;

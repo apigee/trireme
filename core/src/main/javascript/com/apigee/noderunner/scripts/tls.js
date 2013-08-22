@@ -36,7 +36,9 @@ var EventEmitter = require('events').EventEmitter;
 var tlscheckidentity = require('tls_checkidentity');
 
 var debug;
+var debugEnabled;
 if (process.env.NODE_DEBUG && /tls/.test(process.env.NODE_DEBUG)) {
+  debugEnabled = true;
   debug = function(x) { console.error('TLS:', x); };
 } else {
   debug = function() { };
@@ -63,12 +65,16 @@ function getContext(opts, rejectUnauthorized) {
     debug('Using SSL context that trusts everyone');
     ctx.setTrustEverybody();
   } else if (opts.truststore) {
-    debug('Using Java trust store ' + opts.truststore);
+    if (debugEnabled) {
+      debug('Using Java trust store ' + opts.truststore);
+    }
     ctx.setTrustStore(opts.truststore);
   }
 
   if (opts.ca) {
-    debug('Client using array of ' + opts.ca.length + ' certs');
+    if (debugEnabled) {
+      debug('Client using array of ' + opts.ca.length + ' certs');
+    }
     if (opts.ca.length === 0) {
       // Special case
       ctx.addTrustedCert(0, null);
@@ -80,7 +86,9 @@ function getContext(opts, rejectUnauthorized) {
   }
 
   if (opts.keystore) {
-    debug('Client using key store ' + opts.keystore);
+    if (debugEnabled) {
+      debug('Client using key store ' + opts.keystore);
+    }
     ctx.setKeyStore(opts.keystore, opts.passphrase);
   } else {
     if (opts.key) {
@@ -123,7 +131,9 @@ function Server() {
   self.context = wrap.createContext();
 
   if (options.keystore) {
-    debug('Server using Java key store ' + options.keystore);
+    if (debugEnabled) {
+      debug('Server using Java key store ' + options.keystore);
+    }
     self.context.setKeyStore(options.keystore, options.passphrase);
   } else {
     if (options.key) {
@@ -145,7 +155,9 @@ function Server() {
 
   if (options.truststore) {
     // Use an explicit Java trust store
-    debug('Server using trust store ' + options.truststore);
+    if (debugEnabled) {
+      debug('Server using trust store ' + options.truststore);
+    }
     self.context.setTrustStore(options.truststore);
   } else if (!self.rejectUnauthorized || !options.requestCert) {
     // Client cert requested but we shouldn't reject everyone right away, but set "authorized".
@@ -155,7 +167,9 @@ function Server() {
   // Otherwise, in "init" we will set up a Java trust manager only for the supplied CAs
 
   if (options.ca) {
-    debug('Server using array of ' + options.ca.length + ' certs');
+    if (debugEnabled) {
+      debug('Server using array of ' + options.ca.length + ' certs');
+    }
     if (options.ca.length === 0) {
       // Special case
       self.context.addTrustedCert(0, null);
@@ -306,7 +320,9 @@ exports.connect = function() {
     if (options.host || options.port) {
       netOptions.path = undefined;
     }
-    debug('Connecting with ' + JSON.stringify(netOptions));
+    if (debugEnabled) {
+      debug('Connecting with ' + JSON.stringify(netOptions));
+    }
     netConn = net.connect(netOptions, function() {
       sslConn.remoteAddress = netConn.remoteAddress;
       sslConn.remotePort = netConn.remotePort;
@@ -375,16 +391,22 @@ CleartextStream.prototype.init = function(serverMode, server, connection, engine
     handleReadable(self);
   });
   connection.on('end', function() {
-    debug(self.id + ' onEnd');
+    if (debugEnabled) {
+      debug(self.id + ' onEnd');
+    }
     handleEnd(self);
   });
 
   connection.on('error', function(err) {
-    debug(self.id + ' onError');
+    if (debugEnabled) {
+      debug(self.id + ' onError');
+    }
     self.emit('error', err);
   });
   connection.on('close', function() {
-    debug(self.id + ' onClose');
+    if (debugEnabled) {
+      debug(self.id + ' onClose');
+    }
     if (!self.closed) {
       self.closed = true;
       process.nextTick(function() {
@@ -393,7 +415,9 @@ CleartextStream.prototype.init = function(serverMode, server, connection, engine
     }
   });
   connection.on('timeout', function() {
-    debug(self.id + ' onTimeout');
+    if (debugEnabled) {
+      debug(self.id + ' onTimeout');
+    }
     self.emit('timeout');
   });
 };
@@ -407,7 +431,9 @@ CleartextStream.prototype.setHandshakeTimeout = function(timeout) {
 };
 
 function doClose(self, err) {
-  debug(self.id + ' destroy');
+  if (debugEnabled) {
+    debug(self.id + ' destroy');
+  }
   self.closed = true;
   self.socket.destroy();
   process.nextTick(function() {
@@ -430,7 +456,9 @@ CleartextStream.prototype.address = function() {
 };
 
 CleartextStream.prototype._write = function(data, encoding, cb) {
-  debug(this.id + ' _write(' + (data ? data.length : 0) + ')');
+  if (debugEnabled) {
+    debug(this.id + ' _write(' + (data ? data.length : 0) + ')');
+  }
 
   if (this.handshakeComplete) {
     writeData(this, data, 0, cb);
@@ -446,7 +474,9 @@ CleartextStream.prototype._write = function(data, encoding, cb) {
 
 function writeData(self, data, offset, cb) {
   writeCleartext(self, data, offset, function(written) {
-    debug(self.id + ' Net wrote ' + written + ' bytes from ' + data.length);
+    if (debugEnabled) {
+      debug(self.id + ' Net wrote ' + written + ' bytes from ' + data.length);
+    }
     var newOffset = offset + written;
     if (newOffset < data.length) {
       writeData(self, data, newOffset, cb);
@@ -459,7 +489,9 @@ function writeData(self, data, offset, cb) {
 }
 
 CleartextStream.prototype.end = function(data, encoding) {
-  debug(this.id + ' end(' + (data ? data.length : 0) + ')');
+  if (debugEnabled) {
+    debug(this.id + ' end(' + (data ? data.length : 0) + ')');
+  }
 
   var self = this;
   if (this.handshakeComplete) {
@@ -476,7 +508,9 @@ CleartextStream.prototype.end = function(data, encoding) {
 function doEnd(self, data, encoding) {
   if (!self.ended) {
     self.on('finish', function() {
-      debug(self.id + ' onFinish: Closing SSL outbound');
+      if (debugEnabled) {
+        debug(self.id + ' onFinish: Closing SSL outbound');
+      }
       self.ended = true;
       self.engine.closeOutbound();
       while (!self.engine.isOutboundDone()) {
@@ -488,7 +522,9 @@ function doEnd(self, data, encoding) {
 }
 
 function handleReadable(self) {
-  debug(self.id + ' onReadable');
+  if (debugEnabled) {
+    debug(self.id + ' onReadable');
+  }
   self._socketReadable = true;
   if (!self._clientPaused) {
     readLoop(self);
@@ -505,7 +541,9 @@ function processReading(self, d, offset, cb) {
     self._underflowBuf = undefined;
   }
 
-  debug(self.id + ' processReading');
+  if (debugEnabled) {
+    debug(self.id + ' processReading');
+  }
   readCiphertext(self, readData, newOffset, function(readCount, underflow) {
     newOffset += readCount;
     if (underflow) {
@@ -521,7 +559,9 @@ function processReading(self, d, offset, cb) {
 
 function readLoop(self) {
   var data = self.socket.read();
-  debug(self.id + ' Read ' + (data == null ? 0 : data.length) + ' from the socket');
+  if (debugEnabled) {
+    debug(self.id + ' Read ' + (data == null ? 0 : data.length) + ' from the socket');
+  }
   if (data === null) {
     this._socketReadable = false;
   } else {
@@ -532,7 +572,9 @@ function readLoop(self) {
 }
 
 CleartextStream.prototype._read = function(maxLen) {
-  debug(this.id + ' _read');
+  if (debugEnabled) {
+    debug(this.id + ' _read');
+  }
   this._clientPaused = false;
   if (this._socketReadable) {
     readLoop(this);
@@ -540,7 +582,9 @@ CleartextStream.prototype._read = function(maxLen) {
 };
 
 function pushRead(self, d) {
-  debug(self.id + ' Pushing ' + (d ? d.length : 0));
+  if (debugEnabled) {
+    debug(self.id + ' Pushing ' + (d ? d.length : 0));
+  }
   if (d === END_SENTINEL) {
     if (self.onend) {
       self.onend();
@@ -552,7 +596,9 @@ function pushRead(self, d) {
       self.ondata(d, 0, d.length);
     } else {
       if (!self.push(d)) {
-        debug(self.id + ' push queue full');
+        if (debugEnabled) {
+          debug(self.id + ' push queue full');
+        }
         self._clientPaused = true;
       }
     }
@@ -565,10 +611,14 @@ function handleEnd(self) {
     if (!self.handshakeComplete) {
       self.handleSSLError('Connection closed by peer');
     } else if (self.ended) {
-      debug(self.id + ' received end from the other side after our own end');
+      if (debugEnabled) {
+        debug(self.id + ' received end from the other side after our own end');
+      }
       doClose(self);
     } else {
-      debug(self.id + ' Closing SSL inbound without a close from the client', self.id);
+      if (debugEnabled) {
+        debug(self.id + ' Closing SSL inbound without a close from the client', self.id);
+      }
       /* assess if we need this.
       self.engine.closeInbound();
       while (!self.engine.isInboundDone()) {
@@ -622,8 +672,10 @@ CleartextStream.prototype.justHandshaked = function() {
 };
 
 CleartextStream.prototype.handleSSLError = function(err) {
-  debug(this.id + ' Received an error (handshake complete = ' +
-        this.handshakeComplete + '): ' + err);
+  if (debugEnabled) {
+    debug(this.id + ' Received an error (handshake complete = ' +
+          this.handshakeComplete + '): ' + err);
+  }
   if (this.handshakeComplete) {
     this.emit('error', err);
     doClose(this, true);
@@ -683,8 +735,10 @@ function readCiphertext(self, data, offset, cb) {
   var bytesConsumed = sslResult.consumed;
   newOffset += bytesConsumed;
 
-  debug(self.id + ' readCiphertext(' + (data ? data.length : 0) + ', ' + offset + '): SSL status ' + sslResult.status +
-        ' consumed ' + sslResult.consumed + ' produced ' + (sslResult.data ? sslResult.data.length : 0));
+  if (debugEnabled) {
+    debug(self.id + ' readCiphertext(' + (data ? data.length : 0) + ', ' + offset + '): SSL status ' + sslResult.status +
+          ' consumed ' + sslResult.consumed + ' produced ' + (sslResult.data ? sslResult.data.length : 0));
+  }
   if (sslResult.justHandshaked) {
     setImmediate(function() {
       self.justHandshaked();
@@ -716,7 +770,9 @@ function readCiphertext(self, data, offset, cb) {
       lcb = cb;
       cb = undefined;
       self.engine.runTask(function() {
-        debug(self.id + ' task complete from read');
+        if (debugEnabled) {
+          debug(self.id + ' task complete from read');
+        }
         readCiphertext(self, data, newOffset, function(readCount) {
           if (lcb) {
             lcb(readCount + bytesConsumed);
@@ -762,13 +818,19 @@ function writeCleartext(self, data, offset, cb) {
   var bytesConsumed = sslResult.consumed;
   newOffset += sslResult.consumed;
 
-  debug(self.id + ' writeCleartext(' + (data ? data.length : 0) + ', ' + offset + '): SSL status ' + sslResult.status +
-        ' length ' + (sslResult.data ? sslResult.data.length : 0) + ' consumed ' + bytesConsumed);
+  if (debugEnabled) {
+    debug(self.id + ' writeCleartext(' + (data ? data.length : 0) + ', ' + offset + '): SSL status ' + sslResult.status +
+          ' length ' + (sslResult.data ? sslResult.data.length : 0) + ' consumed ' + bytesConsumed);
+  }
 
   if (sslResult.data) {
-    debug(self.id + ' Writing ' + sslResult.data.length);
+    if (debugEnabled) {
+      debug(self.id + ' Writing ' + sslResult.data.length);
+    }
     self.socket.write(sslResult.data, function() {
-      debug(self.id + ' write complete');
+      if (debugEnabled) {
+        debug(self.id + ' write complete');
+      }
       continueWriteCleartext(self, sslResult.status, data, newOffset, bytesConsumed, cb);
     });
   } else {
@@ -807,7 +869,9 @@ function continueWriteCleartext(self, status, data, offset, bytesConsumed, c) {
       lcb = cb;
       cb = undefined;
       self.engine.runTask(function() {
-        debug(self.id + ' task complete from write');
+        if (debugEnabled) {
+          debug(self.id + ' task complete from write');
+        }
         writeCleartext(self, data, offset, function(writeCount) {
           if (lcb) {
             lcb(writeCount + bytesConsumed);

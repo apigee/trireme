@@ -370,12 +370,9 @@ CleartextStream.prototype.init = function(serverMode, server, connection, engine
   self.remoteAddress = self.socket.remoteAddress;
   self.remotePort = self.socket.remotePort;
   self.encrypted = true;
-  self.readQueue = [];
 
   connection.on('readable', function() {
-    debug(self.id + ' onReadable');
-    var data = connection.read();
-    readCiphertext(self, data);
+    handleReadable(self);
   });
   connection.on('end', function() {
     debug(self.id + ' onEnd');
@@ -450,7 +447,7 @@ CleartextStream.prototype._write = function(data, encoding, cb) {
 function writeData(self, data, offset, cb) {
   var chunk = offset ? data.slice(offset) : data;
   writeCleartext(self, chunk, function(written) {
-    debug('Net wrote ' + written + ' bytes from ' + data.length);
+    debug(self.id + ' Net wrote ' + written + ' bytes from ' + data.length);
     var newOffset = offset + written;
     if (newOffset < data.length) {
       writeData(self, data, newOffset, cb);
@@ -463,7 +460,7 @@ function writeData(self, data, offset, cb) {
 }
 
 CleartextStream.prototype.end = function(data, encoding) {
-  debug(this.id + ' end(' + (data ? data.length : 0) + ')');;
+  debug(this.id + ' end(' + (data ? data.length : 0) + ')');
 
   var self = this;
   if (this.handshakeComplete) {
@@ -491,32 +488,51 @@ function doEnd(self, data, encoding) {
   Stream.Writable.prototype.end.call(self, data, encoding);
 }
 
+function handleReadable(self) {
+  debug(self.id + ' onReadable');
+  self._socketReadable = true;
+  if (!self._clientPaused) {
+    readLoop(self);
+  }
+}
+
+function readLoop(self) {
+  var data;
+  do {
+    data = self.socket.read();
+    debug(self.id + ' Read ' + (data == null ? 0 : data.length) + ' from the socket');
+    if (data === null) {
+      this._socketReadable = false;
+    } else {
+      readCiphertext(self, data);
+    }
+  } while (data !== null);
+}
+
 CleartextStream.prototype._read = function(maxLen) {
-  debug('_read');
-  this.readPending = true;
-  while (this.readPending && (this.readQueue.length)) {
-    var chunk = this.readQueue.shift();
-    pushRead(this, chunk);
+  debug(this.id + ' _read');
+  this._clientPaused = false;
+  if (this._socketReadable) {
+    readLoop(this);
   }
 };
 
 function pushRead(self, d) {
-  debug('Pushing ' + (d ? d.length : 0) + ' readPending = ' + self.readPending);
+  debug(self.id + ' Pushing ' + (d ? d.length : 0));
   if (d === END_SENTINEL) {
     if (self.onend) {
       self.onend();
-    } else if (self.readPending) {
-      self.push(null);
     } else {
-      self.readQueue.push(null);
+      self.push(null);
     }
   } else {
     if (self.ondata) {
       self.ondata(d, 0, d.length);
-    } else if (self.readPending) {
-      self.readPending = self.push(d);
     } else {
-      self.readQueue.push(d);
+      if (!self.push(d)) {
+        debug(self.id + ' push queue full');
+        self._clientPaused = true;
+      }
     }
   }
 }

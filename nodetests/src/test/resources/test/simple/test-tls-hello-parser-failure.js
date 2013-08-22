@@ -35,7 +35,8 @@ bonkers.fill(42);
 
 var server = tls.createServer(options, function(c) {
 
-}).listen(common.PORT, function() {
+});
+server.listen(common.PORT, function() {
   var client = net.connect(common.PORT, function() {
     client.write(bonkers);
   });

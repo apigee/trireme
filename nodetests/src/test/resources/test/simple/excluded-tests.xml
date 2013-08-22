@@ -153,6 +153,14 @@
         <Name>test-tls-connect-pipe.js</Name>
         <Description>No pipes in TLS</Description>
     </Excluded>
+    <Excluded>
+        <Name>test-tls-handshake-nohang.js</Name>
+        <Description>requires SecurePair</Description>
+    </Excluded>
+    <Excluded>
+        <Name>test-tls-securepair.*\.js</Name>
+        <Description>No SecurePair</Description>
+    </Excluded>
 
     <!-- DIFFERENT TESTS
          We have different versions of these tests in the "noderunner" directory because they must
@@ -250,15 +258,19 @@
     </Excluded>
     <Excluded>
         <Name>test-http-parser-bad-ref.js</Name>
-        <Excluded>Uses V8 "gc" method.</Excluded>
+        <Description>Uses V8 "gc" method.</Description>
     </Excluded>
     <Excluded>
         <Name>test-tls-set-encoding.js</Name>
-        <Excluded>Depends on "readyState"</Excluded>
+        <Description>Depends on "readyState"</Description>
     </Excluded>
     <Excluded>
         <Name>test-tls-server-slab.js</Name>
-        <Excluded>Depends on internal "slab buffer size"</Excluded>
+        <Description>Depends on internal "slab buffer size"</Description>
+    </Excluded>
+    <Excluded>
+        <Name>test-tls-client-abort3.js</Name>
+        <Description>Assumes that there is something called "ssl" on the socket</Description>
     </Excluded>
 
     <!-- MISCELLANEOUS

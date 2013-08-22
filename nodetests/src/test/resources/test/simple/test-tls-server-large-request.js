@@ -43,12 +43,14 @@ util.inherits(Mediator, stream.Writable);
 
 Mediator.prototype._write = function write(data, enc, cb) {
   this.buf += data;
-  setTimeout(cb, 0);
+  //setTimeout(cb, 0);
 
+  console.log('Total = %d out of %d', this.buf.length, request.length);
   if (this.buf.length >= request.length) {
     assert.equal(this.buf, request.toString());
     server.close();
   }
+  cb();
 };
 
 var mediator = new Mediator();

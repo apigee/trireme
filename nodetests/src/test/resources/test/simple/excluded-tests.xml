@@ -185,12 +185,6 @@
                      bits. Java does it differently unless we custom code it.</Description>
     </Excluded>
     <Excluded>
-        <Name>test-https-.+\.js</Name>
-        <Description>All HTTPS tests are run from the "noderunner" directory because they
-                     use a different keystore format.
-        </Description>
-    </Excluded>
-    <Excluded>
         <Name>test-pipe-address.js</Name>
         <Reason>UNIX sockets are not supported in Noderunner or in Java.</Reason>
     </Excluded>
@@ -233,10 +227,6 @@
          Tests that exercise internal, undocumented APIs in the original Node implementation.
     -->
     <Excluded>
-        <Name>test-https-pfx.js</Name>
-        <Description>Depends on internal SSL errors and cert parsing code.</Description>
-    </Excluded>
-    <Excluded>
         <Name>test-tcp-wrap.+</Name>
         <Description>Internal Node module.</Description>
     </Excluded>
@@ -271,6 +261,14 @@
     <Excluded>
         <Name>test-tls-client-abort3.js</Name>
         <Description>Assumes that there is something called "ssl" on the socket</Description>
+    </Excluded>
+    <Excluded>
+        <Name>test-https-timeout-server.js</Name>
+        <Description>Relies on internal fields.</Description>
+    </Excluded>
+    <Excluded>
+        <Name>test-https-no-reader.js</Name>
+        <Description>Relies on internal readableState</Description>
     </Excluded>
 
     <!-- MISCELLANEOUS

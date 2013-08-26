@@ -44,7 +44,7 @@ although it may not necessarily pass all the node.js tests.
   <tr><td>fs</td><td>Complete</td><td>node.js + Noderunner</td></tr>
   <tr><td>globals</td><td>Complete</td><td>node.js + Noderunner</td></tr>
   <tr><td>http</td><td>Complete</td><td>node.js + Noderunner</td></tr>
-  <tr><td>https</td><td>Partial</td><td>Noderunner</td></tr>
+  <tr><td>https</td><td>Complete</td><td>Noderunner</td></tr>
   <tr><td>module</td><td>Complete</td><td>node.js</td></tr>
   <tr><td>net</td><td>Complete</td><td>node.js + Noderunner</td></tr>
   <tr><td>os</td><td>Partial</td><td>Noderunner</td></tr>
@@ -57,7 +57,7 @@ although it may not necessarily pass all the node.js tests.
   <tr><td>stream</td><td>Complete</td><td>node.js</td></tr>
   <tr><td>string_decoder</td><td>Complete</td><td>node.js</td></tr>
   <tr><td>timers</td><td>Complete</td><td>node.js + Noderunner</td></tr>
-  <tr><td>tls</td><td>Partial</td><td>Noderunner</td></tr>
+  <tr><td>tls</td><td>Complete</td><td>Noderunner</td></tr>
   <tr><td>tty</td><td>Not Implemented</td><td>NA</td></tr>
   <tr><td>url</td><td>Complete</td><td>node.js</td></tr>
   <tr><td>util</td><td>Complete</td><td>node.js</td></tr>
@@ -86,12 +86,30 @@ Noderunner uses Java's standard "SSLEngine" for TLS/SSL and HTTPS support, where
 OpenSSL. The TLS implementation in Node.js is a fairly thin layer on top of OpenSSL and we chose not to try
 and replicate this in Java.
 
-That means that the biggest difference between the Node.js and Noderunner APIs is in how TLS certificates
-and keys are handled. Whereas many TLS programs in Node.js use the "key" and "cert" arguments, which contain
-PEM-encoded keys and certificates, Noderunner uses the "keystore" and "truststore" arguments, which contain
-the names of Java keystore files.
+Furthermore, Java's SSLEngine relies on its own "keystore" files, whereas OpenSSL can operate on a variety
+of files but typically processes PEM files.
+Noderunner handles this disparity by using the "Bouncy Castle" crypto framework to translate PEM files into
+keys and certificates that SSLEngine can understand.
 
-In other words, a Node.js HTTPS server may be written like this:
+In order to support TLS and HTTPS using PEM files, the "noderunner-crypto" module and its depdendencies
+(Bouncy Castle) must be in the class path. If they are not present, then TLS is still available, but it will
+only work with Java keystore files (see below) or without using any keys at all. Noderunner checks for this
+dependency at runtime, so it is simply a matter of including it on the class path, since it will fail
+at runtime if the dependency is neded, and work otherwise.
+
+(For instance, Noderunner can still execute a Node program that acts as an HTTPS client using only default
+certificates without requiring noderunner-crypto. But if it needs to validate a particular CA certificate
+or if it needs to use a client-side certificate then noderunner-crypto is also necessary.)
+
+In addition, the TLS and HTTPS-related methods in Noderunner can use a Java keystore instead of PEM files.
+There are three parameters that are relevant here:
+
+* keystore: The file name of a Java ".jks" keystore file containing a key and certificate
+* truststore: The file name of a Java ".jks" keystore file containing trusted CA certificates
+* passphrase: The passphrase for the keystore and truststore
+
+But the corresponding Noderunner script must be written like this, as it would be in any Node.js program. Howewver,
+if the "noderunner-crypto" module is not present in the classpath, then this will raise an exception:
 
     var options = {
       key: fs.readFileSync(common.fixturesDir + '/keys/agent1-key.pem'),
@@ -102,7 +120,7 @@ In other words, a Node.js HTTPS server may be written like this:
       console.log('got request');
     });
 
-But the corresponding Noderunner script must be written like this:
+In addition, the following is also valid, and "noderunner-crypto" will not be needed:
 
     var options = {
       keystore: common.fixturesDir + '/keys/agent1.jks',
@@ -113,22 +131,33 @@ But the corresponding Noderunner script must be written like this:
       console.log('got request');
     });
 
-Similarly, Noderunner supports the "truststore" argument to supply a trust store for validating connections
-with client-side certificates, and it supports the truststore as well so that a client may choose which
-server certificates to accept.
-
 ### Crypto
 
-The "crypto" module in Noderunner currently supports random numbers, hashes, and "mac" calculation. Ciphers,
-Diffie-Hellman, and public-key validation and signatures are not yet supported.
+With the combination of the built-in crypto support in Java, plus Bouncy Castle, crypto support can be fairly
+complete.
 
-Adding support for signing and validating will require us to either use a different key format like we
-did with TLS, or put code into Java to support PEM keys and signatures.
+Like TLS, certain features (Sign/Verify in particular) only work if the "noderunner-crypto" module and its
+dependencies are in the class path. If they are not present then these methods will throw an exception.
 
-Adding support for Ciphers is easier, but encrypting and signing with AES is sufficiently complex that we
-may need to spend some time if we wish this to be compatible with encrypted data from standard Node.js.
+The following crypto features
+work the same way in Noderunner as they do in standard Node.js:
 
-Finally, Diffie-Hellman should not be difficult if it is important for someone's application.
+* Random bytes
+* Hash
+* Hmac
+* Sign / Verify
+* PBKDF2 (however Java and OpenSSL appear to implement different algorithms, so some more work is required)
+
+The following features have not yet been implemented (although the underlying platform has all the support required
+to make it happen):
+
+* Cipher / Decipher
+* Diffie-Hellman
+
+In the particular case of "Cipher," Node.js uses a particular algorithm for "createCipher" based on a password
+with no salt that follows no known standard, and without the use of salt it is not terribly secure. Should
+we even implement this in Noderunner, or strongly discourage its use? (There is also a variant that can take
+a key generated by PBKDF2 which would be a lot more secure.)
 
 ### Child Process
 

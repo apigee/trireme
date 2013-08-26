@@ -19,7 +19,7 @@
     </dependency>
     <dependency>
       <groupId>com.apigee.noderunner</groupId>
-      <artifactId>noderunner-net</artifactId>
+      <artifactId>noderunner-crypto</artifactId>
       <version>0.6.3-SNAPSHOT</version>
     </dependency>
 

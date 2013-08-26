@@ -21,7 +21,6 @@
  */
 package com.apigee.noderunner.shell;
 
-import com.apigee.noderunner.container.netty.NettyHttpContainer;
 import com.apigee.noderunner.core.NodeEnvironment;
 import com.apigee.noderunner.core.NodeException;
 import com.apigee.noderunner.core.NodeScript;
@@ -120,8 +119,6 @@ public class Main
 
     private int run()
     {
-        String containerName = System.getProperty(ADAPTER_PROP);
-
         NodeEnvironment env = new NodeEnvironment();
         String opt = System.getProperty(SEAL_PROP);
         if (opt != null) {
@@ -133,10 +130,6 @@ public class Main
         }
 
         try {
-            if ((containerName != null) && "netty".equals(containerName)) {
-                env.setHttpContainer(new NettyHttpContainer());
-            }
-
             NodeScript ns;
             if (scriptFile != null) {
                 File sf = new File(scriptFile);

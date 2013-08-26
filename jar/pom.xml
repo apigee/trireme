@@ -19,7 +19,7 @@
     </dependency>
     <dependency>
       <groupId>com.apigee.noderunner</groupId>
-      <artifactId>noderunner-net</artifactId>
+      <artifactId>noderunner-crypto</artifactId>
       <version>0.6.3-SNAPSHOT</version>
     </dependency>
     <dependency>
@@ -51,9 +51,20 @@
               <createDependencyReducedPom>false</createDependencyReducedPom>
               <transformers>
                 <transformer implementation="org.apache.maven.plugins.shade.resource.ManifestResourceTransformer">
-                  <mainClass>com.apigee.noderunner.shell.Main</mainClass>
+                    <mainClass>com.apigee.noderunner.shell.Main</mainClass>
                 </transformer>
               </transformers>
+              <filters>
+                  <filter>
+                      <!-- Exclude digital signatures because we extracted Bouncy Castle, but won't re-sign the jar -->
+                      <artifact>*:*</artifact>
+                      <excludes>
+                          <exclude>META-INF/*.SF</exclude>
+                          <exclude>META-INF/*.DSA</exclude>
+                          <exclude>META-INF/*.RSA</exclude>
+                      </excludes>
+                  </filter>
+              </filters>
             </configuration>
           </execution>
         </executions>

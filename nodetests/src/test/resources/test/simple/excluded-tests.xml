@@ -221,7 +221,18 @@
         <Name>test-tls-client-reject.js</Name>
         <Description>In Java, when "rejectUnauthorized" is true, the server never sees the client.</Description>
     </Excluded>
-
+    <Excluded>
+        <Name>test-tls-getcipher.js</Name>
+        <Description>Java 7 has a different set of cipher suites than the OpenSSL ones in the test suite.</Description>
+    </Excluded>
+    <Excluded>
+        <Name>test-tls-set-ciphers.js</Name>
+        <Description>Java 7 has a different set of cipher suites than the OpenSSL ones in the test suite.</Description>
+    </Excluded>
+    <Excluded>
+        <Name>test-tls-honorcipherorder.js</Name>
+        <Description>Java 7 has a different set of cipher suites than the OpenSSL ones in the test suite.</Description>
+    </Excluded>
 
     <!-- INTERNAL TESTS
          Tests that exercise internal, undocumented APIs in the original Node implementation.
@@ -326,6 +337,34 @@
     <Excluded>
         <Name>test-http-localaddress-bind-error.js</Name>
         <Description>Race condition in closing the server socket when it may have been closed already.</Description>
+    </Excluded>
+    <Excluded>
+        <Name>test-bad-unicode.js</Name>
+        <Description>Doesn't throw exactly the same error</Description>
+    </Excluded>
+    <Excluded>
+        <Name>test-error-reporting.js</Name>
+        <Description>Depends on specific errors.</Description>
+    </Excluded>
+    <Excluded>
+        <Name>test-sys.js</Name>
+        <Description>Depends on fix to Rhino date parsing limitations.</Description>
+    </Excluded>
+    <Excluded>
+        <Name>test-string-decoder.js</Name>
+        <Description>Something weird with UTF-16LE and others</Description>
+    </Excluded>
+    <Excluded>
+        <Name>test-path.js</Name>
+        <Description>A pretty complicated test with a bunch of very specific paths.</Description>
+    </Excluded>
+    <Excluded>
+        <Name>test-querystring.js</Name>
+        <Description>Something else with UTF...</Description>
+    </Excluded>
+    <Excluded>
+        <Name>test-tls-peer-certificate.*\.js</Name>
+        <Description>Can't seem to get all the cert fields out in Java that OpenSSL can for Node.</Description>
     </Excluded>
 
     <!-- DEPRECATION

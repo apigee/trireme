@@ -57,7 +57,7 @@ although it may not necessarily pass all the node.js tests.
   <tr><td>stream</td><td>Complete</td><td>node.js</td></tr>
   <tr><td>string_decoder</td><td>Complete</td><td>node.js</td></tr>
   <tr><td>timers</td><td>Complete</td><td>node.js + Noderunner</td></tr>
-  <tr><td>tls</td><td>Complete</td><td>Noderunner</td></tr>
+  <tr><td>tls</td><td>Almost Complete</td><td>Noderunner</td></tr>
   <tr><td>tty</td><td>Not Implemented</td><td>NA</td></tr>
   <tr><td>url</td><td>Complete</td><td>node.js</td></tr>
   <tr><td>util</td><td>Complete</td><td>node.js</td></tr>
@@ -85,6 +85,12 @@ there is a problem. We would love some help from the Rhino community to start to
 Noderunner uses Java's standard "SSLEngine" for TLS/SSL and HTTPS support, whereas standard Node.js uses
 OpenSSL. The TLS implementation in Node.js is a fairly thin layer on top of OpenSSL and we chose not to try
 and replicate this in Java.
+
+SSLEngine and OpenSSl are not exactly the same. Most notably, especially with Java 7, SSLEngine supports
+a different set of cipher suites, particularly the various elliptical curve ciphers. There are ciphers in common
+(otherwise almost everything will break) but there are many that are not. Many Node.js tests that rely on
+older cipher suites using DES or RC4 will not run on Noderunner because many of these older and weaker
+cipher suites are disabled by default in Java.
 
 Furthermore, Java's SSLEngine relies on its own "keystore" files, whereas OpenSSL can operate on a variety
 of files but typically processes PEM files.

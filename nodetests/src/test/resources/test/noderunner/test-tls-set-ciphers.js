@@ -19,54 +19,44 @@
 // OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE
 // USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-if (!process.versions.openssl) {
-  console.error('Skipping because node compiled without OpenSSL.');
-  process.exit(0);
-}
-
 var common = require('../common');
 var assert = require('assert');
-var fs = require('fs');
+var exec = require('child_process').exec;
 var tls = require('tls');
-var path = require('path');
+var fs = require('fs');
 
-var cert = fs.readFileSync(path.join(common.fixturesDir, 'test_cert.pem'));
-var key = fs.readFileSync(path.join(common.fixturesDir, 'test_key.pem'));
+if (process.platform === 'win32') {
+  console.log("Skipping test, you probably don't have openssl installed.");
+  process.exit();
+}
 
-var errorEmitted = false;
+var options = {
+  key: fs.readFileSync(common.fixturesDir + '/keys/agent2-key.pem'),
+  cert: fs.readFileSync(common.fixturesDir + '/keys/agent2-cert.pem'),
+  ciphers: 'AES128-SHA'
+};
 
-var server = tls.createServer({
-  cert: cert,
-  key: key
-}, function(c) {
-  // Nop
-  setTimeout(function() {
-    c.destroy();
-    server.close();
-  }, 20);
-});
-server.listen(common.PORT, function() {
-  var conn = tls.connect({
-    cert: cert,
-    key: key,
-    rejectUnauthorized: false,
-    port: common.PORT
-  }, function() {
-    setTimeout(function() {
-      conn.destroy();
-    }, 20);
-  });
-
-  // SSL_write() call's return value, when called 0 bytes, should not be
-  // treated as error.
-  conn.end('');
-
-  conn.on('error', function(err) {
-    console.log(err);
-    errorEmitted = true;
-  });
-});
+var reply = 'I AM THE WALRUS'; // something recognizable
+var nconns = 0;
+var response = '';
 
 process.on('exit', function() {
-  assert.ok(!errorEmitted);
+  assert.equal(nconns, 1);
+  assert.notEqual(response.indexOf(reply), -1);
+});
+
+var server = tls.createServer(options, function(conn) {
+  conn.end(reply);
+  nconns++;
+});
+
+server.listen(common.PORT, '127.0.0.1', function() {
+  var cmd = 'openssl s_client -cipher ' + options.ciphers +
+            ' -connect 127.0.0.1:' + common.PORT;
+
+  exec(cmd, function(err, stdout, stderr) {
+    if (err) throw err;
+    response = stdout;
+    server.close();
+  });
 });

@@ -228,6 +228,10 @@ exports.createServer = function () {
   return new Server(arguments[0], arguments[1]);
 };
 
+exports.getCiphers = function() {
+  return wrap.getCiphers();
+};
+
 Server.prototype.listen = function() {
   var self = this;
   var port = arguments[0];

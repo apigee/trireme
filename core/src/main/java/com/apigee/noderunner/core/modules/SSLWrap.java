@@ -26,6 +26,7 @@ import com.apigee.noderunner.core.internal.CompositeTrustManager;
 import com.apigee.noderunner.core.internal.CryptoException;
 import com.apigee.noderunner.core.internal.CryptoService;
 import com.apigee.noderunner.core.internal.InternalNodeModule;
+import com.apigee.noderunner.core.internal.SSLCiphers;
 import com.apigee.noderunner.core.internal.Utils;
 import org.mozilla.javascript.Context;
 import org.mozilla.javascript.EvaluatorException;
@@ -152,6 +153,25 @@ public class SSLWrap
             ContextImpl ctx = (ContextImpl)cx.newObject(thisObj, ContextImpl.CLASS_NAME);
             ctx.init(self.runner);
             return ctx;
+        }
+
+        @JSFunction
+        public static Object getCiphers(Context cx, Scriptable thisObj, Object[] args, Function func)
+        {
+            try {
+                SSLEngine eng = SSLContext.getDefault().createSSLEngine();
+                List<String> supported =
+                    SSLCiphers.get().getSslCiphers("TLS", Arrays.asList(eng.getSupportedCipherSuites()));
+                Scriptable l = cx.newObject(func);
+
+                int i = 0;
+                for (String s : supported) {
+                    l.put(i++, l, s.toLowerCase());
+                }
+                return l;
+            } catch (NoSuchAlgorithmException e) {
+                return null;
+            }
         }
     }
 
@@ -788,7 +808,9 @@ public class SSLWrap
                 return null;
             }
             Scriptable ret = cx.newObject(thisObj);
-            ret.put("name", ret, self.engine.getSession().getCipherSuite());
+            SSLCiphers.Ciph ciph =
+                SSLCiphers.get().getJavaCipher(self.engine.getSession().getCipherSuite());
+            ret.put("name", ret, (ciph == null) ? self.engine.getSession().getCipherSuite() : ciph.getSslName());
             ret.put("version", ret, self.engine.getSession().getProtocol());
             return ret;
         }
@@ -796,16 +818,15 @@ public class SSLWrap
         @JSFunction
         public boolean validateCiphers(String cipherList)
         {
-            HashSet<String> supportedCiphers = new HashSet<String>(Arrays.asList(engine.getSupportedCipherSuites()));
-            if (log.isDebugEnabled()) {
-                log.debug("Supported protocols: " + Arrays.asList(engine.getEnabledProtocols()));
-                log.debug("Supported ciphers: " + supportedCiphers);
-            }
             boolean ret = true;
-            ArrayList<String> finalList = new ArrayList<String>();
+            HashSet<String> enabled = new HashSet<String>(Arrays.asList(engine.getEnabledCipherSuites()));
             for (String cipher : COLON.split(cipherList)) {
-                if (!supportedCiphers.contains(cipher)) {
-                    log.debug(cipher + " is not supported");
+                SSLCiphers.Ciph c = SSLCiphers.get().getSslCipher("TLS", cipher);
+                if (c == null) {
+                    log.debug(cipher + " is unknown");
+                    ret = false;
+                } else if (!enabled.contains(c.getJavaName())) {
+                    log.debug(cipher + " is not supported in the JVM");
                     ret = false;
                 }
             }
@@ -827,13 +848,13 @@ public class SSLWrap
         @JSFunction
         public void setCiphers(String cipherList)
         {
-            HashSet<String> supportedCiphers = new HashSet<String>(Arrays.asList(engine.getSupportedCipherSuites()));
             ArrayList<String> finalList = new ArrayList<String>();
             for (String cipher : COLON.split(cipherList)) {
-                if (!supportedCiphers.contains(cipher)) {
+                SSLCiphers.Ciph c = SSLCiphers.get().getSslCipher("TLS", cipher);
+                if (c == null) {
                     throw new EvaluatorException("Unsupported SSL cipher suite \"" + cipher + '\"');
                 }
-                finalList.add(cipher);
+                finalList.add(c.getJavaName());
             }
             engine.setEnabledCipherSuites(finalList.toArray(new String[finalList.size()]));
         }

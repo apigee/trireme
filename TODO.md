@@ -8,6 +8,8 @@ Pre-process the built-in scripts like Node does to:
 * Strip out "debug" calls
 * Process the various macros referring to DTrace and the like
 
+Replace "assert" which is, after all, "not expected to work outside V8", with Java code.
+
 Add in hooks for Codahale metrics.
 
 ** Node module status:

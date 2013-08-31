@@ -74,7 +74,7 @@ public class Process
         ScriptableObject.defineClass(scope, EnvImpl.class, false, true);
 
         ProcessImpl exports = (ProcessImpl) cx.newObject(scope, ProcessImpl.CLASS_NAME);
-        exports.setRunner(runner);
+        exports.setRunner(cx, runner);
 
         EnvImpl env = (EnvImpl) cx.newObject(scope, EnvImpl.CLASS_NAME);
         env.initialize(runner.getScriptObject().getEnvironment());
@@ -96,6 +96,7 @@ public class Process
         private Scriptable stdin;
         private Scriptable argv;
         private Scriptable env;
+        private Object eventEmitter;
         private long startTime;
         private ScriptRunner runner;
         private Object mainModule;
@@ -118,10 +119,13 @@ public class Process
             return CLASS_NAME;
         }
 
-        public void setRunner(NodeRuntime runner)
+        public void setRunner(Context cx, NodeRuntime runner)
         {
             // This is a low-level module and it's OK to access low-level stuff
             this.runner = (ScriptRunner)runner;
+
+            Scriptable eventModule = (Scriptable)runner.require("events", cx);
+            this.eventEmitter = ScriptableObject.getProperty(eventModule, "EventEmitter");
         }
 
         @JSGetter("mainModule")
@@ -569,6 +573,12 @@ public class Process
         public void setExiting(boolean e)
         {
             this.exiting = e;
+        }
+
+        @JSGetter("EventEmitter")
+        public Object getEventEmitter()
+        {
+            return this.eventEmitter;
         }
     }
 

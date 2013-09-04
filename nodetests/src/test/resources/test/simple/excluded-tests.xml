@@ -161,6 +161,22 @@
         <Name>test-tls-securepair.*\.js</Name>
         <Description>No SecurePair</Description>
     </Excluded>
+    <Excluded>
+        <Name>test-tls-session-cache.js</Name>
+        <Description>No access to the TLS session in NodeRunner / SSLEngine</Description>
+    </Excluded>
+    <Excluded>
+        <Name>test-tls-client-resume.js</Name>
+        <Description>No access to the TLS session in NodeRunner / SSLEngine</Description>
+    </Excluded>
+     <Excluded>
+        <Name>test-https-client-resume.js</Name>
+        <Description>No access to the TLS session in NodeRunner / SSLEngine</Description>
+    </Excluded>
+    <Excluded>
+        <Name>test-tls-honorcipherorder.js</Name>
+        <Description>Cipher ordering is not controled in SSLEngine the same way it is in OpenSSL.</Description>
+    </Excluded>
 
     <!-- DIFFERENT TESTS
          We have different versions of these tests in the "noderunner" directory because they must
@@ -381,6 +397,10 @@
     <Excluded>
         <Name>test-https-strict.js</Name>
         <Description>Depends on additional host names like "agent1", etc.</Description>
+    </Excluded>
+    <Excluded>
+        <Name>test-stdin-from-file.js</Name>
+        <Description>Requires some arguments to "./node" that we don't support.</Description>
     </Excluded>
 
     <!-- DEPRECATION

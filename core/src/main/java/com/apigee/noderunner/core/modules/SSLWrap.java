@@ -94,8 +94,6 @@ public class SSLWrap
     protected static final DateFormat X509_DATE = new SimpleDateFormat("MMM dd HH:mm:ss yyyy zzz");
     protected static CryptoService cryptoService;
 
-    public static final int BUFFER_SIZE = 8192;
-
     @Override
     public String getModuleName()
     {
@@ -217,9 +215,7 @@ public class SSLWrap
                     keyFactory.init(keyStore, passphrase);
                     keyManagers = keyFactory.getKeyManagers();
                 } finally {
-                    if (passphrase != null) {
-                        Arrays.fill(passphrase, '\0');
-                    }
+
                     keyIn.close();
                 }
 
@@ -227,6 +223,38 @@ public class SSLWrap
                 throw new EvaluatorException("Error opening key store: " + gse);
             } catch (IOException ioe) {
                 throw new EvaluatorException("I/O error reading key store: " + ioe);
+            } finally {
+                if (passphrase != null) {
+                    Arrays.fill(passphrase, '\0');
+                }
+            }
+        }
+
+        @JSFunction
+        public static void setPfx(Context cx, Scriptable thisObj, Object[] args, Function func)
+        {
+            Buffer.BufferImpl pfxBuf = objArg(args, 0, Buffer.BufferImpl.class, true);
+            String p = stringArg(args, 1, null);
+            char[] passphrase = (p == null ? null :p.toCharArray());
+            ContextImpl self = (ContextImpl)thisObj;
+
+            try {
+                ByteArrayInputStream bis = new ByteArrayInputStream(pfxBuf.getArray(),
+                                                                    pfxBuf.getArrayOffset(), pfxBuf.getLength());
+                KeyStore keyStore = KeyStore.getInstance("PKCS12");
+                keyStore.load(bis, passphrase);
+                KeyManagerFactory keyFactory = KeyManagerFactory.getInstance("SunX509");
+                keyFactory.init(keyStore, passphrase);
+                self.keyManagers = keyFactory.getKeyManagers();
+
+            } catch (GeneralSecurityException gse) {
+                throw new EvaluatorException("Error opening key store: " + gse);
+            } catch (IOException ioe) {
+                throw new EvaluatorException("I/O error reading key store: " + ioe);
+            } finally {
+                if (passphrase != null) {
+                    Arrays.fill(passphrase, '\0');
+                }
             }
         }
 

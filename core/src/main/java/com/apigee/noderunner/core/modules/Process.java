@@ -390,6 +390,9 @@ public class Process
         {
             int pid = intArg(args, 0);
             String signal = stringArg(args, 1, "TERM");
+            if ("0".equals(signal)) {
+                signal = null;
+            }
 
             ProcessWrap.kill(cx, thisObj, pid, signal);
         }

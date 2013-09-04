@@ -233,6 +233,18 @@
         <Name>test-tls-honorcipherorder.js</Name>
         <Description>Java 7 has a different set of cipher suites than the OpenSSL ones in the test suite.</Description>
     </Excluded>
+    <Excluded>
+        <Name>test-assert.js</Name>
+        <Description>On a stack overflow, Rhino and V8 behave differently, and this test tests that.</Description>
+    </Excluded>
+    <Excluded>
+        <Name>test-fs-utimes.js</Name>
+        <Description>Rhino can't handle all the necessary Date formats.</Description>
+    </Excluded>
+    <Excluded>
+        <Name>test-https-pfx.js</Name>
+        <Description>Different SSL error messages</Description>
+    </Excluded>
 
     <!-- INTERNAL TESTS
          Tests that exercise internal, undocumented APIs in the original Node implementation.
@@ -365,6 +377,10 @@
     <Excluded>
         <Name>test-tls-peer-certificate.*\.js</Name>
         <Description>Can't seem to get all the cert fields out in Java that OpenSSL can for Node.</Description>
+    </Excluded>
+    <Excluded>
+        <Name>test-https-strict.js</Name>
+        <Description>Depends on additional host names like "agent1", etc.</Description>
     </Excluded>
 
     <!-- DEPRECATION

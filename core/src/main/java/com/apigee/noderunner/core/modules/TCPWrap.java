@@ -171,7 +171,14 @@ public class TCPWrap
         @JSGetter("writeQueueSize")
         public int getWriteQueueSize()
         {
-            return (writeQueue == null ? 0 : writeQueue.size());
+            if (writeQueue == null) {
+                return 0;
+            }
+            int s = 0;
+            for (QueuedWrite qw : writeQueue) {
+                s += qw.getLength();
+            }
+            return s;
         }
 
         private void addInterest(int i)

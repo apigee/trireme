@@ -117,10 +117,12 @@ public class ProcessWrap
             throw Utils.makeError(cx, scope, new NodeOSException(Constants.ESRCH));
         }
 
-        if (log.isDebugEnabled()) {
-            log.debug("Terminating pid {} ({}) with {}", pid, proc, signal);
+        if (signal != null) {
+            if (log.isDebugEnabled()) {
+                log.debug("Terminating pid {} ({}) with {}", pid, proc, signal);
+            }
+            proc.terminate(signal);
         }
-        proc.terminate(signal);
     }
 
     public static class ProcessModuleImpl

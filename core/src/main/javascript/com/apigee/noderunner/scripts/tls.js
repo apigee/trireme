@@ -90,6 +90,11 @@ function getContext(opts, rejectUnauthorized) {
       debug('Client using key store ' + opts.keystore);
     }
     ctx.setKeyStore(opts.keystore, opts.passphrase);
+  } else if (opts.pfx) {
+    if (debugEnabled) {
+      debug('Client using PFX key and cert');
+    }
+    ctx.setPfx(toBuf(opts.pfx), opts.passphrase);
   } else {
     if (opts.key) {
       debug('Client using PEM key');
@@ -135,6 +140,11 @@ function Server() {
       debug('Server using Java key store ' + options.keystore);
     }
     self.context.setKeyStore(options.keystore, options.passphrase);
+  } else if (options.pfx) {
+    if (debugEnabled) {
+      debug('Server using PFX key and cert');
+    }
+    self.context.setPfx(toBuf(options.pfx), options.passphrase);
   } else {
     if (options.key) {
       debug('Server using PEM key');
@@ -145,13 +155,12 @@ function Server() {
       self.context.setCert(toBuf(options.cert));
     }
   }
-  if (!options.keystore && !options.cert) {
+  if (!options.keystore && !options.pfx && !options.cert) {
     throw 'Missing certificate';
   }
-  if (!options.keystore && !options.key) {
+  if (!options.keystore && !options.pfx && !options.key) {
     throw 'Missing key';
   }
-  // TODO PFX
 
   if (options.truststore) {
     // Use an explicit Java trust store
@@ -390,6 +399,7 @@ CleartextStream.prototype.init = function(serverMode, server, connection, engine
   self.remoteAddress = self.socket.remoteAddress;
   self.remotePort = self.socket.remotePort;
   self.encrypted = true;
+  self.bytesWritten = 0;
 
   connection.on('readable', function() {
     handleReadable(self);
@@ -464,6 +474,7 @@ CleartextStream.prototype._write = function(data, encoding, cb) {
     debug(this.id + ' _write(' + (data ? data.length : 0) + ')');
   }
 
+  this.bytesWritten += data.length;
   if (this.handshakeComplete) {
     writeData(this, data, 0, cb);
 

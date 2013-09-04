@@ -33,6 +33,26 @@ public class HTTPParserTest
     }
 
     @Test
+    public void testCompleteRequestLengthBlankHeader()
+    {
+        HTTPParsingMachine parser = new HTTPParsingMachine(HTTPParsingMachine.ParsingMode.REQUEST);
+        HTTPParsingMachine.Result r =
+            parser.parse(Utils.stringToBuffer(COMPLETE_REQUEST_LENGTH_BLANK_HDR, Charsets.ASCII));
+        assertFalse(r.isError());
+        assertTrue(r.isComplete());
+        assertTrue(r.isHeadersComplete());
+        assertTrue(r.hasHeaders());
+        assertTrue(r.hasBody());
+        assertEquals(1, r.getMajor());
+        assertEquals(1, r.getMinor());
+        assertEquals("GET", r.getMethod());
+        assertEquals("/foo/bar/baz", r.getUri());
+        assertEquals("", getFirstHeader(r, "User-Agent"));
+        assertEquals("Hello, World!", Utils.bufferToString(r.getBody(), Charsets.ASCII));
+        parser.parse(null);
+    }
+
+    @Test
     public void testCompleteRequestLengthReset()
     {
         HTTPParsingMachine parser = new HTTPParsingMachine(HTTPParsingMachine.ParsingMode.REQUEST);
@@ -412,6 +432,14 @@ public class HTTPParserTest
     "GET /foo/bar/baz HTTP/1.1\r\n" +
     "Host: mybox\r\n" +
     "User-Agent: Myself\r\n" +
+    "Content-Length: 13\r\n" +
+    "\r\n" +
+    "Hello, World!";
+
+    private static final String COMPLETE_REQUEST_LENGTH_BLANK_HDR =
+    "GET /foo/bar/baz HTTP/1.1\r\n" +
+    "Host: mybox\r\n" +
+    "User-Agent:\r\n" +
     "Content-Length: 13\r\n" +
     "\r\n" +
     "Hello, World!";

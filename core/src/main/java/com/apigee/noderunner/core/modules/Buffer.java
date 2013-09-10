@@ -527,6 +527,9 @@ public class Buffer
             int offset = intArg(args, 1, 0);
             int end = intArg(args, 2, b.bufLength);
 
+            if (b.bufLength == 0) {
+                return;
+            }
             if ((offset < 0) || (offset >= b.bufLength)) {
                 throw Utils.makeRangeError(cx, thisObj, "offset out of bounds");
             }

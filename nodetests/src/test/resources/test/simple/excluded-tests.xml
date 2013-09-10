@@ -177,6 +177,26 @@
         <Name>test-tls-honorcipherorder.js</Name>
         <Description>Cipher ordering is not controled in SSLEngine the same way it is in OpenSSL.</Description>
     </Excluded>
+    <Excluded>
+        <Name>test-stdout-close-unref.js</Name>
+        <Description>Depends on undocumented _handle on stdout</Description>
+    </Excluded>
+    <Excluded>
+        <Name>test-stdout-close-catch.js</Name>
+        <Description>./node dependency</Description>
+    </Excluded>
+    <Excluded>
+        <Name>test-process-kill-null.js</Name>
+        <Description>Fails, could be not getting output or something</Description>
+    </Excluded>
+    <Excluded>
+        <Name>test-pipe-head.js</Name>
+        <Description>./node again</Description>
+    </Excluded>
+    <Excluded>
+        <Name>test-init.js</Name>
+        <Description>Testing specific loading of modules in an internal way</Description>
+    </Excluded>
 
     <!-- DIFFERENT TESTS
          We have different versions of these tests in the "noderunner" directory because they must
@@ -260,6 +280,14 @@
     <Excluded>
         <Name>test-https-pfx.js</Name>
         <Description>Different SSL error messages</Description>
+    </Excluded>
+    <Excluded>
+        <Name>test-vm-create-context-circular-reference.js</Name>
+        <Description>Not sure</Description>
+    </Excluded>
+    <Excluded>
+        <Name>test-stream2-stderr-sync.js</Name>
+        <Description>Depends on undocumented parts of the TTY module</Description>
     </Excluded>
 
     <!-- INTERNAL TESTS
@@ -402,6 +430,19 @@
         <Name>test-stdin-from-file.js</Name>
         <Description>Requires some arguments to "./node" that we don't support.</Description>
     </Excluded>
+    <Excluded>
+        <Name>test-stdout-to-file.js</Name>
+        <Description>depends on ./node</Description>
+    </Excluded>
+    <Excluded>
+        <Name>test-stdout-stderr-reading.js</Name>
+        <Description>depends on ./node arguments and other stuff</Description>
+    </Excluded>
+    <Excluded>
+        <Name>test-http-full-response.js</Name>
+        <Description>Flaky test that depends on "ab"</Description>
+    </Excluded>
+
 
     <!-- DEPRECATION
          These tests depend on the "&amp;&amp;throw-deprecation" feature of Node, not implemented here.

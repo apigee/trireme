@@ -613,12 +613,8 @@ public class TCPWrap
                         if (log.isDebugEnabled()) {
                             log.debug("Sending shutdown for {}", clientChannel);
                         }
-                        writeQueue.poll();
                         clientChannel.socket().shutdownOutput();
-                        if (qw.onComplete != null) {
-                            qw.onComplete.call(cx, qw.onComplete, this,
-                                               new Object[] { 0, this, qw });
-                        }
+                        sendWriteCallback(cx, qw, Context.getUndefinedValue());
                     } else {
                         int written = clientChannel.write(qw.buf);
                         if (log.isDebugEnabled()) {
@@ -630,25 +626,33 @@ public class TCPWrap
                             addInterest(SelectionKey.OP_WRITE);
                             break;
                         } else {
-                            writeQueue.poll();
-                            if (qw.onComplete != null) {
-                                qw.onComplete.call(cx, qw.onComplete, this,
-                                                   new Object[] { 0, this, qw });
-                            }
+                            sendWriteCallback(cx, qw, Context.getUndefinedValue());
                         }
                     }
 
+                } catch (ClosedChannelException cce) {
+                    if (log.isDebugEnabled()) {
+                        log.debug("Channel is closed");
+                    }
+                    setErrno(Constants.EOF);
+                    sendWriteCallback(cx, qw, Constants.EOF);
                 } catch (IOException ioe) {
                     if (log.isDebugEnabled()) {
                         log.debug("Error on write: {}", ioe);
                     }
                     setErrno(Constants.EIO);
-                    if (qw.onComplete != null) {
-                        qw.onComplete.call(cx, qw.onComplete, this,
-                                           new Object[] { Constants.EIO, this, qw });
-                    }
+                    sendWriteCallback(cx, qw, Constants.EIO);
                 }
                 qw = writeQueue.peek();
+            }
+        }
+
+        private void sendWriteCallback(Context cx, QueuedWrite qw, Object err)
+        {
+            writeQueue.poll();
+            if (qw.onComplete != null) {
+                qw.onComplete.call(cx, qw.onComplete, this,
+                                   new Object[] { err, this, qw });
             }
         }
 

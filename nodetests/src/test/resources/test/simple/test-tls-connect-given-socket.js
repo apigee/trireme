@@ -37,7 +37,8 @@ var options = {
 var server = tls.createServer(options, function(socket) {
   serverConnected = true;
   socket.end('Hello');
-}).listen(common.PORT, function() {
+});
+server.listen(common.PORT, function() {
   var socket = net.connect({
     port: common.PORT,
     rejectUnauthorized: false

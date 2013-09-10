@@ -55,7 +55,7 @@ public class Process
     public static final String MODULE_NAME = "process";
     public static final String EXECUTABLE_NAME = "./node";
 
-    private static final   double NANO = 1000000000.0;
+    private static final   long NANO = 1000000000L;
     protected static final Logger log  = LoggerFactory.getLogger(Process.class);
 
     @Override
@@ -533,17 +533,17 @@ public class Process
                 if (!arg.has(0, arg) || !arg.has(1, arg)) {
                     throw new EvaluatorException("Argument must be an array");
                 }
-                double startSecs = Context.toNumber(arg.get(0, arg));
-                double startNs = Context.toNumber(arg.get(1, arg));
-                long startNanos = (long)((startSecs * NANO) + startNs);
+                long startSecs = (long)Context.toNumber(arg.get(0, arg));
+                long startNs = (long)Context.toNumber(arg.get(1, arg));
+                long startNanos = ((startSecs * NANO) + startNs);
                 nanos -= startNanos;
             } else if (args.length > 1) {
                 throw new EvaluatorException("Invalid arguments");
             }
 
             Object[] ret = new Object[2];
-            ret[0] = nanos / NANO;
-            ret[1] = nanos % NANO;
+            ret[0] = (int)(nanos / NANO);
+            ret[1] = (int)(nanos % NANO);
             return cx.newArray(thisObj, ret);
         }
 

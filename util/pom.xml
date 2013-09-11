@@ -7,8 +7,8 @@
     <version>0.6.3-SNAPSHOT</version>
   </parent>
 
-  <name>noderunner-shell</name>
-  <artifactId>noderunner-shell</artifactId>
+  <name>noderunner-util</name>
+  <artifactId>noderunner-util</artifactId>
   <version>0.6.3-SNAPSHOT</version>
 
   <dependencies>
@@ -18,23 +18,12 @@
       <version>0.6.3-SNAPSHOT</version>
     </dependency>
     <dependency>
-      <groupId>com.apigee.noderunner</groupId>
-      <artifactId>noderunner-crypto</artifactId>
-      <version>0.6.3-SNAPSHOT</version>
-    </dependency>
-    <dependency>
-      <groupId>com.apigee.noderunner</groupId>
-      <artifactId>noderunner-util</artifactId>
-      <version>0.6.3-SNAPSHOT</version>
-    </dependency>
-
-    <dependency>
       <groupId>org.slf4j</groupId>
       <artifactId>slf4j-api</artifactId>
     </dependency>
     <dependency>
-        <groupId>org.mozilla</groupId>
-        <artifactId>rhino</artifactId>
+      <groupId>org.mozilla</groupId>
+      <artifactId>rhino</artifactId>
     </dependency>
 
     <dependency>
@@ -47,5 +36,5 @@
       <artifactId>logback-classic</artifactId>
       <scope>test</scope>
     </dependency>
-  </dependencies>
+   </dependencies>
 </project>

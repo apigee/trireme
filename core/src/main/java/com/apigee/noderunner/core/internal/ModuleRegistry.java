@@ -64,7 +64,7 @@ public class ModuleRegistry
      * compiler, so it is repeated in pom.xml and must be changed there if it's changed here. This makes these
      * modules be loaded exactly as they would be in traditional Node.
      */
-    private static final String CODE_PREFIX = "(function (exports, module, require, __filename, __dirname) {";
+    private static final String CODE_PREFIX = "(function (exports, require, module, __filename, __dirname) {";
     private static final String CODE_POSTFIX = "});";
 
     private final HashMap<String, NodeModule>         modules         = new HashMap<String, NodeModule>();

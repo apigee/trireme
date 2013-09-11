@@ -1,0 +1,4 @@
+utf16le UTF-16LE
+utf16be UTF-16BE
+utf32le UTF-32LE
+utf32be UTF-32BE

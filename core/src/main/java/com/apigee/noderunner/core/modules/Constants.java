@@ -67,6 +67,7 @@ public class Constants
     public static final String EEXIST = "EEXIST";
     public static final String EINVAL = "EINVAL";
     public static final String EIO = "EIO";
+    public static final String EILSEQ = "EILSEQ";
     public static final String EISDIR = "EISDIR";
     public static final String ENOTFOUND = "ENOTFOUND";
     public static final String ENOENT = "ENOENT";
@@ -103,6 +104,7 @@ public class Constants
         errnos.put(EEXIST, 17);
         errnos.put(EINVAL, 22);
         errnos.put(EIO, 5);
+        errnos.put(EILSEQ, 92);
         errnos.put(EISDIR, 21);
         // TODO this isn't quite right -- not defined on my Mac at least
         errnos.put(ENOTFOUND, 2);

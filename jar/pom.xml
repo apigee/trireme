@@ -24,6 +24,11 @@
     </dependency>
     <dependency>
       <groupId>com.apigee.noderunner</groupId>
+      <artifactId>noderunner-util</artifactId>
+      <version>0.6.3-SNAPSHOT</version>
+    </dependency>
+    <dependency>
+      <groupId>com.apigee.noderunner</groupId>
       <artifactId>noderunner-shell</artifactId>
       <version>0.6.3-SNAPSHOT</version>
      </dependency>

@@ -29,19 +29,36 @@
 
 var wrap = process.binding('iconv-wrap');
 
-function toEncoding(str, encoding) {
+function toEncoding(s, encoding) {
+  var str;
+  if (!s) {
+    str = "";
+  } else if (s instanceof Buffer) {
+    str = s.toString('utf8');
+  } else {
+    str = "" + s;
+  }
   return wrap.encodeString(str, encoding);
 }
 exports.toEncoding = toEncoding;
 exports.encode = toEncoding;
 
-function fromEncoding(buf, encoding) {
+function fromEncoding(b, encoding) {
+  var buf;
+  if (!b) {
+    buf = new Buffer(0);
+  } else if (b instanceof Buffer) {
+    buf = b;
+  } else {
+    buf = new Buffer("" + b, "binary");
+  }
   return wrap.decodeBuffer(buf, encoding);
 }
 exports.fromEncoding = fromEncoding;
 exports.decode = fromEncoding;
 
 function encodingExists(encoding) {
+
   return wrap.encodingExists(encoding);
 }
 exports.encodingExists = encodingExists;

@@ -1084,13 +1084,11 @@ public class Buffer
 
         private static Charset resolveEncoding(Object[] args, int pos)
         {
-            String encArg;
+            String encArg = null;
             if ((pos < args.length) && (args[pos] instanceof String)) {
                 encArg = Context.toString(args[pos]);
-            } else {
-                encArg = DEFAULT_ENCODING;
             }
-            Charset charset = Charsets.get().getCharset(encArg);
+            Charset charset = Charsets.get().resolveCharset(encArg);
             if (charset == null) {
                 throw new EvaluatorException("Unknown encoding: " + encArg);
             }

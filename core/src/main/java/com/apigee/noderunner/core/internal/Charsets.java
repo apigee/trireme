@@ -30,6 +30,9 @@ public class Charsets
 
     public static final Charset UTF8 = Charset.forName("UTF8");
     public static final Charset UCS2 = Charset.forName("UTF-16LE");
+    public static final Charset UTF16BE = Charset.forName("UTF-16BE");
+    public static final Charset UTF32LE = Charset.forName("UTF-32LE");
+    public static final Charset UTF32BE = Charset.forName("UTF-32BE");
     public static final Charset BASE64 = Charset.forName("Node-Base64");
     public static final Charset ASCII = Charset.forName("US-ASCII");
     public static final Charset NODE_HEX = Charset.forName("Node-Hex");
@@ -51,6 +54,18 @@ public class Charsets
         encodings.put("UTF16LE", UCS2);
         encodings.put("utf-16le", UCS2);
         encodings.put("UTF-16LE", UCS2);
+        encodings.put("utf16be", UTF16BE);
+        encodings.put("UTF16BE", UTF16BE);
+        encodings.put("utf-16be", UTF16BE);
+        encodings.put("UTF-16BE", UTF16BE);
+        encodings.put("utf32be", UTF32BE);
+        encodings.put("UTF32BE", UTF32BE);
+        encodings.put("utf-32be", UTF32BE);
+        encodings.put("UTF-32BE", UTF32BE);
+        encodings.put("utf32le", UTF32LE);
+        encodings.put("UTF32LE", UTF32LE);
+        encodings.put("utf-32le", UTF32LE);
+        encodings.put("UTF-32LE", UTF32LE);
         encodings.put("ucs2", UCS2);
         encodings.put("UCS2", UCS2);
         encodings.put("ucs-2", UCS2);

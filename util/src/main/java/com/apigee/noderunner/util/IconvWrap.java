@@ -1,6 +1,7 @@
 package com.apigee.noderunner.util;
 
 import com.apigee.noderunner.core.NodeRuntime;
+import com.apigee.noderunner.core.internal.Charsets;
 import com.apigee.noderunner.core.internal.InternalNodeModule;
 import com.apigee.noderunner.core.internal.Utils;
 import com.apigee.noderunner.core.modules.Buffer;
@@ -21,6 +22,7 @@ import java.nio.charset.CharacterCodingException;
 import java.nio.charset.Charset;
 import java.nio.charset.CharsetDecoder;
 import java.nio.charset.CharsetEncoder;
+import java.nio.charset.CodingErrorAction;
 import java.nio.charset.UnmappableCharacterException;
 
 public class IconvWrap
@@ -62,6 +64,7 @@ public class IconvWrap
 
             Charset cs = self.getCharset(cx, funObj, encoding);
             CharsetEncoder enc = cs.newEncoder();
+            enc.onUnmappableCharacter(CodingErrorAction.REPLACE);
             ByteBuffer decoded;
             try {
                 decoded = enc.encode(CharBuffer.wrap(str));
@@ -81,6 +84,7 @@ public class IconvWrap
 
             Charset cs = self.getCharset(cx, funObj, encoding);
             CharsetDecoder dec = cs.newDecoder();
+            dec.onUnmappableCharacter(CodingErrorAction.REPLACE);
             CharBuffer decoded;
             try {
                 decoded = dec.decode(buf.getBuffer());
@@ -102,11 +106,12 @@ public class IconvWrap
         private Charset getCharset(Context cx, Scriptable scope, String n)
         {
             try {
-                String name = CharsetConverter.getAlias(n);
-                if (name == null) {
-                    name = n;
+                // Check the alias first, and for charsets like "base64" and "binary"
+                Charset cs = Charsets.get().resolveCharset(n);
+                if (cs == null) {
+                    cs = Charset.forName(n);
                 }
-                return Charset.forName(name);
+                return cs;
             } catch (IllegalArgumentException ie) {
                 throw Utils.makeError(cx, scope, "Invalid character set " + n, Constants.EINVAL);
             }

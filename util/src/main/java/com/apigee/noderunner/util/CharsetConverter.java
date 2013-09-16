@@ -1,8 +1,7 @@
 package com.apigee.noderunner.util;
 
-import java.io.BufferedReader;
-import java.io.IOException;
-import java.io.InputStreamReader;
+import com.apigee.noderunner.core.internal.Charsets;
+
 import java.nio.ByteBuffer;
 import java.nio.CharBuffer;
 import java.nio.charset.CharacterCodingException;
@@ -11,15 +10,10 @@ import java.nio.charset.CharsetDecoder;
 import java.nio.charset.CharsetEncoder;
 import java.nio.charset.CoderResult;
 import java.nio.charset.CodingErrorAction;
-import java.util.HashMap;
 import java.util.regex.Pattern;
 
 public class CharsetConverter
 {
-    private static final HashMap<String, String> aliases =
-        new HashMap<String, String>();
-
-    private static final Pattern SPACES = Pattern.compile("[\\t ]+");
     private static final Pattern SLASHES = Pattern.compile("//");
 
     private CharsetDecoder decoder;
@@ -27,27 +21,6 @@ public class CharsetConverter
 
     private ByteBuffer remainingToDecode;
     private CharBuffer toEncode;
-
-    static {
-        // Load additional aliases that aren't built-in to Java, but expected in Node.js
-        try {
-            BufferedReader rdr =
-                new BufferedReader(new InputStreamReader(
-                    CharsetConverter.class.getResourceAsStream("/noderunner-util/charsets.txt")));
-            String line;
-            do {
-                line = rdr.readLine();
-                if (line != null) {
-                    String[] parts = SPACES.split(line);
-                    if (parts.length == 2) {
-                        aliases.put(parts[0], parts[1]);
-                    }
-                }
-            } while (line != null);
-        } catch (IOException ioe) {
-            throw new AssertionError("Error reading charsets mappings from the resource", ioe);
-        }
-    }
 
     private void parseCharset(String n, boolean makeEncoder)
         throws IllegalArgumentException
@@ -66,11 +39,13 @@ public class CharsetConverter
             }
         }
 
-        String name = aliases.get(pat[0]);
-        if (name == null) {
-            name = pat[0];
+        // We maintain an alias of common "node" names and charsets to Java charsets,
+        // and support Node-only charsets like "base64"
+        Charset cs = Charsets.get().getCharset(pat[0]);
+        if (cs == null) {
+            // This will throw if the charset name is not supported
+            cs = Charset.forName(pat[0]);
         }
-        Charset cs = Charset.forName(name);
 
         if (makeEncoder) {
             encoder = cs.newEncoder();
@@ -89,14 +64,6 @@ public class CharsetConverter
                 decoder.onUnmappableCharacter(CodingErrorAction.IGNORE);
             }
         }
-    }
-
-    /**
-     * Return an alias for a character set name that may not necessarily be a standard Java character set.
-     */
-    public static String getAlias(String cs)
-    {
-        return aliases.get(cs);
     }
 
     /**

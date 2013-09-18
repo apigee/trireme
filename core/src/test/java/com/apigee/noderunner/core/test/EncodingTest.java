@@ -4,15 +4,22 @@ import com.apigee.noderunner.core.internal.Utils;
 import org.junit.Test;
 import org.omg.CORBA.PUBLIC_MEMBER;
 
+import java.io.ByteArrayOutputStream;
+import java.io.IOException;
 import java.io.UnsupportedEncodingException;
 import java.nio.ByteBuffer;
+import java.nio.CharBuffer;
+import java.nio.charset.CharacterCodingException;
 import java.nio.charset.Charset;
+import java.nio.charset.CharsetDecoder;
+import java.nio.charset.CharsetEncoder;
 
 import static org.junit.Assert.*;
 
 public class EncodingTest
 {
     private static final String TEXT = "The quick brown fox jumped over the lazy dog";
+    private static final ByteBuffer EMPTY_BUF = ByteBuffer.allocate(0);
 
     private static final String TEXT2 =
         "Man is distinguished, not only by his reason, but by this " +
@@ -30,21 +37,21 @@ public class EncodingTest
 
     @Test
     public void testAscii()
-        throws UnsupportedEncodingException
+        throws UnsupportedEncodingException, CharacterCodingException, IOException
     {
         encodeDecode(TEXT, "ascii");
     }
 
     @Test
     public void testBinary()
-        throws UnsupportedEncodingException
+        throws UnsupportedEncodingException, CharacterCodingException, IOException
     {
         encodeDecode(TEXT, "Node-Binary");
     }
 
     @Test
     public void testHex()
-        throws UnsupportedEncodingException
+        throws UnsupportedEncodingException, CharacterCodingException, IOException
     {
         encodeDecode(TEXT, "Node-Hex");
     }
@@ -65,7 +72,7 @@ public class EncodingTest
 
     @Test
     public void testBase64()
-        throws UnsupportedEncodingException
+        throws UnsupportedEncodingException, CharacterCodingException, IOException
     {
         encodeDecode(TEXT, "Node-Base64");
     }
@@ -81,42 +88,42 @@ public class EncodingTest
 
     @Test
     public void testBase642()
-        throws UnsupportedEncodingException
+        throws UnsupportedEncodingException, CharacterCodingException, IOException
     {
         encodeDecode(TEXT2, "Node-Base64");
     }
 
     @Test
     public void testBase644()
-        throws UnsupportedEncodingException
+        throws UnsupportedEncodingException, CharacterCodingException, IOException
     {
         encodeDecode("foob", "Node-Base64");
     }
 
     @Test
     public void testBase645()
-        throws UnsupportedEncodingException
+        throws UnsupportedEncodingException, CharacterCodingException, IOException
     {
         encodeDecode("fooba", "Node-Base64");
     }
 
     @Test
     public void testBase646()
-        throws UnsupportedEncodingException
+        throws UnsupportedEncodingException, CharacterCodingException, IOException
     {
         encodeDecode("foobar", "Node-Base64");
     }
 
     @Test
     public void testBase646Weird()
-        throws UnsupportedEncodingException
+        throws UnsupportedEncodingException, CharacterCodingException, IOException
     {
         encodeDecode("//4uAA==", "Node-Base64");
     }
 
     @Test
     public void testBase647()
-        throws UnsupportedEncodingException
+        throws UnsupportedEncodingException, CharacterCodingException, IOException
     {
         encodeDecode("user:pass:", "Node-Base64");
     }
@@ -209,10 +216,11 @@ public class EncodingTest
     }
 
     private void encodeDecode(String text, String encoding)
-        throws UnsupportedEncodingException
+        throws UnsupportedEncodingException, CharacterCodingException, IOException
     {
         byte[] ascii = text.getBytes("ascii");
 
+        // Encode and decode using the String class with our new character set
         String encoded = new String(ascii, encoding);
         byte[] decoded = encoded.getBytes(encoding);
         String decodedString = new String(decoded, "ascii");
@@ -220,12 +228,59 @@ public class EncodingTest
         //System.out.println(bytesToString(ascii) + " -> " + bytesToString(decodedAscii));
         assertEquals(text, decodedString);
 
+        // Do the same using our wrappers for StringDecoder and StringEncoder
         Charset cs = Charset.forName(encoding);
         Charset asciiCS = Charset.forName("ascii");
         String encoded1 = Utils.bufferToString(ByteBuffer.wrap(ascii), cs);
+        assertEquals(encoded, encoded1);
         ByteBuffer decoded2 = Utils.stringToBuffer(encoded1, cs);
+        assertEquals(ByteBuffer.wrap(decoded), decoded2);
         String ascii2 = Utils.bufferToString(decoded2, asciiCS);
         assertEquals(text, ascii2);
+
+        // Encode one byte at a time -- we should get the same result
+        CharsetDecoder dec = cs.newDecoder();
+        StringBuilder encoded3 = new StringBuilder();
+        for (int i = 0; i < ascii.length; i++) {
+            ByteBuffer in = ByteBuffer.allocate(1);
+            in.put(ascii[i]).flip();
+            CharBuffer out = CharBuffer.allocate((int)dec.maxCharsPerByte());
+            dec.decode(in, out, (i == (ascii.length - 1)));
+            if (out.flip().hasRemaining()) {
+                encoded3.append(out);
+            }
+        }
+
+        CharBuffer out = CharBuffer.allocate((int)dec.maxCharsPerByte());
+        dec.flush(out);
+        if (out.flip().hasRemaining()) {
+            encoded3.append(out);
+        }
+        assertEquals(encoded, encoded3.toString());
+
+        // Decode one byte at a time -- we should also get the same result
+        CharsetEncoder enc = cs.newEncoder();
+        ByteArrayOutputStream bos = new ByteArrayOutputStream();
+        for (int i = 0; i < encoded.length(); i++) {
+            CharBuffer in = CharBuffer.allocate(1);
+            in.put(encoded.charAt(i)).flip();
+            ByteBuffer bout = ByteBuffer.allocate((int)enc.maxBytesPerChar());
+            enc.encode(in, bout, (i == (encoded.length() - 1)));
+            if (bout.flip().hasRemaining()) {
+                byte[] ob = new byte[bout.remaining()];
+                bout.get(ob);
+                bos.write(ob);
+            }
+        }
+
+        ByteBuffer bout = ByteBuffer.allocate((int)enc.maxBytesPerChar());
+        enc.flush(bout);
+        if (bout.flip().hasRemaining()) {
+            byte[] ob = new byte[bout.remaining()];
+            bout.get(ob);
+            bos.write(ob);
+        }
+        assertArrayEquals(decoded, bos.toByteArray());
     }
 
     private String bytesToString(byte[] bs)

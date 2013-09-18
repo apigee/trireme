@@ -1,6 +1,7 @@
 com.apigee.noderunner.core.modules.Buffer
 com.apigee.noderunner.core.modules.CaresWrap
 com.apigee.noderunner.core.modules.Constants
+com.apigee.noderunner.core.modules.DecoderWrap
 com.apigee.noderunner.core.modules.DNS
 com.apigee.noderunner.core.modules.Evals
 com.apigee.noderunner.core.modules.Crypto

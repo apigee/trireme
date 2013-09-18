@@ -1,6 +1,7 @@
 package com.apigee.noderunner.util;
 
 import com.apigee.noderunner.core.internal.Charsets;
+import com.apigee.noderunner.core.internal.Utils;
 
 import java.nio.ByteBuffer;
 import java.nio.CharBuffer;
@@ -102,7 +103,7 @@ public class CharsetConverter
     {
         // We may have left over bytes -- copy them. This function can take null for either param.
         // Here we move the positions of both buffers, and the new buffer becomes the one that we consume
-        ByteBuffer toDecode = cat(remainingToDecode, in);
+        ByteBuffer toDecode = Utils.catBuffers(remainingToDecode, in);
 
         if ((toDecode != null) && toDecode.hasRemaining()) {
             if (toEncode == null) {
@@ -114,7 +115,7 @@ public class CharsetConverter
             do {
                 result = decoder.decode(toDecode, toEncode, lastChunk);
                 if (result.isOverflow()) {
-                    toEncode = doubleBuffer(toEncode);
+                    toEncode = Utils.doubleBuffer(toEncode);
                 }
             } while (result.isOverflow());
             checkResult(result);
@@ -138,7 +139,7 @@ public class CharsetConverter
             do {
                 result = encoder.encode(toEncode, encoded, lastChunk);
                 if (result.isOverflow()) {
-                    encoded = doubleBuffer(encoded);
+                    encoded = Utils.doubleBuffer(encoded);
                 }
             } while (result.isOverflow());
             checkResult(result);
@@ -161,47 +162,5 @@ public class CharsetConverter
         if (r.isUnmappable() || r.isMalformed()) {
             r.throwException();
         }
-    }
-
-    private static ByteBuffer cat(ByteBuffer b1, ByteBuffer b2)
-    {
-        if ((b1 != null) && (b2 == null)) {
-            return b1;
-        }
-        if ((b1 == null) && (b2 != null)) {
-            return b2;
-        }
-
-        int len = (b1 == null ? 0 : b1.remaining()) +
-                  (b2 == null ? 0 : b2.remaining());
-        if (len == 0) {
-            return null;
-        }
-
-        ByteBuffer r = ByteBuffer.allocate(len);
-        if (b1 != null) {
-            r.put(b1);
-        }
-        if (b2 != null) {
-            r.put(b2);
-        }
-        r.flip();
-        return r;
-    }
-
-    private static CharBuffer doubleBuffer(CharBuffer b)
-    {
-        CharBuffer d = CharBuffer.allocate(b.capacity() * 2);
-        b.flip();
-        d.put(b);
-        return d;
-    }
-
-    private static ByteBuffer doubleBuffer(ByteBuffer b)
-    {
-        ByteBuffer d = ByteBuffer.allocate(b.capacity() * 2);
-        b.flip();
-        d.put(b);
-        return d;
     }
 }

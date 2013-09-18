@@ -130,7 +130,6 @@ public class ModuleRegistry
         addCompiledModule("querystring", "com.apigee.noderunner.fromnode.querystring");
         addCompiledModule("readline", "com.apigee.noderunner.fromnode.readline");
         addCompiledModule("stream", "com.apigee.noderunner.fromnode.stream");
-        addCompiledModule("string_decoder", "com.apigee.noderunner.fromnode.string_decoder");
         addCompiledModule("sys", "com.apigee.noderunner.fromnode.sys");
         addCompiledModule("timers", "com.apigee.noderunner.fromnode.timers");
         addCompiledModule("url", "com.apigee.noderunner.fromnode.url");
@@ -147,6 +146,7 @@ public class ModuleRegistry
         addCompiledModule("native_stream_readable", "com.apigee.noderunner.scripts.native_stream_readable");
         addCompiledModule("native_stream_writable", "com.apigee.noderunner.scripts.native_stream_writable");
         addCompiledModule("noderunner_metrics", "com.apigee.noderunner.scripts.noderunner_metrics");
+        addCompiledModule("string_decoder", "com.apigee.noderunner.scripts.noderunner_string_decoder");
         addCompiledModule("tls", "com.apigee.noderunner.scripts.tls");
         addCompiledModule("tls_checkidentity", "com.apigee.noderunner.scripts.tls_checkidentity");
         addCompiledModule("vm", "com.apigee.noderunner.scripts.vm");

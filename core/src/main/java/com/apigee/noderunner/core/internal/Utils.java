@@ -106,11 +106,13 @@ public class Utils
         do {
             result = decoder.decode(buf, cBuf, true);
             if (result.isOverflow()) {
-                bufLen *= 2;
-                CharBuffer newBuf = CharBuffer.allocate(bufLen);
-                cBuf.flip();
-                newBuf.put(cBuf);
-                cBuf = newBuf;
+                cBuf = doubleBuffer(cBuf);
+            }
+        } while (result.isOverflow());
+        do {
+            result = decoder.flush(cBuf);
+            if (result.isOverflow()) {
+                cBuf = doubleBuffer(cBuf);
             }
         } while (result.isOverflow());
 
@@ -130,16 +132,18 @@ public class Utils
         CoderResult result;
         for (int i = 0; i < bufs.length; i++) {
             do {
-                result = decoder.decode(bufs[i], cBuf, true);
+                result = decoder.decode(bufs[i], cBuf, (i == (bufs.length - 1)));
                 if (result.isOverflow()) {
-                    bufLen *= 2;
-                    CharBuffer newBuf = CharBuffer.allocate(bufLen);
-                    cBuf.flip();
-                    newBuf.put(cBuf);
-                    cBuf = newBuf;
+                    cBuf = doubleBuffer(cBuf);
                 }
             } while (result.isOverflow());
         }
+        do {
+            result = decoder.flush(cBuf);
+            if (result.isOverflow()) {
+                cBuf = doubleBuffer(cBuf);
+            }
+        } while (result.isOverflow());
 
         cBuf.flip();
         return cBuf.toString();
@@ -156,14 +160,16 @@ public class Utils
         CoderResult result;
         do {
             result = enc.encode(chars, writeBuf, true);
-            if (result == CoderResult.OVERFLOW) {
-                bufLen *= 2;
-                ByteBuffer newBuf = ByteBuffer.allocate(bufLen);
-                writeBuf.flip();
-                newBuf.put(writeBuf);
-                writeBuf = newBuf;
+            if (result.isOverflow()) {
+                writeBuf = doubleBuffer(writeBuf);
             }
-        } while (result == CoderResult.OVERFLOW);
+        } while (result.isOverflow());
+        do {
+            result = enc.flush(writeBuf);
+            if (result.isOverflow()) {
+                writeBuf = doubleBuffer(writeBuf);
+            }
+        } while (result.isOverflow());
 
         writeBuf.flip();
         return writeBuf;
@@ -251,5 +257,49 @@ public class Utils
             ret.add(Context.toString(val));
         }
         return ret;
+    }
+
+    public static ByteBuffer catBuffers(ByteBuffer b1, ByteBuffer b2)
+    {
+        if ((b1 != null) && (b2 == null)) {
+            return b1;
+        }
+        if ((b1 == null) && (b2 != null)) {
+            return b2;
+        }
+
+        int len = (b1 == null ? 0 : b1.remaining()) +
+                  (b2 == null ? 0 : b2.remaining());
+        if (len == 0) {
+            return null;
+        }
+
+        ByteBuffer r = ByteBuffer.allocate(len);
+        if (b1 != null) {
+            r.put(b1);
+        }
+        if (b2 != null) {
+            r.put(b2);
+        }
+        r.flip();
+        return r;
+    }
+
+    public static CharBuffer doubleBuffer(CharBuffer b)
+    {
+        int newCap = Math.max(b.capacity() * 2, 1);
+        CharBuffer d = CharBuffer.allocate(newCap);
+        b.flip();
+        d.put(b);
+        return d;
+    }
+
+    public static ByteBuffer doubleBuffer(ByteBuffer b)
+    {
+        int newCap = Math.max(b.capacity() * 2, 1);
+        ByteBuffer d = ByteBuffer.allocate(newCap);
+        b.flip();
+        d.put(b);
+        return d;
     }
 }

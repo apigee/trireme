@@ -95,8 +95,7 @@ public class DecoderWrap
 
             DecoderImpl self = new DecoderImpl();
             self.charset = cs;
-            self.decoder = cs.newDecoder();
-            self.decoder.onUnmappableCharacter(CodingErrorAction.REPLACE);
+            self.decoder = Charsets.get().getDecoder(cs);
             return self;
         }
 
@@ -136,6 +135,14 @@ public class DecoderWrap
                     out = Utils.doubleBuffer(out);
                 }
             } while (result.isOverflow());
+            if (lastChunk) {
+                do {
+                    result = decoder.flush(out);
+                    if (result.isOverflow()) {
+                        out = Utils.doubleBuffer(out);
+                    }
+                } while (result.isOverflow());
+            }
 
             if (allIn.hasRemaining()) {
                 if (log.isTraceEnabled()) {

@@ -1,5 +1,6 @@
 package com.apigee.noderunner.core.test;
 
+import com.apigee.noderunner.core.internal.Charsets;
 import com.apigee.noderunner.core.internal.Utils;
 import org.junit.Test;
 import org.omg.CORBA.PUBLIC_MEMBER;
@@ -18,7 +19,14 @@ import static org.junit.Assert.*;
 
 public class EncodingTest
 {
-    private static final String TEXT = "The quick brown fox jumped over the lazy dog";
+    private static final String TEXT =
+        "The quick brown fox jumped over the lazy dog";
+    private static final String TEXT_EXPECTED =
+        "VGhlIHF1aWNrIGJyb3duIGZveCBqdW1wZWQgb3ZlciB0aGUgbGF6eSBkb2c=";
+    private static final String TEXT_EXPECTED_WS =
+        "VGhlIHF1aWNrIGJyb3du IGZveCBqdW1wZWQgb3Z\n\tlciB0aGUgbGF6eSBkb2c =";
+    private static final String TEXT_EXPECTED_SPEC =
+        "VGhlIHF1aWNrIGJyb3duIGZveCBqdW1wZ\u0001WQgb3ZlciB0aGUgbGF6eSBkb2c=";
     private static final ByteBuffer EMPTY_BUF = ByteBuffer.allocate(0);
 
     private static final String TEXT2 =
@@ -126,6 +134,22 @@ public class EncodingTest
         throws UnsupportedEncodingException, CharacterCodingException, IOException
     {
         encodeDecode("user:pass:", "Node-Base64");
+    }
+
+    @Test
+    public void testBase64Special()
+        throws UnsupportedEncodingException
+    {
+        ByteBuffer text = Utils.stringToBuffer(TEXT, Charsets.ASCII);
+        String encoded = Utils.bufferToString(text.duplicate(), Charsets.BASE64);
+        assertEquals(TEXT_EXPECTED, encoded);
+
+        ByteBuffer decoded = Utils.stringToBuffer(TEXT_EXPECTED, Charsets.BASE64);
+        assertEquals(text, decoded);
+        ByteBuffer decodedWs = Utils.stringToBuffer(TEXT_EXPECTED_WS, Charsets.BASE64);
+        assertEquals(text, decodedWs);
+        ByteBuffer decodedSpec = Utils.stringToBuffer(TEXT_EXPECTED_SPEC, Charsets.BASE64);
+        assertEquals(text, decodedSpec);
     }
 
     @Test

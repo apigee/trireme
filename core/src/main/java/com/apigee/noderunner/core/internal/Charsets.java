@@ -22,6 +22,9 @@
 package com.apigee.noderunner.core.internal;
 
 import java.nio.charset.Charset;
+import java.nio.charset.CharsetDecoder;
+import java.nio.charset.CharsetEncoder;
+import java.nio.charset.CodingErrorAction;
 import java.util.HashMap;
 
 public class Charsets
@@ -95,5 +98,23 @@ public class Charsets
     public Charset getCharset(String name)
     {
         return encodings.get(name);
+    }
+
+    public CharsetDecoder getDecoder(Charset cs)
+    {
+        CharsetDecoder dec = cs.newDecoder();
+        dec.onUnmappableCharacter(CodingErrorAction.REPLACE);
+        return dec;
+    }
+
+    public CharsetEncoder getEncoder(Charset cs)
+    {
+        CharsetEncoder enc = cs.newEncoder();
+        if (BASE64.equals(cs)) {
+            enc.onUnmappableCharacter(CodingErrorAction.IGNORE);
+        } else {
+            enc.onUnmappableCharacter(CodingErrorAction.REPLACE);
+        }
+        return enc;
     }
 }

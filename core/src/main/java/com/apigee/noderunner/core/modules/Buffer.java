@@ -50,7 +50,6 @@ import java.nio.charset.CharsetEncoder;
 import java.nio.charset.CoderResult;
 import java.nio.charset.CodingErrorAction;
 import java.util.Arrays;
-import java.util.regex.Pattern;
 
 public class Buffer
     implements NodeModule
@@ -376,7 +375,7 @@ public class Buffer
                 length = b.bufLength - offset;
             }
 
-            CharsetEncoder encoder = charset.newEncoder();
+            CharsetEncoder encoder = Charsets.get().getEncoder(charset);
 
             if (offset < 0) {
                 throw Utils.makeRangeError(cx, thisObj, "offset out of bounds");
@@ -395,6 +394,7 @@ public class Buffer
             // Encode as much as we can and move the buffer's positions forward
             CharBuffer chars = CharBuffer.wrap(data);
             encoder.encode(chars, writeBuf, true);
+            encoder.flush(writeBuf);
             b.setCharsWritten(chars.position());
 
             return writeBuf.position() - offset - b.bufOffset;
@@ -991,8 +991,7 @@ public class Buffer
         {
             String data = stringArg(args, 0);
             Charset charset = resolveEncoding(args, 1);
-            CharsetEncoder encoder = charset.newEncoder();
-            encoder.onUnmappableCharacter(CodingErrorAction.REPLACE);
+            CharsetEncoder encoder = Charsets.get().getEncoder(charset);
 
             // Encode into a small temporary buffer to make counting easiest.
             // I don't know of a better way.
@@ -1004,7 +1003,12 @@ public class Buffer
                 tmp.clear();
                 result = encoder.encode(chars, tmp, true);
                 total += tmp.position();
-            } while (result == CoderResult.OVERFLOW);
+            } while (result.isOverflow());
+            do {
+                tmp.clear();
+                result = encoder.flush(tmp);
+                total += tmp.position();
+            } while (result.isOverflow());
             return total;
         }
 

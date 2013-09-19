@@ -99,7 +99,7 @@ public class Utils
 
     public static String bufferToString(ByteBuffer buf, Charset cs)
     {
-        CharsetDecoder decoder = cs.newDecoder();
+        CharsetDecoder decoder = Charsets.get().getDecoder(cs);
         int bufLen = (int)(buf.limit() * decoder.averageCharsPerByte());
         CharBuffer cBuf = CharBuffer.allocate(bufLen);
         CoderResult result;
@@ -122,7 +122,7 @@ public class Utils
 
     public static String bufferToString(ByteBuffer[] bufs, Charset cs)
     {
-        CharsetDecoder decoder = cs.newDecoder();
+        CharsetDecoder decoder = Charsets.get().getDecoder(cs);
         int totalBytes = 0;
         for (int i = 0; i < bufs.length; i++) {
             totalBytes += (bufs[i] == null ? 0 : bufs[i].remaining());
@@ -151,11 +151,10 @@ public class Utils
 
     public static ByteBuffer stringToBuffer(String str, Charset cs)
     {
-        CharsetEncoder enc = cs.newEncoder();
+        CharsetEncoder enc = Charsets.get().getEncoder(cs);
         CharBuffer chars = CharBuffer.wrap(str);
         int bufLen = (int)(chars.remaining() * enc.averageBytesPerChar());
         ByteBuffer writeBuf =  ByteBuffer.allocate(bufLen);
-        enc.onUnmappableCharacter(CodingErrorAction.REPLACE);
 
         CoderResult result;
         do {

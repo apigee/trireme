@@ -421,7 +421,8 @@ public class NodeCharsetProvider
             protected CoderResult implFlush(ByteBuffer out)
             {
                 assert(leftovers.size() <= 4);
-                if (!leftovers.isEmpty()) {
+                if (leftovers.size() > 1) {
+                    // Minimum number of characters to consume is two
                     if (out.remaining() < 3) {
                         // It is technically slightly wasteful but it simplifies the code
                         // to assume that we might output three bytes now
@@ -431,7 +432,7 @@ public class NodeCharsetProvider
                     int rem = leftovers.size();
 
                     int c0 = leftovers.remove();
-                    int c1 = leftovers.isEmpty() ? 0 : leftovers.remove();
+                    int c1 = leftovers.remove();
                     int c2 = leftovers.isEmpty() ? 0 : leftovers.remove();
                     int c3 = leftovers.isEmpty() ? 0 : leftovers.remove();
 
@@ -448,7 +449,7 @@ public class NodeCharsetProvider
                         }
                     }
                 }
-                assert(leftovers.isEmpty());
+                assert(leftovers.size() < 2);
                 return CoderResult.UNDERFLOW;
             }
         }
@@ -487,9 +488,9 @@ public class NodeCharsetProvider
                     if (out.remaining() < 4) {
                         return CoderResult.OVERFLOW;
                     }
-                    int b1 = (leftoverLen >= 1) ? leftover[0] : in.get();
-                    int b2 = (leftoverLen >= 2) ? leftover[1] : in.get();
-                    int b3 = in.get();
+                    int b1 = (leftoverLen >= 1) ? leftover[0] : (in.get() & 0xff);
+                    int b2 = (leftoverLen >= 2) ? leftover[1] : (in.get() & 0xff);
+                    int b3 = in.get() & 0xff;
                     leftoverLen = 0;
 
                     out.put(encoding[b1 >>> 2]);
@@ -500,7 +501,7 @@ public class NodeCharsetProvider
 
                 assert(in.remaining() <= 2);
                 while (in.hasRemaining()) {
-                    leftover[leftoverLen] = in.get();
+                    leftover[leftoverLen] = in.get() & 0xff;
                     leftoverLen++;
                 }
                 return CoderResult.UNDERFLOW;

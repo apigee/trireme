@@ -378,8 +378,7 @@ assert.equal('TWFu', (new Buffer('Man')).toString('base64'));
 // test that regular and URL-safe base64 both work
 var expected = [0xff, 0xff, 0xbe, 0xff, 0xef, 0xbf, 0xfb, 0xef, 0xff];
 assert.deepEqual(Buffer('//++/++/++//', 'base64'), Buffer(expected));
-// TODO NODERUNNER
-//assert.deepEqual(Buffer('__--_--_--__', 'base64'), Buffer(expected));
+assert.deepEqual(Buffer('__--_--_--__', 'base64'), Buffer(expected));
 
 // big example
 var quote = 'Man is distinguished, not only by his reason, but by this ' +

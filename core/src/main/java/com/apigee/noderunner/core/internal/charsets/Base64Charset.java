@@ -41,17 +41,23 @@ public class Base64Charset
     private static final class Enc
         extends CharsetEncoder
     {
+        /**
+         * This table maps ASCII character codes to actual characters for use while converting Base64
+         * to binary. It supports both standard and "URL-safe" Base64, whcih is why there are duplicate
+         * entries for character codes 62 and 63.
+         */
         private static final int[] decoding = {
-            -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-            -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-            -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,
-            -1, -1, -1, -1, -1, -1, -1, 62, -1, -1, -1, 63,
-            52, 53, 54, 55, 56, 57, 58, 59, 60, 61, -1, -1,
-            -1, -1, -1, -1, -1, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9,
-            10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23,
-            24, 25, -1, -1, -1, -1, -1, -1, 26, 27, 28, 29, 30, 31,
-            32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45,
-            46, 47, 48, 49, 50, 51
+            -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, // 11
+            -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, // 23
+            -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, // 35
+            -1, -1, -1, -1, -1, -1, -1, 62, -1, 62, -1, 63, // 47
+            52, 53, 54, 55, 56, 57, 58, 59, 60, 61, -1, -1, // 59
+            -1, -1, -1, -1, -1,  0,  1,  2,  3,  4,  5,  6, // 71
+            7,  8,  9,  10, 11, 12, 13, 14, 15, 16, 17, 18, // 83
+            19, 20, 21, 22, 23, 24, 25, -1, -1, -1, -1, 63, // 95
+            -1, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, // 107
+            37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, // 119
+            49, 50, 51
         };
 
         private final ArrayDeque<Integer> leftovers = new ArrayDeque<Integer>(4);
@@ -210,6 +216,10 @@ public class Base64Charset
     private static final class Dec
         extends CharsetDecoder
     {
+        /**
+         * This table maps the binary values 0-63 to corresponding characters for use in cnoverting
+         * binary data to Base64.
+         */
         private static final char[] encoding = {
             'A', 'B', 'C', 'D', 'E', 'F', 'G', 'H',
             'I', 'J', 'K', 'L', 'M','N', 'O', 'P',

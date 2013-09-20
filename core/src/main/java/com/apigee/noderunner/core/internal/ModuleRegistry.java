@@ -147,6 +147,7 @@ public class ModuleRegistry
         addCompiledModule("native_stream_writable", "com.apigee.noderunner.scripts.native_stream_writable");
         addCompiledModule("noderunner_metrics", "com.apigee.noderunner.scripts.noderunner_metrics");
         addCompiledModule("string_decoder", "com.apigee.noderunner.scripts.noderunner_string_decoder");
+        addCompiledModule("noderunner_uncloseable_transform", "com.apigee.noderunner.scripts.noderunner_uncloseable_transform");
         addCompiledModule("tls", "com.apigee.noderunner.scripts.tls");
         addCompiledModule("tls_checkidentity", "com.apigee.noderunner.scripts.tls_checkidentity");
         addCompiledModule("vm", "com.apigee.noderunner.scripts.vm");

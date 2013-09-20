@@ -546,8 +546,8 @@ public class ProcessWrap
 
         private Function getPassthroughStream(Context cx)
         {
-            Scriptable stream = (Scriptable)parent.runner.require("stream", cx);
-            return (Function)stream.get("PassThrough", stream);
+            Scriptable stream = (Scriptable)parent.runner.require("noderunner_uncloseable_transform", cx);
+            return (Function)stream.get("UncloseableTransform", stream);
         }
 
         /**

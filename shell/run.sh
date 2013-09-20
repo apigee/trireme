@@ -15,7 +15,7 @@ export CLASSPATH
 rm ${CP}
 
 JARGS="-Xmx1g"
-JARGS="-Xmx1g -DHttpAdapter=netty"
+#JARGS="-Xmx1g -DHttpAdapter=netty"
 #JARGS="-Xmx1g -DSealRoot=false -DOptLevel=1"
 #JARGS="-Xdebug -Xrunjdwp:server=y,suspend=n,transport=dt_socket,address=localhost:14000"
 #JARGS="-Xdebug -Xrunjdwp:server=y,suspend=n,transport=dt_socket,address=localhost:14000 -DHttpAdapter=netty"

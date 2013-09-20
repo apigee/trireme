@@ -88,6 +88,7 @@ public class UDPWrap
         public static Object newUDPImpl(Context cx, Object[] args, Function ctorObj, boolean inNewExpr)
         {
             UDPImpl udp = new UDPImpl();
+            udp.ref();
             udp.runner = getRunner(cx);
             return udp;
         }
@@ -162,6 +163,7 @@ public class UDPWrap
         @JSFunction
         public void close()
         {
+            super.close();
             if (socket != null) {
                 if (log.isDebugEnabled()) {
                     log.debug("Closing {}", socket);
@@ -239,7 +241,6 @@ public class UDPWrap
         @JSFunction
         public void recvStart()
         {
-            ref();
             final UDPImpl self = this;
             final Scriptable domain = runner.getDomain();
             clearErrno();
@@ -295,7 +296,6 @@ public class UDPWrap
         @JSFunction
         public void recvStop()
         {
-            unref();
             clearErrno();
             if (readThread != null) {
                 readThread.interrupt();

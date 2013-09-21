@@ -784,7 +784,11 @@ function readCiphertext(self, data, offset, cb) {
     case self.engine.NEED_TASK:
       lcb = cb;
       cb = undefined;
+      var paused = self._clientPaused;
+      self._clientPaused = true;
+
       self.engine.runTask(function() {
+        self._clientPaused = paused;
         if (debugEnabled) {
           debug(self.id + ' task complete from read');
         }
@@ -883,7 +887,11 @@ function continueWriteCleartext(self, status, data, offset, bytesConsumed, c) {
     case self.engine.NEED_TASK:
       lcb = cb;
       cb = undefined;
+      var paused = self._clientPaused;
+      self._clientPaused = true;
+
       self.engine.runTask(function() {
+        self._clientPaused = paused;
         if (debugEnabled) {
           debug(self.id + ' task complete from write');
         }

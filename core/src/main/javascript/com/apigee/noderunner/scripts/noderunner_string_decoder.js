@@ -36,11 +36,18 @@ var StringDecoder = exports.StringDecoder = function(enc) {
   this.decoder = new decoderWrap.Decoder(encoding);
 };
 
+function toBuf(o) {
+  if (typeof o === 'string') {
+    return new Buffer(o);
+  }
+  return o;
+}
+
 StringDecoder.prototype.write = function(buffer) {
-  return this.decoder.decode(buffer);
+  return this.decoder.decode(toBuf(buffer));
 };
 
 StringDecoder.prototype.end = function(buf) {
   var buffer = (buf ? buf : null);
-  return this.decoder.end(buffer);
+  return this.decoder.end(toBuf(buf));
 };

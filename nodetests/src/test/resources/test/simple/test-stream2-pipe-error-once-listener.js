@@ -19,34 +19,46 @@
 // OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE
 // USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-// Flags: --expose-gc
 
-var common = require('../common');
+var common = require('../common.js');
 var assert = require('assert');
-var net = require('net');
 
-assert(typeof gc === 'function', 'Run this test with --expose-gc');
-net.createServer(function() {}).listen(common.PORT);
+var util = require('util');
+var stream = require('stream');
 
-var before = 0;
-(function() {
-  // 2**26 == 64M entries
-  gc();
-  for (var i = 0, junk = [0]; i < 26; ++i) junk = junk.concat(junk);
-  before = process.memoryUsage().rss;
 
-  net.createConnection(common.PORT, '127.0.0.1', function() {
-    assert(junk.length != 0);  // keep reference alive
-    setTimeout(done, 10);
-    gc();
-  });
-})();
+var Read = function() {
+  stream.Readable.call(this);
+};
+util.inherits(Read, stream.Readable);
 
-function done() {
-  gc();
-  var after = process.memoryUsage().rss;
-  var reclaimed = (before - after) / 1024;
-  console.log('%d kB reclaimed', reclaimed);
-  assert(reclaimed > 128 * 1024);  // It's around 256 MB on x64.
-  process.exit();
-}
+Read.prototype._read = function(size) {
+  this.push('x');
+  this.push(null);
+};
+
+
+var Write = function() {
+  stream.Writable.call(this);
+};
+util.inherits(Write, stream.Writable);
+
+Write.prototype._write = function(buffer, encoding, cb) {
+  this.emit('error', new Error('boom'));
+  this.emit('alldone');
+};
+
+var read = new Read();
+var write = new Write();
+
+write.once('error', function(err) {});
+write.once('alldone', function(err) {
+  console.log('ok');
+});
+
+process.on('exit', function(c) {
+  console.error('error thrown even with listener');
+});
+
+read.pipe(write);
+

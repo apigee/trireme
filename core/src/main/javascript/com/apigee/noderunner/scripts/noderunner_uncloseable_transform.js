@@ -25,22 +25,28 @@
  * to keep a child from closing a paren't stdin or stdout.
  */
 
-var Transform = require('stream').Transform;
+var PassThrough = require('stream').PassThrough;
 var util = require('util');
 
 function UncloseableTransform(options) {
   if (!(this instanceof UncloseableTransform)) {
     return new UncloseableTransform(options);
   }
-  Transform.call(this, options);
+  PassThrough.call(this, options);
 }
-util.inherits(UncloseableTransform, Transform);
+util.inherits(UncloseableTransform, PassThrough);
 module.exports.UncloseableTransform = UncloseableTransform;
 
 UncloseableTransform.prototype.end = function(chunk, encoding, cb) {
-  this.write(chunk, encoding, function() {
+  if (chunk) {
+    this.write(chunk, encoding, function() {
+      if (cb) {
+        cb('This stream may not be closed');
+      }
+    });
+  } else if (cb) {
     cb('This stream may not be closed');
-  });
+  }
 };
 
 UncloseableTransform.prototype.destroy = function() {

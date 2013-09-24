@@ -201,6 +201,10 @@
         <Name>test-https-foafssl.js</Name>
         <Description>Not entirely sure what this is but we haven't figured it out yet.</Description>
     </Excluded>
+    <Excluded>
+        <Name>test-event-emitter-memory-leak.js</Name>
+        <Description>Requires --expose-gc</Description>
+    </Excluded>
 
     <!-- DIFFERENT TESTS
          We have different versions of these tests in the "noderunner" directory because they must

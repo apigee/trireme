@@ -65,9 +65,17 @@ public class TestRunner
             exitCode = 103;
         } catch (ExecutionException ee) {
             Throwable cause = ee.getCause();
-            if (cause instanceof RhinoException) {
-                System.err.println(cause.toString());
-                System.err.println(((RhinoException)cause).getScriptStackTrace());
+            if (cause instanceof JavaScriptException) {
+                Object value = ((JavaScriptException)cause).getValue();
+                Context.enter();
+                System.err.println(Context.toString(value));
+                Context.exit();
+            } else if (cause instanceof RhinoException) {
+                RhinoException re = (RhinoException)cause;
+                System.err.println(re.details());
+                System.err.println(re.getScriptStackTrace());
+            } else {
+                System.err.println(cause.getMessage());
             }
             cause.printStackTrace(System.err);
             exitCode = 104;

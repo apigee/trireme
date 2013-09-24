@@ -19,34 +19,22 @@
 // OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE
 // USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-// Flags: --expose-gc
-
 var common = require('../common');
 var assert = require('assert');
-var net = require('net');
+var dgram = require('dgram');
 
-assert(typeof gc === 'function', 'Run this test with --expose-gc');
-net.createServer(function() {}).listen(common.PORT);
+var buf = Buffer('test');
+var host = '127.0.0.1';
+var sock = dgram.createSocket('udp4');
 
-var before = 0;
-(function() {
-  // 2**26 == 64M entries
-  gc();
-  for (var i = 0, junk = [0]; i < 26; ++i) junk = junk.concat(junk);
-  before = process.memoryUsage().rss;
+assert.throws(function() {
+  sock.send();
+}, TypeError);  // First argument should be a buffer.
 
-  net.createConnection(common.PORT, '127.0.0.1', function() {
-    assert(junk.length != 0);  // keep reference alive
-    setTimeout(done, 10);
-    gc();
-  });
-})();
-
-function done() {
-  gc();
-  var after = process.memoryUsage().rss;
-  var reclaimed = (before - after) / 1024;
-  console.log('%d kB reclaimed', reclaimed);
-  assert(reclaimed > 128 * 1024);  // It's around 256 MB on x64.
-  process.exit();
-}
+assert.throws(function() { sock.send(buf, -1, 1, 1, host);    }, RangeError);
+assert.throws(function() { sock.send(buf, 1, -1, 1, host);    }, RangeError);
+assert.throws(function() { sock.send(buf, 1, 1, -1, host);    }, RangeError);
+assert.throws(function() { sock.send(buf, 5, 1, 1, host);     }, RangeError);
+assert.throws(function() { sock.send(buf, 1, 5, 1, host);     }, RangeError);
+assert.throws(function() { sock.send(buf, 1, 1, 0, host);     }, RangeError);
+assert.throws(function() { sock.send(buf, 1, 1, 65536, host); }, RangeError);

@@ -73,6 +73,7 @@ function run(num) {
   // Get data from inflate stream
   var output = [];
   inflate.on('data', function(chunk) {
+    console.log(chunk.toString());
     output.push(chunk);
   });
   inflate.on('end', function() {

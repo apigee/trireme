@@ -21,32 +21,24 @@
 
 // Flags: --expose-gc
 
+// Add and remove a lot of different events to an EventEmitter, then check
+// that we didn't leak the event names.
 var common = require('../common');
 var assert = require('assert');
-var net = require('net');
+var events = require('events');
 
-assert(typeof gc === 'function', 'Run this test with --expose-gc');
-net.createServer(function() {}).listen(common.PORT);
+assert.equal(typeof gc, 'function', 'Run this test with --expose-gc');
+gc();
 
-var before = 0;
-(function() {
-  // 2**26 == 64M entries
-  gc();
-  for (var i = 0, junk = [0]; i < 26; ++i) junk = junk.concat(junk);
-  before = process.memoryUsage().rss;
+var before = process.memoryUsage().heapUsed;
+var e = new events.EventEmitter();
 
-  net.createConnection(common.PORT, '127.0.0.1', function() {
-    assert(junk.length != 0);  // keep reference alive
-    setTimeout(done, 10);
-    gc();
-  });
-})();
-
-function done() {
-  gc();
-  var after = process.memoryUsage().rss;
-  var reclaimed = (before - after) / 1024;
-  console.log('%d kB reclaimed', reclaimed);
-  assert(reclaimed > 128 * 1024);  // It's around 256 MB on x64.
-  process.exit();
+for (var i = 0; i < 2.5e5; ++i) {
+  var name = 'a-pretty-long-event-name-' + i;
+  e.on(name, assert.fail);
+  e.removeListener(name, assert.fail);
 }
+gc();
+
+var after = process.memoryUsage().heapUsed;
+assert(after - before < 1024*1024, 'EventEmitter leaks event names.');

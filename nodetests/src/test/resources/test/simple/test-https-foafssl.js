@@ -62,7 +62,7 @@ var server = https.createServer(options, function(req, res) {
 
 
 server.listen(common.PORT, function() {
-  var cmd = 'curl -v --insecure https://127.0.0.1:' + common.PORT + '/';
+  var cmd = 'curl --insecure https://127.0.0.1:' + common.PORT + '/';
   cmd += ' --cert ' + join(common.fixturesDir, 'foafssl.crt');
   cmd += ' --key ' + join(common.fixturesDir, 'foafssl.key');
   console.error('executing %j', cmd);

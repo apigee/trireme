@@ -30,6 +30,5 @@ var buf = new Buffer(1024);
 buf.fill(42);
 
 var socket = dgram.createSocket('udp4');
-
-socket.send(buf, 0, buf.length, common.port, 'localhost');
+socket.send(buf, 0, buf.length, common.PORT, 'localhost');
 socket.close();

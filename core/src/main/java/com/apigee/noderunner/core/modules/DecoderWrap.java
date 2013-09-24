@@ -116,7 +116,6 @@ public class DecoderWrap
 
             DecoderImpl self = new DecoderImpl();
             self.charset = cs;
-            self.decoder = Charsets.get().getDecoder(cs);
             return self;
         }
 
@@ -133,13 +132,19 @@ public class DecoderWrap
         public static Object end(Context cx, Scriptable thisObj, Object[] args, Function func)
         {
             ensureArg(args, 0);
-            Buffer.BufferImpl buf = (args[0] == null ? null : objArg(args, 0, Buffer.BufferImpl.class, true));
+            Buffer.BufferImpl buf = (args[0] == null ? null : objArg(args, 0, Buffer.BufferImpl.class, false));
             DecoderImpl self = (DecoderImpl)thisObj;
-            return self.doDecode(buf, true);
+            String result = self.doDecode(buf, true);
+            self.decoder = null;
+            return result;
         }
 
         private String doDecode(Buffer.BufferImpl buf, boolean lastChunk)
         {
+            if (decoder == null) {
+                decoder = charset.newDecoder();
+            }
+
             ByteBuffer inBuf = (buf == null ? EMPTY : buf.getBuffer());
             ByteBuffer allIn = Utils.catBuffers(this.remaining, inBuf);
             CharBuffer out =

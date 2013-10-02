@@ -4,7 +4,7 @@
   <groupId>com.apigee.noderunner</groupId>
   <artifactId>noderunner</artifactId>
   <name>noderunner</name>
-  <version>0.6.5</version>
+  <version>0.6.6-SNAPSHOT</version>
   
   <packaging>pom</packaging>
 

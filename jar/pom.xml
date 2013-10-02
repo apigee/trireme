@@ -4,33 +4,33 @@
   <parent>
     <groupId>com.apigee.noderunner</groupId>
     <artifactId>noderunner</artifactId>
-    <version>0.6.5</version>
+    <version>0.6.6-SNAPSHOT</version>
   </parent>
 
   <name>noderunner-jar</name>
   <artifactId>noderunner-jar</artifactId>
-  <version>0.6.5</version>
+  <version>0.6.6-SNAPSHOT</version>
 
   <dependencies>
     <dependency>
       <groupId>com.apigee.noderunner</groupId>
       <artifactId>noderunner-core</artifactId>
-      <version>0.6.5</version>
+      <version>0.6.6-SNAPSHOT</version>
     </dependency>
     <dependency>
       <groupId>com.apigee.noderunner</groupId>
       <artifactId>noderunner-crypto</artifactId>
-      <version>0.6.5</version>
+      <version>0.6.6-SNAPSHOT</version>
     </dependency>
     <dependency>
       <groupId>com.apigee.noderunner</groupId>
       <artifactId>noderunner-util</artifactId>
-      <version>0.6.5</version>
+      <version>0.6.6-SNAPSHOT</version>
     </dependency>
     <dependency>
       <groupId>com.apigee.noderunner</groupId>
       <artifactId>noderunner-shell</artifactId>
-      <version>0.6.5</version>
+      <version>0.6.6-SNAPSHOT</version>
      </dependency>
 
     <dependency>

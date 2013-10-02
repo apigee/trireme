@@ -61,22 +61,26 @@ function run(num) {
   var inflate = zlib.createInflate({ dictionary: spdyDict });
 
   if (num === 2) {
+    console.log('resetting');
     deflate.reset();
     deflate.removeAllListeners('data');
   }
 
   // Put data into deflate stream
   deflate.on('data', function(chunk) {
+    console.log('deflated %d', chunk.length);
     inflate.write(chunk);
   });
 
   // Get data from inflate stream
   var output = [];
   inflate.on('data', function(chunk) {
+    console.log('Inflated %d', chunk.length);
     console.log(chunk.toString());
     output.push(chunk);
   });
   inflate.on('end', function() {
+    console.log('end');
     called++;
 
     assert.equal(output.join(''), input);

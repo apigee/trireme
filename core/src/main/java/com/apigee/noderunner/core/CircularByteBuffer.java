@@ -50,6 +50,10 @@ public class CircularByteBuffer
         this.buf = new byte[initialCapacity + 1];
     }
 
+    public void clear() {
+        readPos = writePos = 0;
+    }
+
     public int read() {
         int available = available();
         if (available < 1) {
@@ -82,6 +86,11 @@ public class CircularByteBuffer
         }
 
         return len;
+    }
+
+    public int read(byte[] out)
+    {
+        return read(out, 0, out.length);
     }
 
     public int write(int i) {
@@ -162,6 +171,11 @@ public class CircularByteBuffer
         return len;
     }
 
+    public int peek(byte[] out)
+    {
+        return peek(out, 0, out.length);
+    }
+
     public void resize(int newSize)
     {
         if (newSize < available()) {
@@ -189,6 +203,10 @@ public class CircularByteBuffer
             return writePos - readPos;
         }
         return buf.length - (readPos - writePos);
+    }
+
+    public boolean hasAvailable() {
+        return available() > 0;
     }
 
     public int totalCapacity()

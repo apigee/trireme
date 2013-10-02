@@ -19,6 +19,10 @@
 // OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE
 // USE OR OTHER DEALINGS IN THE SOFTWARE.
 
+/*
+ * Copied from Node 0.10.18 and modified for Noderunner to more directly support what Java can easily do.
+ */
+
 var Transform = require('_stream_transform');
 
 var binding = process.binding('zlib');
@@ -282,21 +286,10 @@ function Zlib(opts, mode) {
     }
   }
 
-  this._binding = new binding.Zlib(mode);
+  this._binding = binding.createZLib();
 
   var self = this;
   this._hadError = false;
-  this._binding.onerror = function(message, errno) {
-    // there is no way to cleanly recover.
-    // continuing only obscures problems.
-    self._binding = null;
-    self._hadError = true;
-
-    var error = new Error(message);
-    error.errno = errno;
-    error.code = exports.codes[errno];
-    self.emit('error', error);
-  };
 
   var level = exports.Z_DEFAULT_COMPRESSION;
   if (typeof opts.level === 'number') level = opts.level;
@@ -304,14 +297,13 @@ function Zlib(opts, mode) {
   var strategy = exports.Z_DEFAULT_STRATEGY;
   if (typeof opts.strategy === 'number') strategy = opts.strategy;
 
-  this._binding.init(opts.windowBits || exports.Z_DEFAULT_WINDOWBITS,
+  this._binding.init(mode,
+                     opts.windowBits || exports.Z_DEFAULT_WINDOWBITS,
                      level,
                      opts.memLevel || exports.Z_DEFAULT_MEMLEVEL,
                      strategy,
                      opts.dictionary);
 
-  this._buffer = new Buffer(this._chunkSize);
-  this._offset = 0;
   this._closed = false;
 
   this.once('end', this.close);
@@ -329,6 +321,7 @@ Zlib.prototype._flush = function(callback) {
   this._transform(new Buffer(0), '', callback);
 };
 
+// This is a bunch of stream-specific stuff here from Node.js -- continue to use this.
 Zlib.prototype.flush = function(callback) {
   var ws = this._writableState;
 
@@ -366,22 +359,27 @@ Zlib.prototype.close = function(callback) {
   });
 };
 
+// This is the function that differs most from regular Node.js. Let the Java layer work in a way that
+// makes the most sense for it, which means that we give it some input and let it iterate
+// a few times until it is done.
 Zlib.prototype._transform = function(chunk, encoding, cb) {
-  var flushFlag;
-  var ws = this._writableState;
+  if (chunk !== null && !Buffer.isBuffer(chunk)) {
+    return cb(new Error('invalid input'));
+  }
+
+  // Figure out whether this is the last chunk from stuff before
   var ending = ws.ending || ws.ended;
   var last = ending && (!chunk || ws.length === chunk.length);
-
-  if (chunk !== null && !Buffer.isBuffer(chunk))
-    return cb(new Error('invalid input'));
 
   // If it's the last chunk, or a final flush, we use the Z_FINISH flush flag.
   // If it's explicitly flushing at some other time, then we use
   // Z_FULL_FLUSH. Otherwise, use Z_NO_FLUSH for maximum compression
   // goodness.
-  if (last)
+  // Problem is, Java 6 doesn't support FULL_FLUSH so we ignore for now.
+  // TODO un-ignore this.
+  if (last) {
     flushFlag = binding.Z_FINISH;
-  else {
+  } else {
     flushFlag = this._flushFlag;
     // once we've flushed the last of the queue, stop flushing and
     // go back to the normal behavior.
@@ -390,66 +388,28 @@ Zlib.prototype._transform = function(chunk, encoding, cb) {
     }
   }
 
-  var availInBefore = chunk && chunk.length;
-  var availOutBefore = this._chunkSize - this._offset;
-  var inOff = 0;
-
-  var req = this._binding.write(flushFlag,
-                                chunk, // in
-                                inOff, // in_off
-                                availInBefore, // in_len
-                                this._buffer, // out
-                                this._offset, //out_off
-                                availOutBefore); // out_len
-
-  req.buffer = chunk;
-  req.callback = callback;
-
+  // Add this input once for consumption.
+  // The binding will call us back once or more times to produce output
   var self = this;
-  function callback(availInAfter, availOutAfter, buffer) {
-    if (self._hadError)
-      return;
+  this._binding.transform(chunk, flushFlag, function(errMsg, outChunk, allConsumed) {
+    if (errMsg) {
+      self._hadError = true;
+      var error = new Error(errMsg);
+      error.errno = errno;
+      error.code = exports.codes[errno];
 
-    var have = availOutBefore - availOutAfter;
-    assert(have >= 0, 'have should not go down');
+      // Should we call cb instead?
+      self.emit('error', error);
 
-    if (have > 0) {
-      var out = self._buffer.slice(self._offset, self._offset + have);
-      self._offset += have;
-      // serve some output to the consumer.
-      self.push(out);
+    } else {
+      if (outChunk) {
+        self.push(outChunk);
+      }
+      if (allConsumed) {
+        cb();
+      }
     }
-
-    // exhausted the output buffer, or used all the input create a new one.
-    if (availOutAfter === 0 || self._offset >= self._chunkSize) {
-      availOutBefore = self._chunkSize;
-      self._offset = 0;
-      self._buffer = new Buffer(self._chunkSize);
-    }
-
-    if (availOutAfter === 0) {
-      // Not actually done.  Need to reprocess.
-      // Also, update the availInBefore to the availInAfter value,
-      // so that if we have to hit it a third (fourth, etc.) time,
-      // it'll have the correct byte counts.
-      inOff += (availInBefore - availInAfter);
-      availInBefore = availInAfter;
-
-      var newReq = self._binding.write(flushFlag,
-                                       chunk,
-                                       inOff,
-                                       availInBefore,
-                                       self._buffer,
-                                       self._offset,
-                                       self._chunkSize);
-      newReq.callback = callback; // this same function
-      newReq.buffer = chunk;
-      return;
-    }
-
-    // finished with the chunk.
-    cb();
-  }
+  });
 };
 
 util.inherits(Deflate, Zlib);

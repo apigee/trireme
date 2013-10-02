@@ -134,7 +134,6 @@ public class ModuleRegistry
         addCompiledModule("timers", "com.apigee.noderunner.fromnode.timers");
         addCompiledModule("url", "com.apigee.noderunner.fromnode.url");
         addCompiledModule("util", "com.apigee.noderunner.fromnode.util");
-        addCompiledModule("zlib", "com.apigee.noderunner.fromnode.zlib");
 
         // These modules are Noderunner-specific built-in modules that either replace regular Node
         // functionality or add to it.
@@ -151,6 +150,7 @@ public class ModuleRegistry
         addCompiledModule("tls", "com.apigee.noderunner.scripts.tls");
         addCompiledModule("tls_checkidentity", "com.apigee.noderunner.scripts.tls_checkidentity");
         addCompiledModule("vm", "com.apigee.noderunner.scripts.vm");
+        addCompiledModule("zlib", "com.apigee.noderunner.scripts.zlib");
     }
 
     private void compileAndAdd(Context cx, Object impl, String name, String path)

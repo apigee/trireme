@@ -57,6 +57,7 @@ import java.util.zip.GZIPInputStream;
 import java.util.zip.GZIPOutputStream;
 import java.util.zip.Inflater;
 import java.util.zip.InflaterInputStream;
+import java.util.zip.InflaterOutputStream;
 
 /**
  * zlib internal module, used by zlib.js
@@ -129,12 +130,9 @@ public class ZLib
             throws InvocationTargetException, IllegalAccessException, InstantiationException
     {
         ScriptableObject.defineClass(scope, ZLibImpl.class);
-        ScriptableObject.defineClass(scope, ZLibObjImpl.class);
-        ScriptableObject.defineClass(scope, ZLibHandleImpl.class);
-
         ZLibImpl zlib = (ZLibImpl) cx.newObject(scope, ZLibImpl.CLASS_NAME);
+        ScriptableObject.defineClass(zlib, ZLibObjImpl.class);
         zlib.initialize(runner, runner.getAsyncPool());
-        zlib.bindFunctions(cx, zlib);
         return zlib;
     }
 
@@ -210,45 +208,39 @@ public class ZLib
             this.pool = fsPool;
         }
 
-        public void bindFunctions(Context cx, Scriptable export)
+        @JSFunction
+        public static Object createZLib(Context cx, Scriptable thisObj, Object[] args, Function func)
         {
-            FunctionObject zlib = new FunctionObject("Zlib",
-                                                     Utils.findMethod(ZLibImpl.class, "Zlib"),
-                                                     this);
-            export.put("Zlib", export, zlib);
-            zlib.associateValue("_module", this);
-        }
-
-        public static Object Zlib(Context cx, Scriptable thisObj, Object[] args, Function func)
-        {
-            ZLibObjImpl zLibObj = (ZLibObjImpl) cx.newObject(thisObj, ZLibObjImpl.CLASS_NAME, args);
-            zLibObj.setParentModule((ZLibImpl) ((ScriptableObject) func).getAssociatedValue("_module"));
-            return zLibObj;
+            ZLibObjImpl zo = (ZLibObjImpl)cx.newObject(thisObj, ZLibObjImpl.CLASS_NAME);
+            ZLibImpl self = (ZLibImpl)thisObj;
+            zo.setParentModule(self);
+            return zo;
         }
     }
 
     public static class ZLibObjImpl
         extends ScriptableObject
     {
-        public static final String CLASS_NAME = "_zlibObjClass";
+        public static final String CLASS_NAME = "ZLib";
 
-        private int windowBits;
+        public static final int DEFAULT_OUT_SIZE = 8192;
+
+        private Buffer.BufferImpl dictionary;
         private int mode;
         private int level;
         private int strategy;
-        private Buffer.BufferImpl dictionary;
 
         private Function onError; // (message, errno)
 
         private ZLibImpl parentModule;
         private boolean initialized = false;
-        private boolean initializedDeflate = false;
-        private boolean initializedInflate = false;
-        private Inflater inflater;
+        // If we're not inflating then we're deflating...
+        private boolean inflating;
         private Deflater deflater;
-        private ByteBuffer headerBuf;
-        private boolean gzipHeaderRead;
-        private final CRC32 crc = new CRC32();
+        private Inflater inflater;
+        private boolean headerDone;
+        private boolean trailerDone;
+        private ByteBuffer remaining;
 
         @Override
         public String getClassName()
@@ -256,59 +248,102 @@ public class ZLib
             return CLASS_NAME;
         }
 
-        public ZLibObjImpl()
-        {
-        }
-
-        public ZLibObjImpl(int mode)
-        {
-            if (mode < DEFLATE || mode > UNZIP) {
-                throw Utils.makeError(Context.getCurrentContext(), this, "bad mode");
-            }
-            this.mode = mode;
-        }
-
         @JSFunction
-        public void init(int windowBits, int level, int memLevel, int strategy, Object dictionary)
+        public static void init(Context cx, Scriptable thisObj, Object[] args, Function func)
         {
+            ZLibObjImpl self = (ZLibObjImpl)thisObj;
+            self.mode = intArg(args, 0);
             /* windowBits ignored */
-            this.level = level;
+            self.level = intArg(args, 2);
             /* memLevel ignored */
+            int strategy = intArg(args, 4);
+            ensureArg(args, 5);
+            Object dictionary = args[5];
 
             if (strategy == Z_DEFAULT_STRATEGY) {
-                this.strategy = Deflater.DEFAULT_STRATEGY;
+                self.strategy = Deflater.DEFAULT_STRATEGY;
             } else if (strategy == Z_FILTERED) {
-                this.strategy = Deflater.FILTERED;
+                self.strategy = Deflater.FILTERED;
             } else if (strategy == Z_HUFFMAN_ONLY) {
-                this.strategy = Deflater.HUFFMAN_ONLY;
+                self.strategy = Deflater.HUFFMAN_ONLY;
             } else {
-                throw Utils.makeError(Context.getCurrentContext(), this, "strategy not supported");
+                throw Utils.makeError(cx, self, "strategy not supported");
             }
 
             if (!dictionary.equals(Undefined.instance)) {
-                this.dictionary = (Buffer.BufferImpl) dictionary;
-            } else {
-                this.dictionary = null;
+                self.dictionary = (Buffer.BufferImpl)dictionary;
             }
 
-            initialized = true;
+            switch (self.mode) {
+            case DEFLATE:
+            case DEFLATERAW:
+            case GUNZIP:
+            case UNZIP:
+                self.inflating = false;
+                break;
+            case INFLATE:
+            case INFLATERAW:
+            case GZIP:
+                // Can't create inflater until we can read the input since we might have to auto-detect
+                self.inflating = true;
+                break;
+            default:
+                throw Utils.makeError(cx, self, "mode not supported");
+            }
+
+            self.initialized = true;
         }
 
-        /**
-         * Initialize deflater and output stream for writeDeflate
-         * @return true if initialized, false if not yet ready (need more bytes to read)
-         * @throws IOException
-         */
-        private boolean initDeflate()
+        @JSFunction
+        public void reset()
+                throws IOException
         {
-            boolean nowrap = mode == DEFLATERAW || mode == GZIP;
+            if (deflater != null) {
+                deflater.reset();
+            }
+            if (inflater != null) {
+                inflater.reset();
+            }
+            headerDone = trailerDone = false;
+            remaining = null;
+        }
 
-            //deflater = new UnblockableDeflater(level, nowrap);
+        @JSFunction
+        public void close()
+                throws IOException
+        {
+            if (deflater != null) {
+                deflater.end();
+            }
+            if (inflater != null) {
+                inflater.end();
+            }
+        }
+
+        @JSFunction
+        public static void transform(Context cx, Scriptable thisObj, Object[] args, Function func)
+        {
+            Buffer.BufferImpl chunk = objArg(args, 0, Buffer.BufferImpl.class, true);
+            int flushFlag = intArg(args, 1);
+            Function cb = functionArg(args, 2, true);
+            ZLibObjImpl self = (ZLibObjImpl)thisObj;
+
+            if (self.inflating) {
+                self.inflate(cx, chunk, flushFlag, cb);
+            } else {
+                self.deflate(cx, chunk, flushFlag, cb);
+            }
+        }
+
+        private void initDeflate()
+        {
+            boolean nowrap = (mode == DEFLATERAW) || (mode == GZIP);
+
             if (log.isDebugEnabled()) {
                 log.debug("New deflater mode = {} nowrap = {}", mode, nowrap);
             }
             deflater = new Deflater(level, nowrap);
-            deflater.setStrategy(this.strategy);
+            deflater.setStrategy(strategy);
             deflater.setLevel(level);
             if (this.dictionary != null) {
                 try {
@@ -319,9 +354,237 @@ public class ZLib
                             new Object[] { "Bad dictionary", Z_DATA_ERROR });
                 }
             }
+        }
 
+        private void deflate(Context cx, Buffer.BufferImpl chunk, int flushFlag, Function cb)
+        {
+            if (deflater == null) {
+                initDeflate();
+            }
+            if (!headerDone) {
+               if (mode == GZIP) {
+                   ByteBuffer bb = makeGZipHeader();
+                   Buffer.BufferImpl buf = Buffer.BufferImpl.newBuffer(cx, this, bb, false);
+                   log.debug("Sending GZIP header");
+                   cb.call(cx, this, this, new Object[] { Context.getUndefinedValue(), buf, false });
+               }
+               headerDone = true;
+            }
+
+            if (log.isDebugEnabled()) {
+                log.debug("Consuming {} bytes from buffer", chunk.getLength());
+            }
+
+            deflater.setInput(chunk.getArray(), chunk.getArrayOffset(), chunk.getLength());
+            if (flushFlag == Z_FINISH) {
+                deflater.finish();
+            }
+
+            boolean done;
+            do {
+                byte[] outBuf = new byte[DEFAULT_OUT_SIZE];
+                int count = deflater.deflate(outBuf);
+                done = ((count == 0) && (deflater.needsInput() || deflater.finished()));
+                if (log.isDebugEnabled()) {
+                    log.debug("Deflater produced {}. needsInput = {} finished = {}",
+                              count, deflater.needsInput(), deflater.finished());
+                }
+                if (count > 0) {
+                    Buffer.BufferImpl outChunk = Buffer.BufferImpl.newBuffer(cx, this, outBuf, 0, count);
+                    cb.call(cx, this, this, new Object[] { Context.getUndefinedValue(), outChunk, false});
+                }
+            } while (!done);
+
+            Buffer.BufferImpl lastChunk = null;
+            if (deflater.finished() && !trailerDone) {
+                if (mode == GZIP) {
+                   ByteBuffer bb = makeGZipTrailer();
+                   Buffer.BufferImpl buf = Buffer.BufferImpl.newBuffer(cx, this, bb, false);
+                   log.debug("Sending GZIP trailer");
+                }
+               headerDone = true;
+            }
+            cb.call(cx, this, this, new Object[] { Context.getUndefinedValue(), lastChunk, true });
+        }
+
+        /**
+         * Construct a GZip header as per the spec:
+         * http://www.gzip.org/zlib/rfc-gzip.html
+         */
+        private ByteBuffer makeGZipHeader()
+        {
+            ByteBuffer zipHeader = ByteBuffer.allocate(GZIP_HEADER_SIZE);
+            zipHeader.order(ByteOrder.LITTLE_ENDIAN);
+            // GZIP magic number
+            zipHeader.put((byte) 0x1f);
+            zipHeader.put((byte)0x8b);
+            // "deflate" compression method
+            zipHeader.put((byte)8);
+            // Flags -- No file names or comments or anything cute
+            zipHeader.put((byte)0);
+            // Timestamp
+            zipHeader.putInt((int)(System.currentTimeMillis() / 1000L));
+            // Compression level hint
+            if (level == Z_BEST_COMPRESSION) {
+                zipHeader.put((byte)2);
+            } else if (level == Z_BEST_SPEED) {
+                zipHeader.put((byte)4);
+            } else {
+                zipHeader.put((byte)0);
+            }
+            // "Unix"
+            zipHeader.put((byte)3);
+            assert(zipHeader.position() == GZIP_HEADER_SIZE);
+
+            zipHeader.flip();
+            return zipHeader;
+        }
+
+        private ByteBuffer makeGZipTrailer()
+        {
+            ByteBuffer zt = ByteBuffer.allocate(GZIP_TRAILER_SIZE);
+            zt.order(ByteOrder.LITTLE_ENDIAN);
+            zt.putInt(0);
+            zt.putInt(0);
+            assert(zt.position() == GZIP_TRAILER_SIZE);
+
+            zt.flip();
+            return zt;
+        }
+
+        private void inflate(Context cx, Buffer.BufferImpl chunk, int flushFlag, Function cb)
+        {
+            boolean consumedChunk = false;
+            if (!headerDone) {
+                switch (mode) {
+                case INFLATE:
+                    inflater = new Inflater(false);
+                    headerDone = true;
+                    break;
+                case INFLATERAW:
+                    inflater = new Inflater(true);
+                    headerDone = true;
+                    break;
+                case GUNZIP:
+                    // Create one buffer that could potentially include everything that we read so far
+                    consumedChunk = true;
+                    remaining = Utils.catBuffers(remaining, chunk.getBuffer());
+                    if (isGZipHeaderComplete()) {
+                        headerDone = true;
+                        inflater = new Inflater(true);
+                    }
+                    break;
+                case UNZIP:
+                    consumedChunk = true;
+                    remaining = Utils.catBuffers(remaining, chunk.getBuffer());
+                    int magic = peekMagicNumber();
+                    if (magic == GZIPInputStream.GZIP_MAGIC) {
+                        mode = GUNZIP;
+                        inflate(cx, chunk, flushFlag, cb);
+                        return;
+                    } else if (magic >= 0) {
+                        mode = INFLATE;
+                        inflate(cx, chunk, flushFlag, cb);
+                        return;
+                    }
+                    break;
+                default:
+                    throw new AssertionError();
+                }
+            }
+
+            if (!headerDone) {
+                // Not enough data so far
+                cb.call(cx, this, this, new Object[] { Context.getUndefinedValue(),
+                                                       Context.getUndefinedValue(), true });
+                return;
+            }
+
+            // Read from "remaining" first, then from the real chunk if it's not already consumed
+        }
+
+        /*
+         * Does the "remaining" buffer contain a complete GZIP header? This requires us to much around
+         * with null-terminated strings and things. If we return true, we will set position so that it points
+         * past the current header.
+         */
+        private boolean isGZipHeaderComplete()
+        {
+            if (remaining.remaining() < GZIP_HEADER_SIZE) {
+                return false;
+            }
+
+            remaining.position(GZIP_HEADER_SIZE);
+
+            // See how much more stuff we have to read
+            int flags = remaining.get(3);
+            if ((flags & (1 << 2)) != 0) {
+                // FHEXTRA set
+                if (remaining.remaining() < 2) {
+                    remaining.position(0);
+                    return false;
+                }
+
+                int extraLen = remaining.getShort();
+                if (remaining.remaining() < extraLen) {
+                    remaining.position(0);
+                    return false;
+                }
+                // Skip...
+                remaining.position(remaining.position() + extraLen);
+            }
+
+            if ((flags & (1 << 3)) != 0) {
+                // FNAME set -- null-terminated name -- read until we get a zero
+                int b;
+                do {
+                    if (remaining.hasRemaining()) {
+                        b = remaining.get();
+                    } else {
+                        remaining.position(0);
+                        return false;
+                    }
+                } while (b != 0);
+            }
+
+            if ((flags & (1 << 4)) != 0) {
+                // FCOMMENT set -- another null-terminated name
+                int b;
+                do {
+                    if (remaining.hasRemaining()) {
+                        b = remaining.get();
+                    } else {
+                        remaining.position(0);
+                        return false;
+                    }
+                } while (b != 0);
+            }
+
+            if ((flags & (1 << 1)) != 0) {
+                // FCHRC set -- just skip two more
+                if (remaining.remaining() < 2) {
+                    remaining.position(0);
+                    return false;
+                }
+                remaining.getShort();
+            }
+
+            // Yay!
             return true;
         }
+
+        /**
+         *  Just read the first two bytes to make the "magic number"
+         */
+        private int peekMagicNumber()
+        {
+            if (remaining.remaining() < 2) {
+                return -1;
+            }
+            return remaining.getShort(0);
+        }
+
+        /*
 
         @JSFunction
         public static Object write(Context cx, Scriptable thisObj, Object[] args, Function func)
@@ -358,6 +621,8 @@ public class ZLib
             }
         }
 
+
+
         protected ZLibHandleImpl writeDeflate(Context cx, final int flush,
                                               final Buffer.BufferImpl in, final int inOff, final int inLen,
                                               final Buffer.BufferImpl out, final int outOff, final int outLen)
@@ -379,35 +644,8 @@ public class ZLib
                         log.debug("deflate: in({}, {}) out({}, {}) flush = {}", inOff, inLen, outOff, outLen, flush);
                     }
                     if (!initializedDeflate) {
-                        initializedDeflate = initDeflate();
-                    }
-
-                    if (mode == GZIP) {
-                        // Add the GZIP header -- we always seem to have a big enough buffer
-                        if (outLen < GZIP_HEADER_SIZE) {
-                            parentModule.runner.enqueueCallback(onError, onError, ZLibObjImpl.this,
-                                    new Object[] { "Output size too small for GZip header", Z_DATA_ERROR });
-                            return;
-                        }
-                        // GZIP header according to the GZIP specification 4.3
-                        // http://www.gzip.org/zlib/rfc-gzip.html
-                        ByteBuffer zipHeader = ByteBuffer.allocate(GZIP_HEADER_SIZE);
-                        zipHeader.order(ByteOrder.LITTLE_ENDIAN);
-                        zipHeader.put((byte) 0x1f);
-                        zipHeader.put((byte)0x8b);
-                        zipHeader.put((byte)8);
-                        zipHeader.put((byte)0);
-                        zipHeader.putInt((int)(System.currentTimeMillis() / 1000L));
-                        // TODO write algorithm strength?
-                        zipHeader.put((byte)0);
-                        zipHeader.put((byte)3);
-                        assert(zipHeader.position() == GZIP_HEADER_SIZE);
-
-                        System.arraycopy(zipHeader.array(), zipHeader.arrayOffset(),
-                                         out.getArray(),
-                                         out.getArrayOffset() + outOff,
-                                         GZIP_HEADER_SIZE);
-                        wroteSoFar += GZIP_HEADER_SIZE;
+                        initDeflate();
+                        wroteSoFar += writeGZipHeader();
                     }
 
                     if (deflater.needsInput() && (inLen > 0)) {
@@ -731,47 +969,7 @@ public class ZLib
 
             return handle;
         }
-
-        @JSFunction
-        public void reset()
-                throws IOException
-        {
-            if (initializedDeflate) {
-                deflater.reset();
-            } else if (initializedInflate) {
-                inflater.reset();
-            }
-            headerBuf.clear();
-            crc.reset();
-            gzipHeaderRead = false;
-        }
-
-        @JSFunction
-        public void close()
-                throws IOException
-        {
-            if (!initialized) {
-                throw Utils.makeError(Context.getCurrentContext(), this, "close before init");
-            }
-
-            if (initializedDeflate) {
-                deflater.end();
-            } else if (initializedInflate) {
-                inflater.end();
-            }
-        }
-
-        @JSGetter("onerror")
-        public Function getOnError()
-        {
-            return onError;
-        }
-
-        @JSSetter("onerror")
-        public void setOnError(Function onError)
-        {
-            this.onError = onError;
-        }
+ */
 
         private void setParentModule(ZLibImpl parentModule)
         {

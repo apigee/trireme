@@ -27,6 +27,7 @@ import com.apigee.noderunner.core.NodeModule;
 import com.apigee.noderunner.core.NodeRuntime;
 import com.apigee.noderunner.core.NodeScript;
 import com.apigee.noderunner.core.Sandbox;
+import com.apigee.noderunner.core.ScriptFuture;
 import com.apigee.noderunner.core.ScriptStatus;
 import com.apigee.noderunner.core.ScriptTask;
 import com.apigee.noderunner.core.modules.AbstractFilesystem;
@@ -90,7 +91,7 @@ public class ScriptRunner
     private final  String          scriptName;
     private final  HashMap<String, NativeModule.ModuleImpl> moduleCache = new HashMap<String, NativeModule.ModuleImpl>();
     private final  HashMap<String, Object> internalModuleCache = new HashMap<String, Object>();
-    private        Future<ScriptStatus>    future;
+    private        ScriptFuture    future;
     private final  CountDownLatch          initialized = new CountDownLatch(1);
     private final  Sandbox                 sandbox;
     private final  PathTranslator          pathTranslator;
@@ -206,8 +207,12 @@ public class ScriptRunner
         }
     }
 
-    public void setFuture(Future<ScriptStatus> future) {
+    public void setFuture(ScriptFuture future) {
         this.future = future;
+    }
+
+    public ScriptFuture getFuture() {
+        return future;
     }
 
     public NodeEnvironment getEnvironment() {

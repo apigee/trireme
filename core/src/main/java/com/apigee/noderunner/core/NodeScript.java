@@ -68,11 +68,16 @@ public class NodeScript
     }
 
     /**
-     * Run the script and return a Future denoting its status. When the script has run to completion --
+     * Run the script and return a Future denoting its status. The script is treated exactly as any other
+     * Node.js program -- that is, it runs in a separate thread, and the returned future may be used to
+     * track its status or completion.
+     * <p>
+     * When the script has run to completion --
      * which means that has left no timers or "nextTick" jobs in its queue, and the "http" and "net" modules
      * are no longer listening for incoming network connections, then it will exit with a status code.
      * Cancelling the future will make the script exit more quickly and throw CancellationException.
      * It is also OK to interrupt the script.
+     * </p>
      */
     public ScriptFuture execute()
         throws NodeException
@@ -91,6 +96,46 @@ public class NodeScript
 
         env.getScriptPool().execute(future);
         return future;
+    }
+
+    /**
+     * Run the script, but treat it as a module rather than as a true script. That means that after
+     * the script has run to completion, the value of "module.exports" will be returned to the caller
+     * via the ScriptFuture, and the script will remain running until it is explicitly cancelled by the
+     * ScriptFuture.
+     * <p>
+     * This method may be used to invoke a module that may, in turn, be driven externally entirely
+     * by Java code. Since the script keeps running until the future is cancelled, it is very important
+     * that the caller eventually cancel the script, or the thread will leak.
+     * </p>
+     */
+    public ScriptFuture executeModule()
+        throws NodeException
+    {
+        if (scriptFile == null) {
+            throw new NodeException("Modules must be specified as a file name and not as a string");
+        }
+
+        runner = new ScriptRunner(this, env, sandbox, scriptName,
+                                  makeModuleScript(), args);
+        runner.setParentProcess(parentProcess);
+        ScriptFuture future = new ScriptFuture(runner);
+        runner.setFuture(future);
+        runner.pin();
+
+        env.getScriptPool().execute(future);
+        return future;
+    }
+
+    /**
+     * The easiest way to run a module is to bootstrap a real script, so here's where we make that.
+     */
+    private String makeModuleScript()
+    {
+        return
+            "var runtime = process.binding('noderunner-module-loader');\n" +
+            "var suppliedModule = require('" + scriptFile.getAbsolutePath() + "');\n" +
+            "runtime.loaded(suppliedModule);";
     }
 
     /**

@@ -21,7 +21,9 @@
  */
 package com.apigee.noderunner.core;
 
+import com.apigee.noderunner.core.internal.NodeExitException;
 import com.apigee.noderunner.core.internal.ScriptRunner;
+import org.mozilla.javascript.Scriptable;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -39,6 +41,7 @@ public class ScriptFuture
     private final ScriptRunner   runner;
     private ScriptStatusListener listener;
     private ScriptStatus         result;
+    private Scriptable           moduleResult;
 
     private volatile boolean cancelled;
 
@@ -98,7 +101,6 @@ public class ScriptFuture
     public ScriptStatus get(long timeout, TimeUnit timeUnit)
         throws InterruptedException, ExecutionException, TimeoutException
     {
-
         long now = System.currentTimeMillis();
         long expiration = now + timeUnit.toMillis(timeout);
         while ((now < expiration) && (result == null)) {
@@ -116,12 +118,61 @@ public class ScriptFuture
         }
     }
 
+    public synchronized Scriptable getModuleResult()
+        throws InterruptedException, ExecutionException
+    {
+        while (moduleResult == null) {
+            if (result != null) {
+                ScriptStatus ss = getResult();
+                throw new ExecutionException(
+                  new NodeExitException(NodeExitException.Reason.NORMAL, ss.getExitCode()));
+            }
+            wait();
+        }
+        return moduleResult;
+    }
+
+    public Scriptable getModuleResult(long timeout, TimeUnit timeUnit)
+        throws InterruptedException, ExecutionException, TimeoutException
+    {
+        long now = System.currentTimeMillis();
+        long expiration = now + timeUnit.toMillis(timeout);
+        while ((now < expiration) && (result == null)) {
+            synchronized (this) {
+                if (result != null) {
+                    ScriptStatus ss = getResult();
+                    throw new ExecutionException(
+                        new NodeExitException(NodeExitException.Reason.NORMAL, ss.getExitCode()));
+                }
+                wait(expiration - now);
+            }
+            now = System.currentTimeMillis();
+        }
+
+        synchronized (this) {
+            if (moduleResult == null) {
+                throw new TimeoutException();
+            }
+            return moduleResult;
+        }
+    }
+
+    public NodeRuntime getRuntime() {
+        return runner;
+    }
+
     private synchronized void set(ScriptStatus status)
     {
         result = status;
         if (listener != null) {
             listener.onComplete(runner.getScriptObject(), status);
         }
+        notifyAll();
+    }
+
+    public synchronized void setModuleResult(Scriptable result)
+    {
+        moduleResult = result;
         notifyAll();
     }
 

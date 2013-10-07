@@ -46,7 +46,7 @@ public class CircularOutputStream
 
     public CircularOutputStream(int maxSize)
     {
-        this(maxSize, DEFAULT_INITIAL_SIZE);
+        this(maxSize, Math.min(maxSize, DEFAULT_INITIAL_SIZE));
     }
 
     private void expand()
@@ -78,15 +78,8 @@ public class CircularOutputStream
         while (!full && (buf.length < maxSize) && ((buf.length - position) < length)) {
             expand();
         }
-        if (full) {
-            // TODO optimize this if it becomes a bottleneck, which it might
-            for (int p = 0; p < length; p++) {
-                write(in[p + offset]);
-            }
-        } else {
-            int toCopy = Math.min(buf.length - position, length);
-            System.arraycopy(in, offset + (length - toCopy), buf, position, toCopy);
-            position += toCopy;
+        for (int p = 0; p < length; p++) {
+            write(in[p + offset]);
         }
     }
 

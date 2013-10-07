@@ -29,6 +29,15 @@ var binding = process.binding('zlib');
 var util = require('util');
 var assert = require('assert').ok;
 
+var debug;
+var debugEnabled;
+if (process.env.NODE_DEBUG && /zlib/.test(process.env.NODE_DEBUG)) {
+  debugEnabled = true;
+  debug = function(x) { console.error('ZIP:', x); };
+} else {
+  debug = function() { };
+}
+
 // zlib doesn't provide these, so kludge them in following the same
 // const naming scheme zlib uses.
 binding.Z_MIN_WINDOWBITS = 8;
@@ -107,7 +116,6 @@ exports.createGunzip = function(o) {
 exports.createUnzip = function(o) {
   return new Unzip(o);
 };
-
 
 // Convenience methods.
 // compress/decompress a string or buffer in one step.
@@ -288,8 +296,8 @@ function Zlib(opts, mode) {
 
   this._binding = binding.createZLib();
 
-  var self = this;
   this._hadError = false;
+  this.mode = mode;
 
   var level = exports.Z_DEFAULT_COMPRESSION;
   if (typeof opts.level === 'number') level = opts.level;
@@ -312,6 +320,7 @@ function Zlib(opts, mode) {
 util.inherits(Zlib, Transform);
 
 Zlib.prototype.reset = function reset() {
+  debug('reset');
   return this._binding.reset();
 };
 
@@ -323,6 +332,7 @@ Zlib.prototype._flush = function(callback) {
 
 // This is a bunch of stream-specific stuff here from Node.js -- continue to use this.
 Zlib.prototype.flush = function(callback) {
+  debug('flush');
   var ws = this._writableState;
 
   if (ws.ended) {
@@ -351,6 +361,7 @@ Zlib.prototype.close = function(callback) {
 
   this._closed = true;
 
+  debug('close');
   this._binding.close();
 
   var self = this;
@@ -368,6 +379,7 @@ Zlib.prototype._transform = function(chunk, encoding, cb) {
   }
 
   // Figure out whether this is the last chunk from stuff before
+  var ws = this._writableState;
   var ending = ws.ending || ws.ended;
   var last = ending && (!chunk || ws.length === chunk.length);
 
@@ -390,22 +402,30 @@ Zlib.prototype._transform = function(chunk, encoding, cb) {
 
   // Add this input once for consumption.
   // The binding will call us back once or more times to produce output
+  if (debugEnabled) {
+    debug('_transform(mode ' + this.mode + ' length ' + chunk.length +
+          ', flushFlag = ' + flushFlag + ')');
+  }
   var self = this;
-  this._binding.transform(chunk, flushFlag, function(errMsg, outChunk, allConsumed) {
-    if (errMsg) {
+  this._binding.transform(chunk, flushFlag, function(err, outChunk, allConsumed) {
+    if (err) {
+      if (debugEnabled) {
+        debug('transform error: ' + JSON.stringify(err));
+      }
       self._hadError = true;
-      var error = new Error(errMsg);
-      error.errno = errno;
-      error.code = exports.codes[errno];
 
       // Should we call cb instead?
-      self.emit('error', error);
+      self.emit('error', err);
 
     } else {
       if (outChunk) {
+        if (debugEnabled) {
+          debug('transform produced ' + outChunk.length + ' bytes');
+        }
         self.push(outChunk);
       }
       if (allConsumed) {
+        debug('transform consumed all input');
         cb();
       }
     }

@@ -62,7 +62,7 @@ although it may not necessarily pass all the node.js tests.
   <tr><td>url</td><td>Complete</td><td>node.js</td></tr>
   <tr><td>util</td><td>Complete</td><td>node.js</td></tr>
   <tr><td>vm</td><td>Complete</td><td>Noderunner</td></tr>
-  <tr><td>zlib</td><td>Complete</td><td>node.js + Noderunner</td></tr>
+  <tr><td>zlib</td><td>Complete</td><td>Noderunner</td></tr>
 </table>
 
 ## What are the Major Differences with "real" node.js?

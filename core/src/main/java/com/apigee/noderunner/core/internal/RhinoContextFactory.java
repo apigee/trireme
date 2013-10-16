@@ -119,10 +119,12 @@ public class RhinoContextFactory
             whitelist.add("org.mozilla.javascript.RhinoException");
             whitelist.add("java.lang.Byte");
             whitelist.add("java.lang.Character");
+            whitelist.add("java.lang.Class");
             whitelist.add("java.lang.Double");
             whitelist.add("java.lang.Exception");
             whitelist.add("java.lang.Float");
             whitelist.add("java.lang.Integer");
+            whitelist.add("java.lang.Package");
             whitelist.add("java.lang.Long");
             whitelist.add("java.lang.Object");
             whitelist.add("java.lang.Short");

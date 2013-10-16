@@ -31,7 +31,6 @@ import com.apigee.noderunner.core.ScriptStatus;
 import com.apigee.noderunner.core.ScriptTask;
 import com.apigee.noderunner.core.modules.AbstractFilesystem;
 import com.apigee.noderunner.core.modules.Buffer;
-import com.apigee.noderunner.core.modules.Filesystem;
 import com.apigee.noderunner.core.modules.NativeModule;
 import com.apigee.noderunner.core.modules.Process;
 import com.apigee.noderunner.net.SelectorHandler;
@@ -697,6 +696,10 @@ public class ScriptRunner
                 // This exception is thrown by process.exit()
                 return ne.getStatus();
             } catch (RhinoException re) {
+                // Sometimes exceptions get wrapped
+                if (process.getExitStatus() != null) {
+                    return process.getExitStatus().getStatus();
+                }
                 Scriptable err = makeError(cx, re);
                 try {
                     boolean handled = handleScriptException(cx, err, re);

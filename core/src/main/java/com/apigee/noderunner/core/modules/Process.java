@@ -105,6 +105,7 @@ public class Process
         private Object domain;
         private boolean usingDomains;
         private boolean exiting;
+        private NodeExitException exitStatus;
 
         @JSConstructor
         public static Object ProcessImpl(Context cx, Object[] args, Function ctorObj, boolean inNewExpr)
@@ -286,7 +287,8 @@ public class Process
         public void abort()
             throws NodeExitException
         {
-            throw new NodeExitException(NodeExitException.Reason.FATAL);
+            exitStatus = new NodeExitException(NodeExitException.Reason.FATAL);
+            throw exitStatus;
         }
 
         @JSFunction
@@ -308,23 +310,25 @@ public class Process
         }
 
         @JSFunction
-        public static Object exit(Context cx, Scriptable thisObj, Object[] args, Function func)
+        public static void exit(Context cx, Scriptable thisObj, Object[] args, Function func)
             throws NodeExitException
         {
+            ProcessImpl self = (ProcessImpl)thisObj;
             if (args.length >= 1) {
                 int code = (Integer)Context.jsToJava(args[0], Integer.class);
-                throw new NodeExitException(NodeExitException.Reason.NORMAL, code);
+                self.exitStatus = new NodeExitException(NodeExitException.Reason.NORMAL, code);
             } else {
-                throw new NodeExitException(NodeExitException.Reason.NORMAL, 0);
+                self.exitStatus = new NodeExitException(NodeExitException.Reason.NORMAL, 0);
             }
+            throw self.exitStatus;
         }
 
         @JSFunction
-        public static Object reallyExit(Context cx, Scriptable thisObj, Object[] args, Function func)
+        public static void reallyExit(Context cx, Scriptable thisObj, Object[] args, Function func)
             throws NodeExitException
         {
             // In regular node this calls the "exit" system call but we are run inside a bigger context so no.
-            return exit(cx, thisObj, args, func);
+            exit(cx, thisObj, args, func);
         }
 
         // TODO getgid
@@ -576,6 +580,16 @@ public class Process
         public void setExiting(boolean e)
         {
             this.exiting = e;
+        }
+
+        public NodeExitException getExitStatus()
+        {
+            return exitStatus;
+        }
+
+        public void setExitStatus(NodeExitException ne)
+        {
+            this.exitStatus = ne;
         }
 
         @JSGetter("EventEmitter")

@@ -48,7 +48,6 @@ import java.nio.CharBuffer;
 import java.nio.charset.Charset;
 import java.nio.charset.CharsetEncoder;
 import java.nio.charset.CoderResult;
-import java.nio.charset.CodingErrorAction;
 import java.util.Arrays;
 
 public class Buffer
@@ -324,7 +323,7 @@ public class Buffer
         }
 
         @JSFunction
-        public static int write(Context cx, Scriptable thisObj, Object[] args, Function func)
+        public static Object write(Context cx, Scriptable thisObj, Object[] args, Function func)
         {
             String data = stringArg(args, 0);
             Charset charset = null;
@@ -383,11 +382,11 @@ public class Buffer
 
             // Set up a buffer with the right offset and limit
             if (length < 0) {
-                return 0;
+                return Context.toNumber(0);
             }
             int maxLen = Math.min(length, b.bufLength - offset);
             if (maxLen < 0) {
-                return 0;
+                return Context.toNumber(0);
             }
             ByteBuffer writeBuf = ByteBuffer.wrap(b.buf, offset + b.bufOffset, maxLen);
 
@@ -397,7 +396,7 @@ public class Buffer
             encoder.flush(writeBuf);
             b.setCharsWritten(chars.position());
 
-            return writeBuf.position() - offset - b.bufOffset;
+            return Context.toNumber(writeBuf.position() - offset - b.bufOffset);
         }
 
         @JSFunction
@@ -484,7 +483,7 @@ public class Buffer
         }
 
         @JSFunction
-        public static int copy(Context cx, Scriptable thisObj, Object[] args, Function func)
+        public static Object copy(Context cx, Scriptable thisObj, Object[] args, Function func)
         {
             BufferImpl b = (BufferImpl)thisObj;
 
@@ -516,7 +515,7 @@ public class Buffer
                                         b.bufLength - sourceStart);
             System.arraycopy(b.buf, sourceStart + b.bufOffset, t.buf,
                              targetStart + t.bufOffset, len);
-            return len;
+            return Context.toNumber(len);
         }
 
         @JSFunction
@@ -556,7 +555,18 @@ public class Buffer
         }
 
         @JSFunction
-        public static int readInt8(Context cx, Scriptable thisObj, Object[] args, Function func)
+        public static Object readInt8(Context cx, Scriptable thisObj, Object[] args, Function func)
+        {
+            return Context.toNumber(readInt8(thisObj, args));
+        }
+
+        @JSFunction
+        public static Object readUInt8(Context cx, Scriptable thisObj, Object[] args, Function func)
+        {
+            return Context.toNumber(readInt8(thisObj, args) & 0xff);
+        }
+
+        private static int readInt8(Scriptable thisObj, Object[] args)
         {
             int offset = intArg(args, 0);
             boolean noAssert = booleanArg(args, 1, false);
@@ -569,33 +579,27 @@ public class Buffer
         }
 
         @JSFunction
-        public static int readUInt8(Context cx, Scriptable thisObj, Object[] args, Function func)
+        public static Object readInt16LE(Context cx, Scriptable thisObj, Object[] args, Function func)
         {
-            return readInt8(cx, thisObj, args, func) & 0xff;
+            return Context.toNumber(readInt16(cx, thisObj, args, func, ByteOrder.LITTLE_ENDIAN));
         }
 
         @JSFunction
-        public static short readInt16LE(Context cx, Scriptable thisObj, Object[] args, Function func)
+        public static Object readInt16BE(Context cx, Scriptable thisObj, Object[] args, Function func)
         {
-            return readInt16(cx, thisObj, args, func, ByteOrder.LITTLE_ENDIAN);
+            return Context.toNumber(readInt16(cx, thisObj, args, func, ByteOrder.BIG_ENDIAN));
         }
 
         @JSFunction
-        public static short readInt16BE(Context cx, Scriptable thisObj, Object[] args, Function func)
+        public static Object readUInt16LE(Context cx, Scriptable thisObj, Object[] args, Function func)
         {
-            return readInt16(cx, thisObj, args, func, ByteOrder.BIG_ENDIAN);
+            return Context.toNumber(readInt16(cx, thisObj, args, func, ByteOrder.LITTLE_ENDIAN) & 0xffff);
         }
 
         @JSFunction
-        public static int readUInt16LE(Context cx, Scriptable thisObj, Object[] args, Function func)
+        public static Object readUInt16BE(Context cx, Scriptable thisObj, Object[] args, Function func)
         {
-            return readInt16(cx, thisObj, args, func, ByteOrder.LITTLE_ENDIAN) & 0xffff;
-        }
-
-        @JSFunction
-        public static int readUInt16BE(Context cx, Scriptable thisObj, Object[] args, Function func)
-        {
-            return readInt16(cx, thisObj, args, func, ByteOrder.BIG_ENDIAN) & 0xffff;
+            return Context.toNumber(readInt16(cx, thisObj, args, func, ByteOrder.BIG_ENDIAN) & 0xffff);
         }
 
         private static short readInt16(Context cx, Scriptable thisObj, Object[] args, Function func, ByteOrder order)
@@ -617,27 +621,27 @@ public class Buffer
         }
 
         @JSFunction
-        public static int readInt32LE(Context cx, Scriptable thisObj, Object[] args, Function func)
+        public static Object readInt32LE(Context cx, Scriptable thisObj, Object[] args, Function func)
         {
-            return readInt32(cx, thisObj, args, func, ByteOrder.LITTLE_ENDIAN);
+            return Context.toNumber(readInt32(cx, thisObj, args, func, ByteOrder.LITTLE_ENDIAN));
         }
 
         @JSFunction
-        public static int readInt32BE(Context cx, Scriptable thisObj, Object[] args, Function func)
+        public static Object readInt32BE(Context cx, Scriptable thisObj, Object[] args, Function func)
         {
-            return readInt32(cx, thisObj, args, func, ByteOrder.BIG_ENDIAN);
+            return Context.toNumber(readInt32(cx, thisObj, args, func, ByteOrder.BIG_ENDIAN));
         }
 
         @JSFunction
-        public static long readUInt32LE(Context cx, Scriptable thisObj, Object[] args, Function func)
+        public static Object readUInt32LE(Context cx, Scriptable thisObj, Object[] args, Function func)
         {
-            return readInt32(cx, thisObj, args, func, ByteOrder.LITTLE_ENDIAN) & 0xffffffffL;
+            return Context.toNumber(readInt32(cx, thisObj, args, func, ByteOrder.LITTLE_ENDIAN) & 0xffffffffL);
         }
 
         @JSFunction
-        public static long readUInt32BE(Context cx, Scriptable thisObj, Object[] args, Function func)
+        public static Object readUInt32BE(Context cx, Scriptable thisObj, Object[] args, Function func)
         {
-            return readInt32(cx, thisObj, args, func, ByteOrder.BIG_ENDIAN) & 0xffffffffL;
+            return Context.toNumber(readInt32(cx, thisObj, args, func, ByteOrder.BIG_ENDIAN) & 0xffffffffL);
         }
 
         private static int readInt32(Context cx, Scriptable thisObj, Object[] args, Function func, ByteOrder order)
@@ -695,29 +699,29 @@ public class Buffer
         @JSFunction
         public static Object readFloatLE(Context cx, Scriptable thisObj, Object[] args, Function func)
         {
-            int intVal = readInt32LE(cx, thisObj, args, func);
-            return Context.javaToJS(Float.intBitsToFloat(intVal), thisObj);
+            int intVal = readInt32(cx, thisObj, args, func, ByteOrder.LITTLE_ENDIAN);
+            return Context.toNumber(Float.intBitsToFloat(intVal));
         }
 
         @JSFunction
         public static Object readFloatBE(Context cx, Scriptable thisObj, Object[] args, Function func)
         {
-            int intVal = readInt32BE(cx, thisObj, args, func);
-            return Context.javaToJS(Float.intBitsToFloat(intVal), thisObj);
+            int intVal = readInt32(cx, thisObj, args, func, ByteOrder.BIG_ENDIAN);
+            return Context.toNumber(Float.intBitsToFloat(intVal));
         }
 
         @JSFunction
         public static Object readDoubleLE(Context cx, Scriptable thisObj, Object[] args, Function func)
         {
             long lVal = readInt64(cx, thisObj, args, func, ByteOrder.LITTLE_ENDIAN);
-            return Context.javaToJS(Double.longBitsToDouble(lVal), thisObj);
+            return Context.toNumber(Double.longBitsToDouble(lVal));
         }
 
         @JSFunction
         public static Object readDoubleBE(Context cx, Scriptable thisObj, Object[] args, Function func)
         {
             long lVal = readInt64(cx, thisObj, args, func, ByteOrder.BIG_ENDIAN);
-            return Context.javaToJS(Double.longBitsToDouble(lVal), thisObj);
+            return Context.toNumber(Double.longBitsToDouble(lVal));
         }
 
         @JSFunction
@@ -974,20 +978,20 @@ public class Buffer
         }
 
         @JSStaticFunction
-        public static boolean isEncoding(Context cx, Scriptable thisObj, Object[] args, Function func)
+        public static Object isEncoding(Context cx, Scriptable thisObj, Object[] args, Function func)
         {
             String enc = stringArg(args, 0);
-            return (Charsets.get().getCharset(enc) != null);
+            return Context.toBoolean(Charsets.get().getCharset(enc) != null);
         }
 
         @JSStaticFunction
-        public static boolean isBuffer(Context cx, Scriptable thisObj, Object[] args, Function func)
+        public static Object isBuffer(Context cx, Scriptable thisObj, Object[] args, Function func)
         {
-            return ((args.length > 0) && (args[0] instanceof BufferImpl));
+            return Context.toBoolean((args.length > 0) && (args[0] instanceof BufferImpl));
         }
 
         @JSStaticFunction
-        public static int byteLength(Context cx, Scriptable thisObj, Object[] args, Function func)
+        public static Object byteLength(Context cx, Scriptable thisObj, Object[] args, Function func)
         {
             String data = stringArg(args, 0);
             Charset charset = resolveEncoding(args, 1);
@@ -1009,7 +1013,7 @@ public class Buffer
                 result = encoder.flush(tmp);
                 total += tmp.position();
             } while (result.isOverflow());
-            return total;
+            return Context.toNumber(total);
         }
 
         @JSStaticFunction

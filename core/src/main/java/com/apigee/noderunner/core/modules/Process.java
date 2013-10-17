@@ -54,7 +54,7 @@ public class Process
     public static final String MODULE_NAME = "process";
     public static final String EXECUTABLE_NAME = "./node";
     /** We don't really know what the umask is in Java, so we set a reasonable default that the tests expected. */
-    public static final int DEFAULT_UMASK = 0664;
+    public static final int DEFAULT_UMASK = 022;
 
     private static final   long NANO = 1000000000L;
     protected static final Logger log  = LoggerFactory.getLogger(Process.class);

@@ -84,12 +84,10 @@ public class ArgUtils
         if (pos < args.length) {
             if (args[pos] instanceof String) {
                 String s = Context.toString(args[pos]);
-                if (s.startsWith("0x")) {
-                    return Integer.parseInt(s, 16);
-                } else if (s.startsWith("0")) {
-                    return Integer.parseInt(s, 8);
-                } else {
-                    return Integer.parseInt(s);
+                try {
+                    return Integer.decode(s);
+                } catch (NumberFormatException nfe) {
+                    return def;
                 }
             } else {
                 Number n = Context.toNumber(args[pos]);

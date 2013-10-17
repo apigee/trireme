@@ -1103,6 +1103,11 @@ public class AsyncFilesystem
             if ((mode & Constants.S_IWOTH) != 0) {
                 perms.add(PosixFilePermission.OTHERS_WRITE);
             }
+            if (log.isDebugEnabled()) {
+                log.debug("Mode {} and {} becomes {} then {}",
+                          Integer.toOctalString(origMode), Integer.toOctalString(runner.getProcess().getUmask()),
+                          Integer.toOctalString(mode), perms);
+            }
             return perms;
         }
 

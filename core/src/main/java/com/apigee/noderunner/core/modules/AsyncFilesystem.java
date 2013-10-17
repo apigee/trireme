@@ -44,6 +44,8 @@ import java.nio.channels.AsynchronousFileChannel;
 import java.nio.channels.CompletionHandler;
 import java.nio.file.DirectoryNotEmptyException;
 import java.nio.file.FileAlreadyExistsException;
+import java.nio.file.FileSystem;
+import java.nio.file.FileSystems;
 import java.nio.file.FileVisitOption;
 import java.nio.file.FileVisitResult;
 import java.nio.file.Files;
@@ -59,9 +61,12 @@ import java.nio.file.StandardOpenOption;
 import java.nio.file.attribute.BasicFileAttributeView;
 import java.nio.file.attribute.BasicFileAttributes;
 import java.nio.file.attribute.FileTime;
+import java.nio.file.attribute.GroupPrincipal;
 import java.nio.file.attribute.PosixFileAttributes;
 import java.nio.file.attribute.PosixFilePermission;
 import java.nio.file.attribute.PosixFilePermissions;
+import java.nio.file.attribute.UserPrincipal;
+import java.nio.file.attribute.UserPrincipalLookupService;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.EnumSet;
@@ -1152,16 +1157,73 @@ public class AsyncFilesystem
             });
         }
 
+        private Object[] doChown(Path path, String uid, String gid, boolean noFollow)
+            throws NodeOSException
+        {
+            if (log.isDebugEnabled()) {
+                log.debug("chown({}) to {}:{}", path, uid, gid);
+            }
+
+            UserPrincipalLookupService lookupService =
+                FileSystems.getDefault().getUserPrincipalLookupService();
+
+            try {
+                UserPrincipal user = lookupService.lookupPrincipalByName(uid);
+                GroupPrincipal group = lookupService.lookupPrincipalByGroupName(gid);
+
+                if (noFollow) {
+                    Files.setAttribute(path, "posix:owner", user, LinkOption.NOFOLLOW_LINKS);
+                    Files.setAttribute(path, "posix:group", group, LinkOption.NOFOLLOW_LINKS);
+                } else {
+                    Files.setAttribute(path, "posix:owner", user);
+                    Files.setAttribute(path, "posix:group", group);
+                }
+                return new Object[] { Context.getUndefinedValue(), Context.getUndefinedValue() };
+            } catch (NoSuchFileException nfe) {
+                throw new NodeOSException(Constants.ENOENT, nfe, path.toString());
+            } catch (IOException ioe) {
+                throw new NodeOSException(Constants.EIO, ioe, path.toString());
+            }
+        }
+
         @JSFunction
         public static void chown(Context cx, Scriptable thisObj, Object[] args, Function func)
         {
-            throw Utils.makeError(cx, thisObj, "Not implemented");
+            final String path = stringArg(args, 0);
+            final String uid = stringArg(args, 1);
+            final String gid = stringArg(args, 2);
+            Function callback = functionArg(args, 3, true);
+            final FSImpl self = (FSImpl)thisObj;
+
+            self.runAction(cx, callback, new AsyncAction() {
+                @Override
+                public Object[] execute()
+                    throws NodeOSException
+                {
+                    Path p = self.translatePath(path);
+                    return self.doChown(p, uid, gid, false);
+                }
+            });
         }
 
         @JSFunction
         public static void fchown(Context cx, Scriptable thisObj, Object[] args, Function func)
         {
-            throw Utils.makeError(cx, thisObj, "Not implemented");
+            final int fd = intArg(args, 0);
+            final String uid = stringArg(args, 1);
+            final String gid = stringArg(args, 2);
+            Function callback = functionArg(args, 3, true);
+            final FSImpl self = (FSImpl)thisObj;
+
+            self.runAction(cx, callback, new AsyncAction() {
+                @Override
+                public Object[] execute()
+                    throws NodeOSException
+                {
+                    FileHandle fh = self.ensureHandle(fd);
+                    return self.doChown(fh.path, uid, gid, fh.noFollow);
+                }
+            });
         }
 
         @JSFunction

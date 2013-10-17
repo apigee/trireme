@@ -65,7 +65,7 @@ public class Version {
     }
 
     /* Node.js API version that is implemented */
-    public static final String NODE_VERSION = "0.10.18";
+    public static final String NODE_VERSION = "0.10.20";
 
     public static final String SSL_VERSION = "java";
 }

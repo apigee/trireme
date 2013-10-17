@@ -24,7 +24,6 @@ package com.apigee.noderunner.core.modules;
 import com.apigee.noderunner.core.NodeModule;
 import com.apigee.noderunner.core.NodeRuntime;
 import com.apigee.noderunner.core.internal.NodeExitException;
-import com.apigee.noderunner.core.internal.PathTranslator;
 import com.apigee.noderunner.core.internal.ScriptRunner;
 import com.apigee.noderunner.core.internal.Utils;
 import com.apigee.noderunner.core.internal.Version;
@@ -54,6 +53,8 @@ public class Process
     protected static final String OBJECT_NAME = "process";
     public static final String MODULE_NAME = "process";
     public static final String EXECUTABLE_NAME = "./node";
+    /** We don't really know what the umask is in Java, so we set a reasonable default that the tests expected. */
+    public static final int DEFAULT_UMASK = 0664;
 
     private static final   long NANO = 1000000000L;
     protected static final Logger log  = LoggerFactory.getLogger(Process.class);
@@ -69,6 +70,7 @@ public class Process
         throws InvocationTargetException, IllegalAccessException, InstantiationException
     {
         ScriptableObject.defineClass(scope, EventEmitter.EventEmitterImpl.class, false, true);
+
 
         ScriptableObject.defineClass(scope, ProcessImpl.class, false, true);
         ScriptableObject.defineClass(scope, EnvImpl.class, false, true);
@@ -106,6 +108,7 @@ public class Process
         private boolean usingDomains;
         private boolean exiting;
         private NodeExitException exitStatus;
+        private int umask = DEFAULT_UMASK;
 
         @JSConstructor
         public static Object ProcessImpl(Context cx, Object[] args, Function ctorObj, boolean inNewExpr)
@@ -518,7 +521,24 @@ public class Process
             }
         }
 
-        // TODO umask
+        @JSFunction
+        public static Object umask(Context cx, Scriptable thisObj, Object[] args, Function func)
+        {
+            ProcessImpl self = (ProcessImpl)thisObj;
+            if (args.length > 0) {
+                int oldMask = self.umask;
+                int newMask = octalOrHexIntArg(args, 0);
+                self.umask = newMask;
+                return Context.toNumber(oldMask);
+            } else {
+                return Context.toNumber(self.umask);
+            }
+        }
+
+        public int getUmask()
+        {
+            return umask;
+        }
 
         @JSFunction
         public static Object uptime(Context cx, Scriptable thisObj, Object[] args, Function func)

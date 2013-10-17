@@ -73,6 +73,34 @@ public class ArgUtils
         return def;
     }
 
+    public static int octalOrHexIntArg(Object[] args, int pos)
+    {
+        ensureArg(args, pos);
+        return octalOrHexIntArg(args, pos, 0);
+    }
+
+    public static int octalOrHexIntArg(Object[] args, int pos, int def)
+    {
+        if (pos < args.length) {
+            if (args[pos] instanceof String) {
+                String s = Context.toString(args[pos]);
+                if (s.startsWith("0x")) {
+                    return Integer.parseInt(s, 16);
+                } else if (s.startsWith("0")) {
+                    return Integer.parseInt(s, 8);
+                } else {
+                    return Integer.parseInt(s);
+                }
+            } else {
+                Number n = Context.toNumber(args[pos]);
+                if (!n.equals(ScriptRuntime.NaN)) {
+                    return n.intValue();
+                }
+            }
+        }
+        return def;
+    }
+
     public static Number numberArg(Object[] args, int pos)
     {
         ensureArg(args, pos);

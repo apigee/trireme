@@ -94,14 +94,6 @@
         <Description>File watching isn't implemented yet.</Description>
     </Excluded>
     <Excluded>
-        <Name>test-umask.js</Name>
-        <Description>Can't set that in Java.</Description>
-    </Excluded>
-    <Excluded>
-        <Name>test-fs-write-file-sync.js</Name>
-        <Description>Depends on umask.</Description>
-    </Excluded>
-    <Excluded>
         <Name>test-net-listen-fd0.js</Name>
         <Description>Listening on a file descriptor is not supported in Noderunner or Java.</Description>
     </Excluded>

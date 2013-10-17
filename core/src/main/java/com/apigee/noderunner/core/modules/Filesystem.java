@@ -24,6 +24,7 @@ package com.apigee.noderunner.core.modules;
 import com.apigee.noderunner.core.NodeRuntime;
 import com.apigee.noderunner.core.internal.InternalNodeModule;
 import com.apigee.noderunner.core.internal.NodeOSException;
+import com.apigee.noderunner.core.internal.ScriptRunner;
 import com.apigee.noderunner.core.internal.Utils;
 import org.mozilla.javascript.BaseFunction;
 import org.mozilla.javascript.Context;
@@ -48,6 +49,9 @@ import java.util.concurrent.atomic.AtomicInteger;
 
 /**
  * An implementation of the "fs" internal Node module. The "fs.js" script depends on it.
+ * This is an implementaion that supports Java versions up to and including Java 6. That means that
+ * it does not have all the features supported by "real" Node.js "AsyncFilesystem" uses the new Java 7
+ * APIs and is much more complete.
  */
 public class Filesystem
     implements InternalNodeModule
@@ -79,7 +83,7 @@ public class Filesystem
         public static final String CLASS_NAME = "_fsClass";
         private static final int FIRST_FD = 4;
 
-        protected NodeRuntime runner;
+        protected ScriptRunner runner;
         protected Executor pool;
         private final AtomicInteger nextFd = new AtomicInteger(FIRST_FD);
         private final ConcurrentHashMap<Integer, FileHandle> descriptors =
@@ -92,10 +96,11 @@ public class Filesystem
 
         protected void initialize(NodeRuntime runner, Executor fsPool)
         {
-            this.runner = runner;
+            this.runner = (ScriptRunner)runner;
             this.pool = fsPool;
         }
 
+        @Override
         public void cleanup()
         {
             for (FileHandle handle : descriptors.values()) {
@@ -133,7 +138,7 @@ public class Filesystem
                 }
             }
 
-            final Filesystem.FSImpl self = this;
+            final FSImpl self = this;
             final Scriptable domain = runner.getDomain();
             runner.pin();
             pool.execute(new Runnable()
@@ -167,10 +172,18 @@ public class Filesystem
             return null;
         }
 
-        private void createFile(File f, int mode)
+        private static void checkCall(boolean result, File f, String name)
             throws IOException
         {
-            f.createNewFile();
+            if (!result) {
+                throw new IOException(name + " failed for " + f.getPath());
+            }
+        }
+
+        private  void createFile(File f, int mode)
+            throws IOException
+        {
+            checkCall(f.createNewFile(), f, "createNewFile");
             setMode(f, mode);
         }
 
@@ -184,30 +197,33 @@ public class Filesystem
             return trans;
         }
 
-        private void setMode(File f, int mode)
+        private void setMode(File f, int origMode)
+            throws IOException
         {
+            int mode =
+                origMode & (~(runner.getProcess().getUmask()));
             if (((mode & Constants.S_IROTH) != 0) || ((mode & Constants.S_IRGRP) != 0)) {
-                f.setReadable(true, false);
+                checkCall(f.setReadable(true, false), f, "setReadable");
             } else if ((mode & Constants.S_IRUSR) != 0) {
-                f.setReadable(true, true);
+                checkCall(f.setReadable(true, true), f, "setReadable");
             } else {
-                f.setReadable(false, true);
+                checkCall(f.setReadable(false, true), f, "setReadable");
             }
 
             if (((mode & Constants.S_IWOTH) != 0) || ((mode & Constants.S_IWGRP) != 0)) {
-                f.setWritable(true, false);
+                checkCall(f.setWritable(true, false), f, "setWritable");
             } else if ((mode & Constants.S_IWUSR) != 0) {
-                f.setWritable(true, true);
+                checkCall(f.setWritable(true, true), f, "setWritable");
             } else {
-                f.setWritable(false, true);
+                checkCall(f.setWritable(false, true), f, "setWritable");
             }
 
             if (((mode & Constants.S_IXOTH) != 0) || ((mode & Constants.S_IXGRP) != 0)) {
-                f.setExecutable(true, false);
+                checkCall(f.setExecutable(true, false), f, "setExecutable");
             } else if ((mode & Constants.S_IXUSR) != 0) {
-                f.setExecutable(true, true);
+                checkCall(f.setExecutable(true, true), f, "setExecutable");
             } else {
-                f.setExecutable(false, true);
+                checkCall(f.setExecutable(false, true), f, "setExecutable");
             }
         }
 
@@ -244,7 +260,7 @@ public class Filesystem
         }
 
         @JSFunction
-        public static Object open(final Context cx, final Scriptable thisObj, Object[] args, Function func)
+        public static Object open(Context cx, final Scriptable thisObj, Object[] args, Function func)
         {
             final String pathStr = stringArg(args, 0);
             final int flags = intArg(args, 1);
@@ -279,8 +295,8 @@ public class Filesystem
             if (path.exists()) {
                 if ((flags & Constants.O_TRUNC) != 0) {
                     // For exact compatibility, perhaps this should open and truncate
-                    path.delete();
                     try {
+                        checkCall(path.delete(), path, "delete");
                         createFile(path, mode);
                     } catch (IOException e) {
                         throw new NodeOSException(Constants.EIO, e);
@@ -386,7 +402,7 @@ public class Filesystem
         }
 
         @JSFunction
-        public static Object read(final Context cx, final Scriptable thisObj, Object[] args, Function func)
+        public static Object read(Context cx, final Scriptable thisObj, Object[] args, Function func)
         {
             final FSImpl fs = (FSImpl)thisObj;
             final int fd = intArg(args, 0);
@@ -453,7 +469,7 @@ public class Filesystem
         }
 
         @JSFunction
-        public static Object write(final Context cx, final Scriptable thisObj, Object[] args, Function func)
+        public static Object write(Context cx, final Scriptable thisObj, Object[] args, Function func)
         {
             final FSImpl fs = (FSImpl)thisObj;
             final int fd = intArg(args, 0);
@@ -718,7 +734,11 @@ public class Filesystem
             if (!file.mkdir()) {
                 throw new NodeOSException(Constants.EIO);
             }
-            setMode(file, mode);
+            try {
+                setMode(file, mode);
+            } catch (IOException ioe) {
+                throw new NodeOSException(Constants.EIO, ioe);
+            }
         }
 
         @JSFunction
@@ -804,8 +824,6 @@ public class Filesystem
         @JSFunction
         public static Object lstat(Context cx, Scriptable thisObj, Object[] args, Function func)
         {
-            // TODO this means that our code can't distinguish symbolic links. This will require either
-            // native code or some changes in fs.js itself.
             return stat(cx, thisObj, args, func);
         }
 
@@ -927,35 +945,32 @@ public class Filesystem
         @JSFunction
         public boolean isBlockDevice()
         {
-            return false; // TODO
+            return false;
         }
 
         @JSFunction
         public boolean isCharacterDevice()
         {
-            return false; // TODO
+            return false;
         }
 
         @JSFunction
         public boolean isSymbolicLink()
         {
-            return false; // TODO
+            return false;
         }
 
         @JSFunction
         public boolean isFIFO()
         {
-            return false; // TODO
+            return false;
         }
 
         @JSFunction
         public boolean isSocket()
         {
-            return false; // TODO
+            return false;
         }
-
-        // TODO dev
-        // TODO ino
 
         @JSGetter("mode")
         public int getMode()
@@ -979,28 +994,16 @@ public class Filesystem
             return mode;
         }
 
-        // TODO nlink
-        // TODO uid
-        // TODO gid
-        // TODO rdev
-
         @JSGetter("size")
         public double getSize() {
             return file.length();
         }
-
-        // TODO blksize
-        // TODO blocks
-
-        // TODO atime
 
         @JSGetter("mtime")
         public Object getMTime()
         {
             return Context.getCurrentContext().newObject(this, "Date", new Object[] { file.lastModified() });
         }
-
-        // TODO ctime
 
         @JSFunction
         public Object toJSON()

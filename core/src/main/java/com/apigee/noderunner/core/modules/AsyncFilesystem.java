@@ -24,6 +24,7 @@ package com.apigee.noderunner.core.modules;
 import com.apigee.noderunner.core.NodeRuntime;
 import com.apigee.noderunner.core.internal.InternalNodeModule;
 import com.apigee.noderunner.core.internal.NodeOSException;
+import com.apigee.noderunner.core.internal.ScriptRunner;
 import com.apigee.noderunner.core.internal.Utils;
 import org.mozilla.javascript.Context;
 import org.mozilla.javascript.Function;
@@ -58,7 +59,6 @@ import java.nio.file.StandardOpenOption;
 import java.nio.file.attribute.BasicFileAttributeView;
 import java.nio.file.attribute.BasicFileAttributes;
 import java.nio.file.attribute.FileTime;
-import java.nio.file.attribute.PosixFileAttributeView;
 import java.nio.file.attribute.PosixFileAttributes;
 import java.nio.file.attribute.PosixFilePermission;
 import java.nio.file.attribute.PosixFilePermissions;
@@ -110,7 +110,7 @@ public class AsyncFilesystem
         public static final String CLASS_NAME = "_fsClass";
         private static final int FIRST_FD = 4;
 
-        protected NodeRuntime runner;
+        protected ScriptRunner runner;
         protected ExecutorService pool;
         private final AtomicInteger nextFd = new AtomicInteger(FIRST_FD);
         private final ConcurrentHashMap<Integer, FileHandle> descriptors =
@@ -123,7 +123,7 @@ public class AsyncFilesystem
 
         protected void initialize(NodeRuntime runner, ExecutorService fsPool)
         {
-            this.runner = runner;
+            this.runner = (ScriptRunner)runner;
             this.pool = fsPool;
         }
 
@@ -539,7 +539,7 @@ public class AsyncFilesystem
             byte[] bytes = buf.getArray();
             int bytesOffset = buf.getArrayOffset() + off;
             ByteBuffer writeBuf = ByteBuffer.wrap(bytes, bytesOffset, len);
-            final FileHandle handle = ensureRegularFileHandle(fd);
+            FileHandle handle = ensureRegularFileHandle(fd);
 
             if (pos <= 0L) {
                 pos = handle.position;
@@ -1070,8 +1070,10 @@ public class AsyncFilesystem
             });
         }
 
-        private static Set<PosixFilePermission> modeToPerms(int mode)
+        private Set<PosixFilePermission> modeToPerms(int origMode)
         {
+            int mode =
+                origMode & (~(runner.getProcess().getUmask()));
             Set<PosixFilePermission> perms =
                 EnumSet.noneOf(PosixFilePermission.class);
             if ((mode & Constants.S_IXUSR) != 0) {

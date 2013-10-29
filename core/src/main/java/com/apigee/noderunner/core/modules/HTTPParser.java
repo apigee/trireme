@@ -169,6 +169,18 @@ public class HTTPParser
         }
 
         @JSFunction
+        public void pause()
+        {
+            // I don't think that we have anything to pause in this implementation. The implementation
+            // in node's "deps" seems to only be an error check as well.
+        }
+
+        @JSFunction
+        public void resume()
+        {
+        }
+
+        @JSFunction
         public static void finish(Context cx, Scriptable thisObj, Object[] args, Function ctorObj)
         {
             log.debug("HTTP parser finished with input");

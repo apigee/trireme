@@ -8,6 +8,7 @@ com.apigee.noderunner.core.modules.Crypto
 com.apigee.noderunner.core.modules.EventEmitter
 com.apigee.noderunner.core.modules.HTTPParser
 com.apigee.noderunner.core.modules.HTTPWrap
+com.apigee.noderunner.core.modules.ModuleLoader
 com.apigee.noderunner.core.modules.NativeModule
 com.apigee.noderunner.core.modules.NativeInputStreamAdapter
 com.apigee.noderunner.core.modules.NativeOutputStreamAdapter

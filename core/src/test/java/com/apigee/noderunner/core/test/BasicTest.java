@@ -14,6 +14,7 @@ import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
 import org.mozilla.javascript.JavaScriptException;
+import org.mozilla.javascript.Scriptable;
 
 import static org.junit.Assert.*;
 
@@ -471,6 +472,21 @@ public class BasicTest
         ScriptStatus status = script.execute().get();
         assertEquals(0, status.getExitCode());
         script.close();
+    }
+
+    @Test
+    public void testRunModule()
+        throws InterruptedException, ExecutionException, NodeException
+    {
+        NodeScript script = env.createScript("testmodue.js",
+                                             new File("./target/test-classes/tests/testmodule"),
+                                             null);
+        ScriptFuture future = script.executeModule();
+        Scriptable module = future.getModuleResult();
+        assertNotNull(module);
+        assertTrue(module.has("modulename", module));
+        assertEquals("testmodule", module.get("modulename", module));
+        future.cancel(true);
     }
 
     private void runTest(String name)

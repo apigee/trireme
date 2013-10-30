@@ -1,15 +1,15 @@
-# Noderunner
+# Trireme
 
 This is a set of libraries for running node.js scripts inside Java.
 
-## What is Noderunner?
+## What is Trireme?
 
-Noderunner runs Node.js scripts inside the JVM.
+Trireme runs Node.js scripts inside the JVM.
 This is important because there is a lot of software out there (including our own) that is built in Java and
 isn't going to get rewritten in JavaScript now or in the future.
 
-Noderunner is specifically designed to be embeddable within any Java program. There is a lot of support inside
-Noderunner for this specific case:
+Trireme is specifically designed to be embeddable within any Java program. There is a lot of support inside
+Trireme for this specific case:
 
 * Many Node.js scripts can run inside a single JVM, subject to memory constraints.
 * Each script is totally isolated from the others -- there is no way for one script to affect the heap of
@@ -22,9 +22,9 @@ adapter, built using Netty 4.0, is included.)
 * The sandbox supports a Rhino feature that makes it possible to limit the execution time for a script.
 With this feature enabled, a script that runs an infinite loop can be terminated after some time.
 
-## How Complete is Noderunner?
+## How Complete is Trireme?
 
-Noderunner supports most of the Node.js APIs and passes much of the Node.js test suite.
+Trireme supports most of the Node.js APIs and passes much of the Node.js test suite.
 
 The table below shows each module and its status. "Complete" means that a module is functionally complete,
 although it may not necessarily pass all the node.js tests.
@@ -32,37 +32,37 @@ although it may not necessarily pass all the node.js tests.
 <table>
   <tr><td><b>Module</b></td><td><b>Status</b></td><td><b>Source</b></td></tr>
   <tr><td>assert</td><td>Complete</td><td>node.js</td></tr>
-  <tr><td>child_process</td><td>Partial</td><td>Noderunner</td></tr>
+  <tr><td>child_process</td><td>Partial</td><td>Trireme</td></tr>
   <tr><td>cluster</td><td>Not Implemented Yet</td><td>node.js</td></tr>
   <tr><td>console</td><td>Complete</td><td>node.js</td></tr>
-  <tr><td>crypto</td><td>Partial</td><td>node.js + Noderunner</td></tr>
+  <tr><td>crypto</td><td>Partial</td><td>node.js + Trireme</td></tr>
   <tr><td>debugger</td><td>Not Implemented</td><td><NA/td></tr>
-  <tr><td>dgram</td><td>Partial</td><td>node.js + Noderunner</td></tr>
-  <tr><td>dns</td><td>Partial</td><td>Noderunner</td></tr>
-  <tr><td>domain</td><td>Complete</td><td>node.js + Noderunner</td></tr>
+  <tr><td>dgram</td><td>Partial</td><td>node.js + Trireme</td></tr>
+  <tr><td>dns</td><td>Partial</td><td>Trireme</td></tr>
+  <tr><td>domain</td><td>Complete</td><td>node.js + Trireme</td></tr>
   <tr><td>events</td><td>Complete</td><td>node.js</td></tr>
-  <tr><td>fs</td><td>Complete</td><td>node.js + Noderunner</td></tr>
-  <tr><td>globals</td><td>Complete</td><td>node.js + Noderunner</td></tr>
-  <tr><td>http</td><td>Complete</td><td>node.js + Noderunner</td></tr>
-  <tr><td>https</td><td>Mostly Complete - See Notes</td><td>Noderunner</td></tr>
+  <tr><td>fs</td><td>Complete</td><td>node.js + Trireme</td></tr>
+  <tr><td>globals</td><td>Complete</td><td>node.js + Trireme</td></tr>
+  <tr><td>http</td><td>Complete</td><td>node.js + Trireme</td></tr>
+  <tr><td>https</td><td>Mostly Complete - See Notes</td><td>Trireme</td></tr>
   <tr><td>module</td><td>Complete</td><td>node.js</td></tr>
-  <tr><td>net</td><td>Complete</td><td>node.js + Noderunner</td></tr>
-  <tr><td>os</td><td>Partial</td><td>Noderunner</td></tr>
+  <tr><td>net</td><td>Complete</td><td>node.js + Trireme</td></tr>
+  <tr><td>os</td><td>Partial</td><td>Trireme</td></tr>
   <tr><td>path</td><td>Complete</td><td>node.js</td></tr>
-  <tr><td>process</td><td>Complete</td><td>Noderunner</td></tr>
+  <tr><td>process</td><td>Complete</td><td>Trireme</td></tr>
   <tr><td>punycode</td><td>Complete</td><td>node.js</td></tr>
   <tr><td>querystring</td><td>Complete</td><td>node.js</td></tr>
-  <tr><td>readline</td><td>Partial</td><td>node.js + Noderunner</td></tr>
-  <tr><td>repl</td><td>Not Implemented</td><td>node.js + Noderunner</td></tr>
+  <tr><td>readline</td><td>Partial</td><td>node.js + Trireme</td></tr>
+  <tr><td>repl</td><td>Not Implemented</td><td>node.js + Trireme</td></tr>
   <tr><td>stream</td><td>Complete</td><td>node.js</td></tr>
   <tr><td>string_decoder</td><td>Complete</td><td>node.js</td></tr>
-  <tr><td>timers</td><td>Complete</td><td>node.js + Noderunner</td></tr>
-  <tr><td>tls</td><td>Mostly Complete - See Notes</td><td>Noderunner</td></tr>
+  <tr><td>timers</td><td>Complete</td><td>node.js + Trireme</td></tr>
+  <tr><td>tls</td><td>Mostly Complete - See Notes</td><td>Trireme</td></tr>
   <tr><td>tty</td><td>Not Implemented</td><td>NA</td></tr>
   <tr><td>url</td><td>Complete</td><td>node.js</td></tr>
   <tr><td>util</td><td>Complete</td><td>node.js</td></tr>
-  <tr><td>vm</td><td>Complete</td><td>Noderunner</td></tr>
-  <tr><td>zlib</td><td>Complete</td><td>Noderunner</td></tr>
+  <tr><td>vm</td><td>Complete</td><td>Trireme</td></tr>
+  <tr><td>zlib</td><td>Complete</td><td>Trireme</td></tr>
 </table>
 
 ## What are the Major Differences with "real" node.js?
@@ -71,7 +71,7 @@ A few of the modules are different, some in major ways:
 
 ### JavaScript Language
 
-Noderunner runs in the JVM on Rhino, which is the most complete JavaScript implementation for
+Trireme runs in the JVM on Rhino, which is the most complete JavaScript implementation for
 the JVM. Rhino currently implements version 1.8 of JavaScript, which means that a few things supported
 in later versions of JavaScript, such as the "trimLeft" method of the "String" object, are not supported.
 
@@ -82,7 +82,7 @@ there is a problem. We would love some help from the Rhino community to start to
 
 ### TLS/SSL and HTTPS
 
-Noderunner uses Java's standard "SSLEngine" for TLS/SSL and HTTPS support, whereas standard Node.js uses
+Trireme uses Java's standard "SSLEngine" for TLS/SSL and HTTPS support, whereas standard Node.js uses
 OpenSSL. The TLS implementation in Node.js is a fairly thin layer on top of OpenSSL and we chose not to try
 and replicate this in Java.
 
@@ -91,12 +91,12 @@ SSLEngine and OpenSSl are not exactly the same. There are a few differences:
 1) Most notably, especially with Java 7, SSLEngine supports
 a different set of cipher suites, particularly the various elliptical curve ciphers. There are ciphers in common
 (otherwise almost everything will break) but there are many that are not. Many Node.js tests that rely on
-older cipher suites using DES or RC4 will not run on Noderunner because many of these older and weaker
-cipher suites are disabled by default in Java. However, "OpenSSL style" names work in Noderunner just as they
+older cipher suites using DES or RC4 will not run on Trireme because many of these older and weaker
+cipher suites are disabled by default in Java. However, "OpenSSL style" names work in Trireme just as they
 do in regular Node and if the JVM supports a particular cipher suite from OpenSSL, you will get the same one
-in Noderunner.
+in Trireme.
 
-2) Java handles SSL sessions differently, and gives the user less control about it. Right now, Noderunner
+2) Java handles SSL sessions differently, and gives the user less control about it. Right now, Trireme
 is unable to support the ability of a TLS or HTTPS client to retrieve the session from an existing connection
 and re-use it for another TCP connection.
 
@@ -106,32 +106,32 @@ it will likely get a different one.
 
 4) Java's SSLEngine relies on its own "keystore" files, whereas OpenSSL can operate on a variety
 of files but typically processes PEM files.
-Noderunner handles this disparity by using the "Bouncy Castle" crypto framework to translate PEM files into
+Trireme handles this disparity by using the "Bouncy Castle" crypto framework to translate PEM files into
 keys and certificates that SSLEngine can understand. In addition, you can also use regular Java keystore files,
 as described below.
 
 5) "securepair" isn't implemented yet -- the vast majority of TLS code we have seen just uses the regular
 "cleartext stream." If you really want to see "securepair," it's probably not too difficult.
 
-In order to support TLS and HTTPS using PEM files, the "noderunner-crypto" module and its depdendencies
+In order to support TLS and HTTPS using PEM files, the "trireme-crypto" module and its depdendencies
 (Bouncy Castle) must be in the class path. If they are not present, then TLS is still available, but it will
-only work with Java keystore files (see below) or without using any keys at all. Noderunner checks for this
+only work with Java keystore files (see below) or without using any keys at all. Trireme checks for this
 dependency at runtime, so it is simply a matter of including it on the class path, since it will fail
 at runtime if the dependency is neded, and work otherwise.
 
-(For instance, Noderunner can still execute a Node program that acts as an HTTPS client using only default
-certificates without requiring noderunner-crypto. But if it needs to validate a particular CA certificate
-or if it needs to use a client-side certificate then noderunner-crypto is also necessary.)
+(For instance, Trireme can still execute a Node program that acts as an HTTPS client using only default
+certificates without requiring trireme-crypto. But if it needs to validate a particular CA certificate
+or if it needs to use a client-side certificate then trireme-crypto is also necessary.)
 
-In addition, the TLS and HTTPS-related methods in Noderunner can use a Java keystore instead of PEM files.
+In addition, the TLS and HTTPS-related methods in Trireme can use a Java keystore instead of PEM files.
 There are three parameters that are relevant here:
 
 * keystore: The file name of a Java ".jks" keystore file containing a key and certificate
 * truststore: The file name of a Java ".jks" keystore file containing trusted CA certificates
 * passphrase: The passphrase for the keystore and truststore
 
-But the corresponding Noderunner script must be written like this, as it would be in any Node.js program. Howewver,
-if the "noderunner-crypto" module is not present in the classpath, then this will raise an exception:
+But the corresponding Trireme script must be written like this, as it would be in any Node.js program. Howewver,
+if the "trireme-crypto" module is not present in the classpath, then this will raise an exception:
 
     var options = {
       key: fs.readFileSync(common.fixturesDir + '/keys/agent1-key.pem'),
@@ -142,7 +142,7 @@ if the "noderunner-crypto" module is not present in the classpath, then this wil
       console.log('got request');
     });
 
-In addition, the following is also valid, and "noderunner-crypto" will not be needed:
+In addition, the following is also valid, and "trireme-crypto" will not be needed:
 
     var options = {
       keystore: common.fixturesDir + '/keys/agent1.jks',
@@ -158,11 +158,11 @@ In addition, the following is also valid, and "noderunner-crypto" will not be ne
 With the combination of the built-in crypto support in Java, plus Bouncy Castle, crypto support can be fairly
 complete.
 
-Like TLS, certain features (Sign/Verify in particular) only work if the "noderunner-crypto" module and its
+Like TLS, certain features (Sign/Verify in particular) only work if the "trireme-crypto" module and its
 dependencies are in the class path. If they are not present then these methods will throw an exception.
 
 The following crypto features
-work the same way in Noderunner as they do in standard Node.js:
+work the same way in Trireme as they do in standard Node.js:
 
 * Random bytes
 * Hash
@@ -178,20 +178,20 @@ to make it happen):
 
 In the particular case of "Cipher," Node.js uses a particular algorithm for "createCipher" based on a password
 with no salt that follows no known standard, and without the use of salt it is not terribly secure. Should
-we even implement this in Noderunner, or strongly discourage its use? (There is also a variant that can take
+we even implement this in Trireme, or strongly discourage its use? (There is also a variant that can take
 a key generated by PBKDF2 which would be a lot more secure.)
 
 Finally, the "Context" feature of the Crypto module is not implemented. This module is really used inside Node.js
-to implement TLS, and Noderunner does TLS a different way, as explained above.
+to implement TLS, and Trireme does TLS a different way, as explained above.
 
 ### Child Process
 
 Child processes are supported. Arbitary commands may be executed, just like in standard Node.js.
 
-When a Noderunner script uses "fork" to spawn a new instance of itself, the script runs as a separate
+When a Trireme script uses "fork" to spawn a new instance of itself, the script runs as a separate
 thread inside the same JVM, rather than as a separate OS process as it works in regular Node.js.
 
-Some Node.js scripts rely on the ability to spawn a process called "./node" in order to fork itself. Noderunner
+Some Node.js scripts rely on the ability to spawn a process called "./node" in order to fork itself. Trireme
 looks for this and tries to use it to spawn a new thread but it does not work in all cases. It does seem to
 be mostly the Node.js test suite itself that does this.
 
@@ -207,31 +207,31 @@ behave exactly the same as it does on Linux.
 
 On Java 6, the filesystem implementation falls back to using only the APIs supported in this version of Java,
 which means that many things like symbolic links are not supported, and support for "chmod" and the like is
-not exactly the same as in standard Node.js. On Java 7, Noderunner is able to use additional features and
+not exactly the same as in standard Node.js. On Java 7, Trireme is able to use additional features and
 the filesystem support is much more complete.
 
 ### OS
 
-Again, Noderunner runs on top of the JVM, which presents an operating-system abstraction. Things that Node.js
+Again, Trireme runs on top of the JVM, which presents an operating-system abstraction. Things that Node.js
 programs can do like set up signal handlers and the like are not supported.
 
 ## How Fast is It?
 
 Rhino on the JVM is much slower than V8. (In some benchmarks it is 50 times slower.) However, Node.js programs
-take advantage of a lot of native code, especially when HTTP and TLS are used, so Noderunner generally
+take advantage of a lot of native code, especially when HTTP and TLS are used, so Trireme generally
 fares much better.
 
 In general, we have seen simple HTTP benchmarks run at about one-half the speed of the same programs on
 standard Node.js. Some things are slower than that, and others are faster -- it all depends, as it does with
 all benchmarks.
 
-We would love to be able to use a faster JavaScript implementation, which would speed up all of Noderunner.
-However, for many programs, Noderunner on Rhino will be just fine, and the ability to embed Noderunner inside
+We would love to be able to use a faster JavaScript implementation, which would speed up all of Trireme.
+However, for many programs, Trireme on Rhino will be just fine, and the ability to embed Trireme inside
 another container is especially helpful.
 
 ## What Are the Dependencies?
 
-Since Noderunner is supposed to be highly embeddable, we try to minimize the dependencies.
+Since Trireme is supposed to be highly embeddable, we try to minimize the dependencies.
 
 ### Rhino.
 
@@ -251,17 +251,17 @@ we can without any additional stuff.
 
 ### Node.js Implementation
 
-Noderunner has a similar architecture to Node.js itself. Many of the core modules in standard Node.js rely
+Trireme has a similar architecture to Node.js itself. Many of the core modules in standard Node.js rely
 on a JavaScript shell, with native modules underneath that are written in C++.
 
-Noderunner is similar, and in many cases it exposes Java modules that mimic the interfaces of the C++
-native modules in Node.js. So for instance, Noderunner implements a native "tcp_wrap" module in Java
+Trireme is similar, and in many cases it exposes Java modules that mimic the interfaces of the C++
+native modules in Node.js. So for instance, Trireme implements a native "tcp_wrap" module in Java
 that uses NIO to emulate the same API as the "tcp_wrap" module in Node.js. The same goes for udp,
 HTTP parsing, and many other things.
 
 ### Threading Model
 
-Each Noderunner script runs in a single thread. In other words, when the script is executed, it spawns a new thread
+Each Trireme script runs in a single thread. In other words, when the script is executed, it spawns a new thread
 and occupies it until the script exits. Ticks and timers are implemented within that single thread. If the script
 exits (has no ticks or timers, is not "pinned" by a library like http, and falls off the bottom of the code)
 then the thread exits.
@@ -272,9 +272,9 @@ Node.js.
 However, some modules, such as the filesystem, may block, so those modules dispatch to a thread pool, just like
 in many other Java programs.
 
-Similarly, the "HTTP adapter" allows Noderunner to be embedded inside an existing
+Similarly, the "HTTP adapter" allows Trireme to be embedded inside an existing
 server container, and in that case HTTP requests may come from many different threads. For that reason, the main
-event loop for each Noderunner script depends on underlying collections that are thread-safe, so that different
+event loop for each Trireme script depends on underlying collections that are thread-safe, so that different
 threads may place events on the event loop.
 
 In the future, we may choose to support multi-tenant script threads, so that many isolated scripts may run
@@ -282,11 +282,11 @@ in the same thread. That would decrease memory usage and context switching for s
 
 ### HTTP Adapter
 
-The HTTP adapter is an interface that a server may implement and plug in to Noderunner. When it is plugged in,
-the adapter is responsible for calling Noderunner when new HTTP requests arrive, and for presenting the
+The HTTP adapter is an interface that a server may implement and plug in to Trireme. When it is plugged in,
+the adapter is responsible for calling Trireme when new HTTP requests arrive, and for presenting the
 actual HTTP requests and responses.
 
-When this is used, Noderunner scripts work just as they do in standard Node.js, but the "server" part of
+When this is used, Trireme scripts work just as they do in standard Node.js, but the "server" part of
 http is delegated to the adapter. (The client side of http continues to work the same way, however.)
 
 ### The Sandbox
@@ -296,23 +296,23 @@ allowed to do. It allows a script to accept or reject requests to access the fil
 the network, and execute programs. Using the sandbox, it is possible to run Node.js scripts in a
 totally isolated environment in a muti-tenant server.
 
-## Running Noderunner
+## Running Trireme
 
-The "jar" module builds a self-contained JAR that may be used to launch Noderunner on the command
+The "jar" module builds a self-contained JAR that may be used to launch Trireme on the command
 line just like regular Node.js:
 
     mvn install
-    java -jar jar/target/noderunner.X.Y.Z.jar <script name>
+    java -jar jar/target/trireme.X.Y.Z.jar <script name>
 
 (and with no arguments it will launch the "repl" but that implementation is not complete)
 
-## Embedding Noderunner
+## Embedding Trireme
 
 There is JavaDoc for the "NodeEnvironment" and "NodeScript" classes, and many other features.
 Here are the basics:
 
-    import com.apigee.noderunner.core.NodeEnvironment;
-    import com.apigee.noderunner.core.NodeScript;
+    import org.apigee.trireme.core.NodeEnvironment;
+    import org.apigee.trireme.core.NodeScript;
 
     // The NodeEnvironment controls the environment for many scripts
     NodeEnvironment env = new NodeEnvironment();

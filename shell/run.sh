@@ -21,4 +21,4 @@ JARGS="-Xmx1g"
 #JARGS="-Xdebug -Xrunjdwp:server=y,suspend=n,transport=dt_socket,address=localhost:14000 -DHttpAdapter=netty"
 
 #echo "Classpath is set"
-exec java ${JARGS} com.apigee.noderunner.shell.Main $*
+exec java ${JARGS} org.apigee.trireme.shell.Main $*

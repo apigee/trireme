@@ -1,9 +1,9 @@
 <project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
   <modelVersion>4.0.0</modelVersion>
 
-  <groupId>com.apigee.noderunner</groupId>
-  <artifactId>noderunner</artifactId>
-  <name>noderunner</name>
+  <groupId>org.apigee.trireme</groupId>
+  <artifactId>trireme</artifactId>
+  <name>trireme</name>
   <version>0.6.6-SNAPSHOT</version>
   
   <packaging>pom</packaging>
@@ -19,7 +19,8 @@
 
   <licenses>
     <license>
-      <name>Apigee Corporation</name>
+      <name>MIT License</name>
+      <url>http://opensource.org/licenses/MIT</url>
     </license>
   </licenses>
   
@@ -154,8 +155,8 @@
   </build>
 
   <scm>
-    <connection>scm:git:https://github.com/apigee/noderunner.git</connection>
-    <developerConnection>scm:git:ssh://git@github.com/apigee/noderunner.git</developerConnection>
+    <connection>scm:git:https://github.com/apigee/trireme.git</connection>
+    <developerConnection>scm:git:ssh://git@github.com/apigee/trireme.git</developerConnection>
   </scm>
 
   <distributionManagement>

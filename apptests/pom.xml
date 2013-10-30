@@ -2,8 +2,8 @@
   <modelVersion>4.0.0</modelVersion>
   
   <parent>
-    <groupId>com.apigee.noderunner</groupId>
-    <artifactId>noderunner</artifactId>
+    <groupId>org.apigee.trireme</groupId>
+    <artifactId>trireme</artifactId>
     <version>0.6.6-SNAPSHOT</version>
   </parent>
 
@@ -13,14 +13,14 @@
 
   <dependencies>
     <dependency>
-      <groupId>com.apigee.noderunner</groupId>
-      <artifactId>noderunner-core</artifactId>
+      <groupId>org.apigee.trireme</groupId>
+      <artifactId>trireme-core</artifactId>
       <version>0.6.6-SNAPSHOT</version>
       <scope>test</scope>
     </dependency>
     <dependency>
-      <groupId>com.apigee.noderunner</groupId>
-      <artifactId>noderunner-net</artifactId>
+      <groupId>org.apigee.trireme</groupId>
+      <artifactId>trireme-net</artifactId>
       <version>0.6.6-SNAPSHOT</version>
       <scope>test</scope>
     </dependency>

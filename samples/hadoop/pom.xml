@@ -2,19 +2,19 @@
   <modelVersion>4.0.0</modelVersion>
   
   <parent>
-    <groupId>com.apigee.noderunner</groupId>
-    <artifactId>noderunner-samples</artifactId>
+    <groupId>org.apigee.trireme</groupId>
+    <artifactId>trireme-samples</artifactId>
     <version>0.6.6-SNAPSHOT</version>
   </parent>
 
-  <name>noderunner-hadoop-sample</name>
-  <artifactId>noderunner-hadoop-sample</artifactId>
+  <name>trireme-hadoop-sample</name>
+  <artifactId>trireme-hadoop-sample</artifactId>
   <version>0.6.6-SNAPSHOT</version>
 
   <dependencies>
     <dependency>
-      <groupId>com.apigee.noderunner</groupId>
-      <artifactId>noderunner-core</artifactId>
+      <groupId>org.apigee.trireme</groupId>
+      <artifactId>trireme-core</artifactId>
       <version>0.6.6-SNAPSHOT</version>
     </dependency>
 

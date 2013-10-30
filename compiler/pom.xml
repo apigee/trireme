@@ -2,8 +2,8 @@
   <modelVersion>4.0.0</modelVersion>
   
   <parent>
-    <groupId>com.apigee.noderunner</groupId>
-    <artifactId>noderunner</artifactId>
+    <groupId>org.apigee.trireme</groupId>
+    <artifactId>trireme</artifactId>
     <version>0.6.6-SNAPSHOT</version>
   </parent>
 

@@ -2,18 +2,18 @@
   <modelVersion>4.0.0</modelVersion>
   
   <parent>
-    <groupId>com.apigee.noderunner</groupId>
-    <artifactId>noderunner</artifactId>
+    <groupId>org.apigee.trireme</groupId>
+    <artifactId>trireme</artifactId>
     <version>0.6.6-SNAPSHOT</version>
   </parent>
 
-  <name>noderunner-core</name>
-  <artifactId>noderunner-core</artifactId>
+  <name>trireme-core</name>
+  <artifactId>trireme-core</artifactId>
   <version>0.6.6-SNAPSHOT</version>
 
   <dependencies>
     <dependency>
-      <groupId>com.apigee.noderunner</groupId>
+      <groupId>org.apigee.trireme</groupId>
       <artifactId>rhino-compiler</artifactId>
       <version>0.6.6-SNAPSHOT</version>
       <scope>provided</scope>
@@ -43,7 +43,7 @@
   <build>
     <plugins>
       <plugin>
-        <groupId>com.apigee.noderunner</groupId>
+        <groupId>org.apigee.trireme</groupId>
         <artifactId>rhino-compiler</artifactId>
         <version>${project.version}</version>
         <configuration>

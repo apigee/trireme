@@ -2,7 +2,7 @@
   <modelVersion>4.0.0</modelVersion>
   
   <parent>
-    <groupId>org.apigee.trireme</groupId>
+    <groupId>io.apigee.trireme</groupId>
     <artifactId>trireme</artifactId>
     <version>0.6.6-SNAPSHOT</version>
   </parent>
@@ -17,31 +17,31 @@
 
   <dependencies>
     <dependency>
-      <groupId>org.apigee.trireme</groupId>
+      <groupId>io.apigee.trireme</groupId>
       <artifactId>trireme-core</artifactId>
       <version>0.6.6-SNAPSHOT</version>
       <scope>test</scope>
     </dependency>
     <dependency>
-      <groupId>org.apigee.trireme</groupId>
+      <groupId>io.apigee.trireme</groupId>
       <artifactId>trireme-net</artifactId>
       <version>0.6.6-SNAPSHOT</version>
       <scope>test</scope>
     </dependency>
     <dependency>
-      <groupId>org.apigee.trireme</groupId>
+      <groupId>io.apigee.trireme</groupId>
       <artifactId>trireme-crypto</artifactId>
       <version>0.6.6-SNAPSHOT</version>
       <scope>test</scope>
     </dependency>
     <dependency>
-      <groupId>org.apigee.trireme</groupId>
+      <groupId>io.apigee.trireme</groupId>
       <artifactId>trireme-util</artifactId>
       <version>0.6.6-SNAPSHOT</version>
       <scope>test</scope>
     </dependency>
     <dependency>
-      <groupId>org.apigee.trireme</groupId>
+      <groupId>io.apigee.trireme</groupId>
       <artifactId>trireme-shell</artifactId>
       <version>0.6.6-SNAPSHOT</version>
       <scope>test</scope>

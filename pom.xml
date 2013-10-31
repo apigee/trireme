@@ -1,9 +1,17 @@
 <project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
   <modelVersion>4.0.0</modelVersion>
 
+  <parent>
+    <groupId>org.sonatype.oss</groupId>
+    <artifactId>oss-parent</artifactId>
+    <version>7</version>
+  </parent>
+
   <groupId>io.apigee.trireme</groupId>
   <artifactId>trireme</artifactId>
   <name>trireme</name>
+  <description>Trireme -- Embed Node.js programs inside the Java Virtual Machine</description>
+  <url>http://apigee.io/</url>
   <version>0.6.6-SNAPSHOT</version>
   
   <packaging>pom</packaging>
@@ -151,18 +159,51 @@
           <!--<execution><goals><goal>check</goal></goals></execution> -->
         </executions>
       </plugin>
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-source-plugin</artifactId>
+        <executions>
+          <execution>
+            <id>attach-sources</id>
+            <goals>
+              <goal>jar</goal>
+            </goals>
+          </execution>
+        </executions>
+      </plugin>
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-javadoc-plugin</artifactId>
+        <executions>
+          <execution>
+            <id>attach-javadocs</id>
+            <goals>
+              <goal>jar</goal>
+            </goals>
+          </execution>
+        </executions>
+      </plugin>
     </plugins>
   </build>
 
   <scm>
+    <url>git@github.com:apigee/trireme.git</url>
     <connection>scm:git:https://github.com/apigee/trireme.git</connection>
     <developerConnection>scm:git:ssh://git@github.com/apigee/trireme.git</developerConnection>
   </scm>
 
-  <distributionManagement>
-    <repository>
-      <id>apigeeks</id>
-      <url>http://mavenrepo.eng.apigeeks.net:8081/nexus/content/repositories/apigeegw</url>
-   </repository>
-  </distributionManagement>
+  <developers>
+    <developer>
+        <name>Greg Brail</name>
+        <id>gbrail</id>
+    </developer>
+    <developer>
+        <name>Yegor Pomortsev</name>
+        <id>illicium</id>
+    </developer>
+    <developer>
+        <name>Ed Anuff</name>
+        <id>edanuff</id>
+    </developer>
+  </developers>
 </project>

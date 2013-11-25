@@ -17,20 +17,24 @@ import java.util.concurrent.TimeoutException;
 
 public class TestRunner
 {
-    public static final long TEST_TIMEOUT_SECS = 60;
+    public static final int TEST_TIMEOUT_SECS = 60;
 
     public static void main(String[] args)
     {
-        if ((args.length < 1) || (args.length > 2)) {
+        if ((args.length < 1) || (args.length > 3)) {
             System.exit(10);
         }
 
         File fileName = new File(args[0]);
         NodeEnvironment env = new NodeEnvironment();
         int exitCode = 101;
+        int timeout = TEST_TIMEOUT_SECS;
 
         if ((args.length >= 2) && args[1].equals("netty")) {
             env.setHttpContainer(new NettyHttpContainer());
+        }
+        if (args.length >= 3) {
+            timeout = Integer.parseInt(args[2]);
         }
 
         try {
@@ -39,7 +43,7 @@ public class TestRunner
             Future<ScriptStatus> exec;
             try {
                 exec = script.execute();
-                ScriptStatus status = exec.get(TEST_TIMEOUT_SECS, TimeUnit.SECONDS);
+                ScriptStatus status = exec.get(timeout, TimeUnit.SECONDS);
                 exitCode = status.getExitCode();
                 if (status.hasCause()) {
                     Throwable cause = status.getCause();

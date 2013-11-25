@@ -17,30 +17,30 @@ if (module === require.main) {
   var tests = fs.readdirSync(dir);
   var spawn = require('child_process').spawn;
 
-  function runBenchmarks() {
-    var test = tests.shift();
-    if (!test)
-      return;
-
-    if (test.match(/^[\._]/))
-      return process.nextTick(runBenchmarks);
-
-    console.error(type + '/' + test);
-    test = path.resolve(dir, test);
-
-    var child = spawn(process.execPath, [ test ], { stdio: 'inherit' });
-    child.on('close', function(code) {
-      if (code)
-        process.exit(code);
-      else {
-        console.log('');
-        runBenchmarks();
-      }
-    });
-  }
-
-  // Noderunner: Rhino doesn't seem to accept this code.
   runBenchmarks();
+}
+
+function runBenchmarks() {
+  var test = tests.shift();
+  if (!test)
+    return;
+
+  if (test.match(/^[\._]/))
+    return process.nextTick(runBenchmarks);
+
+  console.error(type + '/' + test);
+  test = path.resolve(dir, test);
+
+  var a = (process.execArgv || []).concat(test);
+  var child = spawn(process.execPath, a, { stdio: 'inherit' });
+  child.on('close', function(code) {
+    if (code)
+      process.exit(code);
+    else {
+      console.log('');
+      runBenchmarks();
+    }
+  });
 }
 
 exports.createBenchmark = function(fn, options) {

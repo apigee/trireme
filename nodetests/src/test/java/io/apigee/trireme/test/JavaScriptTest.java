@@ -24,12 +24,12 @@ import java.io.PrintWriter;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
-import java.util.Map;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 @RunWith(Parameterized.class)
 public class JavaScriptTest
+    extends TestBase
 {
     public static final String[] BASE_DIRS =
         new String[] { "target/test-classes/test/simple",
@@ -41,42 +41,13 @@ public class JavaScriptTest
     public static final String TEST_FILE_NAME_PROP = "TestFile";
     public static final String TEST_ADAPTER_PROP = "TestAdapter";
 
-    public static final String DEFAULT_ADAPTER = "default";
     public static final String NETTY_ADAPTER = "netty";
 
     private static final Pattern isJs = Pattern.compile(".+\\.js$");
     private static final Pattern isHttp = Pattern.compile("^test-http.+");
     private static final DocumentBuilderFactory docFactory = DocumentBuilderFactory.newInstance();
 
-    private final File fileName;
-    private final String adapter;
-    private final String javaVersion;
-
     private static PrintWriter resultWriter;
-
-    private static String java6Command;
-    private static String java7Command;
-    private static String javaCommand;
-    private static String[] javaVersions;
-
-    static {
-        java6Command = findJava("JAVA_HOME_6");
-        java7Command = findJava("JAVA_HOME_7");
-        javaCommand = findJava("JAVA_HOME");
-        if (javaCommand == null) {
-            javaCommand = "java";
-        }
-
-        System.out.println("Java 6:  " + java6Command);
-        System.out.println("Java 7:  " + java7Command);
-        System.out.println("Default: " + javaCommand);
-
-        if ((java6Command != null) && (java7Command != null)) {
-            javaVersions = new String[] { "6", "7" };
-        } else {
-            javaVersions = new String[] { "default" };
-        }
-    }
 
     @BeforeClass
     public static void setup()
@@ -89,18 +60,6 @@ public class JavaScriptTest
         }
 
         resultWriter = new PrintWriter(new FileOutputStream(RESULT_FILE));
-    }
-
-    private static String findJava(String javaHome)
-    {
-        String home = System.getenv(javaHome);
-        if (home != null) {
-            File javaFile = new File(home + "/bin/java");
-            if (javaFile.exists() && javaFile.canExecute()) {
-                return javaFile.getPath();
-            }
-        }
-        return null;
     }
 
     @AfterClass
@@ -238,9 +197,7 @@ public class JavaScriptTest
 
     public JavaScriptTest(File fileName, String adapter, String javaVersion)
     {
-        this.fileName = fileName;
-        this.adapter = adapter;
-        this.javaVersion = javaVersion;
+        super(fileName, adapter, javaVersion);
     }
 
     @Test
@@ -249,37 +206,8 @@ public class JavaScriptTest
     {
         System.out.println("**** Testing " + fileName.getName() + " (" + adapter + ", " + javaVersion + ")...");
 
-        String command;
-        if ("6".equals(javaVersion)) {
-            command = java6Command;
-        } else if ("7".equals(javaVersion)) {
-            command = java7Command;
-        } else {
-            command = javaCommand;
-        }
+        int exitCode = launchTest(DEFAULT_TIMEOUT, null);
 
-        String logLevel = System.getProperty("LOGLEVEL", "INFO");
-        ProcessBuilder pb = new ProcessBuilder(command,
-                                               "-DLOGLEVEL=" + logLevel,
-                                               "io.apigee.trireme.test.TestRunner",
-                                               fileName.getName(),
-                                               adapter);
-        pb.directory(fileName.getParentFile());
-        pb.redirectErrorStream(true);
-        Map<String, String> envVars = pb.environment();
-        envVars.put("CLASSPATH", System.getProperty("surefire.test.class.path"));
-        Process proc = pb.start();
-
-        byte[] output = new byte[8192];
-        int r;
-        do {
-            r = proc.getInputStream().read(output);
-            if (r > 0) {
-                System.out.write(output, 0, r);
-            }
-        } while (r > 0);
-
-        int exitCode = proc.waitFor();
         resultWriter.println(fileName.getName() + '\t' + adapter + '\t' + javaVersion + '\t' + exitCode);
         if (exitCode == 0) {
             System.out.println("** " + fileName.getName() + " (" + adapter + ", " + javaVersion + ") SUCCESS");

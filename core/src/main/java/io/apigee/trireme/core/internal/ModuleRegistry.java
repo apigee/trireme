@@ -68,10 +68,12 @@ public class ModuleRegistry
      */
     private static final String CODE_PREFIX = "(function (exports, require, module, __filename, __dirname) {";
     private static final String CODE_POSTFIX = "});";
+    public static final String MAIN_SCRIPT = "/io/apigee/trireme/fromnode/node.js";
 
     private final HashMap<String, NodeModule>         modules         = new HashMap<String, NodeModule>();
     private final HashMap<String, InternalNodeModule> internalModules = new HashMap<String, InternalNodeModule>();
     private final HashMap<String, Script>             compiledModules = new HashMap<String, Script>();
+    private Script                                    mainScript;
 
     public void load(Context cx)
     {
@@ -153,17 +155,21 @@ public class ModuleRegistry
         addCompiledModule("tls_checkidentity", "io.apigee.trireme.scripts.tls_checkidentity");
         addCompiledModule("vm", "io.apigee.trireme.scripts.vm");
         addCompiledModule("zlib", "io.apigee.trireme.scripts.zlib");
+
+        // Compile this separately because it should not be wrapped with a function like other scripts.
+        String mainSource = readResource(MAIN_SCRIPT, "node.js", this);
+        mainScript = cx.compileString(mainSource, "node.js", 1, null);
     }
 
-    private void compileAndAdd(Context cx, Object impl, String name, String path)
+    private String readResource(String path, String name, Object base)
     {
         String scriptSource;
-        InputStream is = impl.getClass().getResourceAsStream(path);
+        InputStream is = base.getClass().getResourceAsStream(path);
         if (is == null) {
             throw new AssertionError("Script " + path + " cannot be found for module " + name);
         }
         try {
-            scriptSource = Utils.readStream(is);
+            return Utils.readStream(is);
         } catch (IOException ioe) {
             throw new AssertionError("Error reading script " + path + " for module " + name);
         } finally {
@@ -172,6 +178,11 @@ public class ModuleRegistry
             } catch (IOException ignore) {
             }
         }
+    }
+
+    private void compileAndAdd(Context cx, Object impl, String name, String path)
+    {
+        String scriptSource = readResource(path, name, impl);
 
         String finalSource = CODE_PREFIX + scriptSource + CODE_POSTFIX;
         Script compiled = cx.compileString(finalSource, name, 1, null);
@@ -215,6 +226,11 @@ public class ModuleRegistry
         } catch (IllegalAccessException e) {
             throw new AssertionError("Error creating Script instance for " + className);
         }
+    }
+
+    public Script getMainScript()
+    {
+        return mainScript;
     }
 
     public NodeModule get(String name)

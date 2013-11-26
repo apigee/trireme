@@ -53,6 +53,7 @@ public class Process
     protected static final String OBJECT_NAME = "process";
     public static final String MODULE_NAME = "process";
     public static final String EXECUTABLE_NAME = "./node";
+    public static final String DEFAULT_TITLE = "trireme";
     /** We don't really know what the umask is in Java, so we set a reasonable default that the tests expected. */
     public static final int DEFAULT_UMASK = 022;
 
@@ -69,84 +70,114 @@ public class Process
     public Scriptable registerExports(Context cx, Scriptable scope, NodeRuntime runner)
         throws InvocationTargetException, IllegalAccessException, InstantiationException
     {
-        ScriptableObject.defineClass(scope, EventEmitter.EventEmitterImpl.class, false, true);
+        ScriptableObject.defineClass(scope, ProcessImpl.class);
+        ScriptableObject.defineClass(scope, EnvImpl.class);
 
+        ProcessImpl proc = (ProcessImpl)cx.newObject(scope, ProcessImpl.CLASS_NAME);
+        proc.init(cx, runner);
+        proc.defineFunctionProperties(
+            new String[] { "binding", "abort", "chdir", "cwd", "reallyExit",
+                           "_kill", "send", "memoryUsage", "needTickCallback", "_usingDomains",
+                           "umask", "uptime", "hrtime",
+                           "_debugProcess", "_debugPause", "_debugEnd", "dlopen" },
+            ProcessImpl.class, 0);
 
-        ScriptableObject.defineClass(scope, ProcessImpl.class, false, true);
-        ScriptableObject.defineClass(scope, EnvImpl.class, false, true);
+        proc.defineProperty("argv", null, Utils.findMethod(ProcessImpl.class, "getArgv"), null, 0);
+        proc.defineProperty("execArgv", null, Utils.findMethod(ProcessImpl.class, "getExecArgv"), null, 0);
+        proc.defineProperty("execPath", null, Utils.findMethod(ProcessImpl.class, "getExecPath"), null, 0);
+        proc.defineProperty("env", null, Utils.findMethod(ProcessImpl.class, "getEnv"), null, 0);
+        proc.defineProperty("version", null, Utils.findMethod(ProcessImpl.class, "getVersion"), null, 0);
+        proc.defineProperty("versions", null, Utils.findMethod(ProcessImpl.class, "getVersions"), null, 0);
+        proc.defineProperty("features", null, Utils.findMethod(ProcessImpl.class, "getFeatures"), null, 0);
+        proc.defineProperty("arch", null, Utils.findMethod(ProcessImpl.class, "getArch"), null, 0);
+        proc.defineProperty("pid", null, Utils.findMethod(ProcessImpl.class, "getPid"), null, 0);
+        proc.defineProperty("platform", null, Utils.findMethod(ProcessImpl.class, "getPlatform"), null, 0);
+        proc.defineProperty("moduleLoadList", null, Utils.findMethod(ProcessImpl.class, "getModuleLoadList"), null, 0);
+        proc.defineProperty("_errno", null, Utils.findMethod(ProcessImpl.class, "getErrno"), null, 0);
+        proc.defineProperty("_tickInfoBox", null, Utils.findMethod(ProcessImpl.class, "getTickInfoBox"), null, 0);
 
-        ProcessImpl exports = (ProcessImpl) cx.newObject(scope, ProcessImpl.CLASS_NAME);
-        exports.setRunner(cx, runner);
+        proc.defineProperty("title", null, Utils.findMethod(ProcessImpl.class, "getTitle"),
+                            Utils.findMethod(ProcessImpl.class, "setTitle"), 0);
+        proc.defineProperty("_events", null, Utils.findMethod(ProcessImpl.class, "getEvents"),
+                            Utils.findMethod(ProcessImpl.class, "setEvents"), 0);
+        proc.defineProperty("_eval", null, Utils.findMethod(ProcessImpl.class, "getEval"),
+                            Utils.findMethod(ProcessImpl.class, "setEval"), 0);
+        proc.defineProperty("_immediateCallback", null, Utils.findMethod(ProcessImpl.class, "getImmediateCallback"),
+                            Utils.findMethod(ProcessImpl.class, "setImmediateCallback"), 0);
+        proc.defineProperty("_needImmediateCallback", null, Utils.findMethod(ProcessImpl.class, "getNeedImmediateCallback"),
+                            Utils.findMethod(ProcessImpl.class, "setNeedImmediateCallback"), 0);
+        proc.defineProperty("_nextDomainTick", null, Utils.findMethod(ProcessImpl.class, "getNextDomainTick"),
+                            Utils.findMethod(ProcessImpl.class, "setNextDomainTick"), 0);
+        proc.defineProperty("_tickFromSpinner", null, Utils.findMethod(ProcessImpl.class, "getTickFromSpinner"),
+                            Utils.findMethod(ProcessImpl.class, "setTickFromSpinner"), 0);
+        proc.defineProperty("_tickCallback", null, Utils.findMethod(ProcessImpl.class, "getTickCallback"),
+                            Utils.findMethod(ProcessImpl.class, "setTickCallback"), 0);
+        proc.defineProperty("_tickDomainCallback",  null, Utils.findMethod(ProcessImpl.class, "getTickDomainCallback"),
+                            Utils.findMethod(ProcessImpl.class, "setTickDomainCallback"), 0);
 
-        EnvImpl env = (EnvImpl) cx.newObject(scope, EnvImpl.CLASS_NAME);
-        env.initialize(runner.getScriptObject().getEnvironment());
-        exports.setEnv(env);
-
-        // Put the object directly in the scope -- we only do this for modules that are always deployed
-        // as global variables in the script.
-        scope.put(OBJECT_NAME, scope, exports);
-        return exports;
+        return proc;
     }
 
     public static class ProcessImpl
-        extends EventEmitter.EventEmitterImpl
+        extends ScriptableObject
     {
-        protected static final String CLASS_NAME = "_processClass";
-
-        private Scriptable stdout;
-        private Scriptable stderr;
-        private Scriptable stdin;
-        private Scriptable argv;
-        private Scriptable env;
-        private Object eventEmitter;
-        private long startTime;
-        private ScriptRunner runner;
-        private Object mainModule;
-        private boolean needImmediateCallback;
-        private Function immediateCallback;
-        private Object domain;
-        private boolean usingDomains;
-        private boolean exiting;
-        private NodeExitException exitStatus;
-        private int umask = DEFAULT_UMASK;
-
-        @JSConstructor
-        public static Object ProcessImpl(Context cx, Object[] args, Function ctorObj, boolean inNewExpr)
-        {
-            ProcessImpl ret = new ProcessImpl();
-            ret.startTime = System.currentTimeMillis();
-            return ret;
-        }
+        public static final String CLASS_NAME = "_processClass";
+        private static final int IB_LENGTH = 0;
+        private static final int IB_INDEX = 1;
+        private static final int IB_DEPTH = 2;
 
         @Override
         public String getClassName() {
             return CLASS_NAME;
         }
 
-        public void setRunner(Context cx, NodeRuntime runner)
+        private Scriptable argv;
+        private Scriptable env;
+        private String eval;
+        private Object events;
+        private Object moduleLoadList;
+        private long startTime;
+        private ScriptRunner runner;
+        private NodeExitException exitStatus;
+        private String title = DEFAULT_TITLE;
+        private int umask = DEFAULT_UMASK;
+
+        private Function immediateCallback;
+        private Function tickFromSpinner;
+        private Function tickDomainCallback;
+        private Function tickCallback;
+        private Function nextDomainTick;
+        private boolean needTickCallback;
+        private boolean needImmediateCallback;
+        private boolean usingDomains;
+        private Scriptable infoBox;
+
+        void init(Context cx, NodeRuntime runner)
         {
             // This is a low-level module and it's OK to access low-level stuff
             this.runner = (ScriptRunner)runner;
 
-            Scriptable eventModule = (Scriptable)runner.require("events", cx);
-            this.eventEmitter = ScriptableObject.getProperty(eventModule, "EventEmitter");
-        }
+            EnvImpl env = (EnvImpl) cx.newObject(this, EnvImpl.CLASS_NAME);
+            env.initialize(runner.getScriptObject().getEnvironment());
+            this.env = env;
 
-        @JSGetter("mainModule")
-        public Object getMainModule() {
-            return mainModule;
-        }
+            startTime = System.currentTimeMillis();
+            // Node.cc pre-creates these, presumably to make access later faster...
+            events = cx.newObject(this);
+            moduleLoadList = cx.newArray(this, 0);
 
-        @JSSetter("mainModule")
-        public void setMainModule(Object m) {
-            this.mainModule = m;
+            // We will use this later on in order to get access to what's going on in node.js itself
+            Scriptable infoBox = cx.newArray(this, 3);
+            infoBox.put(IB_LENGTH, infoBox, new Integer(0));
+            infoBox.put(IB_INDEX, infoBox, new Integer(0));
+            infoBox.put(IB_DEPTH, infoBox, new Integer(0));
+            this.infoBox = infoBox;
         }
 
         /**
          * Implement process.binding. This works like the rest of the module loading but uses a different
          * namespace and a different cache. These types of modules must be implemented in Java.
          */
-        @JSFunction
         public static Object binding(Context cx, Scriptable thisObj, Object[] args, Function func)
         {
             String name = stringArg(args, 0);
@@ -189,104 +220,33 @@ public class Process
             return mod;
         }
 
-        @JSGetter("stdout")
-        public Object getStdout()
-        {
-            if (stdout == null) {
-                Context cx = Context.getCurrentContext();
-                runner.requireInternal(NativeOutputStreamAdapter.MODULE_NAME, cx);
-                stdout =
-                    NativeOutputStreamAdapter.createNativeStream(cx,
-                                                                 runner.getScriptScope(), runner,
-                                                                 runner.getStdout(), true);
-
-                // node "legacy API" -- use POSIX file descriptor number
-                stdout.put("fd", stdout, 1);
-            }
-            return stdout;
-        }
-
-        public void setStdout(Scriptable s)
-        {
-            this.stdout = s;
-        }
-
-        @JSGetter("stderr")
-        public Object getStderr()
-        {
-            if (stderr == null) {
-                Context cx = Context.getCurrentContext();
-                runner.requireInternal(NativeOutputStreamAdapter.MODULE_NAME, cx);
-                stderr =
-                    NativeOutputStreamAdapter.createNativeStream(cx,
-                                                                 runner.getScriptScope(), runner,
-                                                                 runner.getStderr(), true);
-
-                // node "legacy API" -- use POSIX file descriptor number
-                stderr.put("fd", stderr, 2);
-            }
-            return stderr;
-        }
-
-        public void setStderr(Scriptable s)
-        {
-            this.stderr = s;
-        }
-
-        @JSGetter("stdin")
-        public Object getStdin()
-        {
-            if (stdin == null) {
-                Context cx = Context.getCurrentContext();
-                runner.requireInternal(NativeInputStreamAdapter.MODULE_NAME, cx);
-                stdin =
-                    NativeInputStreamAdapter.createNativeStream(cx,
-                                                                runner.getScriptScope(), runner,
-                                                                runner.getStdin(), true);
-
-                // node "legacy API" -- use POSIX file descriptor number
-                stdin.put("fd", stdin, 0);
-            }
-            return stdin;
-        }
-
-        public void setStdin(Scriptable s)
-        {
-            this.stdin = s;
-        }
-
-        @JSGetter("argv")
         public Object getArgv()
         {
             return argv;
         }
 
-        public void setArgv(String[] args)
+        public void setArgv(Context cx, String[] args)
         {
             Object[] argvArgs = new Object[args.length];
             for (int i = 0; i < args.length; i++) {
                 argvArgs[i] = args[i];
             }
-            argv = Context.getCurrentContext().newArray(this, argvArgs);
+            if (log.isDebugEnabled()) {
+                log.debug("Setting argv to {}", argvArgs);
+            }
+            argv = cx.newArray(this, argvArgs);
         }
 
-        @JSGetter("execArgv")
         public Object getExecArgv()
         {
             return Context.getCurrentContext().newArray(this, 0);
         }
 
-        public void setEnv(EnvImpl env) {
-            this.env = env;
-        }
-
-        @JSGetter("execPath")
         public String getExecPath()
         {
             return EXECUTABLE_NAME;
         }
 
-        @JSFunction
         public void abort()
             throws NodeExitException
         {
@@ -294,26 +254,22 @@ public class Process
             throw exitStatus;
         }
 
-        @JSFunction
         public void chdir(String cd)
         {
             runner.setWorkingDirectory(cd);
         }
 
-        @JSFunction
         public String cwd()
         {
             return runner.getWorkingDirectory();
         }
 
-        @JSGetter("env")
-        public Scriptable getEnv()
+        public Object getEnv()
         {
             return env;
         }
 
-        @JSFunction
-        public static void exit(Context cx, Scriptable thisObj, Object[] args, Function func)
+        public static void reallyExit(Context cx, Scriptable thisObj, Object[] args, Function func)
             throws NodeExitException
         {
             ProcessImpl self = (ProcessImpl)thisObj;
@@ -326,58 +282,32 @@ public class Process
             throw self.exitStatus;
         }
 
-        @JSFunction
-        public static void reallyExit(Context cx, Scriptable thisObj, Object[] args, Function func)
-            throws NodeExitException
-        {
-            // In regular node this calls the "exit" system call but we are run inside a bigger context so no.
-            exit(cx, thisObj, args, func);
-        }
-
-        // TODO getgid
-        // TODO setgid
-        // TODO getuid
-        // TODO setuid
-
-        @JSGetter("version")
         public String getVersion()
         {
             return "v" + Version.NODE_VERSION;
         }
 
-        @JSGetter("versions")
         public Object getVersions()
         {
             Scriptable env = Context.getCurrentContext().newObject(this);
             env.put("trireme", env, Version.TRIREME_VERSION);
             env.put("node", env, Version.NODE_VERSION);
             env.put("openssl", env, Version.SSL_VERSION);
+            env.put("java", env, System.getProperty("java.version"));
             return env;
         }
 
-        @JSGetter("config")
-        public Scriptable getConfig()
-        {
-            Scriptable c = Context.getCurrentContext().newObject(this);
-            Scriptable vars = Context.getCurrentContext().newObject(this);
-            // TODO fill it in
-            c.put("variables", c, vars);
-            return c;
-        }
-
-        @JSGetter("title")
         public String getTitle()
         {
-            return "trireme";
+            return title;
         }
 
-        @JSSetter("title")
         public void setTitle(String title)
         {
-            // You can't set it
+            this.title = title;
+            runner.getMainThread().setName("Trireme: " + title);
         }
 
-        @JSGetter("arch")
         public String getArch()
         {
             // This is actually the bitness of the JRE, not necessarily the system
@@ -392,8 +322,7 @@ public class Process
             return arch;
         }
 
-        @JSFunction
-        public static void kill(Context cx, Scriptable thisObj, Object[] args, Function func)
+        public static void _kill(Context cx, Scriptable thisObj, Object[] args, Function func)
         {
             int pid = intArg(args, 0);
             String signal = stringArg(args, 1, "TERM");
@@ -404,7 +333,6 @@ public class Process
             ProcessWrap.kill(cx, thisObj, pid, signal);
         }
 
-        @JSGetter("pid")
         public int getPid()
         {
             // Java doesn't give us the OS pid. However this is used for debug to show different Node scripts
@@ -412,7 +340,6 @@ public class Process
             return System.identityHashCode(runner) % 65536;
         }
 
-        @JSFunction
         public static void send(Context cx, Scriptable thisObj, Object[] args, Function func)
         {
             Object message = objArg(args, 0, Object.class, true);
@@ -426,19 +353,14 @@ public class Process
             pw.getOnMessage().call(cx, pw, pw, new Object[] { message });
         }
 
-        @JSGetter("_errno")
-        public Object getErrno()
-        {
+        public Object getErrno() {
             return runner.getErrno();
         }
 
-        @JSGetter("platform")
-        public String getPlatform()
-        {
+        public String getPlatform() {
             return "java";
         }
 
-        @JSFunction
         public static Object memoryUsage(Context cx, Scriptable thisObj, Object[] args, Function func)
         {
             Runtime r = Runtime.getRuntime();
@@ -449,69 +371,72 @@ public class Process
             return mem;
         }
 
-        @JSFunction
-        public static void _usingDomains(Context cx, Scriptable thisObj, Object[] args, Function func)
-        {
-            ((ProcessImpl)thisObj).usingDomains = true;
+        public Object getEvents() {
+            return events;
         }
 
-        @JSFunction
-        public static void nextTick(Context cx, Scriptable thisObj, Object[] args, Function func)
-        {
-            Function f = functionArg(args, 0, true);
-            ProcessImpl proc = (ProcessImpl)thisObj;
-            Scriptable domain = null;
-            if (proc.usingDomains) {
-                domain = ensureValid(proc.domain);
-            }
-            proc.runner.enqueueCallbackWithLimit(f, f, thisObj, domain, new Object[0]);
+        public void setEvents(Object e) {
+            this.events = e;
         }
 
-        @JSFunction
-        public static void _tickCallback(Context cx, Scriptable thisObj, Object[] args, Function func)
-        {
-            ProcessImpl proc = (ProcessImpl)thisObj;
-            proc.runner.executeTicks(cx);
+        public Object getModuleLoadList() {
+            return moduleLoadList;
         }
 
-        @JSGetter("maxTickDepth")
-        public int getMaxTickDepth()
-        {
-            return runner.getMaxTickDepth();
+        public String getEval() {
+            return eval;
         }
 
-        @JSSetter("maxTickDepth")
-        public void setMaxTickDepth(double depth)
-        {
-            if (Double.isInfinite(depth)) {
-                runner.setMaxTickDepth(Integer.MAX_VALUE);
-            } else {
-                runner.setMaxTickDepth((int)depth);
-            }
+        public void setEval(String script) {
+            this.eval = script;
         }
 
-        @JSSetter("_needImmediateCallback")
-        public void setNeedImmediateCallback(boolean n)
-        {
-            this.needImmediateCallback = n;
+        // TODO These are coded up in node.cc but I can't find where they are called:
+        // TODO _getActiveRequests
+        // TODO _getActiveHandles
+
+        public Object getInfoBox() {
+            return infoBox;
         }
 
-        @JSGetter("_needImmediateCallback")
-        public boolean isNeedImmediateCallback()
-        {
-            return needImmediateCallback;
+        public Object getNeedImmediate(){
+            return Context.toBoolean(needImmediateCallback);
         }
 
-        @JSSetter("_immediateCallback")
-        public void setImmediateCallback(Function f)
+        public void setNeedImmediate(boolean need)
         {
-            this.immediateCallback = f;
+            // TODO we may need to start and stop some event loop here. See NeedImmediateCallbackSetter in node.cc.
+            needImmediateCallback = need;
         }
 
-        @JSGetter("_immediateCallback")
-        public Function getImmediateCallback()
-        {
+        public Function getTickFromSpinner() {
+            return tickFromSpinner;
+        }
+
+        public void setTickFromSpinner(Function t) {
+            this.tickFromSpinner = t;
+        }
+
+        public Function getImmediateCallback() {
             return immediateCallback;
+        }
+
+        public void setImmediateCallback(Function cb) {
+            this.immediateCallback = cb;
+        }
+
+          public void needTickCallback()
+        {
+            log.debug("_needTickCallback");
+            needTickCallback = true;
+        }
+
+        public void setNeedTickCallback(boolean need) {
+            this.needTickCallback = false;
+        }
+
+        public boolean isNeedTickCallback() {
+            return needTickCallback;
         }
 
         public void checkImmediateTasks(Context cx)
@@ -521,7 +446,38 @@ public class Process
             }
         }
 
-        @JSFunction
+        public void _usingDomains()
+        {
+            // This doesn't do much but we need it for compatibility
+            assert(tickDomainCallback != null);
+            assert(nextDomainTick != null);
+            usingDomains = true;
+        }
+
+        public Function getTickCallback() {
+            return tickCallback;
+        }
+
+        public void setTickCallback(Function c) {
+            this.tickCallback = c;
+        }
+
+        public Function getTickDomainCallback() {
+            return tickDomainCallback;
+        }
+
+        public void setTickDomainCallback(Function c) {
+            this.tickDomainCallback = c;
+        }
+
+        public Function getNextDomainTick() {
+            return tickDomainCallback;
+        }
+
+        public void setNextDomainTick(Function c) {
+            this.tickDomainCallback = c;
+        }
+
         public static Object umask(Context cx, Scriptable thisObj, Object[] args, Function func)
         {
             ProcessImpl self = (ProcessImpl)thisObj;
@@ -540,7 +496,6 @@ public class Process
             return umask;
         }
 
-        @JSFunction
         public static Object uptime(Context cx, Scriptable thisObj, Object[] args, Function func)
         {
             ProcessImpl self = (ProcessImpl)thisObj;
@@ -548,7 +503,6 @@ public class Process
             return Context.javaToJS(up, thisObj);
         }
 
-        @JSFunction
         public static Object hrtime(Context cx, Scriptable thisObj, Object[] args, Function func)
         {
             long nanos = System.nanoTime();
@@ -571,35 +525,11 @@ public class Process
             return cx.newArray(thisObj, ret);
         }
 
-        @JSGetter("features")
         public Object getFeatures()
         {
+            // TODO put something in here about SSL and the like
             Scriptable features = Context.getCurrentContext().newObject(this);
             return features;
-        }
-
-        @JSGetter("domain")
-        public Object getDomain()
-        {
-            return domain;
-        }
-
-        @JSSetter("domain")
-        public void setDomain(Object d)
-        {
-            this.domain = d;
-        }
-
-        @JSGetter("_exiting")
-        public boolean isExiting()
-        {
-            return exiting;
-        }
-
-        @JSSetter("_exiting")
-        public void setExiting(boolean e)
-        {
-            this.exiting = e;
         }
 
         public NodeExitException getExitStatus()
@@ -612,11 +542,36 @@ public class Process
             this.exitStatus = ne;
         }
 
-        @JSGetter("EventEmitter")
-        public Object getEventEmitter()
+        public static Object _debugProcess(Context cx, Scriptable thisObj, Object[] args, Function func)
         {
-            return this.eventEmitter;
+            throw Utils.makeError(cx, thisObj, "Not implemented");
         }
+
+        public static Object _debugPause(Context cx, Scriptable thisObj, Object[] args, Function func)
+        {
+            throw Utils.makeError(cx, thisObj, "Not implemented");
+        }
+
+        public static Object _debugEnd(Context cx, Scriptable thisObj, Object[] args, Function func)
+        {
+            throw Utils.makeError(cx, thisObj, "Not implemented");
+        }
+
+        public static Object dlopen(Context cx, Scriptable thisObj, Object[] args, Function func)
+        {
+            throw Utils.makeError(cx, thisObj, "Not implemented");
+        }
+
+        // TODO _print_eval
+        // TODO _forceRepl
+        // TODO noDeprecation
+        // TODO throwDeprecation
+        // TODO traceDeprecation
+
+        // TODO getgid
+        // TODO setgid
+        // TODO getuid
+        // TODO setuid
     }
 
     public static class EnvImpl

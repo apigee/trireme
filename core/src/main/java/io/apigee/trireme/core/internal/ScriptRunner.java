@@ -44,6 +44,7 @@ import org.mozilla.javascript.EvaluatorException;
 import org.mozilla.javascript.Function;
 import org.mozilla.javascript.JavaScriptException;
 import org.mozilla.javascript.RhinoException;
+import org.mozilla.javascript.Script;
 import org.mozilla.javascript.Scriptable;
 import org.mozilla.javascript.ScriptableObject;
 import org.slf4j.Logger;
@@ -84,6 +85,7 @@ public class ScriptRunner
     public static final String TIMEOUT_TIMESTAMP_KEY = "_tickTimeout";
 
     private final  NodeEnvironment env;
+    private        Thread          mainThread;
     private        File            scriptFile;
     private        String          script;
     private final  NodeScript      scriptObject;
@@ -243,6 +245,10 @@ public class ScriptRunner
         return scope;
     }
 
+    public void setNativeModule(NativeModule.NativeImpl mod) {
+        this.nativeModule = mod;
+    }
+
     public NativeModule.NativeImpl getNativeModule() {
         return nativeModule;
     }
@@ -286,15 +292,21 @@ public class ScriptRunner
     }
 
     public Scriptable getStdinStream() {
-        return (Scriptable)process.getStdin();
+        // TODO
+        return null;
+        //return (Scriptable)process.getStdin();
     }
 
     public Scriptable getStdoutStream() {
-        return (Scriptable)process.getStdout();
+        // TODO
+        return null;
+        //return (Scriptable)process.getStdout();
     }
 
     public Scriptable getStderrStream() {
-        return (Scriptable)process.getStderr();
+        // TODO
+        return null;
+        //return (Scriptable)process.getStderr();
     }
 
     public Scriptable getParentProcess() {
@@ -307,6 +319,10 @@ public class ScriptRunner
 
     public void setParentProcess(Scriptable parentProcess) {
         this.parentProcess = parentProcess;
+    }
+
+    public Thread getMainThread() {
+        return mainThread;
     }
 
     /**
@@ -405,7 +421,9 @@ public class ScriptRunner
 
     public Scriptable getDomain()
     {
-        return ArgUtils.ensureValid(process.getDomain());
+        // TODO
+        return null;
+        //return ArgUtils.ensureValid(process.getDomain());
     }
 
     /**
@@ -513,12 +531,14 @@ public class ScriptRunner
     }
 
     /**
-     * Execute the script.
+     * Execute the script. This should happen inside a thread that will be dedicated to it until we
+     * are finished.
      */
     @Override
     public ScriptStatus call()
         throws NodeException
     {
+        this.mainThread = Thread.currentThread();
         Object ret = env.getContextFactory().call(new ContextAction()
         {
             @Override
@@ -530,6 +550,61 @@ public class ScriptRunner
         return (ScriptStatus)ret;
     }
 
+    private ScriptStatus runScript(Context cx)
+    {
+        ScriptStatus status;
+
+        cx.putThreadLocal(RUNNER, this);
+
+        // Re-use the global scope from before, but make it top-level so that there are no shared variables
+        scope = (ScriptableObject)cx.newObject(env.getScope());
+        scope.setPrototype(env.getScope());
+        scope.setParentScope(null);
+
+        try {
+            initGlobals(cx);
+
+            Script nodeJs = env.getRegistry().getMainScript();
+
+            if (log.isDebugEnabled()) {
+                log.debug("Executing node.js");
+            }
+            Function startup = (Function)nodeJs.exec(cx, scope);
+
+            if (scriptFile == null) {
+                if (log.isDebugEnabled()) {
+                    log.debug("Using eval to run the script");
+                }
+                process.setEval(script);
+                setArgv(cx, null);
+            } else {
+                setArgv(cx, scriptFileName);
+            }
+
+            if (log.isDebugEnabled()) {
+                log.debug("Executing startup function {}", startup);
+            }
+            startup.call(cx, scope, scope, new Object[] { process });
+
+        } catch (Throwable t) {
+            if (log.isDebugEnabled()) {
+                log.debug("Fatal error in script: {}", t);
+            }
+            return new ScriptStatus(t);
+        } finally {
+           initialized.countDown();
+        }
+
+        try {
+            status = mainLoop(cx);
+        } catch (Throwable t) {
+            return new ScriptStatus(t);
+        }
+
+        return status;
+    }
+
+    /* OLD CODE
     private ScriptStatus runScript(Context cx)
     {
         ScriptStatus status;
@@ -558,12 +633,12 @@ public class ScriptRunner
 
             } else {
                 // Again like the real node, delegate running the actual script to the module module.
-                /*
-                if (!scriptFile.isAbsolute() && !scriptPath.startsWith("./")) {
+
+                //if (!scriptFile.isAbsolute() && !scriptPath.startsWith("./")) {
                     // Add ./ before script path to un-confuse the module module if it's a local path
-                    scriptPath = new File("./", scriptPath).getPath();
-                }
-                */
+                //    scriptPath = new File("./", scriptPath).getPath();
+                //}
+
 
                 if (log.isDebugEnabled()) {
                     log.debug("Launching module.runMain({})", scriptFileName);
@@ -603,8 +678,9 @@ public class ScriptRunner
 
         return status;
     }
+*/
 
-    private void setArgv(String scriptName)
+    private void setArgv(Context cx, String scriptName)
     {
         String[] argv = new String[args == null ? 2 : args.length + 2];
         argv[0] = Process.EXECUTABLE_NAME;
@@ -612,9 +688,56 @@ public class ScriptRunner
         if (args != null) {
             System.arraycopy(args, 0, argv, 2, args.length);
         }
-        process.setArgv(argv);
+        process.setArgv(cx, argv);
     }
 
+    private ScriptStatus mainLoop(Context cx)
+        throws IOException
+    {
+        while (process.isNeedTickCallback() || (pinCount.get() > 0)) {
+            try {
+                if ((future != null) && future.isCancelled()) {
+                    return ScriptStatus.CANCELLED;
+                }
+
+                long now = System.currentTimeMillis();
+
+                // Calculate how long we will wait in the call to select
+                long pollTimeout;
+                if (!tickFunctions.isEmpty()) {
+                    pollTimeout = 0;
+                } else if (timerQueue.isEmpty()) {
+                    pollTimeout = DEFAULT_DELAY;
+                } else {
+                    Activity nextActivity = timerQueue.peek();
+                    pollTimeout = (nextActivity.timeout - now);
+                }
+
+                // Check for network I/O and also sleep if necessary
+                if (pollTimeout > 0L) {
+                    if (log.isTraceEnabled()) {
+                        log.trace("mainLoop: sleeping for {} needTick = {} pinCount = {}",
+                                  pollTimeout, process.isNeedTickCallback(), pinCount.get());
+                    }
+                    selector.select(pollTimeout);
+                } else {
+                    selector.selectNow();
+                }
+
+                // TODO Act on network I/O
+                // TODO act on timers
+
+                log.trace("Calling tickFromSpinner");
+                process.getTickFromSpinner().call(cx, scope, process, null);
+
+            } catch (NodeExitException nee) {
+            } catch (RhinoException re) {
+            }
+        }
+        return ScriptStatus.OK;
+    }
+
+    /* OLD CODE
     private ScriptStatus mainLoop(Context cx)
         throws IOException
     {
@@ -723,6 +846,7 @@ public class ScriptRunner
         }
         return ScriptStatus.OK;
     }
+    */
 
     private Scriptable makeError(Context cx, RhinoException re)
     {
@@ -736,6 +860,7 @@ public class ScriptRunner
         }
     }
 
+    /* OLD CODE
     private boolean handleScriptException(Context cx, Scriptable error, RhinoException re)
     {
         Function handleFatal = (Function)ScriptableObject.getProperty(fatalHandler, "handleFatal");
@@ -752,10 +877,12 @@ public class ScriptRunner
         }
         return handled;
     }
+    */
 
     /**
      * Execute up to "maxTickDepth" ticks. The count is in there to prevent starvation of timers and I/O.
      */
+    /* OLD CODE
     public void executeTicks(Context cx)
         throws RhinoException
     {
@@ -779,10 +906,35 @@ public class ScriptRunner
             nextCall = tickFunctions.poll();
         }
     }
+    */
+
+    /**
+     * Manually bootstrap the "process" object, which will be used for loading everything else.
+     */
+    private void initGlobals(Context cx)
+        throws NodeException
+    {
+        if (log.isDebugEnabled()) {
+            log.debug("Initializing process object");
+        }
+        Process processModule = new Process();
+        try {
+            process = (Process.ProcessImpl)processModule.registerExports(cx, scope, this);
+        } catch (InvocationTargetException e) {
+            throw new NodeException(e);
+        } catch (IllegalAccessException e) {
+            throw new NodeException(e);
+        } catch (InstantiationException e) {
+            throw new NodeException(e);
+        }
+
+        scope.put("global", scope, scope);
+    }
 
     /**
      * One-time initialization of the built-in modules and objects.
      */
+    /* OLD CODE
     private void initGlobals(Context cx)
         throws NodeException
     {
@@ -868,6 +1020,7 @@ public class ScriptRunner
             throw new NodeException(e);
         }
     }
+    */
 
     public Object getConsole(Scriptable s)
     {

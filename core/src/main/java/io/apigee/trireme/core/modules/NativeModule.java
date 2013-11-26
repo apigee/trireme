@@ -21,6 +21,7 @@
  */
 package io.apigee.trireme.core.modules;
 
+import io.apigee.trireme.core.InternalNodeModule;
 import io.apigee.trireme.core.NodeModule;
 import io.apigee.trireme.core.NodeRuntime;
 import io.apigee.trireme.core.internal.ScriptRunner;
@@ -49,7 +50,7 @@ import java.lang.reflect.InvocationTargetException;
  * any internal modules.
  */
 public class NativeModule
-    implements NodeModule
+    implements InternalNodeModule
 {
     protected static final Logger log = LoggerFactory.getLogger(NativeModule.class);
 
@@ -72,6 +73,13 @@ public class NativeModule
         ScriptableObject.defineClass(scope, ModuleImpl.class);
         NativeImpl nat = (NativeImpl)cx.newObject(scope, NativeImpl.CLASS_NAME);
         nat.initialize(cx, runner);
+
+        ModuleImpl natMod = (ModuleImpl)cx.newObject(scope, ModuleImpl.CLASS_NAME);
+        natMod.setId(MODULE_NAME);
+        natMod.setFileName("native_module.js");
+        natMod.setExports(nat);
+        natMod.setLoaded(true);
+        ((ScriptRunner)runner).cacheModule(MODULE_NAME, natMod);
         return nat;
     }
 
@@ -101,6 +109,7 @@ public class NativeModule
         {
             // This is an internal-only module and it's OK to use the internal interface here.
             this.runner = (ScriptRunner)runner;
+            this.runner.setNativeModule(this);
             this.cache = cx.newObject(this);
         }
 
@@ -242,7 +251,11 @@ public class NativeModule
         public static Object getSource(Context cx, Scriptable thisObj, Object[] args, Function func)
         {
             String name = stringArg(args, 0);
+            return getSource(name);
+        }
 
+        private static Object getSource(String name)
+        {
             InputStream in = NativeImpl.class.getResourceAsStream(NODE_SCRIPT_BASE + name + SCRIPT_SUFFIX);
             if (in == null) {
                 in = NativeImpl.class.getResourceAsStream(NR_SCRIPT_BASE + name + SCRIPT_SUFFIX);

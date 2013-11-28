@@ -50,7 +50,7 @@ public class BasicTest
         throws InterruptedException, ExecutionException, NodeException
     {
         NodeScript script = env.createScript("test.js",
-                                             "console.log(\'Hello, World!\');process.exit(0);  ",
+                                             "console.log(\'Hello, World!\');console.log(\'Goodbye, World!\');process.exit(0);  ",
                                              null);
         ScriptStatus stat = script.execute().get();
         assertEquals(0, stat.getExitCode());
@@ -100,7 +100,7 @@ public class BasicTest
                 assertTrue(status.isCancelled());
             }
         });
-        Thread.sleep(50L);
+        Thread.sleep(500L);
         status.cancel(false);
         try {
             status.get();

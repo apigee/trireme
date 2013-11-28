@@ -32,10 +32,6 @@ import org.mozilla.javascript.EvaluatorException;
 import org.mozilla.javascript.Function;
 import org.mozilla.javascript.Scriptable;
 import org.mozilla.javascript.ScriptableObject;
-import org.mozilla.javascript.annotations.JSConstructor;
-import org.mozilla.javascript.annotations.JSFunction;
-import org.mozilla.javascript.annotations.JSGetter;
-import org.mozilla.javascript.annotations.JSSetter;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -50,7 +46,6 @@ import java.util.Map;
 public class Process
     implements NodeModule
 {
-    protected static final String OBJECT_NAME = "process";
     public static final String MODULE_NAME = "process";
     public static final String EXECUTABLE_NAME = "./node";
     public static final String DEFAULT_TITLE = "trireme";
@@ -66,46 +61,39 @@ public class Process
         return MODULE_NAME;
     }
 
+    /**
+     * This is a funny object in that we will implement it in Java, but we will set a lot of prototype functions
+     * and other function and non-function properties from JavaScript in node.js. So this only really works
+     * in Rhino if we define all the properties using reflection. In the current Rhino this is slower than
+     * any other method (about 2x slower than method calls inside JS and 100x slower than native java method calls)
+     * but it works.
+     */
     @Override
     public Scriptable registerExports(Context cx, Scriptable scope, NodeRuntime runner)
         throws InvocationTargetException, IllegalAccessException, InstantiationException
     {
         ScriptableObject.defineClass(scope, ProcessImpl.class);
-        ScriptableObject.defineClass(scope, EnvImpl.class);
 
         ProcessImpl proc = (ProcessImpl)cx.newObject(scope, ProcessImpl.CLASS_NAME);
         proc.init(cx, runner);
         proc.defineFunctionProperties(
             new String[] { "binding", "abort", "chdir", "cwd", "reallyExit",
-                           "_kill", "send", "memoryUsage", "needTickCallback", "_usingDomains",
+                           "_kill", "send", "memoryUsage", "_needTickCallback", "_usingDomains",
                            "umask", "uptime", "hrtime",
                            "_debugProcess", "_debugPause", "_debugEnd", "dlopen" },
             ProcessImpl.class, 0);
 
-        proc.defineProperty("argv", null, Utils.findMethod(ProcessImpl.class, "getArgv"), null, 0);
-        proc.defineProperty("execArgv", null, Utils.findMethod(ProcessImpl.class, "getExecArgv"), null, 0);
-        proc.defineProperty("execPath", null, Utils.findMethod(ProcessImpl.class, "getExecPath"), null, 0);
-        proc.defineProperty("env", null, Utils.findMethod(ProcessImpl.class, "getEnv"), null, 0);
-        proc.defineProperty("version", null, Utils.findMethod(ProcessImpl.class, "getVersion"), null, 0);
         proc.defineProperty("versions", null, Utils.findMethod(ProcessImpl.class, "getVersions"), null, 0);
         proc.defineProperty("features", null, Utils.findMethod(ProcessImpl.class, "getFeatures"), null, 0);
         proc.defineProperty("arch", null, Utils.findMethod(ProcessImpl.class, "getArch"), null, 0);
-        proc.defineProperty("pid", null, Utils.findMethod(ProcessImpl.class, "getPid"), null, 0);
-        proc.defineProperty("platform", null, Utils.findMethod(ProcessImpl.class, "getPlatform"), null, 0);
-        proc.defineProperty("moduleLoadList", null, Utils.findMethod(ProcessImpl.class, "getModuleLoadList"), null, 0);
         proc.defineProperty("_errno", null, Utils.findMethod(ProcessImpl.class, "getErrno"), null, 0);
-        proc.defineProperty("_tickInfoBox", null, Utils.findMethod(ProcessImpl.class, "getTickInfoBox"), null, 0);
 
         proc.defineProperty("title", null, Utils.findMethod(ProcessImpl.class, "getTitle"),
                             Utils.findMethod(ProcessImpl.class, "setTitle"), 0);
-        proc.defineProperty("_events", null, Utils.findMethod(ProcessImpl.class, "getEvents"),
-                            Utils.findMethod(ProcessImpl.class, "setEvents"), 0);
-        proc.defineProperty("_eval", null, Utils.findMethod(ProcessImpl.class, "getEval"),
-                            Utils.findMethod(ProcessImpl.class, "setEval"), 0);
         proc.defineProperty("_immediateCallback", null, Utils.findMethod(ProcessImpl.class, "getImmediateCallback"),
                             Utils.findMethod(ProcessImpl.class, "setImmediateCallback"), 0);
-        proc.defineProperty("_needImmediateCallback", null, Utils.findMethod(ProcessImpl.class, "getNeedImmediateCallback"),
-                            Utils.findMethod(ProcessImpl.class, "setNeedImmediateCallback"), 0);
+        proc.defineProperty("_needImmediateCallback", null, Utils.findMethod(ProcessImpl.class, "getNeedImmediate"),
+                            Utils.findMethod(ProcessImpl.class, "setNeedImmediate"), 0);
         proc.defineProperty("_nextDomainTick", null, Utils.findMethod(ProcessImpl.class, "getNextDomainTick"),
                             Utils.findMethod(ProcessImpl.class, "setNextDomainTick"), 0);
         proc.defineProperty("_tickFromSpinner", null, Utils.findMethod(ProcessImpl.class, "getTickFromSpinner"),
@@ -131,11 +119,6 @@ public class Process
             return CLASS_NAME;
         }
 
-        private Scriptable argv;
-        private Scriptable env;
-        private String eval;
-        private Object events;
-        private Object moduleLoadList;
         private long startTime;
         private ScriptRunner runner;
         private NodeExitException exitStatus;
@@ -147,37 +130,48 @@ public class Process
         private Function tickDomainCallback;
         private Function tickCallback;
         private Function nextDomainTick;
+        private Function nextTick;
         private boolean needTickCallback;
         private boolean needImmediateCallback;
         private boolean usingDomains;
-        private Scriptable infoBox;
+
+        private static ScriptRunner getRunner(Context cx)
+        {
+            return (ScriptRunner)cx.getThreadLocal(ScriptRunner.RUNNER);
+        }
 
         void init(Context cx, NodeRuntime runner)
         {
             // This is a low-level module and it's OK to access low-level stuff
             this.runner = (ScriptRunner)runner;
 
-            EnvImpl env = (EnvImpl) cx.newObject(this, EnvImpl.CLASS_NAME);
-            env.initialize(runner.getScriptObject().getEnvironment());
-            this.env = env;
-
             startTime = System.currentTimeMillis();
-            // Node.cc pre-creates these, presumably to make access later faster...
-            events = cx.newObject(this);
-            moduleLoadList = cx.newArray(this, 0);
+            defineProperty("execPath", EXECUTABLE_NAME, READONLY);
+            defineProperty("version", "v" + Version.NODE_VERSION, READONLY);
+            // Java doesn't give us the OS pid. However this is used for debug to show different Node scripts
+            // on the same machine, so return a value that uniquely identifies this ScriptRunner.
+            defineProperty("pid", System.identityHashCode(runner) % 65536, READONLY);
+            defineProperty("platform", "java", READONLY);
+
+            Scriptable env = cx.newObject(this);
+            for (Map.Entry<String, String> ee : runner.getScriptObject().getEnvironment().entrySet()) {
+                env.put(ee.getKey(), env, ee.getValue());
+            }
+            defineProperty("env", env, 0);
 
             // We will use this later on in order to get access to what's going on in node.js itself
             Scriptable infoBox = cx.newArray(this, 3);
             infoBox.put(IB_LENGTH, infoBox, new Integer(0));
             infoBox.put(IB_INDEX, infoBox, new Integer(0));
             infoBox.put(IB_DEPTH, infoBox, new Integer(0));
-            this.infoBox = infoBox;
+            defineProperty("_tickInfoBox", infoBox, 0);
         }
 
         /**
          * Implement process.binding. This works like the rest of the module loading but uses a different
          * namespace and a different cache. These types of modules must be implemented in Java.
          */
+        @SuppressWarnings("unused")
         public static Object binding(Context cx, Scriptable thisObj, Object[] args, Function func)
         {
             String name = stringArg(args, 0);
@@ -220,11 +214,6 @@ public class Process
             return mod;
         }
 
-        public Object getArgv()
-        {
-            return argv;
-        }
-
         public void setArgv(Context cx, String[] args)
         {
             Object[] argvArgs = new Object[args.length];
@@ -234,19 +223,11 @@ public class Process
             if (log.isDebugEnabled()) {
                 log.debug("Setting argv to {}", argvArgs);
             }
-            argv = cx.newArray(this, argvArgs);
+            defineProperty("argv", cx.newArray(this, argvArgs), READONLY);
+            defineProperty("execArgv", cx.newArray(this, 0), READONLY);
         }
 
-        public Object getExecArgv()
-        {
-            return Context.getCurrentContext().newArray(this, 0);
-        }
-
-        public String getExecPath()
-        {
-            return EXECUTABLE_NAME;
-        }
-
+        @SuppressWarnings("unused")
         public void abort()
             throws NodeExitException
         {
@@ -254,21 +235,19 @@ public class Process
             throw exitStatus;
         }
 
+        @SuppressWarnings("unused")
         public void chdir(String cd)
         {
             runner.setWorkingDirectory(cd);
         }
 
+        @SuppressWarnings("unused")
         public String cwd()
         {
             return runner.getWorkingDirectory();
         }
 
-        public Object getEnv()
-        {
-            return env;
-        }
-
+        @SuppressWarnings("unused")
         public static void reallyExit(Context cx, Scriptable thisObj, Object[] args, Function func)
             throws NodeExitException
         {
@@ -282,11 +261,7 @@ public class Process
             throw self.exitStatus;
         }
 
-        public String getVersion()
-        {
-            return "v" + Version.NODE_VERSION;
-        }
-
+        @SuppressWarnings("unused")
         public Object getVersions()
         {
             Scriptable env = Context.getCurrentContext().newObject(this);
@@ -297,17 +272,25 @@ public class Process
             return env;
         }
 
+        @SuppressWarnings("unused")
         public String getTitle()
         {
             return title;
         }
 
+        @SuppressWarnings("unused")
         public void setTitle(String title)
         {
             this.title = title;
             runner.getMainThread().setName("Trireme: " + title);
         }
 
+        public void setEval(String eval)
+        {
+            defineProperty("_eval", eval, 0);
+        }
+
+        @SuppressWarnings("unused")
         public String getArch()
         {
             // This is actually the bitness of the JRE, not necessarily the system
@@ -322,6 +305,7 @@ public class Process
             return arch;
         }
 
+        @SuppressWarnings("unused")
         public static void _kill(Context cx, Scriptable thisObj, Object[] args, Function func)
         {
             int pid = intArg(args, 0);
@@ -340,6 +324,7 @@ public class Process
             return System.identityHashCode(runner) % 65536;
         }
 
+        @SuppressWarnings("unused")
         public static void send(Context cx, Scriptable thisObj, Object[] args, Function func)
         {
             Object message = objArg(args, 0, Object.class, true);
@@ -353,14 +338,12 @@ public class Process
             pw.getOnMessage().call(cx, pw, pw, new Object[] { message });
         }
 
+        @SuppressWarnings("unused")
         public Object getErrno() {
             return runner.getErrno();
         }
 
-        public String getPlatform() {
-            return "java";
-        }
-
+        @SuppressWarnings("unused")
         public static Object memoryUsage(Context cx, Scriptable thisObj, Object[] args, Function func)
         {
             Runtime r = Runtime.getRuntime();
@@ -371,81 +354,118 @@ public class Process
             return mem;
         }
 
-        public Object getEvents() {
-            return events;
-        }
-
-        public void setEvents(Object e) {
-            this.events = e;
-        }
-
-        public Object getModuleLoadList() {
-            return moduleLoadList;
-        }
-
-        public String getEval() {
-            return eval;
-        }
-
-        public void setEval(String script) {
-            this.eval = script;
-        }
-
         // TODO These are coded up in node.cc but I can't find where they are called:
         // TODO _getActiveRequests
         // TODO _getActiveHandles
 
-        public Object getInfoBox() {
-            return infoBox;
+        // IMMEDIATE CALLBACKS: Managed in timer.js, otherwise idle
+
+        @SuppressWarnings("unused")
+        public boolean getNeedImmediate() {
+            return needImmediateCallback;
         }
 
-        public Object getNeedImmediate(){
-            return Context.toBoolean(needImmediateCallback);
+        public boolean isNeedImmediate() {
+            return needImmediateCallback;
         }
 
+        @SuppressWarnings("unused")
         public void setNeedImmediate(boolean need)
         {
-            // TODO we may need to start and stop some event loop here. See NeedImmediateCallbackSetter in node.cc.
+            if (log.isTraceEnabled()) {
+                log.trace("needImmediateCallback = {}", need);
+            }
             needImmediateCallback = need;
         }
 
-        public Function getTickFromSpinner() {
-            return tickFromSpinner;
+        public void callImmediateCallbacks(Context cx)
+        {
+            assert(needImmediateCallback);
+            needImmediateCallback = false;
+            log.trace("Calling immediate callbacks");
+            immediateCallback.call(cx, this, this, null);
         }
 
-        public void setTickFromSpinner(Function t) {
-            this.tickFromSpinner = t;
-        }
-
+        @SuppressWarnings("unused")
         public Function getImmediateCallback() {
             return immediateCallback;
         }
 
+        @SuppressWarnings("unused")
         public void setImmediateCallback(Function cb) {
             this.immediateCallback = cb;
         }
 
-          public void needTickCallback()
-        {
-            log.debug("_needTickCallback");
-            needTickCallback = true;
+        // SPINNER TICKS: Not sure yet why this is here
+
+        @SuppressWarnings("unused")
+        public Function getTickFromSpinner() {
+            return tickFromSpinner;
         }
 
-        public void setNeedTickCallback(boolean need) {
-            this.needTickCallback = false;
+        @SuppressWarnings("unused")
+        public void setTickFromSpinner(Function t) {
+            this.tickFromSpinner = t;
+        }
+
+        // TICK CALLBACKS: Managed by "nextTick"
+
+        @SuppressWarnings("unused")
+        public static void _needTickCallback(Context cx, Scriptable thisObj, Object[] args, Function func)
+        {
+            log.trace("_needTickCallback");
+            // By the time that we get way down here, we have lost track of "this". So, we only could have
+            // got here one way, and that's how we identify ourselves...
+            getRunner(cx).getProcess().needTickCallback = true;
+        }
+
+        public void callTickCallbacks(Context cx)
+        {
+            assert(needTickCallback);
+            needTickCallback = false;
+            if (log.isTraceEnabled()) {
+                Scriptable tickInfo = (Scriptable)ScriptableObject.getProperty(this, "_tickInfoBox");
+                log.trace("Calling tick callbacks. Tick info = {}, {}, {}",
+                          tickInfo.get(0, tickInfo), tickInfo.get(1, tickInfo), tickInfo.get(2, tickInfo));
+            }
+            tickCallback.call(cx, this, this, null);
         }
 
         public boolean isNeedTickCallback() {
             return needTickCallback;
         }
 
-        public void checkImmediateTasks(Context cx)
-        {
-            while (needImmediateCallback) {
-                immediateCallback.call(cx, immediateCallback, null, null);
-            }
+        @SuppressWarnings("unused")
+        public Function getTickCallback() {
+            return tickCallback;
         }
 
+        @SuppressWarnings("unused")
+        public void setTickCallback(Function c) {
+            this.tickCallback = c;
+        }
+
+        @SuppressWarnings("unused")
+        public Function getTickDomainCallback() {
+            return tickDomainCallback;
+        }
+
+        @SuppressWarnings("unused")
+        public void setTickDomainCallback(Function c) {
+            this.tickDomainCallback = c;
+        }
+
+        @SuppressWarnings("unused")
+        public Function getNextDomainTick() {
+            return tickDomainCallback;
+        }
+
+        @SuppressWarnings("unused")
+        public void setNextDomainTick(Function c) {
+            this.tickDomainCallback = c;
+        }
+
+        @SuppressWarnings("unused")
         public void _usingDomains()
         {
             // This doesn't do much but we need it for compatibility
@@ -454,30 +474,7 @@ public class Process
             usingDomains = true;
         }
 
-        public Function getTickCallback() {
-            return tickCallback;
-        }
-
-        public void setTickCallback(Function c) {
-            this.tickCallback = c;
-        }
-
-        public Function getTickDomainCallback() {
-            return tickDomainCallback;
-        }
-
-        public void setTickDomainCallback(Function c) {
-            this.tickDomainCallback = c;
-        }
-
-        public Function getNextDomainTick() {
-            return tickDomainCallback;
-        }
-
-        public void setNextDomainTick(Function c) {
-            this.tickDomainCallback = c;
-        }
-
+        @SuppressWarnings("unused")
         public static Object umask(Context cx, Scriptable thisObj, Object[] args, Function func)
         {
             ProcessImpl self = (ProcessImpl)thisObj;
@@ -496,6 +493,7 @@ public class Process
             return umask;
         }
 
+        @SuppressWarnings("unused")
         public static Object uptime(Context cx, Scriptable thisObj, Object[] args, Function func)
         {
             ProcessImpl self = (ProcessImpl)thisObj;
@@ -503,6 +501,7 @@ public class Process
             return Context.javaToJS(up, thisObj);
         }
 
+        @SuppressWarnings("unused")
         public static Object hrtime(Context cx, Scriptable thisObj, Object[] args, Function func)
         {
             long nanos = System.nanoTime();
@@ -525,6 +524,7 @@ public class Process
             return cx.newArray(thisObj, ret);
         }
 
+        @SuppressWarnings("unused")
         public Object getFeatures()
         {
             // TODO put something in here about SSL and the like
@@ -532,31 +532,25 @@ public class Process
             return features;
         }
 
-        public NodeExitException getExitStatus()
-        {
-            return exitStatus;
-        }
-
-        public void setExitStatus(NodeExitException ne)
-        {
-            this.exitStatus = ne;
-        }
-
+        @SuppressWarnings("unused")
         public static Object _debugProcess(Context cx, Scriptable thisObj, Object[] args, Function func)
         {
             throw Utils.makeError(cx, thisObj, "Not implemented");
         }
 
+        @SuppressWarnings("unused")
         public static Object _debugPause(Context cx, Scriptable thisObj, Object[] args, Function func)
         {
             throw Utils.makeError(cx, thisObj, "Not implemented");
         }
 
+        @SuppressWarnings("unused")
         public static Object _debugEnd(Context cx, Scriptable thisObj, Object[] args, Function func)
         {
             throw Utils.makeError(cx, thisObj, "Not implemented");
         }
 
+        @SuppressWarnings("unused")
         public static Object dlopen(Context cx, Scriptable thisObj, Object[] args, Function func)
         {
             throw Utils.makeError(cx, thisObj, "Not implemented");
@@ -573,23 +567,4 @@ public class Process
         // TODO getuid
         // TODO setuid
     }
-
-    public static class EnvImpl
-            extends ScriptableObject
-    {
-        public static final String CLASS_NAME = "_Environment";
-
-        @Override
-        public String getClassName() {
-            return CLASS_NAME;
-        }
-
-        void initialize(Map<String, String> env)
-        {
-            for (Map.Entry<String, String> ee : env.entrySet()) {
-                this.put(ee.getKey(), this, ee.getValue());
-            }
-        }
-    }
-
 }

@@ -53,6 +53,27 @@ public class RhinoContextFactory
     }
 
     /**
+     * Customize how Rhino works for maximum V8 compatibility.
+     */
+    @Override
+    protected boolean hasFeature(Context cx, int f)
+    {
+        switch (f) {
+        // Put file name and line number in Error objects
+        case Context.FEATURE_LOCATION_INFORMATION_IN_ERROR:
+            return true;
+        // Support "use strict"
+        case Context.FEATURE_STRICT_MODE:
+            return true;
+        // Allow assignment to "__proto__"
+        case Context.FEATURE_PARENT_PROTO_PROPERTIES:
+            return true;
+        default:
+            return super.hasFeature(cx, f);
+        }
+    }
+
+    /**
      * Rhino will call this every "instruction observer threshold" bytecode instructions. We will look
      * on the current thread stack and if the expiration time is set, then we will
      */

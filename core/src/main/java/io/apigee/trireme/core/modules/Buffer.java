@@ -53,7 +53,6 @@ import java.util.Arrays;
 public class Buffer
     implements NodeModule
 {
-    private static final String DEFAULT_ENCODING = "utf8";
     public static final String MODULE_NAME = "buffer";
 
     /** Not documented but node tests for a RangeError over this size. */
@@ -80,6 +79,7 @@ public class Buffer
                            null, 0);
         // In our implementation, SlowBuffer is exactly the same as buffer
         export.put("SlowBuffer", export, buf);
+        ((ScriptRunner)runner).setBufferModule(export);
         return export;
     }
 

@@ -136,6 +136,7 @@ public class ModuleRegistry
         addCompiledModule("stream", "io.apigee.trireme.fromnode.stream");
         addCompiledModule("sys", "io.apigee.trireme.fromnode.sys");
         addCompiledModule("timers", "io.apigee.trireme.fromnode.timers");
+        addCompiledModule("tty", "io.apigee.trireme.fromnode.tty");
         addCompiledModule("url", "io.apigee.trireme.fromnode.url");
         addCompiledModule("util", "io.apigee.trireme.fromnode.util");
 

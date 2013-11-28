@@ -253,8 +253,16 @@ public class ScriptRunner
         return nativeModule;
     }
 
+    /**
+     * This lets us cache a copy of the buffer module, which is important when we have to set the "charsWritten"
+     * property, which for some reason is an attribute of the module.
+     */
     public Buffer.BufferModuleImpl getBufferModule() {
         return buffer;
+    }
+
+    public void setBufferModule(Buffer.BufferModuleImpl mod) {
+        this.buffer = mod;
     }
 
     public Selector getSelector() {
@@ -584,8 +592,10 @@ public class ScriptRunner
             if (log.isDebugEnabled()) {
                 log.debug("Executing startup function {}", startup);
             }
-            startup.call(cx, scope, scope, new Object[] { process });
+            startup.call(cx, scope, process, new Object[] { process });
 
+        } catch (NodeExitException nee) {
+            return nee.getStatus();
         } catch (Throwable t) {
             if (log.isDebugEnabled()) {
                 log.debug("Fatal error in script: {}", t);
@@ -597,6 +607,8 @@ public class ScriptRunner
 
         try {
             status = mainLoop(cx);
+        } catch (NodeExitException nee) {
+            return nee.getStatus();
         } catch (Throwable t) {
             return new ScriptStatus(t);
         }
@@ -694,44 +706,46 @@ public class ScriptRunner
     private ScriptStatus mainLoop(Context cx)
         throws IOException
     {
-        while (process.isNeedTickCallback() || (pinCount.get() > 0)) {
-            try {
-                if ((future != null) && future.isCancelled()) {
-                    return ScriptStatus.CANCELLED;
+        while (process.isNeedTickCallback() || process.isNeedImmediate() || (pinCount.get() > 0)) {
+            if ((future != null) && future.isCancelled()) {
+                log.debug("Script future has been cancelled. Exiting main loop");
+                return ScriptStatus.CANCELLED;
+            }
+
+            long now = System.currentTimeMillis();
+
+            // Calculate how long we will wait in the call to select
+            long pollTimeout;
+            if (!tickFunctions.isEmpty()) {
+                pollTimeout = 0;
+            } else if (timerQueue.isEmpty()) {
+                pollTimeout = DEFAULT_DELAY;
+            } else {
+                Activity nextActivity = timerQueue.peek();
+                pollTimeout = (nextActivity.timeout - now);
+            }
+
+            // Check for network I/O and also sleep if necessary
+            if (pollTimeout > 0L) {
+                if (log.isTraceEnabled()) {
+                    log.trace("mainLoop: sleeping for {} needTick = {} pinCount = {}",
+                              pollTimeout, process.isNeedTickCallback(), pinCount.get());
                 }
+                selector.select(pollTimeout);
+            } else {
+                selector.selectNow();
+            }
 
-                long now = System.currentTimeMillis();
+            // TODO pull some data from the task queue and stick it somewhere!
+            // need to put these tasks on the next tick queue perhaps because some are not top-level functions
+            // TODO Act on network I/O
+            // TODO act on timers
 
-                // Calculate how long we will wait in the call to select
-                long pollTimeout;
-                if (!tickFunctions.isEmpty()) {
-                    pollTimeout = 0;
-                } else if (timerQueue.isEmpty()) {
-                    pollTimeout = DEFAULT_DELAY;
-                } else {
-                    Activity nextActivity = timerQueue.peek();
-                    pollTimeout = (nextActivity.timeout - now);
-                }
-
-                // Check for network I/O and also sleep if necessary
-                if (pollTimeout > 0L) {
-                    if (log.isTraceEnabled()) {
-                        log.trace("mainLoop: sleeping for {} needTick = {} pinCount = {}",
-                                  pollTimeout, process.isNeedTickCallback(), pinCount.get());
-                    }
-                    selector.select(pollTimeout);
-                } else {
-                    selector.selectNow();
-                }
-
-                // TODO Act on network I/O
-                // TODO act on timers
-
-                log.trace("Calling tickFromSpinner");
-                process.getTickFromSpinner().call(cx, scope, process, null);
-
-            } catch (NodeExitException nee) {
-            } catch (RhinoException re) {
+            if (process.isNeedImmediate()) {
+                process.callImmediateCallbacks(cx);
+            }
+            if (process.isNeedTickCallback()) {
+                process.callTickCallbacks(cx);
             }
         }
         return ScriptStatus.OK;

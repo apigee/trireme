@@ -83,25 +83,25 @@ public class Process
                            "_debugProcess", "_debugPause", "_debugEnd", "dlopen" },
             ProcessImpl.class, 0);
 
-        proc.defineProperty("versions", null, Utils.findMethod(ProcessImpl.class, "getVersions"), null, 0);
-        proc.defineProperty("features", null, Utils.findMethod(ProcessImpl.class, "getFeatures"), null, 0);
-        proc.defineProperty("arch", null, Utils.findMethod(ProcessImpl.class, "getArch"), null, 0);
+        proc.defineProperty("versions", ProcessImpl.class, 0);
+        proc.defineProperty("features", ProcessImpl.class, 0);
+        proc.defineProperty("arch", ProcessImpl.class, 0);
         proc.defineProperty("_errno", null, Utils.findMethod(ProcessImpl.class, "getErrno"), null, 0);
+        proc.defineProperty("domain", ProcessImpl.class, 0);
 
-        proc.defineProperty("title", null, Utils.findMethod(ProcessImpl.class, "getTitle"),
-                            Utils.findMethod(ProcessImpl.class, "setTitle"), 0);
+        proc.defineProperty("title", ProcessImpl.class, 0);
+        proc.defineProperty("_submitTick", null, Utils.findMethod(ProcessImpl.class, "getSubmitTick"),
+                            Utils.findMethod(ProcessImpl.class, "setSubmitTick"), 0);
         proc.defineProperty("_immediateCallback", null, Utils.findMethod(ProcessImpl.class, "getImmediateCallback"),
                             Utils.findMethod(ProcessImpl.class, "setImmediateCallback"), 0);
         proc.defineProperty("_needImmediateCallback", null, Utils.findMethod(ProcessImpl.class, "getNeedImmediate"),
                             Utils.findMethod(ProcessImpl.class, "setNeedImmediate"), 0);
-        proc.defineProperty("_nextDomainTick", null, Utils.findMethod(ProcessImpl.class, "getNextDomainTick"),
-                            Utils.findMethod(ProcessImpl.class, "setNextDomainTick"), 0);
         proc.defineProperty("_tickFromSpinner", null, Utils.findMethod(ProcessImpl.class, "getTickFromSpinner"),
                             Utils.findMethod(ProcessImpl.class, "setTickFromSpinner"), 0);
         proc.defineProperty("_tickCallback", null, Utils.findMethod(ProcessImpl.class, "getTickCallback"),
                             Utils.findMethod(ProcessImpl.class, "setTickCallback"), 0);
-        proc.defineProperty("_tickDomainCallback",  null, Utils.findMethod(ProcessImpl.class, "getTickDomainCallback"),
-                            Utils.findMethod(ProcessImpl.class, "setTickDomainCallback"), 0);
+        proc.defineProperty("_fatalException", null, Utils.findMethod(ProcessImpl.class, "getFatalException"),
+                            Utils.findMethod(ProcessImpl.class, "setFatalException"), 0);
 
         return proc;
     }
@@ -127,13 +127,12 @@ public class Process
 
         private Function immediateCallback;
         private Function tickFromSpinner;
-        private Function tickDomainCallback;
         private Function tickCallback;
-        private Function nextDomainTick;
-        private Function nextTick;
+        private Function submitTick;
+        private Function fatalException;
+        private Scriptable domain;
         private boolean needTickCallback;
         private boolean needImmediateCallback;
-        private boolean usingDomains;
 
         private static ScriptRunner getRunner(Context cx)
         {
@@ -358,6 +357,47 @@ public class Process
         // TODO _getActiveRequests
         // TODO _getActiveHandles
 
+        // SUBMIT TICK: We will use this special function on node.js to call callbacks in the right domain
+
+        @SuppressWarnings("unused")
+        public void setSubmitTick(Function f) {
+            this.submitTick = f;
+        }
+
+        @SuppressWarnings("unused")
+        public Function getSubmitTick() {
+            return submitTick;
+        }
+
+        /**
+         * Pass on the function and args to the main loop, in JavaScript code, where we put it on the
+         * tick queue for running soon.
+         */
+        public void submitTick(Context cx, Function f, Scriptable domain, Object[] args)
+        {
+            int numArgs = (args == null ? 0 : args.length);
+            if (log.isTraceEnabled()) {
+                log.trace("Submitting function {} with {} args as a next tick", f, numArgs);
+            }
+            Object[] callArgs = new Object[numArgs + 2];
+            callArgs[0] = f;
+            callArgs[1] = domain;
+            if (numArgs > 0) {
+                System.arraycopy(args, 0, callArgs, 2, numArgs);
+            }
+            submitTick.call(cx, f, this, callArgs);
+        }
+
+        @SuppressWarnings("unused")
+        public void setDomain(Scriptable d) {
+            this.domain = d;
+        }
+
+        @SuppressWarnings("unused")
+        public Scriptable getDomain() {
+            return domain;
+        }
+
         // IMMEDIATE CALLBACKS: Managed in timer.js, otherwise idle
 
         @SuppressWarnings("unused")
@@ -381,8 +421,9 @@ public class Process
         public void callImmediateCallbacks(Context cx)
         {
             assert(needImmediateCallback);
-            needImmediateCallback = false;
             log.trace("Calling immediate callbacks");
+            // Reset this here because callbacks might result in the need for more callbacks!
+            needImmediateCallback = false;
             immediateCallback.call(cx, this, this, null);
         }
 
@@ -422,13 +463,15 @@ public class Process
         public void callTickCallbacks(Context cx)
         {
             assert(needTickCallback);
-            needTickCallback = false;
             if (log.isTraceEnabled()) {
                 Scriptable tickInfo = (Scriptable)ScriptableObject.getProperty(this, "_tickInfoBox");
-                log.trace("Calling tick callbacks. Tick info = {}, {}, {}",
+                log.trace("Calling tick spinner callbacks. Tick info = {}, {}, {}",
                           tickInfo.get(0, tickInfo), tickInfo.get(1, tickInfo), tickInfo.get(2, tickInfo));
             }
-            tickCallback.call(cx, this, this, null);
+            // Reset this because ticks might result in the need for more ticks!
+            needTickCallback = false;
+            //tickCallback.call(cx, this, this, null);
+            tickFromSpinner.call(cx, this, this, null);
         }
 
         public boolean isNeedTickCallback() {
@@ -446,32 +489,23 @@ public class Process
         }
 
         @SuppressWarnings("unused")
-        public Function getTickDomainCallback() {
-            return tickDomainCallback;
-        }
-
-        @SuppressWarnings("unused")
-        public void setTickDomainCallback(Function c) {
-            this.tickDomainCallback = c;
-        }
-
-        @SuppressWarnings("unused")
-        public Function getNextDomainTick() {
-            return tickDomainCallback;
-        }
-
-        @SuppressWarnings("unused")
-        public void setNextDomainTick(Function c) {
-            this.tickDomainCallback = c;
-        }
-
-        @SuppressWarnings("unused")
-        public void _usingDomains()
+        public static void _usingDomains(Context cx, Scriptable thisObj, Object[] args, Function func)
         {
-            // This doesn't do much but we need it for compatibility
-            assert(tickDomainCallback != null);
-            assert(nextDomainTick != null);
-            usingDomains = true;
+            // Switch up the callbacks for domains on the object. This happens in the JS code.
+            log.debug("_usingDomains: Setting up handlers to support domains");
+            ProcessImpl self = (ProcessImpl)thisObj;
+            Function switchToDomains = (Function)ScriptableObject.getProperty(self, "_switchToDomains");
+            switchToDomains.call(cx, self, self, null);
+        }
+
+        @SuppressWarnings("unused")
+        public Function getFatalException() {
+            return fatalException;
+        }
+
+        @SuppressWarnings("unused")
+        public void setFatalException(Function f) {
+            fatalException = f;
         }
 
         @SuppressWarnings("unused")

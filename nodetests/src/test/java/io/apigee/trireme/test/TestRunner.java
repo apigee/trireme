@@ -45,7 +45,7 @@ public class TestRunner
                 exec = script.execute();
                 ScriptStatus status = exec.get(timeout, TimeUnit.SECONDS);
                 exitCode = status.getExitCode();
-                if (status.hasCause()) {
+                if (!status.isOk() && status.hasCause()) {
                     Throwable cause = status.getCause();
 
                     if (cause instanceof JavaScriptException) {
@@ -74,6 +74,7 @@ public class TestRunner
                 Context.enter();
                 System.err.println(Context.toString(value));
                 Context.exit();
+                System.err.println(((JavaScriptException)cause).getScriptStackTrace());
             } else if (cause instanceof RhinoException) {
                 RhinoException re = (RhinoException)cause;
                 System.err.println(re.details());

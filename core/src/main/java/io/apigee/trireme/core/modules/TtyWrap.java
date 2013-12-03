@@ -2,7 +2,6 @@ package io.apigee.trireme.core.modules;
 
 import io.apigee.trireme.core.InternalNodeModule;
 import io.apigee.trireme.core.NodeRuntime;
-import io.apigee.trireme.core.ScriptTask;
 import io.apigee.trireme.core.Utils;
 import io.apigee.trireme.core.internal.Charsets;
 import io.apigee.trireme.core.internal.ScriptRunner;
@@ -32,6 +31,8 @@ import java.util.concurrent.Future;
 /**
  * This module is a lot like PipeWrap, and does all its thread stuff the same way, but it deals
  * with the system console, which in Java is handled in a special way and has special features.
+ * This module does output using synchronous I/O, rather than making the implementation
+ * much more complex.
  */
 
 public class TtyWrap
@@ -158,6 +159,7 @@ public class TtyWrap
             return CLASS_NAME;
         }
 
+        @SuppressWarnings("unused")
         @JSConstructor
         public static Object constructor(Context cx, Object[] args, Function ctorObj, boolean inNewExpr)
         {
@@ -176,22 +178,32 @@ public class TtyWrap
             return ret;
         }
 
+        @SuppressWarnings("unused")
         @JSSetter("onread")
         public void setOnRead(Function r) {
             this.onRead = r;
         }
 
+        @SuppressWarnings("unused")
         @JSGetter("onread")
         public Function getOnRead() {
             return onRead;
         }
 
+        @SuppressWarnings("unused")
+        @JSGetter("writeQueueSize")
+        public int getWriteQueueSize() {
+            return 0;
+        }
+
+        @SuppressWarnings("unused")
         @JSFunction
         public static Object getWindowSize(Context cx, Scriptable thisObj, Object[] args, Function func)
         {
             return Context.getUndefinedValue();
         }
 
+        @SuppressWarnings("unused")
         @JSFunction
         public static void setRawMode(Context cx, Scriptable thisObj, Object[] args, Function func)
         {
@@ -199,6 +211,7 @@ public class TtyWrap
             // TODO nothing -- but should we always call flush in this mode? Otherwise should we go by lines?
         }
 
+        @SuppressWarnings("unused")
         @JSFunction
         public static void readStart(Context cx, Scriptable thisObj, Object[] args, Function func)
         {
@@ -209,6 +222,7 @@ public class TtyWrap
             self.startReading();
         }
 
+        @SuppressWarnings("unused")
         @JSFunction
         public static void readStop(Context cx, Scriptable thisObj, Object[] args, Function func)
         {
@@ -288,6 +302,7 @@ public class TtyWrap
             }
         }
 
+        @SuppressWarnings("unused")
         @JSFunction
         public static Object writeBuffer(Context cx, Scriptable thisObj, Object[] args, Function func)
         {
@@ -302,18 +317,21 @@ public class TtyWrap
             return self.offerWrite(cx, str, buf.getLength());
         }
 
+        @SuppressWarnings("unused")
         @JSFunction
         public static Object writeUtf8String(Context cx, Scriptable thisObj, Object[] args, Function func)
         {
             return writeString(cx, thisObj, args, Charsets.UTF8);
         }
 
+        @SuppressWarnings("unused")
         @JSFunction
         public static Object writeAsciiString(Context cx, Scriptable thisObj, Object[] args, Function func)
         {
             return writeString(cx, thisObj, args, Charsets.ASCII);
         }
 
+        @SuppressWarnings("unused")
         @JSFunction
         public static Object writeUcs2String(Context cx, Scriptable thisObj, Object[] args, Function func)
         {
@@ -335,47 +353,15 @@ public class TtyWrap
          * Execute the write. Make it non-blocking by dispatching it to the thread pool. These are short-running
          * tasks so use the regular async pool. Return a "writeReq" object that net.js will use to track status.
          */
-        private Object offerWrite(Context cx, final String str, int count)
+        private Object offerWrite(Context cx, String str, int count)
         {
-            // TODO need to pin and unpin, and maintain write queue just as we do in the PipeWrap
-            // TODO and while we're at it, do we REALLY need this class or can we just use system.out?
             final Scriptable ret = cx.newObject(this);
             ret.put("bytes", ret, count);
 
-            runner.getAsyncPool().submit(new Runnable() {
-                @Override
-                public void run()
-                {
-                    sendBuffer(str, ret);
-                }
-            });
-            return ret;
-        }
-
-        /**
-         * Send the buffer, then enqueue a task back to the main script thread to send either the
-         * success or failure.
-         */
-        protected void sendBuffer(String str, final Scriptable req)
-        {
-            if (log.isTraceEnabled()) {
-                log.trace("Writing to system console");
-            }
-
             console.writer().write(str);
+            console.writer().flush();
 
-            runner.enqueueTask(new ScriptTask()
-            {
-                @Override
-                public void execute(Context cx, Scriptable scope)
-                {
-                    // The "oncomplete" function is set AFTER the write call returns, so we have to
-                    // wait until now to pick it up
-                    Function oc = (Function)ScriptableObject.getProperty(req, "oncomplete");
-
-                    oc.call(cx, TtyImpl.this, TtyImpl.this, new Object[] { null, this, req });
-                }
-            });
+            return ret;
         }
     }
 }

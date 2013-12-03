@@ -70,6 +70,8 @@ public class PipeWrap
         private boolean reading;
         private Function onRead;
         private Future<?> readJob;
+        /** For now, only async mode is used -- we may enable this in the future */
+        private boolean asyncMode = false;
 
         private final AtomicInteger queueSize = new AtomicInteger();
 
@@ -78,21 +80,25 @@ public class PipeWrap
             return CLASS_NAME;
         }
 
+        @SuppressWarnings("unused")
         @JSSetter("onread")
         public void setOnRead(Function r) {
             this.onRead = r;
         }
 
+        @SuppressWarnings("unused")
         @JSGetter("onread")
         public Function getOnRead() {
             return onRead;
         }
 
+        @SuppressWarnings("unused")
         @JSGetter("writeQueueSize")
         public int getWriteQueueSize() {
             return queueSize.get();
         }
 
+        @SuppressWarnings("unused")
         @JSFunction
         public static void open(Context cx, Scriptable thisObj, Object[] args, Function func)
         {
@@ -115,6 +121,7 @@ public class PipeWrap
             }
         }
 
+        @SuppressWarnings("unused")
         @JSFunction
         public static void readStart(Context cx, Scriptable thisObj, Object[] args, Function func)
         {
@@ -125,6 +132,7 @@ public class PipeWrap
             self.startReading();
         }
 
+        @SuppressWarnings("unused")
         @JSFunction
         public static void readStop(Context cx, Scriptable thisObj, Object[] args, Function func)
         {
@@ -132,6 +140,7 @@ public class PipeWrap
             self.stopReading();
         }
 
+        @SuppressWarnings("unused")
         @JSFunction
         public static void shutdown(Context cx, Scriptable thisObj, Object[] args, Function func)
         {
@@ -139,6 +148,7 @@ public class PipeWrap
             self.stopReading();
         }
 
+        @SuppressWarnings("unused")
         @JSFunction
         public void close()
         {
@@ -217,6 +227,7 @@ public class PipeWrap
             }
         }
 
+        @SuppressWarnings("unused")
         @JSFunction
         public static Object writeBuffer(Context cx, Scriptable thisObj, Object[] args, Function func)
         {
@@ -228,18 +239,21 @@ public class PipeWrap
             return self.offerWrite(cx, buf.getBuffer());
         }
 
+        @SuppressWarnings("unused")
         @JSFunction
         public static Object writeUtf8String(Context cx, Scriptable thisObj, Object[] args, Function func)
         {
             return writeString(cx, thisObj, args, Charsets.UTF8);
         }
 
+        @SuppressWarnings("unused")
         @JSFunction
         public static Object writeAsciiString(Context cx, Scriptable thisObj, Object[] args, Function func)
         {
             return writeString(cx, thisObj, args, Charsets.ASCII);
         }
 
+        @SuppressWarnings("unused")
         @JSFunction
         public static Object writeUcs2String(Context cx, Scriptable thisObj, Object[] args, Function func)
         {
@@ -263,33 +277,50 @@ public class PipeWrap
          */
         private Object offerWrite(Context cx, final ByteBuffer buf)
         {
+            final Scriptable domain = runner.getDomain();
             final Scriptable ret = cx.newObject(this);
             ret.put("bytes", ret, buf.remaining());
 
-            queueSize.incrementAndGet();
-            runner.pin();
-            runner.getAsyncPool().submit(new Runnable() {
+            if (asyncMode) {
+                queueSize.incrementAndGet();
+                runner.pin();
+                runner.getAsyncPool().submit(new Runnable() {
                 @Override
                 public void run()
                 {
-                    sendBuffer(buf, ret);
+                    sendBuffer(buf, ret, domain);
                 }
             });
+                return ret;
+            }
+
+            // In the synchronous case, as for standard output and error, write synchronously
+            try {
+                writeOutput(buf);
+            } catch (IOException ioe) {
+                throw Utils.makeError(cx, this, ioe.toString());
+            }
             return ret;
+        }
+
+        private void writeOutput(ByteBuffer buf)
+            throws IOException
+        {
+            output.write(buf.array(), buf.arrayOffset() + buf.position(), buf.remaining());
         }
 
         /**
          * Send the buffer, then enqueue a task back to the main script thread to send either the
          * success or failure.
          */
-        protected void sendBuffer(ByteBuffer buf, final Scriptable req)
+        protected void sendBuffer(ByteBuffer buf, final Scriptable req, final Scriptable domain)
         {
             if (log.isTraceEnabled()) {
                 log.trace("Writing {} to output stream {}", buf, output);
             }
             IOException ioe = null;
             try {
-                output.write(buf.array(), buf.arrayOffset() + buf.position(), buf.remaining());
+                writeOutput(buf);
             } catch (IOException e) {
                 ioe = e;
             } finally {
@@ -309,23 +340,30 @@ public class PipeWrap
                     Scriptable err =
                         (fioe == null ? null : Utils.makeErrorObject(cx, scope, fioe.toString()));
 
-                    oc.call(cx, PipeImpl.this, PipeImpl.this, new Object[] { err, this, req });
+                    runner.enqueueCallback(oc, PipeImpl.this, PipeImpl.this,
+                                           domain, new Object[] { err, this, req });
                 }
-            });
+            }, domain);
         }
 
+        // These three are implemented by the native Node.js "pipe_wrap" module, but they don't
+        // make sense in this context. Add them for completeness and troubleshooting.
+
+        @SuppressWarnings("unused")
         @JSFunction
         public static void bind(Context cx, Scriptable thisObj, Object[] args, Function func)
         {
             throw Utils.makeError(cx, thisObj, "Not implemented");
         }
 
+        @SuppressWarnings("unused")
         @JSFunction
         public static void listen(Context cx, Scriptable thisObj, Object[] args, Function func)
         {
             throw Utils.makeError(cx, thisObj, "Not implemented");
         }
 
+        @SuppressWarnings("unused")
         @JSFunction
         public static void connect(Context cx, Scriptable thisObj, Object[] args, Function func)
         {

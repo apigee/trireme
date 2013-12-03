@@ -78,7 +78,7 @@ public class ScriptFuture
     {
         assert(Thread.holdsLock(this));
         ScriptStatus s = result;
-        if (s.hasCause()) {
+        if (!s.isOk() && s.hasCause()) {
             throw new ExecutionException(s.getCause());
         }
         if (cancelled) {

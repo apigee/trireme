@@ -75,7 +75,8 @@ public class TimerWrap
 
         private Function              onTimeout;
         private ScriptRunner.Activity activity;
-        private Object                domain;
+        private ScriptRunner          runner;
+        private Scriptable            domain;
 
         @Override
         public String getClassName()
@@ -84,49 +85,55 @@ public class TimerWrap
         }
 
         @JSConstructor
+        @SuppressWarnings("unused")
         public static Object newTimerImpl(Context cx, Object[] args, Function fn, boolean isNew)
         {
             TimerImpl t = new TimerImpl();
             t.ref();
+            t.runner = getRunner();
             return t;
         }
 
         @JSGetter("ontimeout")
+        @SuppressWarnings("unused")
         public Function getTimeout() {
             return onTimeout;
         }
 
         @JSSetter("ontimeout")
+        @SuppressWarnings("unused")
         public void setTimeout(Function f) {
             this.onTimeout = f;
         }
 
         @JSGetter("domain")
-        public Object getDomain() {
+        @SuppressWarnings("unused")
+        public Scriptable getDomain() {
             return domain;
         }
 
         @JSSetter("domain")
-        public void setDomain(Object d) {
+        @SuppressWarnings("unused")
+        public void setDomain(Scriptable d) {
             this.domain = d;
         }
 
         @JSFunction
+        @SuppressWarnings("unused")
         public static int start(Context cx, Scriptable thisObj, Object[] args, Function func)
         {
             int timeout = intArg(args, 0);
             int interval = intArg(args, 1, 0);
             TimerImpl timer = (TimerImpl)thisObj;
-            Scriptable domain = ensureValid(timer.domain);
 
             if (log.isDebugEnabled()) {
                 log.debug("Starting timer {} in {} interval = {}",
                           System.identityHashCode(timer), timeout, interval);
             }
             if (interval > 0) {
-                timer.activity = getRunner().createTimer(timeout, true, interval, timer, timer, domain);
+                timer.activity = getRunner().createTimer(timeout, true, interval, timer, timer);
             } else {
-                timer.activity = getRunner().createTimer(timeout, false, 0L, timer, timer, domain);
+                timer.activity = getRunner().createTimer(timeout, false, 0L, timer, timer);
             }
             return 0;
         }
@@ -145,13 +152,18 @@ public class TimerWrap
         }
 
         @Override
+        @SuppressWarnings("unused")
         public void execute(Context cx, Scriptable scope)
         {
             if (log.isDebugEnabled()) {
-                log.debug("Executing timer {} ontimeout = {}", System.identityHashCode(this), onTimeout);
+                log.debug("Executing timer {} ontimeout = {} domain = {}", System.identityHashCode(this), onTimeout);
             }
             if (onTimeout != null) {
-                onTimeout.call(cx, onTimeout, this, null);
+                if (domain == null) {
+                    onTimeout.call(cx, onTimeout, this, null);
+                } else {
+                    runner.enqueueCallback(onTimeout, this, this, domain, null);
+                }
             }
         }
     }

@@ -18,8 +18,8 @@ ARGS=-Xmx1g
 if [ $1 == "-d" ]
 then
   ARGS="-Xdebug -Xrunjdwp:server=y,suspend=y,transport=dt_socket,address=localhost:14000"
-  cd `dirname $2`; java ${ARGS} com.apigee.noderunner.test.TestRunner `basename $2` $3 $4 $5 $6 $7
+  cd `dirname $2`; java ${ARGS} io.apigee.trireme.test.TestRunner `basename $2` $3 $4 $5 $6 $7
 
 else 
-  cd `dirname $1`; java ${ARGS} com.apigee.noderunner.test.TestRunner `basename $1` $2 $3 $4 $5 $6
+  cd `dirname $1`; java ${ARGS} io.apigee.trireme.test.TestRunner `basename $1` $2 $3 $4 $5 $6
 fi

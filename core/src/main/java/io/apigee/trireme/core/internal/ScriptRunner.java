@@ -429,9 +429,7 @@ public class ScriptRunner
 
     public Scriptable getDomain()
     {
-        // TODO
-        return null;
-        //return ArgUtils.ensureValid(process.getDomain());
+        return process.getDomain();
     }
 
     /**
@@ -440,7 +438,7 @@ public class ScriptRunner
      * assertion check, or synchronize the timer queue.
      */
     public Activity createTimer(long delay, boolean repeating, long repeatInterval, ScriptTask task,
-                                Scriptable scope, Scriptable domain)
+                                Scriptable scope)
     {
         Task t = new Task(task, scope);
         long timeout = System.currentTimeMillis() + delay;
@@ -450,7 +448,6 @@ public class ScriptRunner
             log.debug("Going to fire timeout {} at {}", seq, timeout);
         }
         t.setId(seq);
-        t.setDomain(domain);
         t.setTimeout(timeout);
         if (repeating) {
             t.setInterval(repeatInterval);
@@ -560,8 +557,6 @@ public class ScriptRunner
 
     private ScriptStatus runScript(Context cx)
     {
-        ScriptStatus status;
-
         cx.putThreadLocal(RUNNER, this);
 
         // Re-use the global scope from before, but make it top-level so that there are no shared variables
@@ -570,8 +565,10 @@ public class ScriptRunner
         scope.setParentScope(null);
 
         try {
+            // Set up "process"
             initGlobals(cx);
 
+            // Look up "node.js" and run it. It returns a function as a result.
             Script nodeJs = env.getRegistry().getMainScript();
 
             if (log.isDebugEnabled()) {
@@ -579,6 +576,7 @@ public class ScriptRunner
             }
             Function startup = (Function)nodeJs.exec(cx, scope);
 
+            // Figure out from the invocation parameters how to set up node.js
             if (scriptFile == null) {
                 if (log.isDebugEnabled()) {
                     log.debug("Using eval to run the script");
@@ -589,13 +587,45 @@ public class ScriptRunner
                 setArgv(cx, scriptFileName);
             }
 
+            // Run the function returned by "node.js". This will run the script for the first time.
             if (log.isDebugEnabled()) {
                 log.debug("Executing startup function {}", startup);
             }
-            startup.call(cx, scope, process, new Object[] { process });
+            boolean timing = startTiming(cx);
+            try {
+                startup.call(cx, scope, process, new Object[] { process });
+            } catch (NodeExitException nee) {
+                if (log.isDebugEnabled()) {
+                    log.debug("Exiting via process.exit: {}", nee);
+                }
+                return nee.getStatus();
+            } catch (RhinoException re) {
+                boolean caught = handleScriptException(cx, re);
+                if (!caught) {
+                    return new ScriptStatus(re);
+                }
+            } finally {
+                endTiming(timing, cx);
+            }
 
-        } catch (NodeExitException nee) {
-            return nee.getStatus();
+            // Repeatedly run the main loop until the process exits, or there are no more pinned objects,
+            // or there is an unhandled exception, or the main loop is cancelled.
+            while (true) {
+                try {
+                    return mainLoop(cx);
+                } catch (NodeExitException nee) {
+                    if (log.isDebugEnabled()) {
+                        log.debug("Exiting via process.exit: {}", nee);
+                    }
+                    return nee.getStatus();
+                } catch (RhinoException re) {
+                    boolean caught = handleScriptException(cx, re);
+                    if (!caught) {
+                        return new ScriptStatus(re);
+                    }
+                }
+            }
+
         } catch (Throwable t) {
             if (log.isDebugEnabled()) {
                 log.debug("Fatal error in script: {}", t);
@@ -604,16 +634,6 @@ public class ScriptRunner
         } finally {
            initialized.countDown();
         }
-
-        try {
-            status = mainLoop(cx);
-        } catch (NodeExitException nee) {
-            return nee.getStatus();
-        } catch (Throwable t) {
-            return new ScriptStatus(t);
-        }
-
-        return status;
     }
 
     /* OLD CODE
@@ -703,50 +723,121 @@ public class ScriptRunner
         process.setArgv(cx, argv);
     }
 
+    private long calculatePollTimeout()
+    {
+        long t;
+        if (process.isNeedTickCallback() || process.isNeedImmediate() || !tickFunctions.isEmpty()) {
+            t = 0;
+        } else {
+            Activity nextActivity = timerQueue.peek();
+            if (nextActivity == null) {
+                t = DEFAULT_DELAY;
+            } else {
+                t = (nextActivity.timeout - System.currentTimeMillis());
+            }
+        }
+        if (log.isTraceEnabled()) {
+            log.trace("Calculated poll timeout {}. needTick = {} needImmediate = {} hasFunctions = {}",
+                      t, process.isNeedTickCallback(), process.isNeedImmediate(), !tickFunctions.isEmpty());
+        }
+        return t;
+    }
+
     private ScriptStatus mainLoop(Context cx)
         throws IOException
     {
-        while (process.isNeedTickCallback() || process.isNeedImmediate() || (pinCount.get() > 0)) {
+        log.debug("Entering main loop");
+
+        // Timeout will be zero if there are ticks to run right now, and otherwise it will be the next timer task
+        long pollTimeout = calculatePollTimeout();
+
+        while ((pollTimeout == 0L) || (pinCount.get() > 0)) {
             if ((future != null) && future.isCancelled()) {
                 log.debug("Script future has been cancelled. Exiting main loop");
                 return ScriptStatus.CANCELLED;
             }
 
-            long now = System.currentTimeMillis();
-
-            // Calculate how long we will wait in the call to select
-            long pollTimeout;
-            if (!tickFunctions.isEmpty()) {
-                pollTimeout = 0;
-            } else if (timerQueue.isEmpty()) {
-                pollTimeout = DEFAULT_DELAY;
-            } else {
-                Activity nextActivity = timerQueue.peek();
-                pollTimeout = (nextActivity.timeout - now);
-            }
-
             // Check for network I/O and also sleep if necessary
             if (pollTimeout > 0L) {
                 if (log.isTraceEnabled()) {
-                    log.trace("mainLoop: sleeping for {} needTick = {} pinCount = {}",
-                              pollTimeout, process.isNeedTickCallback(), pinCount.get());
+                    log.trace("mainLoop: sleeping for {} pinCount = {}",
+                              pollTimeout, pinCount.get());
                 }
                 selector.select(pollTimeout);
             } else {
                 selector.selectNow();
             }
 
-            // TODO pull some data from the task queue and stick it somewhere!
-            // need to put these tasks on the next tick queue perhaps because some are not top-level functions
-            // TODO Act on network I/O
-            // TODO act on timers
+            // Process any tasks that were placed in the queue by Java code.
+            // These tasks will end up being submitted like any other "nextTick" job.
+            Activity nextTask = tickFunctions.poll();
+            while (nextTask != null) {
+                boolean timing = startTiming(cx);
+                try {
+                    nextTask.execute(cx);
+                } finally {
+                    endTiming(timing, cx);
+                }
+                nextTask = tickFunctions.poll();
+            }
 
+            // Process any sockets that have pending I/O
+            Iterator<SelectionKey> keys = selector.selectedKeys().iterator();
+            while (keys.hasNext()) {
+                SelectionKey selKey = keys.next();
+                boolean timing = startTiming(cx);
+                try {
+                    ((SelectorHandler)selKey.attachment()).selected(selKey);
+                } finally {
+                    endTiming(timing, cx);
+                }
+                keys.remove();
+            }
+
+            // Jump to JavaScript to process ticks and immediate tasks
             if (process.isNeedImmediate()) {
-                process.callImmediateCallbacks(cx);
+                boolean timing = startTiming(cx);
+                try {
+                    process.callImmediateCallbacks(cx);
+                } finally {
+                    endTiming(timing, cx);
+                }
             }
             if (process.isNeedTickCallback()) {
-                process.callTickCallbacks(cx);
+                boolean timing = startTiming(cx);
+                try {
+                    process.callTickCallbacks(cx);
+                } finally {
+                    endTiming(timing, cx);
+                }
             }
+
+            // Check the timer queue for all expired timers
+            Activity timed = timerQueue.peek();
+            long now = System.currentTimeMillis();
+            while ((timed != null) && (timed.timeout <= now)) {
+                timerQueue.poll();
+                if (!timed.cancelled) {
+                    boolean timing = startTiming(cx);
+                    try {
+                        if (log.isDebugEnabled()) {
+                            log.debug("Executing timer {}", timed.id);
+                        }
+                        timed.execute(cx);
+                    } finally {
+                        endTiming(timing, cx);
+                    }
+                    if (timed.repeating && !timed.cancelled) {
+                        timed.timeout = now + timed.interval;
+                        if (log.isDebugEnabled()) {
+                            log.debug("Re-registering {} to fire at {}", timed.id, timed.timeout);
+                        }
+                        timerQueue.add(timed);
+                    }
+                }
+                timed = timerQueue.peek();
+            }
+            pollTimeout = calculatePollTimeout();
         }
         return ScriptStatus.OK;
     }
@@ -874,24 +965,23 @@ public class ScriptRunner
         }
     }
 
-    /* OLD CODE
-    private boolean handleScriptException(Context cx, Scriptable error, RhinoException re)
+    /**
+     * Handle a fatal exception by calling back in to JavaScript code in "node.js". Exit if
+     * the exception is uncaught.
+     */
+    private boolean handleScriptException(Context cx, RhinoException re)
     {
-        Function handleFatal = (Function)ScriptableObject.getProperty(fatalHandler, "handleFatal");
-
         if (log.isDebugEnabled()) {
-            log.debug("Handling fatal exception {} domain = {}\n{}",
-                      re, System.identityHashCode(process.getDomain()), re.getScriptStackTrace());
-            log.debug("Fatal Java exception: {}", re);
+            log.debug("Got a fatal exception {}", re);
         }
+        Object err = (re instanceof JavaScriptException ? ((JavaScriptException)re).getValue() : re.getMessage());
         boolean handled =
-            Context.toBoolean(handleFatal.call(cx, scope, null, new Object[] { error, log.isDebugEnabled() }));
+            Context.toBoolean(process.getFatalException().call(cx, process, process, new Object[] { err }));
         if (log.isDebugEnabled()) {
-            log.debug("Handled = {}", handled);
+            log.debug("  fatal exception caught: {}", handled);
         }
         return handled;
     }
-    */
 
     /**
      * Execute up to "maxTickDepth" ticks. The count is in there to prevent starvation of timers and I/O.
@@ -1145,12 +1235,14 @@ public class ScriptRunner
         return false;
     }
 
-    private void endTiming(Context cx)
+    private void endTiming(boolean wasTiming, Context cx)
     {
-        cx.removeThreadLocal(TIMEOUT_TIMESTAMP_KEY);
+        if (wasTiming) {
+            cx.removeThreadLocal(TIMEOUT_TIMESTAMP_KEY);
+        }
     }
 
-    public abstract static class Activity
+    public abstract class Activity
         implements Comparable<Activity>
     {
         protected int id;
@@ -1161,36 +1253,7 @@ public class ScriptRunner
         protected boolean hasLimit;
         protected Scriptable domain;
 
-        protected abstract void executeInternal(Context cx);
-
-        void execute(Context cx)
-        {
-            if (domain != null) {
-                if (ScriptableObject.hasProperty(domain, "_disposed")) {
-                    domain = null;
-                }
-            }
-            if (domain != null) {
-                if (log.isDebugEnabled()) {
-                    log.debug("Entering domain {}", System.identityHashCode(domain));
-                }
-                Function enter = (Function)ScriptableObject.getProperty(domain, "enter");
-                enter.call(cx, enter, domain, new Object[0]);
-            }
-
-            executeInternal(cx);
-
-            // Do NOT do this next bit in a try..finally block. Why not? Because the exception handling
-            // logic in runMain depends on "process.domain" still being set, and it will clean up
-            // on failure there.
-            if (domain != null) {
-                if (log.isDebugEnabled()) {
-                    log.debug("Exiting domain {}", System.identityHashCode(domain));
-                }
-                Function exit = (Function)ScriptableObject.getProperty(domain, "exit");
-                exit.call(cx, exit, domain, new Object[0]);
-            }
-        }
+        protected abstract void execute(Context cx);
 
         int getId() {
             return id;
@@ -1261,7 +1324,7 @@ public class ScriptRunner
         }
     }
 
-    private static final class Callback
+    private final class Callback
         extends Activity
     {
         Function function;
@@ -1278,13 +1341,13 @@ public class ScriptRunner
         }
 
         @Override
-        protected void executeInternal(Context cx)
+        protected void execute(Context cx)
         {
-            function.call(cx, scope, thisObj, args);
+            process.submitTick(cx, function, domain, args);
         }
     }
 
-    private static final class Task
+    private final class Task
         extends Activity
     {
         private ScriptTask task;
@@ -1297,7 +1360,7 @@ public class ScriptRunner
         }
 
         @Override
-        protected void executeInternal(Context ctx)
+        protected void execute(Context ctx)
         {
             task.execute(ctx, scope);
         }

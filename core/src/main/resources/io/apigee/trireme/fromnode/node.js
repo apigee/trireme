@@ -57,6 +57,8 @@
 
     startup.resolveArgv0();
 
+    startup.processTrireme();
+
     // There are various modes that Node can run in. The most common two
     // are running from a script and running the REPL - but there are a few
     // others like the debugger or running --eval arguments. Here we decide
@@ -820,6 +822,69 @@
     if (!isWindows && argv0.indexOf('/') !== -1 && argv0.charAt(0) !== '/') {
       var path = NativeModule.require('path');
       process.argv[0] = path.join(cwd, process.argv[0]);
+    }
+  };
+
+  /*
+   * TRIREME: We need a little support in here for how we do things in Java. This code
+   * is Trireme-specific and will have to be added every time we customize node.js.
+   */
+  startup.processTrireme = function() {
+    function copyArgs(args) {
+      var a = [];
+      for (var i = 2; i < args.length; i++) {
+        a.push(args[i]);
+      }
+      return a;
+    }
+
+    // This is a function that will be called when some Java code is done with an async operation
+    // and wants to call a callback back in the main script thread.
+    process._submitTick = function(f, d) {
+      var fArgs = copyArgs(arguments);
+      var self = this;
+      process.nextTick(function() {
+        f.apply(self, fArgs);
+      });
+    };
+
+    // This function is called whenever the JavaScript code switches over to domain mode.
+    // This stuff normally happens in "node.cc"
+    process._switchToDomains = function() {
+      var domain = NativeModule.require('domain');
+      if (process._domainsEnabled) {
+        return;
+      }
+
+      process.nextTick = process._nextDomainTick;
+      process._tickCallback = process._tickDomainCallback;
+
+      // A function that will be called by the main runtime when it needs to have a function run in this
+      // thread, optionally with a domain
+      process._submitTick = function(f, d) {
+        var fArgs = copyArgs(arguments);
+        var self = this;
+        if (d) {
+          d.enter();
+        }
+        try {
+          process.nextTick(function() {
+            f.apply(self, fArgs);
+          });
+        } finally {
+          if (d) {
+            d.exit();
+          }
+        }
+      };
+      process._domainsEnabled = true;
+    };
+
+    // Install no-op functions for the various "DTRACE" macros that are hidden in the source code.
+    // We may wish to have these actually add something in the future that uses Metrics.
+    var metrics = NativeModule.require('trireme_metrics');
+    for (var p in metrics) {
+      global[p] = metrics[p];
     }
   };
 

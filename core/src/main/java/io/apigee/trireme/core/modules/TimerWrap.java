@@ -131,9 +131,9 @@ public class TimerWrap
                           System.identityHashCode(timer), timeout, interval);
             }
             if (interval > 0) {
-                timer.activity = getRunner().createTimer(timeout, true, interval, timer, timer);
+                timer.activity = getRunner().createTimer(timeout, true, interval, timer, timer, timer);
             } else {
-                timer.activity = getRunner().createTimer(timeout, false, 0L, timer, timer);
+                timer.activity = getRunner().createTimer(timeout, false, 0L, timer, timer, timer);
             }
             return 0;
         }
@@ -156,14 +156,11 @@ public class TimerWrap
         public void execute(Context cx, Scriptable scope)
         {
             if (log.isDebugEnabled()) {
-                log.debug("Executing timer {} ontimeout = {} domain = {}", System.identityHashCode(this), onTimeout);
+                log.debug("Executing timer {} ontimeout = {} domain = {}",
+                          System.identityHashCode(this), onTimeout, domain);
             }
             if (onTimeout != null) {
-                if (domain == null) {
-                    onTimeout.call(cx, onTimeout, this, null);
-                } else {
-                    runner.enqueueCallback(onTimeout, this, this, domain, null);
-                }
+                runner.getProcess().submitTick(cx, onTimeout, this, this, domain, null);
             }
         }
     }

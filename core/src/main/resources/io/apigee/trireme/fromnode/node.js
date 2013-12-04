@@ -840,12 +840,9 @@
 
     // This is a function that will be called when some Java code is done with an async operation
     // and wants to call a callback back in the main script thread.
-    process._submitTick = function(f, d) {
+    process._submitTick = function(func, domain) {
       var fArgs = copyArgs(arguments);
-      var self = this;
-      process.nextTick(function() {
-        f.apply(self, fArgs);
-      });
+      func.apply(this, fArgs);
     };
 
     // This function is called whenever the JavaScript code switches over to domain mode.
@@ -856,28 +853,24 @@
         return;
       }
 
+      // As "node.cc" would do, replace key methods with ones that understand domains
       process.nextTick = process._nextDomainTick;
       process._tickCallback = process._tickDomainCallback;
+      process._domainsEnabled = true;
 
       // A function that will be called by the main runtime when it needs to have a function run in this
       // thread, optionally with a domain
-      process._submitTick = function(f, d) {
+      process._submitTick = function(func, domain) {
         var fArgs = copyArgs(arguments);
-        var self = this;
-        if (d) {
-          d.enter();
+        if (domain) {
+          domain.enter();
         }
-        try {
-          process.nextTick(function() {
-            f.apply(self, fArgs);
-          });
-        } finally {
-          if (d) {
-            d.exit();
-          }
+        func.apply(this, fArgs);
+        if (domain) {
+          // Do not exit the domain in a "finally" -- if we throw, the exception handler will clear it
+          domain.exit();
         }
       };
-      process._domainsEnabled = true;
     };
 
     // Install no-op functions for the various "DTRACE" macros that are hidden in the source code.

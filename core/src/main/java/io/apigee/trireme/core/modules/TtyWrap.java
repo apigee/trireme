@@ -52,7 +52,6 @@ public class TtyWrap
     {
         ScriptableObject.defineClass(global, TtyModuleImpl.class);
         TtyModuleImpl mod = (TtyModuleImpl)cx.newObject(global, TtyModuleImpl.CLASS_NAME);
-        mod.init(runtime);
         ScriptableObject.defineClass(mod, TtyImpl.class, false, true);
         return mod;
     }
@@ -70,15 +69,11 @@ public class TtyWrap
             return CLASS_NAME;
         }
 
-        void init(NodeRuntime runtime)
-        {
-            this.runner = (ScriptRunner)runtime;
-        }
-
         @JSFunction
-        public String guessHandleType(int fd)
+        public static String guessHandleType(Context cx, Scriptable thisObj, Object[] args, Function func)
         {
-            switch (getType(fd)) {
+            int fd = intArg(args, 0);
+            switch (getType(cx, fd)) {
             case TTY:
                 return "TTY";
             case STREAM:
@@ -89,9 +84,10 @@ public class TtyWrap
         }
 
         @JSFunction
-        public boolean isTTY(int fd)
+        public static boolean isTTY(Context cx, Scriptable thisObj, Object[] args, Function func)
         {
-            return (getType(fd) == StreamType.TTY);
+            int fd = intArg(args, 0);
+            return (getType(cx, fd) == StreamType.TTY);
         }
 
         /**
@@ -99,9 +95,10 @@ public class TtyWrap
          * pipes, since we can't do that in Java. We must consider whether stdout and stderr were redirected
          * using a "sandbox," and also whether the console is available, before returning.
          */
-        private StreamType getType(int fd)
+        private static StreamType getType(Context cx, int fd)
         {
             StreamType st;
+            ScriptRunner runner = (ScriptRunner)cx.getThreadLocal(ScriptRunner.RUNNER);
 
             switch (fd) {
             case 0:

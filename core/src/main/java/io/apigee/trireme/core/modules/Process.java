@@ -373,7 +373,8 @@ public class Process
          * Pass on the function and args to the main loop, in JavaScript code, where we put it on the
          * tick queue for running soon.
          */
-        public void submitTick(Context cx, Function f, Scriptable domain, Object[] args)
+        public void submitTick(Context cx, Function f, Scriptable scope, Scriptable thisObj,
+                               Scriptable domain, Object[] args)
         {
             int numArgs = (args == null ? 0 : args.length);
             if (log.isTraceEnabled()) {
@@ -385,7 +386,7 @@ public class Process
             if (numArgs > 0) {
                 System.arraycopy(args, 0, callArgs, 2, numArgs);
             }
-            submitTick.call(cx, f, this, callArgs);
+            submitTick.call(cx, scope, thisObj, callArgs);
         }
 
         @SuppressWarnings("unused")

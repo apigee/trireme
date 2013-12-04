@@ -678,6 +678,12 @@ public class ProcessWrap
             Scriptable stdio = (Scriptable)options.get("stdio", options);
             Sandbox scriptSandbox = new Sandbox(parent.runner.getSandbox());
 
+            // TODO: For IGNORE, set an appropriate null Stream on the sandbox and be done with it.
+            // for FD, just set the same FD that we use in the current process
+            // for PIPE, create a passthrough stream just as we do now, and then set it directly
+            // on the "process" object. Modify "setupTrireme" in node.js to pick it up
+            // and override what went before.
+
             scriptSandbox.setStdinStream(createReadableStream(cx, stdio, 0));
             scriptSandbox.setStdoutStream(createWritableStream(cx, stdio, 1));
             scriptSandbox.setStderrStream(createWritableStream(cx, stdio, 2));

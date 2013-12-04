@@ -438,7 +438,7 @@ public class ScriptRunner
      * assertion check, or synchronize the timer queue.
      */
     public Activity createTimer(long delay, boolean repeating, long repeatInterval, ScriptTask task,
-                                Scriptable scope)
+                                Scriptable scope, Scriptable thisObj)
     {
         Task t = new Task(task, scope);
         long timeout = System.currentTimeMillis() + delay;
@@ -449,6 +449,7 @@ public class ScriptRunner
         }
         t.setId(seq);
         t.setTimeout(timeout);
+        t.setThisObj(thisObj);
         if (repeating) {
             t.setInterval(repeatInterval);
             t.setRepeating(true);
@@ -632,6 +633,7 @@ public class ScriptRunner
             }
             return new ScriptStatus(t);
         } finally {
+            closeCloseables(cx);
            initialized.countDown();
         }
     }
@@ -768,19 +770,6 @@ public class ScriptRunner
                 selector.selectNow();
             }
 
-            // Process any tasks that were placed in the queue by Java code.
-            // These tasks will end up being submitted like any other "nextTick" job.
-            Activity nextTask = tickFunctions.poll();
-            while (nextTask != null) {
-                boolean timing = startTiming(cx);
-                try {
-                    nextTask.execute(cx);
-                } finally {
-                    endTiming(timing, cx);
-                }
-                nextTask = tickFunctions.poll();
-            }
-
             // Process any sockets that have pending I/O
             Iterator<SelectionKey> keys = selector.selectedKeys().iterator();
             while (keys.hasNext()) {
@@ -794,19 +783,31 @@ public class ScriptRunner
                 keys.remove();
             }
 
-            // Jump to JavaScript to process ticks and immediate tasks
-            if (process.isNeedImmediate()) {
+            // Process any tasks that were placed in the queue by Java code.
+            Activity nextTask = tickFunctions.poll();
+            while (nextTask != null) {
                 boolean timing = startTiming(cx);
                 try {
-                    process.callImmediateCallbacks(cx);
+                    nextTask.execute(cx);
                 } finally {
                     endTiming(timing, cx);
                 }
+                nextTask = tickFunctions.poll();
             }
+
+            // Jump to JavaScript to process ticks and immediate tasks
             if (process.isNeedTickCallback()) {
                 boolean timing = startTiming(cx);
                 try {
                     process.callTickCallbacks(cx);
+                } finally {
+                    endTiming(timing, cx);
+                }
+            }
+            if (process.isNeedImmediate()) {
+                boolean timing = startTiming(cx);
+                try {
+                    process.callImmediateCallbacks(cx);
                 } finally {
                     endTiming(timing, cx);
                 }
@@ -1252,6 +1253,7 @@ public class ScriptRunner
         protected boolean cancelled;
         protected boolean hasLimit;
         protected Scriptable domain;
+        protected Scriptable thisObj;
 
         protected abstract void execute(Context cx);
 
@@ -1311,6 +1313,14 @@ public class ScriptRunner
             this.domain = domain;
         }
 
+        public Scriptable getThisObj() {
+            return thisObj;
+        }
+
+        public void setThisObj(Scriptable thisObj) {
+            this.thisObj = thisObj;
+        }
+
         @Override
         public int compareTo(Activity a)
         {
@@ -1329,7 +1339,6 @@ public class ScriptRunner
     {
         Function function;
         Scriptable scope;
-        Scriptable thisObj;
         Object[] args;
 
         Callback(Function f, Scriptable s, Scriptable thisObj, Object[] args)
@@ -1343,7 +1352,8 @@ public class ScriptRunner
         @Override
         protected void execute(Context cx)
         {
-            process.submitTick(cx, function, domain, args);
+            process.submitTick(cx, function,
+                               scope, thisObj, domain, args);
         }
     }
 

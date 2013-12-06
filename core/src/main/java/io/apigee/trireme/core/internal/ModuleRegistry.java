@@ -152,6 +152,7 @@ public class ModuleRegistry
         addCompiledModule("trireme_metrics", "io.apigee.trireme.scripts.trireme_metrics");
         addCompiledModule("string_decoder", "io.apigee.trireme.scripts.trireme_string_decoder");
         addCompiledModule("trireme_uncloseable_transform", "io.apigee.trireme.scripts.trireme_uncloseable_transform");
+        addCompiledModule("trireme_stream_utils", "io.apigee.trireme.scripts.trireme_stream_utils");
         addCompiledModule("tls", "io.apigee.trireme.scripts.tls");
         addCompiledModule("tls_checkidentity", "io.apigee.trireme.scripts.tls_checkidentity");
         addCompiledModule("vm", "io.apigee.trireme.scripts.vm");

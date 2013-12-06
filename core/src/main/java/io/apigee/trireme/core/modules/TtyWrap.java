@@ -3,6 +3,7 @@ package io.apigee.trireme.core.modules;
 import io.apigee.trireme.core.InternalNodeModule;
 import io.apigee.trireme.core.NodeRuntime;
 import io.apigee.trireme.core.Utils;
+import io.apigee.trireme.core.internal.AbstractDescriptor;
 import io.apigee.trireme.core.internal.Charsets;
 import io.apigee.trireme.core.internal.ScriptRunner;
 import org.mozilla.javascript.Context;
@@ -17,6 +18,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import static io.apigee.trireme.core.ArgUtils.*;
+import static io.apigee.trireme.core.internal.AbstractDescriptor.DescriptorType.*;
 
 import java.io.Console;
 import java.io.IOException;
@@ -60,7 +62,6 @@ public class TtyWrap
         extends ScriptableObject
     {
         public static final String CLASS_NAME = "_ttyModuleClass";
-        private enum StreamType { TTY, STREAM, INVALID }
 
         private ScriptRunner runner;
 
@@ -69,6 +70,7 @@ public class TtyWrap
             return CLASS_NAME;
         }
 
+        @SuppressWarnings("unused")
         @JSFunction
         public static String guessHandleType(Context cx, Scriptable thisObj, Object[] args, Function func)
         {
@@ -76,18 +78,21 @@ public class TtyWrap
             switch (getType(cx, fd)) {
             case TTY:
                 return "TTY";
-            case STREAM:
+            case PIPE:
                 return "PIPE";
+            case FILE:
+                return "FILE";
             default:
                 return "UNKNOWN";
             }
         }
 
+        @SuppressWarnings("unused")
         @JSFunction
         public static boolean isTTY(Context cx, Scriptable thisObj, Object[] args, Function func)
         {
             int fd = intArg(args, 0);
-            return (getType(cx, fd) == StreamType.TTY);
+            return (getType(cx, fd) == TTY);
         }
 
         /**
@@ -95,39 +100,39 @@ public class TtyWrap
          * pipes, since we can't do that in Java. We must consider whether stdout and stderr were redirected
          * using a "sandbox," and also whether the console is available, before returning.
          */
-        private static StreamType getType(Context cx, int fd)
+        private static AbstractDescriptor.DescriptorType getType(Context cx, int fd)
         {
-            StreamType st;
+            AbstractDescriptor.DescriptorType st;
             ScriptRunner runner = (ScriptRunner)cx.getThreadLocal(ScriptRunner.RUNNER);
 
             switch (fd) {
             case 0:
                 InputStream stdin = runner.getStdin();
                 if (System.in.equals(stdin) && (System.console() != null)) {
-                    st = StreamType.TTY;
+                    st = TTY;
                 } else {
-                    st = StreamType.STREAM;
+                    st = PIPE;
                 }
                 break;
             case 1:
                 OutputStream stdout = runner.getStdout();
                 if (System.out.equals(stdout) && (System.console() != null)) {
-                    st = StreamType.TTY;
+                    st = TTY;
                 } else {
-                    st = StreamType.STREAM;
+                    st = PIPE;
                 }
                 break;
             case 2:
                 OutputStream stderr = runner.getStderr();
                 if (System.err.equals(stderr) && (System.console() != null)) {
-                    st = StreamType.TTY;
+                    st = TTY;
                 } else {
-                    st = StreamType.STREAM;
+                    st = PIPE;
                 }
                 break;
             default:
-                st = StreamType.INVALID;
-                break;
+                AbstractDescriptor descriptor = runner.getDescriptor(fd);
+                return (descriptor == null ? INVALID : descriptor.getType());
             }
 
             if (log.isDebugEnabled()) {
@@ -352,7 +357,7 @@ public class TtyWrap
          */
         private Object offerWrite(Context cx, String str, int count)
         {
-            final Scriptable ret = cx.newObject(this);
+            Scriptable ret = cx.newObject(this);
             ret.put("bytes", ret, count);
 
             console.writer().write(str);

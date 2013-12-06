@@ -37,9 +37,6 @@ d.on('error', function(er) {
   console.error('caught', er && (er.message || er));
 
   var er_message = er.message;
-  if (typeof er === 'string') {
-    er_message = er;
-  }
   var er_path = er.path
 
   // On windows, error messages can contain full path names. If this is the
@@ -70,10 +67,10 @@ d.on('error', function(er) {
     case 'thrown':
       assert.ok(!er.domainEmitter);
       assert.equal(er.domain, d);
-      //assert.equal(er.domainThrown, true);
+      assert.equal(er.domainThrown, true);
       break;
 
-    case "ENOENT:this file does not exist":
+    case "ENOENT, open 'this file does not exist'":
       assert.equal(er.domain, d);
       assert.equal(er.domainThrown, false);
       assert.equal(typeof er.domainBound, 'function');
@@ -102,12 +99,12 @@ d.on('error', function(er) {
 
     case 'implicit timer':
       assert.equal(er.domain, d);
-      //assert.equal(er.domainThrown, true);
+      assert.equal(er.domainThrown, true);
       assert.ok(!er.domainEmitter);
       assert.ok(!er.domainBound);
       break;
 
-    case 'Cannot call method \"isDirectory\" of undefined':
+    case er_message.match(/Cannot call method/):
       assert.equal(er.domain, d);
       assert.ok(!er.domainEmitter);
       assert.ok(!er.domainBound);
@@ -120,8 +117,14 @@ d.on('error', function(er) {
       break;
 
     default:
-      console.error('unexpected error, throwing %j', er.message, er);
-      throw er;
+      if (er_message.match(/Cannot call method/)) {
+        assert.equal(er.domain, d);
+        assert.ok(!er.domainEmitter);
+        assert.ok(!er.domainBound);
+      } else {
+        console.error('unexpected error, throwing %j', er.message, er);
+        throw er;
+      }
   }
 
   caught++;
@@ -136,7 +139,6 @@ process.on('exit', function() {
 });
 
 
-
 // revert to using the domain when a callback is passed to nextTick in
 // the middle of a tickCallback loop
 d.run(function() {
@@ -145,7 +147,6 @@ d.run(function() {
   });
 });
 expectCaught++;
-
 
 
 // catch thrown errors no matter how many times we enter the event loop
@@ -167,8 +168,6 @@ d.run(function() {
   });
 });
 expectCaught++;
-
-
 
 // implicit addition of a timer created within a domain-bound context.
 d.run(function() {
@@ -240,6 +239,7 @@ fs.open('this file does not exist', 'r', d.intercept(function(er) {
 expectCaught++;
 
 
+
 // implicit addition by being created within a domain-bound context.
 var implicit;
 
@@ -259,8 +259,7 @@ var result = d.run(function () {
 });
 assert.equal(result, 'return value');
 
-/*
+
 var fst = fs.createReadStream('stream for nonexistent file')
 d.add(fst)
 expectCaught++;
-*/

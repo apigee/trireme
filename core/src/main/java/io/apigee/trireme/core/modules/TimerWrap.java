@@ -152,9 +152,9 @@ public class TimerWrap
         }
 
         @Override
-        @SuppressWarnings("unused")
         public void execute(Context cx, Scriptable scope)
         {
+            super.close();
             if (log.isDebugEnabled()) {
                 log.debug("Executing timer {} ontimeout = {} domain = {}",
                           System.identityHashCode(this), onTimeout, domain);

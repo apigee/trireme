@@ -23,6 +23,7 @@ package io.apigee.trireme.core.modules;
 
 import io.apigee.trireme.core.NodeRuntime;
 import io.apigee.trireme.core.InternalNodeModule;
+import io.apigee.trireme.core.internal.AbstractDescriptor;
 import io.apigee.trireme.core.internal.NodeOSException;
 import io.apigee.trireme.core.internal.ScriptRunner;
 import io.apigee.trireme.core.Utils;
@@ -71,11 +72,9 @@ import java.util.Collections;
 import java.util.EnumSet;
 import java.util.HashSet;
 import java.util.Set;
-import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Future;
-import java.util.concurrent.atomic.AtomicInteger;
 
 import static io.apigee.trireme.core.ArgUtils.*;
 
@@ -109,16 +108,12 @@ public class AsyncFilesystem
     }
 
     public static class FSImpl
-        extends AbstractFilesystem
+        extends ScriptableObject
     {
         public static final String CLASS_NAME = "_fsClass";
-        private static final int FIRST_FD = 4;
 
         protected ScriptRunner runner;
         protected ExecutorService pool;
-        private final AtomicInteger nextFd = new AtomicInteger(FIRST_FD);
-        private final ConcurrentHashMap<Integer, FileHandle> descriptors =
-            new ConcurrentHashMap<Integer, FileHandle>();
 
         @Override
         public String getClassName() {
@@ -129,23 +124,6 @@ public class AsyncFilesystem
         {
             this.runner = (ScriptRunner)runner;
             this.pool = fsPool;
-        }
-
-        @Override
-        public void cleanup()
-        {
-            for (FileHandle handle : descriptors.values()) {
-                if (log.isDebugEnabled()) {
-                    log.debug("Closing leaked file descriptor " + handle);
-                }
-                if (handle.file != null) {
-                    try {
-                        handle.file.close();
-                    } catch (IOException ignore) {
-                    }
-                }
-            }
-            descriptors.clear();
         }
 
         private static Object mapResponse(Object[] ret)
@@ -223,11 +201,15 @@ public class AsyncFilesystem
         private FileHandle ensureHandle(int fd)
             throws NodeOSException
         {
-            FileHandle handle = descriptors.get(fd);
-            if (handle == null) {
+            try {
+                FileHandle handle = (FileHandle)runner.getDescriptor(fd);
+                if (handle == null) {
+                    throw new NodeOSException(Constants.EBADF);
+                }
+                return handle;
+            } catch (ClassCastException cce) {
                 throw new NodeOSException(Constants.EBADF);
             }
-            return handle;
         }
 
         private FileHandle ensureRegularFileHandle(int fd)
@@ -327,12 +309,12 @@ public class AsyncFilesystem
 
                 } catch (NoSuchFileException fnfe) {
                     log.debug("File not found");
-                    throw new NodeOSException(Constants.ENOENT, pathStr);
+                    throw new NodeOSException(Constants.ENOENT, fnfe, "open", pathStr);
                 } catch (IOException ioe) {
                     if (log.isDebugEnabled()) {
                         log.debug("I/O error: {}", ioe);
                     }
-                    throw new NodeOSException(Constants.EIO, ioe, pathStr);
+                    throw new NodeOSException(Constants.EIO, ioe, "open", pathStr);
                 }
             }
 
@@ -344,7 +326,7 @@ public class AsyncFilesystem
                     fileHandle.noFollow = true;
                 }
                 */
-                int fd = nextFd.getAndIncrement();
+                int fd = runner.registerDescriptor(fileHandle);
                 if (log.isDebugEnabled()) {
                     log.debug("  open({}) = {}", pathStr, fd);
                 }
@@ -354,13 +336,12 @@ public class AsyncFilesystem
                     }
                     fileHandle.position = file.size();
                 }
-                descriptors.put(fd, fileHandle);
                 return new Object [] { Context.getUndefinedValue(), fd };
             } catch (IOException ioe) {
                 if (log.isDebugEnabled()) {
                     log.debug("I/O error: {}", ioe);
                 }
-                throw new NodeOSException(Constants.EIO, ioe, pathStr);
+                throw new NodeOSException(Constants.EIO, ioe, "open", pathStr);
             }
         }
 
@@ -391,10 +372,8 @@ public class AsyncFilesystem
                 if (log.isDebugEnabled()) {
                     log.debug("close({})", fd);
                 }
-                if (handle.file != null) {
-                    handle.file.close();
-                }
-                descriptors.remove(fd);
+                runner.unregisterDescriptor(fd);
+                handle.close();
             } catch (IOException ioe) {
                 throw new NodeOSException(Constants.EIO, ioe);
             }
@@ -686,7 +665,7 @@ public class AsyncFilesystem
                 Files.copy(oldFile, newFile, StandardCopyOption.REPLACE_EXISTING);
 
             } catch (IOException ioe) {
-                throw new NodeOSException(Constants.EIO, ioe, oldPath);
+                throw new NodeOSException(Constants.EIO, ioe, "rename", oldPath);
             }
         }
 
@@ -766,9 +745,9 @@ public class AsyncFilesystem
             try {
                 Files.delete(p);
             } catch (NoSuchFileException nfe) {
-                throw new NodeOSException(Constants.ENOENT, nfe, path);
+                throw new NodeOSException(Constants.ENOENT, nfe, "rmdir", path);
             } catch (IOException ioe) {
-                throw new NodeOSException(Constants.EIO, ioe, path);
+                throw new NodeOSException(Constants.EIO, ioe, "rmdir", path);
             }
         }
 
@@ -802,11 +781,11 @@ public class AsyncFilesystem
                 Files.delete(p);
 
             } catch (NoSuchFileException nfe) {
-                throw new NodeOSException(Constants.ENOENT, nfe, path);
+                throw new NodeOSException(Constants.ENOENT, nfe, "unlink", path);
             } catch (DirectoryNotEmptyException dne) {
-                throw new NodeOSException(Constants.EINVAL, dne, path);
+                throw new NodeOSException(Constants.EINVAL, dne, "unlink", path);
             } catch (IOException ioe) {
-                throw new NodeOSException(Constants.EIO, ioe, path);
+                throw new NodeOSException(Constants.EIO, ioe, "unlink", path);
             }
         }
 
@@ -844,9 +823,9 @@ public class AsyncFilesystem
                                       PosixFilePermissions.asFileAttribute(perms));
 
             } catch (FileAlreadyExistsException fee) {
-                throw new NodeOSException(Constants.EEXIST, fee, path);
+                throw new NodeOSException(Constants.EEXIST, fee, "mkdir", path);
             } catch (IOException ioe) {
-                throw new NodeOSException(Constants.EIO, ioe, path);
+                throw new NodeOSException(Constants.EIO, ioe, "mkdir", path);
             }
         }
 
@@ -899,7 +878,7 @@ public class AsyncFilesystem
                 return new Object[] { Context.getUndefinedValue(), fileList };
 
             } catch (IOException ioe) {
-                throw new NodeOSException(Constants.EIO, ioe, dn);
+                throw new NodeOSException(Constants.EIO, ioe, "readdir", dn);
             } finally {
                 Context.exit();
             }
@@ -937,9 +916,9 @@ public class AsyncFilesystem
                     attrs = Files.readAttributes(p, PosixFileAttributes.class);
                 }
                 } catch (NoSuchFileException nfe) {
-                    throw new NodeOSException(Constants.ENOENT, nfe, p.toString());
+                    throw new NodeOSException(Constants.ENOENT, nfe, "stat", p.toString());
                 } catch (IOException ioe) {
-                    throw new NodeOSException(Constants.EIO, ioe, p.toString());
+                    throw new NodeOSException(Constants.EIO, ioe, "stat", p.toString());
                 }
 
                 StatsImpl s = (StatsImpl)cx.newObject(this, StatsImpl.CLASS_NAME);
@@ -1049,9 +1028,9 @@ public class AsyncFilesystem
                 FileTime newMTime = FileTime.fromMillis((long)(mtime * 1000.0));
                 attrView.setTimes(newMTime, newATime, attrs.creationTime());
             } catch (NoSuchFileException nfe) {
-                throw new NodeOSException(Constants.ENOENT, nfe, path.toString());
+                throw new NodeOSException(Constants.ENOENT, nfe, "utimes", path.toString());
             } catch (IOException ioe) {
-                throw new NodeOSException(Constants.EIO, ioe, path.toString());
+                throw new NodeOSException(Constants.EIO, ioe, "utimes", path.toString());
             }
             return new Object[] { Context.getUndefinedValue(), Context.getUndefinedValue() };
         }
@@ -1132,9 +1111,9 @@ public class AsyncFilesystem
                 }
                 return new Object[] { Context.getUndefinedValue(), Context.getUndefinedValue() };
             } catch (NoSuchFileException nfe) {
-                throw new NodeOSException(Constants.ENOENT, nfe, path.toString());
+                throw new NodeOSException(Constants.ENOENT, nfe, "chmod", path.toString());
             } catch (IOException ioe) {
-                throw new NodeOSException(Constants.EIO, ioe, path.toString());
+                throw new NodeOSException(Constants.EIO, ioe, "chmod", path.toString());
             }
         }
 
@@ -1179,9 +1158,9 @@ public class AsyncFilesystem
                 }
                 return new Object[] { Context.getUndefinedValue(), Context.getUndefinedValue() };
             } catch (NoSuchFileException nfe) {
-                throw new NodeOSException(Constants.ENOENT, nfe, path.toString());
+                throw new NodeOSException(Constants.ENOENT, nfe, "chown", path.toString());
             } catch (IOException ioe) {
-                throw new NodeOSException(Constants.EIO, ioe, path.toString());
+                throw new NodeOSException(Constants.EIO, ioe, "chown", path.toString());
             }
         }
 
@@ -1259,13 +1238,13 @@ public class AsyncFilesystem
 
             } catch (FileAlreadyExistsException fae) {
                 log.debug("FileAlreadyExists");
-                throw new NodeOSException(Constants.EEXIST, fae, destPath);
+                throw new NodeOSException(Constants.EEXIST, fae, "link", destPath);
             } catch (NoSuchFileException nfe) {
                 log.debug("NoSuchFile");
-                throw new NodeOSException(Constants.ENOENT, nfe, srcPath);
+                throw new NodeOSException(Constants.ENOENT, nfe, "link", srcPath);
             } catch (IOException ioe) {
                 log.debug("IOException: {}", ioe);
-                throw new NodeOSException(Constants.EIO, ioe, destPath);
+                throw new NodeOSException(Constants.EIO, ioe, "link", destPath);
             }
         }
 
@@ -1305,13 +1284,13 @@ public class AsyncFilesystem
 
             } catch (FileAlreadyExistsException fae) {
                 log.debug("FileAlreadyExists");
-                throw new NodeOSException(Constants.EEXIST, fae, destPath);
+                throw new NodeOSException(Constants.EEXIST, fae, "symlink", destPath);
             } catch (NoSuchFileException nfe) {
                 log.debug("NoSuchFile");
-                throw new NodeOSException(Constants.ENOENT, nfe, srcPath);
+                throw new NodeOSException(Constants.ENOENT, nfe, "symlink", srcPath);
             } catch (IOException ioe) {
                 log.debug("IOException: {}", ioe);
-                throw new NodeOSException(Constants.EIO, ioe, destPath);
+                throw new NodeOSException(Constants.EIO, ioe, "symlink", destPath);
             }
         }
 
@@ -1353,13 +1332,13 @@ public class AsyncFilesystem
                 return new Object[] { Context.getUndefinedValue(), result };
             } catch (NoSuchFileException nfe) {
                 log.debug("NoSuchFile");
-                throw new NodeOSException(Constants.ENOENT, nfe, pathStr);
+                throw new NodeOSException(Constants.ENOENT, nfe, "readlink", pathStr);
             } catch (NotLinkException nle) {
                 log.debug("NotLink");
-                throw new NodeOSException(Constants.EINVAL, nle, pathStr);
+                throw new NodeOSException(Constants.EINVAL, nle, "readlink", pathStr);
             } catch (IOException ioe) {
                 log.debug("IOException: {}", ioe);
-                throw new NodeOSException(Constants.EIO, ioe, pathStr);
+                throw new NodeOSException(Constants.EIO, ioe, "readlink", pathStr);
             }
         }
     }
@@ -1497,9 +1476,8 @@ public class AsyncFilesystem
     }
 
     public static class FileHandle
+        extends AbstractDescriptor
     {
-        static final String KEY = "_fileHandle";
-
         AsynchronousFileChannel file;
         Path path;
         long position;
@@ -1507,8 +1485,18 @@ public class AsyncFilesystem
 
         FileHandle(Path path, AsynchronousFileChannel file)
         {
+            super(DescriptorType.FILE);
             this.path = path;
             this.file = file;
+        }
+
+        @Override
+        public void close()
+            throws IOException
+        {
+            if (file != null) {
+                file.close();
+            }
         }
     }
 

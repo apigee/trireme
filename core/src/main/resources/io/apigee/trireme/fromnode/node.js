@@ -57,6 +57,8 @@
 
     startup.resolveArgv0();
 
+    // Add stuff that is specific to Trireme. This should be called at the end because it may replace
+    // the stdio streams that were created previously.
     startup.processTrireme();
 
     // There are various modes that Node can run in. The most common two
@@ -611,6 +613,8 @@
   startup.processStdio = function() {
     var stdin, stdout, stderr;
 
+    // Trireme: We might set stdout, stdin, and stderr before calling this if we are spawned by another script
+    if (!process.stdout) {
     process.__defineGetter__('stdout', function() {
       if (stdout) return stdout;
       stdout = createWritableStdioStream(1);
@@ -625,7 +629,9 @@
       }
       return stdout;
     });
+    }
 
+    if (!process.stderr) {
     process.__defineGetter__('stderr', function() {
       if (stderr) return stderr;
       stderr = createWritableStdioStream(2);
@@ -635,7 +641,9 @@
       };
       return stderr;
     });
+    }
 
+    if (!process.stdin) {
     process.__defineGetter__('stdin', function() {
       if (stdin) return stdin;
 
@@ -696,6 +704,7 @@
 
       return stdin;
     });
+    }
 
     process.openStdin = function() {
       process.stdin.resume();

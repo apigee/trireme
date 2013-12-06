@@ -12,10 +12,6 @@
         <Description>cluster module support planned but not implemented.</Description>
     </Excluded>
     <Excluded>
-        <Name>test-child-process.+\.js</Name>
-        <Description>Support for handles and sockets not done yet.</Description>
-    </Excluded>
-    <Excluded>
         <Name>test-crypto-ecb.js</Name>
         <Description>Cipher not yet implemented</Description>
     </Excluded>

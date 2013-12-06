@@ -76,11 +76,15 @@ public class Process
 
         ProcessImpl proc = (ProcessImpl)cx.newObject(scope, ProcessImpl.CLASS_NAME);
         proc.init(cx, runner);
+        /*
+         * Note on dlopen -- "module" module will silently ignore it if not defined, but having it throw
+         * causes tests to fail.
+         */
         proc.defineFunctionProperties(
             new String[] { "binding", "abort", "chdir", "cwd", "reallyExit",
                            "_kill", "send", "memoryUsage", "_needTickCallback", "_usingDomains",
                            "umask", "uptime", "hrtime",
-                           "_debugProcess", "_debugPause", "_debugEnd", "dlopen" },
+                           "_debugProcess", "_debugPause", "_debugEnd" },
             ProcessImpl.class, 0);
 
         proc.defineProperty("versions", ProcessImpl.class, 0);
@@ -378,7 +382,7 @@ public class Process
         {
             int numArgs = (args == null ? 0 : args.length);
             if (log.isTraceEnabled()) {
-                log.trace("Submitting function {} with {} args as a next tick", f, numArgs);
+                log.trace("Executing function {} args = {} domain = {}", f, numArgs, domain);
             }
             Object[] callArgs = new Object[numArgs + 2];
             callArgs[0] = f;
@@ -423,8 +427,7 @@ public class Process
         {
             assert(needImmediateCallback);
             log.trace("Calling immediate callbacks");
-            // Reset this here because callbacks might result in the need for more callbacks!
-            needImmediateCallback = false;
+            // Don't reset needImmediateCallback -- process does it
             immediateCallback.call(cx, this, this, null);
         }
 
@@ -584,22 +587,5 @@ public class Process
         {
             throw Utils.makeError(cx, thisObj, "Not implemented");
         }
-
-        @SuppressWarnings("unused")
-        public static Object dlopen(Context cx, Scriptable thisObj, Object[] args, Function func)
-        {
-            throw Utils.makeError(cx, thisObj, "Not implemented");
-        }
-
-        // TODO _print_eval
-        // TODO _forceRepl
-        // TODO noDeprecation
-        // TODO throwDeprecation
-        // TODO traceDeprecation
-
-        // TODO getgid
-        // TODO setgid
-        // TODO getuid
-        // TODO setuid
     }
 }

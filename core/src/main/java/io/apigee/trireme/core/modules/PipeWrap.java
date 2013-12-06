@@ -4,8 +4,10 @@ import io.apigee.trireme.core.InternalNodeModule;
 import io.apigee.trireme.core.NodeRuntime;
 import io.apigee.trireme.core.ScriptTask;
 import io.apigee.trireme.core.Utils;
+import io.apigee.trireme.core.internal.AbstractDescriptor;
 import io.apigee.trireme.core.internal.Charsets;
 import io.apigee.trireme.core.internal.ScriptRunner;
+import io.apigee.trireme.core.internal.StreamDescriptor;
 import org.mozilla.javascript.Context;
 import org.mozilla.javascript.Function;
 import org.mozilla.javascript.Scriptable;
@@ -70,8 +72,8 @@ public class PipeWrap
         private boolean reading;
         private Function onRead;
         private Future<?> readJob;
-        /** For now, only async mode is used -- we may enable this in the future */
-        private boolean asyncMode = false;
+        private int fd;
+        private boolean asyncMode;
 
         private final AtomicInteger queueSize = new AtomicInteger();
 
@@ -102,11 +104,11 @@ public class PipeWrap
         @JSFunction
         public static void open(Context cx, Scriptable thisObj, Object[] args, Function func)
         {
-            int fd = intArg(args, 0);
             PipeImpl self = (PipeImpl)thisObj;
+            self.fd = intArg(args, 0);
             self.runner = getRunner();
 
-            switch (fd) {
+            switch (self.fd) {
             case 0:
                 self.input = getRunner().getStdin();
                 break;
@@ -117,7 +119,23 @@ public class PipeWrap
                 self.output = getRunner().getStderr();
                 break;
             default:
-                throw Utils.makeError(cx, thisObj, "Invalid FD " + fd);
+                AbstractDescriptor descriptor = getRunner().getDescriptor(self.fd);
+                if ((descriptor == null) || (descriptor.getType() != AbstractDescriptor.DescriptorType.PIPE)) {
+                    throw Utils.makeError(cx, thisObj, "Invalid FD " + self.fd);
+                }
+                try {
+                    StreamDescriptor<?> sd = (StreamDescriptor<?>)descriptor;
+                    if (sd.getStream() instanceof InputStream) {
+                        self.input = (InputStream)sd.getStream();
+                    } else if (sd.getStream() instanceof OutputStream) {
+                        self.output = (OutputStream)sd.getStream();
+                    }
+                } catch (ClassCastException cce) {
+                    throw Utils.makeError(cx, thisObj, "Invalid FD " + self.fd);
+                }
+                // Only support async mode for non-stdio streams
+                self.asyncMode = true;
+                break;
             }
         }
 
@@ -153,6 +171,17 @@ public class PipeWrap
         public void close()
         {
             stopReading();
+            StreamDescriptor<?> sd = (StreamDescriptor<?>)runner.getDescriptor(fd);
+            try {
+                if (log.isDebugEnabled()) {
+                    log.debug("Closing fd {} = {}", fd, sd);
+                }
+                sd.getStream().close();
+            } catch (IOException ioe) {
+                if (log.isDebugEnabled()) {
+                    log.debug("Error closing fd {}: {}", fd, ioe);
+                }
+            }
             super.close();
         }
 
@@ -341,7 +370,7 @@ public class PipeWrap
                         (fioe == null ? null : Utils.makeErrorObject(cx, scope, fioe.toString()));
 
                     runner.enqueueCallback(oc, PipeImpl.this, PipeImpl.this,
-                                           domain, new Object[] { err, this, req });
+                                           domain, new Object[] { err, PipeImpl.this, req });
                 }
             }, domain);
         }

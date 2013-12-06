@@ -21,7 +21,6 @@
  */
 package io.apigee.trireme.core.internal;
 
-import io.apigee.trireme.core.ArgUtils;
 import io.apigee.trireme.core.NodeEnvironment;
 import io.apigee.trireme.core.NodeException;
 import io.apigee.trireme.core.NodeModule;
@@ -32,7 +31,6 @@ import io.apigee.trireme.core.ScriptFuture;
 import io.apigee.trireme.core.ScriptStatus;
 import io.apigee.trireme.core.ScriptTask;
 import io.apigee.trireme.core.Utils;
-import io.apigee.trireme.core.modules.AbstractFilesystem;
 import io.apigee.trireme.core.modules.Buffer;
 import io.apigee.trireme.core.modules.NativeModule;
 import io.apigee.trireme.core.modules.Process;
@@ -64,6 +62,7 @@ import java.util.Iterator;
 import java.util.Map;
 import java.util.PriorityQueue;
 import java.util.concurrent.Callable;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
@@ -81,6 +80,7 @@ public class ScriptRunner
 
     private static final long DEFAULT_DELAY = Integer.MAX_VALUE;
     private static final int DEFAULT_TICK_DEPTH = 10000;
+    private static final int FIRST_FD = 4;
 
     public static final String TIMEOUT_TIMESTAMP_KEY = "_tickTimeout";
 
@@ -100,6 +100,9 @@ public class ScriptRunner
     private final  ExecutorService         asyncPool;
     private final IdentityHashMap<Closeable, Closeable> openHandles =
         new IdentityHashMap<Closeable, Closeable>();
+    private final AtomicInteger nextFd = new AtomicInteger(FIRST_FD);
+    private final ConcurrentHashMap<Integer, AbstractDescriptor> fileDescriptors =
+        new ConcurrentHashMap<Integer, AbstractDescriptor>();
 
     private final  ConcurrentLinkedQueue<Activity> tickFunctions = new ConcurrentLinkedQueue<Activity>();
     private final  PriorityQueue<Activity>       timerQueue    = new PriorityQueue<Activity>();
@@ -299,24 +302,6 @@ public class ScriptRunner
         return ((sandbox != null) && (sandbox.getStderr() != null)) ? sandbox.getStderr() : System.err;
     }
 
-    public Scriptable getStdinStream() {
-        // TODO
-        return null;
-        //return (Scriptable)process.getStdin();
-    }
-
-    public Scriptable getStdoutStream() {
-        // TODO
-        return null;
-        //return (Scriptable)process.getStdout();
-    }
-
-    public Scriptable getStderrStream() {
-        // TODO
-        return null;
-        //return (Scriptable)process.getStderr();
-    }
-
     public Scriptable getParentProcess() {
         return parentProcess;
     }
@@ -514,13 +499,40 @@ public class ScriptRunner
         openHandles.remove(c);
     }
 
+    public int registerDescriptor(AbstractDescriptor d)
+    {
+        int fd = nextFd.getAndIncrement();
+        fileDescriptors.put(fd, d);
+        return fd;
+    }
+
+    public void unregisterDescriptor(int fd)
+    {
+        fileDescriptors.remove(fd);
+    }
+
+    public AbstractDescriptor getDescriptor(int fd)
+    {
+        return fileDescriptors.get(fd);
+    }
+
     /**
      * Clean up all the leaked handles and file descriptors.
      */
     private void closeCloseables(Context cx)
     {
-        AbstractFilesystem fs = (AbstractFilesystem)requireInternal("fs", cx);
-        fs.cleanup();
+        for (Closeable c : fileDescriptors.values()) {
+            if (log.isDebugEnabled()) {
+                log.debug("Closing leaked file descriptor {}", c);
+            }
+            try {
+                c.close();
+            } catch (IOException ioe) {
+                if (log.isDebugEnabled()) {
+                    log.debug("Error closing leaked handle: {}", ioe);
+                }
+            }
+        }
 
         for (Closeable c: openHandles.values()) {
             if (log.isDebugEnabled()) {
@@ -975,7 +987,12 @@ public class ScriptRunner
         if (log.isDebugEnabled()) {
             log.debug("Got a fatal exception {}", re);
         }
-        Object err = (re instanceof JavaScriptException ? ((JavaScriptException)re).getValue() : re.getMessage());
+        Object err;
+        if (re instanceof JavaScriptException) {
+            err = ((JavaScriptException)re).getValue();
+        } else {
+            err = Utils.makeErrorObject(cx, process, re.getMessage(), re);
+        }
         boolean handled =
             Context.toBoolean(process.getFatalException().call(cx, process, process, new Object[] { err }));
         if (log.isDebugEnabled()) {
@@ -1033,7 +1050,24 @@ public class ScriptRunner
             throw new NodeException(e);
         }
 
+        if (scriptName != null) {
+            process.setTitle(scriptName);
+        }
+
         scope.put("global", scope, scope);
+
+        // These will cause code in "node.js" to assign the various process variables if necessary
+        if (sandbox != null) {
+            if (sandbox.getStdinStream() != null) {
+                process.put("stdin", process, sandbox.getStdinStream());
+            }
+            if (sandbox.getStdoutStream() != null) {
+                process.put("stdout", process, sandbox.getStdoutStream());
+            }
+            if (sandbox.getStderrStream() != null) {
+                process.put("stderr", process, sandbox.getStderrStream());
+            }
+        }
     }
 
     /**

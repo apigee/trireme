@@ -54,7 +54,15 @@ public class NodeOSException
 
     public NodeOSException(String code, Throwable cause, String path)
     {
-        super(code + ':' + path);
+        super(code + ": " + path);
+        this.code = code;
+        this.path = path;
+        initCause(cause);
+    }
+
+    public NodeOSException(String code, Throwable cause, String operation, String path)
+    {
+        super(code + ", " + operation + " '" + path + "'");
         this.code = code;
         this.path = path;
         initCause(cause);

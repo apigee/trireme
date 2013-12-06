@@ -23,6 +23,7 @@ package io.apigee.trireme.core.modules;
 
 import io.apigee.trireme.core.NodeRuntime;
 import io.apigee.trireme.core.InternalNodeModule;
+import io.apigee.trireme.core.internal.AbstractDescriptor;
 import io.apigee.trireme.core.internal.NodeOSException;
 import io.apigee.trireme.core.internal.ScriptRunner;
 import io.apigee.trireme.core.Utils;
@@ -43,9 +44,7 @@ import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.io.RandomAccessFile;
 import java.lang.reflect.InvocationTargetException;
-import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.Executor;
-import java.util.concurrent.atomic.AtomicInteger;
 
 /**
  * An implementation of the "fs" internal Node module. The "fs.js" script depends on it.
@@ -78,16 +77,12 @@ public class Filesystem
     }
 
     public static class FSImpl
-        extends AbstractFilesystem
+        extends ScriptableObject
     {
         public static final String CLASS_NAME = "_fsClass";
-        private static final int FIRST_FD = 4;
 
         protected ScriptRunner runner;
         protected Executor pool;
-        private final AtomicInteger nextFd = new AtomicInteger(FIRST_FD);
-        private final ConcurrentHashMap<Integer, FileHandle> descriptors =
-            new ConcurrentHashMap<Integer, FileHandle>();
 
         @Override
         public String getClassName() {
@@ -98,23 +93,6 @@ public class Filesystem
         {
             this.runner = (ScriptRunner)runner;
             this.pool = fsPool;
-        }
-
-        @Override
-        public void cleanup()
-        {
-            for (FileHandle handle : descriptors.values()) {
-                if (log.isDebugEnabled()) {
-                    log.debug("Closing leaked file descriptor " + handle);
-                }
-                if (handle.file != null) {
-                    try {
-                        handle.file.close();
-                    } catch (IOException ignore) {
-                    }
-                }
-            }
-            descriptors.clear();
         }
 
         private Object runAction(final Context cx, final Function callback, final AsyncAction action)
@@ -230,11 +208,15 @@ public class Filesystem
         private FileHandle ensureHandle(int fd)
             throws NodeOSException
         {
-            FileHandle handle = descriptors.get(fd);
-            if (handle == null) {
+            try {
+                FileHandle handle = (FileHandle)runner.getDescriptor(fd);
+                if (handle == null) {
+                    throw new NodeOSException(Constants.EBADF);
+                }
+                return handle;
+            } catch (ClassCastException cce) {
                 throw new NodeOSException(Constants.EBADF);
             }
-            return handle;
         }
 
         private FileHandle ensureRegularFileHandle(int fd)
@@ -360,8 +342,7 @@ public class Filesystem
             Context cx = Context.enter();
             try {
                 FileHandle fileHandle = new FileHandle(path, file);
-                int fd = nextFd.getAndIncrement();
-                descriptors.put(fd, fileHandle);
+                int fd = runner.registerDescriptor(fileHandle);
                 return new Object [] { Context.getUndefinedValue(), fd };
             } finally {
                 Context.exit();
@@ -392,10 +373,8 @@ public class Filesystem
         {
             FileHandle handle = ensureRegularFileHandle(fd);
             try {
-                if (handle.file != null) {
-                    handle.file.close();
-                }
-                descriptors.remove(fd);
+                runner.unregisterDescriptor(fd);
+                handle.close();
             } catch (IOException ioe) {
                 throw new NodeOSException(Constants.EIO, ioe);
             }
@@ -1017,16 +996,24 @@ public class Filesystem
     }
 
     public static class FileHandle
+        extends AbstractDescriptor
     {
-        static final String KEY = "_fileHandle";
-
         RandomAccessFile file;
         File fileRef;
 
         FileHandle(File fileRef, RandomAccessFile file)
         {
+            super(DescriptorType.FILE);
             this.fileRef = fileRef;
             this.file = file;
+        }
+
+        @Override
+        public void close() throws IOException
+        {
+            if (file != null) {
+                file.close();
+            }
         }
     }
 

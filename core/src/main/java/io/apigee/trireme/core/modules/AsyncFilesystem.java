@@ -32,7 +32,6 @@ import org.mozilla.javascript.Function;
 import org.mozilla.javascript.Scriptable;
 import org.mozilla.javascript.ScriptableObject;
 import org.mozilla.javascript.annotations.JSFunction;
-import org.mozilla.javascript.annotations.JSGetter;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -159,7 +158,7 @@ public class AsyncFilesystem
 
             final FSImpl self = this;
             final Scriptable domain = runner.getDomain();
-            runner.pin();
+            runner.pin(this);
             pool.execute(new Runnable()
             {
                 @Override
@@ -181,7 +180,7 @@ public class AsyncFilesystem
                         runner.enqueueCallback(callback, callback, null, domain,
                                                action.mapException(cx, self, e));
                     } finally {
-                        runner.unPin();
+                        runner.unPin(FSImpl.this);
                     }
                 }
             });
@@ -238,6 +237,7 @@ public class AsyncFilesystem
         }
 
         @JSFunction
+        @SuppressWarnings("unused")
         public static Object open(final Context cx, final Scriptable thisObj, Object[] args, Function func)
         {
             final String pathStr = stringArg(args, 0);
@@ -380,6 +380,7 @@ public class AsyncFilesystem
         }
 
         @JSFunction
+        @SuppressWarnings("unused")
         public static Object read(Context cx, Scriptable thisObj, Object[] args, Function func)
         {
             FSImpl fs = (FSImpl)thisObj;
@@ -448,7 +449,7 @@ public class AsyncFilesystem
             } else {
                 final Scriptable domain = runner.getDomain();
                 final long readPos = pos;
-                runner.pin();
+                runner.pin(this);
                 handle.file.read(readBuf, pos, null,
                                  new CompletionHandler<Integer, Object>()
                                  {
@@ -467,7 +468,7 @@ public class AsyncFilesystem
 
                                          runner.enqueueCallback(callback, callback, null, domain,
                                                                 new Object[] { Context.getUndefinedValue(), count, buf });
-                                         runner.unPin();
+                                         runner.unPin(FSImpl.this);
                                      }
 
                                      @Override
@@ -477,7 +478,7 @@ public class AsyncFilesystem
                                                                 new Object[] { Utils.makeErrorObject(
                                                                                  cx, FSImpl.this, Constants.EIO, Constants.EIO),
                                                                                0, buf });
-                                         runner.unPin();
+                                         runner.unPin(FSImpl.this);
                                      }
                                  });
                 return null;
@@ -485,6 +486,7 @@ public class AsyncFilesystem
         }
 
         @JSFunction
+        @SuppressWarnings("unused")
         public static Object write(Context cx, Scriptable thisObj, Object[] args, Function func)
         {
             FSImpl fs = (FSImpl)thisObj;
@@ -554,7 +556,7 @@ public class AsyncFilesystem
                 // This doesn't make it a whole lot safer to issue a lot of async writes though
                 handle.position += writeBuf.remaining();
 
-                runner.pin();
+                runner.pin(this);
                 handle.file.write(writeBuf, pos, 0,
                                   new CompletionHandler<Integer, Integer>()
                                   {
@@ -569,7 +571,7 @@ public class AsyncFilesystem
 
                                           runner.enqueueCallback(callback, callback, null, domain,
                                                                  new Object[] { Context.getUndefinedValue(), count, buf });
-                                          runner.unPin();
+                                          runner.unPin(FSImpl.this);
                                       }
 
                                       @Override
@@ -579,7 +581,7 @@ public class AsyncFilesystem
                                                                 new Object[] { Utils.makeErrorObject(
                                                                                  cx, FSImpl.this, Constants.EIO, Constants.EIO),
                                                                                0, buf });
-                                          runner.unPin();
+                                          runner.unPin(FSImpl.this);
                                       }
                                   });
                 return null;
@@ -587,6 +589,7 @@ public class AsyncFilesystem
         }
 
         @JSFunction
+        @SuppressWarnings("unused")
         public static void fsync(Context cx, Scriptable thisObj, Object[] args, Function func)
         {
             final FSImpl fs = (FSImpl)thisObj;
@@ -605,6 +608,7 @@ public class AsyncFilesystem
         }
 
         @JSFunction
+        @SuppressWarnings("unused")
         public static void fdatasync(Context cx, Scriptable thisObj, Object[] args, Function func)
         {
             final FSImpl fs = (FSImpl)thisObj;
@@ -637,6 +641,7 @@ public class AsyncFilesystem
         }
 
         @JSFunction
+        @SuppressWarnings("unused")
         public static void rename(Context cx, Scriptable thisObj, Object[] args, Function func)
         {
             final String oldPath = stringArg(args, 0);
@@ -714,6 +719,7 @@ public class AsyncFilesystem
         }
 
         @JSFunction
+        @SuppressWarnings("unused")
         public static void rmdir(Context cx, Scriptable thisObj, Object[] args, Function func)
         {
             final FSImpl fs = (FSImpl)thisObj;
@@ -752,6 +758,7 @@ public class AsyncFilesystem
         }
 
         @JSFunction
+        @SuppressWarnings("unused")
         public static void unlink(Context cx, Scriptable thisObj, Object[] args, Function func)
         {
             final String path = stringArg(args, 0);
@@ -790,6 +797,7 @@ public class AsyncFilesystem
         }
 
         @JSFunction
+        @SuppressWarnings("unused")
         public static void mkdir(Context cx, Scriptable thisObj, Object[] args, Function func)
         {
             final String path = stringArg(args, 0);
@@ -830,6 +838,7 @@ public class AsyncFilesystem
         }
 
         @JSFunction
+        @SuppressWarnings("unused")
         public static Object readdir(Context cx, Scriptable thisObj, Object[] args, Function func)
         {
             final String path = stringArg(args, 0);
@@ -885,6 +894,7 @@ public class AsyncFilesystem
         }
 
         @JSFunction
+        @SuppressWarnings("unused")
         public static Object stat(Context cx, Scriptable thisObj, Object[] args, Function func)
         {
             final String path = stringArg(args, 0);
@@ -922,7 +932,7 @@ public class AsyncFilesystem
                 }
 
                 StatsImpl s = (StatsImpl)cx.newObject(this, StatsImpl.CLASS_NAME);
-                s.setAttributes(attrs);
+                s.setAttributes(cx, attrs);
                 if (log.isTraceEnabled()) {
                     log.trace("stat {} = {}", p, s);
                 }
@@ -933,6 +943,7 @@ public class AsyncFilesystem
         }
 
         @JSFunction
+        @SuppressWarnings("unused")
         public static Object lstat(Context cx, Scriptable thisObj, Object[] args, Function func)
         {
             final String path = stringArg(args, 0);
@@ -952,6 +963,7 @@ public class AsyncFilesystem
         }
 
         @JSFunction
+        @SuppressWarnings("unused")
         public static Object fstat(Context cx, Scriptable thisObj, Object[] args, Function func)
         {
             final FSImpl fs = (FSImpl)thisObj;
@@ -971,6 +983,7 @@ public class AsyncFilesystem
         }
 
         @JSFunction
+        @SuppressWarnings("unused")
         public static void utimes(Context cx, Scriptable thisObj, Object[] args, Function func)
         {
             final String path = stringArg(args, 0);
@@ -991,6 +1004,7 @@ public class AsyncFilesystem
         }
 
         @JSFunction
+        @SuppressWarnings("unused")
         public static void futimes(Context cx, Scriptable thisObj, Object[] args, Function func)
         {
             final int fd = intArg(args, 0);
@@ -1036,6 +1050,7 @@ public class AsyncFilesystem
         }
 
         @JSFunction
+        @SuppressWarnings("unused")
         public static void chmod(Context cx, Scriptable thisObj, Object[] args, Function func)
         {
             final String path = stringArg(args, 0);
@@ -1118,6 +1133,7 @@ public class AsyncFilesystem
         }
 
         @JSFunction
+        @SuppressWarnings("unused")
         public static void fchmod(Context cx, Scriptable thisObj, Object[] args, Function func)
         {
             final int fd = intArg(args, 0);
@@ -1165,6 +1181,7 @@ public class AsyncFilesystem
         }
 
         @JSFunction
+        @SuppressWarnings("unused")
         public static void chown(Context cx, Scriptable thisObj, Object[] args, Function func)
         {
             final String path = stringArg(args, 0);
@@ -1185,6 +1202,7 @@ public class AsyncFilesystem
         }
 
         @JSFunction
+        @SuppressWarnings("unused")
         public static void fchown(Context cx, Scriptable thisObj, Object[] args, Function func)
         {
             final int fd = intArg(args, 0);
@@ -1205,6 +1223,7 @@ public class AsyncFilesystem
         }
 
         @JSFunction
+        @SuppressWarnings("unused")
         public static Object link(Context cx, Scriptable thisObj, Object[] args, Function func)
         {
             final String srcPath = stringArg(args, 0);
@@ -1249,6 +1268,7 @@ public class AsyncFilesystem
         }
 
         @JSFunction
+        @SuppressWarnings("unused")
         public static Object symlink(Context cx, Scriptable thisObj, Object[] args, Function func)
         {
             final String srcPath = stringArg(args, 0);
@@ -1295,6 +1315,7 @@ public class AsyncFilesystem
         }
 
         @JSFunction
+        @SuppressWarnings("unused")
         public static Object readlink(Context cx, Scriptable thisObj, Object[] args, Function func)
         {
             final String path = stringArg(args, 0);
@@ -1355,32 +1376,21 @@ public class AsyncFilesystem
             return CLASS_NAME;
         }
 
-        public void setAttributes(PosixFileAttributes attrs)
+        public void setAttributes(Context cx, PosixFileAttributes attrs)
         {
-            this.attrs = attrs;
-        }
-
-        // Fake "dev" and "ino" based on whatever information we can get from the product
-        @JSGetter("dev")
-        public int getDev()
-        {
-            return 0;
-        }
-
-        @JSGetter("ino")
-        public int getIno()
-        {
+            // Fake "dev" and "ino" based on whatever information we can get from the product
+            put("size", this, attrs.size());
+            put("dev", this, 0);
             Object ino = attrs.fileKey();
             if (ino instanceof Number) {
-                return ((Number)ino).intValue();
+                put("ino", this, ino);
             } else {
-                return ino.hashCode();
+                put("ino", this, ino.hashCode());
             }
-        }
+            put("atime", this, makeDate(cx, attrs.lastAccessTime().toMillis()));
+            put("mtime", this, makeDate(cx, attrs.lastModifiedTime().toMillis()));
+            put("ctime", this, makeDate(cx, attrs.creationTime().toMillis()));
 
-        @JSGetter("mode")
-        public int getMode()
-        {
             int mode = 0;
 
             // File mode flags -- these are used by the JS code to handle "isFile" and other methods
@@ -1423,55 +1433,12 @@ public class AsyncFilesystem
             if (perms.contains(PosixFilePermission.OWNER_WRITE)) {
                 mode |= Constants.S_IWUSR;
             }
-            return mode;
+            put("mode", this, mode);
         }
 
-        // TODO nlink
-        // TODO uid
-        // TODO gid
-        // TODO rdev
-
-        @JSGetter("size")
-        public double getSize() {
-            return attrs.size();
-        }
-
-        // TODO blksize
-        // TODO blocks
-
-        @JSGetter("atime")
-        public Object getATime()
+        private Object makeDate(Context cx, long ts)
         {
-            return makeDate(attrs.lastAccessTime().toMillis());
-        }
-
-        @JSGetter("mtime")
-        public Object getMTime()
-        {
-            return makeDate(attrs.lastModifiedTime().toMillis());
-        }
-
-        @JSGetter("ctime")
-        public Object getCTime()
-        {
-            return makeDate(attrs.creationTime().toMillis());
-        }
-
-        @JSFunction
-        public Object toJSON()
-        {
-            Scriptable s = Context.getCurrentContext().newObject(this);
-            s.put("mode", s, getMode());
-            s.put("size", s, getSize());
-            s.put("mtime", s, getMTime());
-            s.put("atime", s, getATime());
-            s.put("ctime", s, getCTime());
-            return s;
-        }
-
-        private Object makeDate(long ts)
-        {
-            return Context.getCurrentContext().newObject(this, "Date", new Object[] { ts });
+            return cx.newObject(this, "Date", new Object[] { ts });
         }
     }
 

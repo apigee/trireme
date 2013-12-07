@@ -157,7 +157,7 @@ public class HTTPWrap
         {
             this.runner = runner;
             this.adapter = container.newServer(runner.getScriptObject(), this);
-            runner.pin();
+            runner.pin(this);
         }
 
         NodeRuntime getRunner() {
@@ -201,7 +201,7 @@ public class HTTPWrap
                 adapter.close();
                 adapter = null;
             }
-            runner.unPin();
+            runner.unPin(this);
         }
 
         /**

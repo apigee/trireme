@@ -118,7 +118,7 @@ public class Filesystem
 
             final FSImpl self = this;
             final Scriptable domain = runner.getDomain();
-            runner.pin();
+            runner.pin(this);
             pool.execute(new Runnable()
             {
                 @Override
@@ -143,7 +143,7 @@ public class Filesystem
                         runner.enqueueCallback(callback, callback, null, domain,
                                                action.mapException(cx, self, e));
                     } finally {
-                        runner.unPin();
+                        runner.unPin(FSImpl.this);
                     }
                 }
             });

@@ -90,7 +90,7 @@ public class NodeScript
         ScriptFuture future = new ScriptFuture(runner);
         runner.setFuture(future);
         if (pin) {
-            runner.pin();
+            runner.pin(this);
         }
 
         env.getScriptPool().execute(future);
@@ -120,7 +120,7 @@ public class NodeScript
         runner.setParentProcess(parentProcess);
         ScriptFuture future = new ScriptFuture(runner);
         runner.setFuture(future);
-        runner.pin();
+        runner.pin(this);
 
         env.getScriptPool().execute(future);
         return future;

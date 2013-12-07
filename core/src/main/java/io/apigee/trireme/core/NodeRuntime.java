@@ -66,13 +66,19 @@ public interface NodeRuntime
     /**
      * Increment the "pin count" on this script. A script with a pin count of zero will remain running and in
      * an idle state until there is work to do. Once the pin count again reaches zero the script may exit.
+     *
+     * @param pinner the object that requested the pin -- this is used for debugging and asserting problems
+     *               where scripts exit prematurely or never exit
      */
-    void pin();
+    void pin(Object pinner);
 
     /**
      * Decrement the "pin count," which may cause the script to exit at the end of the current function.
+     *
+     * @param pinner the object that requested the pin. If assertions are enabled, it is an exception to
+     *               raise a duplicate pin or unpin
      */
-    void unPin();
+    void unPin(Object pinner);
 
     /**
      * Return the thread pool that may be used to run short-lived asyncrhonous tasks. Tasks submitted to this

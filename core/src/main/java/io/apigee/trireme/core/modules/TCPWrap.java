@@ -105,11 +105,24 @@ public class TCPWrap
         private boolean                 writeReady;
 
         @JSConstructor
+        @SuppressWarnings("unused")
         public static Object newTCPImpl(Context cx, Object[] args, Function ctorObj, boolean inNewExpr)
         {
             TCPImpl tcp = new TCPImpl();
             tcp.ref();
             return tcp;
+        }
+
+        @Override
+        public String toString()
+        {
+            if (svrChannel != null) {
+                return svrChannel.toString();
+            } else if (clientChannel != null) {
+                return clientChannel.toString();
+            } else {
+                return super.toString();
+            }
         }
 
         private void clientInit()
@@ -144,32 +157,38 @@ public class TCPWrap
         }
 
         @JSSetter("onconnection")
+        @SuppressWarnings("unused")
         public void setOnConnection(Function oc) {
             this.onConnection = oc;
         }
 
         @JSGetter("onconnection")
+        @SuppressWarnings("unused")
         public Function getOnConnection() {
             return onConnection;
         }
 
         @JSSetter("onread")
+        @SuppressWarnings("unused")
         public void setOnRead(Function r) {
             this.onRead = r;
         }
 
         @JSGetter("onread")
+        @SuppressWarnings("unused")
         public Function getOnRead() {
             return onRead;
         }
 
         @JSGetter("bytes")
+        @SuppressWarnings("unused")
         public int getByteCount()
         {
             return byteCount;
         }
 
         @JSGetter("writeQueueSize")
+        @SuppressWarnings("unused")
         public int getWriteQueueSize()
         {
             if (writeQueue == null) {
@@ -200,6 +219,7 @@ public class TCPWrap
             }
         }
         @JSFunction
+        @SuppressWarnings("unused")
         public static void close(Context cx, Scriptable thisObj, Object[] args, Function func)
         {
             Function callback = functionArg(args, 0, false);
@@ -238,6 +258,7 @@ public class TCPWrap
         }
 
         @JSFunction
+        @SuppressWarnings("unused")
         public String bind(String address, int port)
         {
             clearErrno();
@@ -250,6 +271,7 @@ public class TCPWrap
         }
 
         @JSFunction
+        @SuppressWarnings("unused")
         public String bind6(String address, int port)
         {
             // TODO Java doesn't care. Do we need a check?
@@ -257,6 +279,7 @@ public class TCPWrap
         }
 
         @JSFunction
+        @SuppressWarnings("unused")
         public String listen(int backlog)
         {
             clearErrno();
@@ -365,6 +388,7 @@ public class TCPWrap
         }
 
         @JSFunction
+        @SuppressWarnings("unused")
         public static Object writeBuffer(Context cx, Scriptable thisObj, Object[] args, Function func)
         {
             ensureArg(args, 0);
@@ -381,6 +405,7 @@ public class TCPWrap
         }
 
         @JSFunction
+        @SuppressWarnings("unused")
         public static Object writeUtf8String(Context cx, Scriptable thisObj, Object[] args, Function func)
         {
             String s = stringArg(args, 0);
@@ -388,6 +413,7 @@ public class TCPWrap
         }
 
         @JSFunction
+        @SuppressWarnings("unused")
         public static Object writeAsciiString(Context cx, Scriptable thisObj, Object[] args, Function func)
         {
             String s = stringArg(args, 0);
@@ -395,6 +421,7 @@ public class TCPWrap
         }
 
         @JSFunction
+        @SuppressWarnings("unused")
         public static Object writeUcs2String(Context cx, Scriptable thisObj, Object[] args, Function func)
         {
             String s = stringArg(args, 0);
@@ -413,6 +440,7 @@ public class TCPWrap
         }
 
         @JSFunction
+        @SuppressWarnings("unused")
         public static Object shutdown(Context cx, Scriptable thisObj, Object[] args, Function func)
         {
             TCPImpl tcp = (TCPImpl)thisObj;
@@ -459,6 +487,7 @@ public class TCPWrap
         }
 
         @JSFunction
+        @SuppressWarnings("unused")
         public void readStart()
         {
             clearErrno();
@@ -469,6 +498,7 @@ public class TCPWrap
         }
 
         @JSFunction
+        @SuppressWarnings("unused")
         public void readStop()
         {
             clearErrno();
@@ -479,6 +509,7 @@ public class TCPWrap
         }
 
         @JSFunction
+        @SuppressWarnings("unused")
         public static Object connect(Context cx, Scriptable thisObj, Object[] args, Function func)
         {
             final TCPImpl tcp = (TCPImpl)thisObj;
@@ -541,6 +572,7 @@ public class TCPWrap
         }
 
         @JSFunction
+        @SuppressWarnings("unused")
         public static Object connect6(Context cx, Scriptable thisObj, Object[] args, Function func)
         {
             return connect(cx, thisObj,  args, func);
@@ -696,6 +728,7 @@ public class TCPWrap
         }
 
         @JSFunction
+        @SuppressWarnings("unused")
         public static Object getsockname(Context cx, Scriptable thisObj, Object[] args, Function func)
         {
             TCPImpl tcp = (TCPImpl)thisObj;
@@ -715,6 +748,7 @@ public class TCPWrap
         }
 
         @JSFunction
+        @SuppressWarnings("unused")
         public static Object getpeername(Context cx, Scriptable thisObj, Object[] args, Function func)
         {
             TCPImpl tcp = (TCPImpl)thisObj;
@@ -734,6 +768,7 @@ public class TCPWrap
         }
 
         @JSFunction
+        @SuppressWarnings("unused")
         public void setNoDelay(boolean nd)
         {
             clearErrno();
@@ -748,6 +783,7 @@ public class TCPWrap
         }
 
         @JSFunction
+        @SuppressWarnings("unused")
         public void setKeepAlive(boolean nd)
         {
             clearErrno();
@@ -762,6 +798,7 @@ public class TCPWrap
         }
 
         @JSFunction
+        @SuppressWarnings("unused")
         public void setSimultaneousAccepts(int accepts)
         {
             // Not implemented in Java
@@ -800,17 +837,20 @@ public class TCPWrap
         }
 
         @JSSetter("oncomplete")
+        @SuppressWarnings("unused")
         public void setOnComplete(Function c)
         {
             this.onComplete = c;
         }
 
         @JSGetter("oncomplete")
+        @SuppressWarnings("unused")
         public Function getOnComplete() {
             return onComplete;
         }
 
         @JSGetter("bytes")
+        @SuppressWarnings("unused")
         public int getLength() {
             return length;
         }
@@ -830,11 +870,13 @@ public class TCPWrap
         }
 
         @JSSetter("oncomplete")
+        @SuppressWarnings("unused")
         public void setOnComplete(Function f) {
             this.onComplete = f;
         }
 
         @JSGetter("oncomplete")
+        @SuppressWarnings("unused")
         public Function getOnComplete() {
             return onComplete;
         }

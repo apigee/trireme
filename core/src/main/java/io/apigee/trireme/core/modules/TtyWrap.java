@@ -52,14 +52,15 @@ public class TtyWrap
     public Scriptable registerExports(Context cx, Scriptable global, NodeRuntime runtime)
         throws InvocationTargetException, IllegalAccessException, InstantiationException
     {
-        ScriptableObject.defineClass(global, TtyModuleImpl.class);
+        ScriptableObject.defineClass(global, Referenceable.class, false, true);
+        ScriptableObject.defineClass(global, TtyModuleImpl.class, false, true);
         TtyModuleImpl mod = (TtyModuleImpl)cx.newObject(global, TtyModuleImpl.CLASS_NAME);
         ScriptableObject.defineClass(mod, TtyImpl.class, false, true);
         return mod;
     }
 
     public static class TtyModuleImpl
-        extends ScriptableObject
+        extends Referenceable
     {
         public static final String CLASS_NAME = "_ttyModuleClass";
 
@@ -364,6 +365,14 @@ public class TtyWrap
             console.writer().flush();
 
             return ret;
+        }
+
+        @SuppressWarnings("unused")
+        @JSFunction
+        public void close()
+        {
+            super.close();
+            stopReading();
         }
     }
 }

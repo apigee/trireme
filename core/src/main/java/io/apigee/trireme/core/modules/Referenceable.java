@@ -43,7 +43,7 @@ public class Referenceable
         clearErrno();
         if (!referenced) {
             referenced = true;
-            getRunner().pin();
+            getRunner().pin(this);
         }
     }
 
@@ -53,7 +53,7 @@ public class Referenceable
         clearErrno();
         if (referenced) {
             referenced = false;
-            getRunner().unPin();
+            getRunner().unPin(this);
         }
     }
 

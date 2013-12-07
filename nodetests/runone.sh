@@ -13,7 +13,7 @@ td=./src/test/resources/test/tmp
 rm -rf ${td}
 mkdir ${td}
 
-ARGS=-Xmx1g
+ARGS="-Xmx1g -ea:io.apigee..."
 
 if [ $1 == "-d" ]
 then

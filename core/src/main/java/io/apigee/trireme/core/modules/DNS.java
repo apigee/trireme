@@ -106,7 +106,7 @@ public class DNS
             // TO prevent many, many tests from exiting, we have to "pin" the main script runner thread
             // before we go off into another thread, so it doesn't exit.
             final Scriptable domain = runner.getDomain();
-            runner.pin();
+            runner.pin(this);
             runner.getAsyncPool().execute(new Runnable()
             {
                 @Override
@@ -137,7 +137,7 @@ public class DNS
             } catch (IOException ioe) {
                 invokeCallback(cx, callback, Constants.EIO, null, family, domain);
             } finally {
-                runner.unPin();
+                runner.unPin(this);
                 Context.exit();
             }
         }

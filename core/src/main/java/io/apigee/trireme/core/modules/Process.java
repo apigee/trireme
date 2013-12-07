@@ -78,7 +78,7 @@ public class Process
         proc.init(cx, runner);
         /*
          * Note on dlopen -- "module" module will silently ignore it if not defined, but having it throw
-         * causes tests to fail.
+         * causes tests to fail. That's why it's not in this list.
          */
         proc.defineFunctionProperties(
             new String[] { "binding", "abort", "chdir", "cwd", "reallyExit",
@@ -125,7 +125,6 @@ public class Process
 
         private long startTime;
         private ScriptRunner runner;
-        private NodeExitException exitStatus;
         private String title = DEFAULT_TITLE;
         private int umask = DEFAULT_UMASK;
 
@@ -234,8 +233,7 @@ public class Process
         public void abort()
             throws NodeExitException
         {
-            exitStatus = new NodeExitException(NodeExitException.Reason.FATAL);
-            throw exitStatus;
+            throw new NodeExitException(NodeExitException.Reason.FATAL);
         }
 
         @SuppressWarnings("unused")
@@ -254,14 +252,12 @@ public class Process
         public static void reallyExit(Context cx, Scriptable thisObj, Object[] args, Function func)
             throws NodeExitException
         {
-            ProcessImpl self = (ProcessImpl)thisObj;
             if (args.length >= 1) {
                 int code = (Integer)Context.jsToJava(args[0], Integer.class);
-                self.exitStatus = new NodeExitException(NodeExitException.Reason.NORMAL, code);
+                throw new NodeExitException(NodeExitException.Reason.NORMAL, code);
             } else {
-                self.exitStatus = new NodeExitException(NodeExitException.Reason.NORMAL, 0);
+                throw new NodeExitException(NodeExitException.Reason.NORMAL, 0);
             }
-            throw self.exitStatus;
         }
 
         @SuppressWarnings("unused")
@@ -427,7 +423,7 @@ public class Process
         {
             assert(needImmediateCallback);
             log.trace("Calling immediate callbacks");
-            // Don't reset needImmediateCallback -- process does it
+            // Don't reset needImmediateCallback -- timer.js does it directly
             immediateCallback.call(cx, this, this, null);
         }
 
@@ -441,7 +437,7 @@ public class Process
             this.immediateCallback = cb;
         }
 
-        // SPINNER TICKS: Not sure yet why this is here
+        // SPINNER TICKS: This is what we actually call when we are ready to run tick callbacks.
 
         @SuppressWarnings("unused")
         public Function getTickFromSpinner() {
@@ -472,10 +468,16 @@ public class Process
                 log.trace("Calling tick spinner callbacks. Tick info = {}, {}, {}",
                           tickInfo.get(0, tickInfo), tickInfo.get(1, tickInfo), tickInfo.get(2, tickInfo));
             }
-            // Reset this because ticks might result in the need for more ticks!
             needTickCallback = false;
-            //tickCallback.call(cx, this, this, null);
-            tickFromSpinner.call(cx, this, this, null);
+            boolean noMoreTicks = Context.toBoolean(tickFromSpinner.call(cx, this, this, null));
+            if (log.isTraceEnabled()) {
+                log.trace("called tickFromSpinner: {}", noMoreTicks);
+            }
+            /*
+            if (noMoreTicks) {
+                needTickCallback = false;
+            }
+            */
         }
 
         public boolean isNeedTickCallback() {

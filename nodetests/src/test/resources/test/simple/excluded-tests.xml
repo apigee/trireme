@@ -166,10 +166,6 @@
         <Description>Cipher ordering is not controled in SSLEngine the same way it is in OpenSSL.</Description>
     </Excluded>
     <Excluded>
-        <Name>test-stdout-close-unref.js</Name>
-        <Description>Depends on undocumented _handle on stdout</Description>
-    </Excluded>
-    <Excluded>
         <Name>test-stdout-close-catch.js</Name>
         <Description>./node dependency</Description>
     </Excluded>
@@ -284,10 +280,6 @@
     <Excluded>
         <Name>test-stream2-stderr-sync.js</Name>
         <Description>Depends on undocumented parts of the TTY module</Description>
-    </Excluded>
-    <Excluded>
-        <Name>test-next-tick-starvation.js</Name>
-        <Description>Give us a break and increase the timeout -- still a valid test.</Description>
     </Excluded>
 
     <!-- INTERNAL TESTS
@@ -443,16 +435,16 @@
         <Description>Flaky test that depends on "ab"</Description>
     </Excluded>
     <Excluded>
-        <Name>performance.js</Name>
-        <Description>Not really a unit test but in there just for fun</Description>
-    </Excluded>
-    <Excluded>
         <Name>test-stdout-cannot-be-closed-child-process-pipe.js</Name>
         <Description>Depends on a specific error message</Description>
     </Excluded>
     <Excluded>
         <Name>test-fs-realpath.js</Name>
         <Description>This is pretty complex and depends on a lot of proprietary FS stuff.</Description>
+    </Excluded>
+    <Excluded>
+        <Name>test-stream-pipe-multi.js</Name>
+        <Description>One of those tests that tries to run until it runs out of stack space.</Description>
     </Excluded>
 
     <!-- DEPRECATION

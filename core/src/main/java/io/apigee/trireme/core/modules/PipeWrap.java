@@ -176,7 +176,9 @@ public class PipeWrap
                 if (log.isDebugEnabled()) {
                     log.debug("Closing fd {} = {}", fd, sd);
                 }
-                sd.getStream().close();
+                if ((sd != null) && (sd.getStream() != null)) {
+                    sd.getStream().close();
+                }
             } catch (IOException ioe) {
                 if (log.isDebugEnabled()) {
                     log.debug("Error closing fd {}: {}", fd, ioe);
@@ -312,7 +314,7 @@ public class PipeWrap
 
             if (asyncMode) {
                 queueSize.incrementAndGet();
-                runner.pin();
+                runner.pin(this);
                 runner.getAsyncPool().submit(new Runnable() {
                 @Override
                 public void run()
@@ -364,7 +366,7 @@ public class PipeWrap
                 {
                     // The "oncomplete" function is set AFTER the write call returns, so we have to
                     // wait until now to pick it up
-                    runner.unPin();
+                    runner.unPin(PipeImpl.this);
                     Function oc = (Function)ScriptableObject.getProperty(req, "oncomplete");
                     Scriptable err =
                         (fioe == null ? null : Utils.makeErrorObject(cx, scope, fioe.toString()));

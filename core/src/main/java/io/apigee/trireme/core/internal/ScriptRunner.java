@@ -109,6 +109,8 @@ public class ScriptRunner
     private final  Selector                      selector;
     private        int                           timerSequence;
     private final  AtomicInteger                 pinCount      = new AtomicInteger(0);
+    private final  IdentityHashMap<Object, Object> pinners = new IdentityHashMap<Object, Object>();
+    private        boolean                       strictPinning;
     private        int                           maxTickDepth = DEFAULT_TICK_DEPTH;
 
     // Globals that are set up for the process
@@ -166,6 +168,7 @@ public class ScriptRunner
         this.args = args;
         this.sandbox = sandbox;
         this.pathTranslator = new PathTranslator();
+        assert(enableStrictPinning());
 
         if ((sandbox != null) && (sandbox.getFilesystemRoot() != null)) {
             try {
@@ -201,6 +204,13 @@ public class ScriptRunner
         } catch (IOException ioe) {
             throw new AssertionError(ioe);
         }
+    }
+
+    private boolean enableStrictPinning()
+    {
+        log.debug("Strict pin checks are enabled because assertions are enabled");
+        strictPinning = true;
+        return true;
     }
 
     public void close()
@@ -445,21 +455,35 @@ public class ScriptRunner
     }
 
     @Override
-    public void pin()
+    public void pin(Object pinner)
     {
         int currentPinCount = pinCount.incrementAndGet();
-        log.debug("Pin count is now {}", currentPinCount);
+        if (log.isDebugEnabled()) {
+            log.debug("Pin count is now {}", currentPinCount);
+        }
+        if (strictPinning || log.isDebugEnabled()) {
+            synchronized (pinners) {
+                assert(!pinners.containsKey(pinner));
+                pinners.put(pinner, pinner);
+            }
+        }
     }
 
     @Override
-    public void unPin()
+    public void unPin(Object pinner)
     {
-        int currentPinCount = pinCount.decrementAndGet();
-        log.debug("Pin count is now {}", currentPinCount);
-
-        if (currentPinCount < 0) {
-            log.warn("Negative pin count: {}", currentPinCount);
+        if (strictPinning || log.isDebugEnabled()) {
+            synchronized (pinners) {
+                assert(pinners.containsKey(pinner));
+                pinners.remove(pinner);
+            }
         }
+
+        int currentPinCount = pinCount.decrementAndGet();
+        if (log.isDebugEnabled()) {
+            log.debug("Pin count is now {}", currentPinCount);
+        }
+        assert(currentPinCount >= 0);
         if (currentPinCount == 0) {
             selector.wakeup();
         }
@@ -608,11 +632,9 @@ public class ScriptRunner
             try {
                 startup.call(cx, scope, process, new Object[] { process });
             } catch (NodeExitException nee) {
-                if (log.isDebugEnabled()) {
-                    log.debug("Exiting via process.exit: {}", nee);
-                }
-                return nee.getStatus();
+                throw nee;
             } catch (RhinoException re) {
+                // Delegate handling of unhandled exceptions to node.js where it might be caught or rethrown
                 boolean caught = handleScriptException(cx, re);
                 if (!caught) {
                     return new ScriptStatus(re);
@@ -627,10 +649,7 @@ public class ScriptRunner
                 try {
                     return mainLoop(cx);
                 } catch (NodeExitException nee) {
-                    if (log.isDebugEnabled()) {
-                        log.debug("Exiting via process.exit: {}", nee);
-                    }
-                    return nee.getStatus();
+                    throw nee;
                 } catch (RhinoException re) {
                     boolean caught = handleScriptException(cx, re);
                     if (!caught) {
@@ -639,6 +658,11 @@ public class ScriptRunner
                 }
             }
 
+        } catch (NodeExitException nee) {
+            if (log.isDebugEnabled()) {
+                log.debug("Exiting via process.exit: {}", nee);
+            }
+            return nee.getStatus();
         } catch (Throwable t) {
             if (log.isDebugEnabled()) {
                 log.debug("Fatal error in script: {}", t);
@@ -770,6 +794,13 @@ public class ScriptRunner
                 log.debug("Script future has been cancelled. Exiting main loop");
                 return ScriptStatus.CANCELLED;
             }
+            if (log.isDebugEnabled() && (pollTimeout > 1000L) && (pinCount.get() > 0)) {
+                synchronized (pinners) {
+                    for (Object pinner : pinners.keySet()) {
+                        log.debug("Pinner: {}", pinner);
+                    }
+                }
+            }
 
             // Check for network I/O and also sleep if necessary
             if (pollTimeout > 0L) {
@@ -780,6 +811,34 @@ public class ScriptRunner
                 selector.select(pollTimeout);
             } else {
                 selector.selectNow();
+            }
+
+            // Check the timer queue for all expired timers.
+            // This has to be before running ticks, otherwise timers may never fire if later events
+            // raise exceptions.
+            Activity timed = timerQueue.peek();
+            long now = System.currentTimeMillis();
+            while ((timed != null) && (timed.timeout <= now)) {
+                timerQueue.poll();
+                if (!timed.cancelled) {
+                    boolean timing = startTiming(cx);
+                    try {
+                        if (log.isDebugEnabled()) {
+                            log.debug("Executing timer {}", timed.id);
+                        }
+                        timed.execute(cx);
+                    } finally {
+                        endTiming(timing, cx);
+                    }
+                    if (timed.repeating && !timed.cancelled) {
+                        timed.timeout = now + timed.interval;
+                        if (log.isDebugEnabled()) {
+                            log.debug("Re-registering {} to fire at {}", timed.id, timed.timeout);
+                        }
+                        timerQueue.add(timed);
+                    }
+                }
+                timed = timerQueue.peek();
             }
 
             // Process any sockets that have pending I/O
@@ -825,31 +884,7 @@ public class ScriptRunner
                 }
             }
 
-            // Check the timer queue for all expired timers
-            Activity timed = timerQueue.peek();
-            long now = System.currentTimeMillis();
-            while ((timed != null) && (timed.timeout <= now)) {
-                timerQueue.poll();
-                if (!timed.cancelled) {
-                    boolean timing = startTiming(cx);
-                    try {
-                        if (log.isDebugEnabled()) {
-                            log.debug("Executing timer {}", timed.id);
-                        }
-                        timed.execute(cx);
-                    } finally {
-                        endTiming(timing, cx);
-                    }
-                    if (timed.repeating && !timed.cancelled) {
-                        timed.timeout = now + timed.interval;
-                        if (log.isDebugEnabled()) {
-                            log.debug("Re-registering {} to fire at {}", timed.id, timed.timeout);
-                        }
-                        timerQueue.add(timed);
-                    }
-                }
-                timed = timerQueue.peek();
-            }
+
             pollTimeout = calculatePollTimeout();
         }
         return ScriptStatus.OK;

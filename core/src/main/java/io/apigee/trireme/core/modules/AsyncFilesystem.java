@@ -305,7 +305,7 @@ public class AsyncFilesystem
                         log.debug("Opening {} with {}", path, options);
                     }
                     file = AsynchronousFileChannel.open(path, options, pool,
-                                                        PosixFilePermissions.asFileAttribute(modeToPerms(mode)));
+                                                        PosixFilePermissions.asFileAttribute(modeToPerms(mode, true)));
 
                 } catch (NoSuchFileException fnfe) {
                     log.debug("File not found");
@@ -824,7 +824,7 @@ public class AsyncFilesystem
                 log.debug("mkdir({})", path);
             }
             Path p  = translatePath(path);
-            Set<PosixFilePermission> perms = modeToPerms(mode);
+            Set<PosixFilePermission> perms = modeToPerms(mode, true);
 
             try {
                 Files.createDirectory(p,
@@ -1068,10 +1068,14 @@ public class AsyncFilesystem
             });
         }
 
-        private Set<PosixFilePermission> modeToPerms(int origMode)
+        private Set<PosixFilePermission> modeToPerms(int origMode, boolean onCreate)
         {
-            int mode =
-                origMode & (~(runner.getProcess().getUmask()));
+            int mode;
+            if (onCreate) {
+                mode = origMode & (~(runner.getProcess().getUmask()));
+            } else {
+                mode = origMode;
+            }
             Set<PosixFilePermission> perms =
                 EnumSet.noneOf(PosixFilePermission.class);
             if ((mode & Constants.S_IXUSR) != 0) {
@@ -1102,9 +1106,14 @@ public class AsyncFilesystem
                 perms.add(PosixFilePermission.OTHERS_WRITE);
             }
             if (log.isDebugEnabled()) {
-                log.debug("Mode {} and {} becomes {} then {}",
+                if (onCreate) {
+                    log.debug("Mode {} and {} becomes {} then {}",
                           Integer.toOctalString(origMode), Integer.toOctalString(runner.getProcess().getUmask()),
                           Integer.toOctalString(mode), perms);
+                } else {
+                    log.debug("Mode {} becomes {}",
+                          Integer.toOctalString(origMode), perms);
+                }
             }
             return perms;
         }
@@ -1112,7 +1121,7 @@ public class AsyncFilesystem
         private Object[] doChmod(Path path, int mode, boolean noFollow)
             throws NodeOSException
         {
-            Set<PosixFilePermission> perms = modeToPerms(mode);
+            Set<PosixFilePermission> perms = modeToPerms(mode, false);
 
             if (log.isDebugEnabled()) {
                 log.debug("chmod({}, {}) to {}", path, mode, perms);

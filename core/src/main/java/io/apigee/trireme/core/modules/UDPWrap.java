@@ -88,7 +88,6 @@ public class UDPWrap
         public static Object newUDPImpl(Context cx, Object[] args, Function ctorObj, boolean inNewExpr)
         {
             UDPImpl udp = new UDPImpl();
-            udp.ref();
             udp.runner = getRunner(cx);
             return udp;
         }
@@ -288,6 +287,7 @@ public class UDPWrap
                         }
                     }
                 }, "Trireme UDP read thread");
+                ref();
                 readThread.setDaemon(true);
                 readThread.start();
             }
@@ -296,6 +296,7 @@ public class UDPWrap
         @JSFunction
         public void recvStop()
         {
+            unref();
             clearErrno();
             if (readThread != null) {
                 readThread.interrupt();

@@ -47,6 +47,10 @@
         <Description>Needs some IPv6 support and testing</Description>
     </Excluded>
     <Excluded>
+        <Name>test-net-throttle.js</Name>
+        <Description>Depends on internal variables.</Description>
+    </Excluded>
+    <Excluded>
         <Name>test-net-connect-econnrefused.js</Name>
         <Description>Depends on "process" variable that is not implemented</Description>
     </Excluded>

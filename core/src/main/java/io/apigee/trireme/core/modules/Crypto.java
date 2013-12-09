@@ -701,7 +701,10 @@ public class Crypto
                                        sigBuf.getLength());
 
             } catch (GeneralSecurityException gse) {
-                throw Utils.makeError(cx, thisObj, "error verifying: " + gse);
+                if (log.isDebugEnabled()) {
+                    log.debug("Error in signature verification: {}", gse);
+                }
+                return false;
             }
         }
     }

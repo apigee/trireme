@@ -162,7 +162,7 @@ public class Filesystem
             throws IOException
         {
             checkCall(f.createNewFile(), f, "createNewFile");
-            setMode(f, mode);
+            setMode(f, mode, true);
         }
 
         private File translatePath(String path)
@@ -175,11 +175,15 @@ public class Filesystem
             return trans;
         }
 
-        private void setMode(File f, int origMode)
+        private void setMode(File f, int origMode, boolean onCreate)
             throws IOException
         {
-            int mode =
-                origMode & (~(runner.getProcess().getUmask()));
+            int mode;
+            if (onCreate) {
+                mode = origMode & (~(runner.getProcess().getUmask()));
+            } else {
+                mode = origMode;
+            }
             if (((mode & Constants.S_IROTH) != 0) || ((mode & Constants.S_IRGRP) != 0)) {
                 checkCall(f.setReadable(true, false), f, "setReadable");
             } else if ((mode & Constants.S_IRUSR) != 0) {
@@ -714,7 +718,7 @@ public class Filesystem
                 throw new NodeOSException(Constants.EIO);
             }
             try {
-                setMode(file, mode);
+                setMode(file, mode, true);
             } catch (IOException ioe) {
                 throw new NodeOSException(Constants.EIO, ioe);
             }

@@ -109,7 +109,7 @@ public class ScriptRunner
     private final  Selector                      selector;
     private        int                           timerSequence;
     private final  AtomicInteger                 pinCount      = new AtomicInteger(0);
-    private final  IdentityHashMap<Object, Object> pinners = new IdentityHashMap<Object, Object>();
+    private final  IdentityHashMap<Object, Integer> pinners = new IdentityHashMap<Object, Integer>();
     private        boolean                       strictPinning;
     private        int                           maxTickDepth = DEFAULT_TICK_DEPTH;
 
@@ -462,9 +462,11 @@ public class ScriptRunner
             log.debug("Pin count is now {}", currentPinCount);
         }
         if (strictPinning || log.isDebugEnabled()) {
+            // Extra strict checking and debugging for pins. Disabled by default because this is
+            // a critical code path where we can't have synchonization.
             synchronized (pinners) {
-                assert(!pinners.containsKey(pinner));
-                pinners.put(pinner, pinner);
+                Integer pinned = pinners.get(pinner);
+                pinners.put(pinner, (pinned == null ? 1 : pinned + 1));
             }
         }
     }
@@ -474,8 +476,11 @@ public class ScriptRunner
     {
         if (strictPinning || log.isDebugEnabled()) {
             synchronized (pinners) {
-                assert(pinners.containsKey(pinner));
-                pinners.remove(pinner);
+                Integer pc = pinners.remove(pinner);
+                assert(pc != null);
+                if ((pc != null) && (pc > 1)) {
+                    pinners.put(pinner, pc - 1);
+                }
             }
         }
 

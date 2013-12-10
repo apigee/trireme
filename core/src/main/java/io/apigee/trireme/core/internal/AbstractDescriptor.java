@@ -5,7 +5,7 @@ import java.io.Closeable;
 public abstract class AbstractDescriptor
     implements Closeable
 {
-    public enum DescriptorType { FILE, PIPE, TTY, INVALID }
+    public enum DescriptorType { FILE, PIPE, TTY, IPC, INVALID }
 
     private DescriptorType type;
 

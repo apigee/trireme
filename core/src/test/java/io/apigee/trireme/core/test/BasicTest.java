@@ -489,6 +489,13 @@ public class BasicTest
         future.cancel(true);
     }
 
+    @Test
+    public void testPipeWrap()
+        throws InterruptedException, ExecutionException, NodeException
+    {
+        runTest("pipepipetest.js");
+    }
+
     private void runTest(String name)
         throws InterruptedException, ExecutionException, NodeException
     {

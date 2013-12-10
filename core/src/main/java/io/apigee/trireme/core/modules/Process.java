@@ -82,7 +82,7 @@ public class Process
          */
         proc.defineFunctionProperties(
             new String[] { "binding", "abort", "chdir", "cwd", "reallyExit",
-                           "_kill", "send", "memoryUsage", "_needTickCallback", "_usingDomains",
+                           "_kill", "memoryUsage", "_needTickCallback", "_usingDomains",
                            "umask", "uptime", "hrtime",
                            "_debugProcess", "_debugPause", "_debugEnd" },
             ProcessImpl.class, 0);
@@ -90,7 +90,6 @@ public class Process
         proc.defineProperty("versions", ProcessImpl.class, 0);
         proc.defineProperty("features", ProcessImpl.class, 0);
         proc.defineProperty("arch", ProcessImpl.class, 0);
-        proc.defineProperty("_errno", null, Utils.findMethod(ProcessImpl.class, "getErrno"), null, 0);
         proc.defineProperty("domain", ProcessImpl.class, 0);
 
         proc.defineProperty("title", ProcessImpl.class, 0);
@@ -321,25 +320,6 @@ public class Process
             // Java doesn't give us the OS pid. However this is used for debug to show different Node scripts
             // on the same machine, so return a value that uniquely identifies this ScriptRunner.
             return System.identityHashCode(runner) % 65536;
-        }
-
-        @SuppressWarnings("unused")
-        public static void send(Context cx, Scriptable thisObj, Object[] args, Function func)
-        {
-            Object message = objArg(args, 0, Object.class, true);
-            ProcessImpl self = (ProcessImpl)thisObj;
-
-            if (self.runner.getParentProcess() == null) {
-                throw Utils.makeError(cx, thisObj, "IPC is not enabled back to the parent");
-            }
-
-            ProcessWrap.ProcessImpl pw = (ProcessWrap.ProcessImpl)self.runner.getParentProcess();
-            pw.getOnMessage().call(cx, pw, pw, new Object[] { message });
-        }
-
-        @SuppressWarnings("unused")
-        public Object getErrno() {
-            return runner.getErrno();
         }
 
         @SuppressWarnings("unused")

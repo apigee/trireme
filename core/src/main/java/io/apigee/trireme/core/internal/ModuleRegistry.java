@@ -115,6 +115,7 @@ public class ModuleRegistry
         addCompiledModule("_stream_transform", "io.apigee.trireme.fromnode._stream_transform");
         addCompiledModule("_stream_writable", "io.apigee.trireme.fromnode._stream_writable");
         addCompiledModule("assert", "io.apigee.trireme.fromnode.assert");
+        addCompiledModule("child_process", "io.apigee.trireme.fromnode.child_process");
         addCompiledModule("cluster", "io.apigee.trireme.fromnode.cluster");
         addCompiledModule("console", "io.apigee.trireme.fromnode.console");
         addCompiledModule("constants", "io.apigee.trireme.fromnode.constants");
@@ -146,7 +147,6 @@ public class ModuleRegistry
         addCompiledModule("_fatal_handler", "io.apigee.trireme.scripts._fatal_handler");
         addCompiledModule("http", "io.apigee.trireme.scripts.adaptorhttp");
         addCompiledModule("https", "io.apigee.trireme.scripts.adaptorhttps");
-        addCompiledModule("child_process", "io.apigee.trireme.scripts.child_process");
         addCompiledModule("native_stream_readable", "io.apigee.trireme.scripts.native_stream_readable");
         addCompiledModule("native_stream_writable", "io.apigee.trireme.scripts.native_stream_writable");
         addCompiledModule("trireme_metrics", "io.apigee.trireme.scripts.trireme_metrics");

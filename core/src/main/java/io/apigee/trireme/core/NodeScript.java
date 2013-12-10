@@ -44,9 +44,10 @@ public class NodeScript
     private ScriptRunner runner;
     private Object attachment;
     private Sandbox sandbox;
-    private Scriptable parentProcess;
     private boolean pin;
     private Map<String, String> environment;
+    private Object ipcPipe;
+    private int ipcFd;
 
     NodeScript(NodeEnvironment env, String scriptName, File script, String[] args)
     {
@@ -86,7 +87,7 @@ public class NodeScript
         } else {
             runner = new ScriptRunner(this, env, sandbox, scriptName, scriptFile, args);
         }
-        runner.setParentProcess(parentProcess);
+        runner.setIpcPipe(ipcPipe, ipcFd);
         ScriptFuture future = new ScriptFuture(runner);
         runner.setFuture(future);
         if (pin) {
@@ -117,7 +118,7 @@ public class NodeScript
 
         runner = new ScriptRunner(this, env, sandbox, scriptName,
                                   makeModuleScript(), args);
-        runner.setParentProcess(parentProcess);
+        runner.setIpcPipe(ipcPipe, ipcFd);
         ScriptFuture future = new ScriptFuture(runner);
         runner.setFuture(future);
         runner.pin(this);
@@ -226,14 +227,12 @@ public class NodeScript
     }
 
     /**
-     * An internal method to identify the child process argument of the parent who forked this script.
+     * An internal method to set up IPC between Trireme processes in the same VM.
      */
-    public void _setParentProcess(Scriptable parent)
+    public void _setIpcPipe(Object pipe, int fd)
     {
-        this.parentProcess = parent;
-        if (runner != null) {
-            runner.setParentProcess(parent);
-        }
+        this.ipcPipe = pipe;
+        this.ipcFd = fd;
     }
 
     /**

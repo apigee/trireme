@@ -26,18 +26,57 @@
 
 var net = require('net');
 var stream = require('stream');
+var pipeWrap = process.binding('pipe_wrap');
 
-module.exports.createReadableStream = function(fd) {
+module.exports.createPipe = function() {
+  return new pipeWrap.Pipe();
+};
+
+// Set up a pipe from "fd" to the "pipeWrap" that we already created
+module.exports.startInputPipeHandle = function(fd, targetHandle) {
+  var src;
+  switch (fd) {
+    case 0:
+      src = process.stdin;
+      break;
+    default:
+      throw Error('Invalid fd ' + fd);
+  }
+
+  var target = new net.Socket({ handle: targetHandle });
+  src.pipe(target);
+};
+
+// Same thing, other way around
+module.exports.startOutputPipeHandle = function(fd, srcHandle) {
+  var target;
+  switch (fd) {
+    case 1:
+      target = process.stdout;
+      break;
+    case 2:
+      target = process.stderr;
+      break;
+    default:
+      throw Error('Invalid fd ' + fd);
+  }
+
+  var src = new net.Socket({ handle: srcHandle });
+  src.pipe(target);
+};
+
+// Given a handle (a PipeWrap), set up a stream that can only read from it
+module.exports.createReadableStream = function(handle) {
   return new net.Socket({
-    fd: fd,
+    handle: handle,
     readable: true,
     writable: false
   });
 };
 
-module.exports.createWritableStream = function(fd) {
+module.exports.createWritableStream = function(handle) {
   return new net.Socket({
-    fd: fd,
+    handle: handle,
     readable: false,
     writable: true
   });

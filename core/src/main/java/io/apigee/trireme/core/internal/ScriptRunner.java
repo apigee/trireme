@@ -33,6 +33,7 @@ import io.apigee.trireme.core.ScriptTask;
 import io.apigee.trireme.core.Utils;
 import io.apigee.trireme.core.modules.Buffer;
 import io.apigee.trireme.core.modules.NativeModule;
+import io.apigee.trireme.core.modules.PipeWrap;
 import io.apigee.trireme.core.modules.Process;
 import io.apigee.trireme.net.SelectorHandler;
 import org.mozilla.javascript.Context;
@@ -320,8 +321,18 @@ public class ScriptRunner
         return process;
     }
 
-    public void setParentProcess(Scriptable parentProcess) {
-        this.parentProcess = parentProcess;
+    public void setIpcPipe(Object p, int fd)
+    {
+        if (p != null) {
+            if (log.isDebugEnabled()) {
+                log.debug("Setting fd {} to pull from {}", fd, p);
+            }
+            // This is a pipe that will let us send and receive to and from the parent process. It is all set up.
+            // need to register it to the specified fd so that node.js will magically pick it up.
+            PipeWrap.PipeImpl pipe = (PipeWrap.PipeImpl)p;
+            IPCDescriptor d = new IPCDescriptor(pipe);
+            fileDescriptors.put(fd, d);
+        }
     }
 
     public Thread getMainThread() {
@@ -496,24 +507,12 @@ public class ScriptRunner
 
     public void setErrno(String err)
     {
-        scope.put("errno", scope, err);
+        process.put("_errno", process, err);
     }
 
     public void clearErrno()
     {
-        scope.put("errno", scope, 0);
-    }
-
-    public Object getErrno()
-    {
-        if (scope.has("errno", scope)) {
-            Object errno = scope.get("errno", scope);
-            if (errno == null) {
-                return Context.getUndefinedValue();
-            }
-            return scope.get("errno", scope);
-        }
-        return Context.getUndefinedValue();
+        process.put("_errno", process, 0);
     }
 
     @Override
@@ -645,6 +644,7 @@ public class ScriptRunner
                     return new ScriptStatus(re);
                 }
             } finally {
+                initialized.countDown();
                 endTiming(timing, cx);
             }
 
@@ -675,7 +675,6 @@ public class ScriptRunner
             return new ScriptStatus(t);
         } finally {
             closeCloseables(cx);
-           initialized.countDown();
         }
     }
 

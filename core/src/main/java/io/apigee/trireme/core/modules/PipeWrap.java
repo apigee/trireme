@@ -6,12 +6,14 @@ import io.apigee.trireme.core.ScriptTask;
 import io.apigee.trireme.core.Utils;
 import io.apigee.trireme.core.internal.AbstractDescriptor;
 import io.apigee.trireme.core.internal.Charsets;
+import io.apigee.trireme.core.internal.IPCDescriptor;
 import io.apigee.trireme.core.internal.ScriptRunner;
 import io.apigee.trireme.core.internal.StreamDescriptor;
 import org.mozilla.javascript.Context;
 import org.mozilla.javascript.Function;
 import org.mozilla.javascript.Scriptable;
 import org.mozilla.javascript.ScriptableObject;
+import org.mozilla.javascript.annotations.JSConstructor;
 import org.mozilla.javascript.annotations.JSFunction;
 import org.mozilla.javascript.annotations.JSGetter;
 import org.mozilla.javascript.annotations.JSSetter;
@@ -27,13 +29,23 @@ import java.io.OutputStream;
 import java.lang.reflect.InvocationTargetException;
 import java.nio.ByteBuffer;
 import java.nio.charset.Charset;
+import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.Future;
 import java.util.concurrent.atomic.AtomicInteger;
 
 /**
- * Implement the "pipe" interface. This happens only based on standard input and output -- Java gives us no way
- * to talk to arbitrary pipes. This means that this is also used whenever standard input and output are
- * redirected.
+ * <p>
+ * Implement the "pipe" interface. This is used in a few places inside Trireme, and we do it all using "PipeWrap"
+ * for compatibility with the existing JS code.
+ * </p>
+ * <p>
+ * This code can read and write to and from Java InputStreams and OutputStreams. We use this for process
+ * stin/out/err, and when spawning subprocesses using the "ProcessBuilder" API.
+ * </p>
+ * <p>
+ * This code can also be used to connect two pipes via a thread-safe channel. This is used when two
+ * Trireme "processes" are running inside the same JVM and need to communicate.
+ * </p>
  */
 
 public class PipeWrap
@@ -69,17 +81,38 @@ public class PipeWrap
         private ScriptRunner runner;
         private OutputStream output;
         private InputStream input;
-        private boolean reading;
+        private volatile boolean reading;
         private Function onRead;
         private Future<?> readJob;
         private int fd;
         private boolean asyncMode;
+        private boolean open;
+        private PipeImpl targetPipe;
+        private PipeImpl srcPipe;
+        private ConcurrentLinkedQueue<Buffer.BufferImpl> targetQueue;
 
         private final AtomicInteger queueSize = new AtomicInteger();
 
         @Override
         public String getClassName() {
             return CLASS_NAME;
+        }
+
+        @SuppressWarnings("unused")
+        @JSConstructor
+        public static Object init(Context cx, Object[] args, Function func, boolean inNew)
+        {
+            if (!inNew) {
+                return cx.newObject(func, CLASS_NAME, args);
+            }
+            // TODO check for "ipc" flag?
+
+            return new PipeImpl();
+        }
+
+        public PipeImpl()
+        {
+            runner = getRunner();
         }
 
         @SuppressWarnings("unused")
@@ -100,6 +133,9 @@ public class PipeWrap
             return queueSize.get();
         }
 
+        /**
+         * This method is called from "node.js" to create streams for stdin / out / err.
+         */
         @SuppressWarnings("unused")
         @JSFunction
         public static void open(Context cx, Scriptable thisObj, Object[] args, Function func)
@@ -107,36 +143,119 @@ public class PipeWrap
             PipeImpl self = (PipeImpl)thisObj;
             self.fd = intArg(args, 0);
             self.runner = getRunner();
+            assert(self.runner != null);
 
             switch (self.fd) {
             case 0:
-                self.input = getRunner().getStdin();
+                self.input = self.runner.getStdin();
                 break;
             case 1:
-                self.output = getRunner().getStdout();
+                self.output = self.runner.getStdout();
                 break;
             case 2:
-                self.output = getRunner().getStderr();
+                self.output = self.runner.getStderr();
                 break;
             default:
-                AbstractDescriptor descriptor = getRunner().getDescriptor(self.fd);
-                if ((descriptor == null) || (descriptor.getType() != AbstractDescriptor.DescriptorType.PIPE)) {
+                AbstractDescriptor descriptor = self.runner.getDescriptor(self.fd);
+                if (descriptor == null) {
                     throw Utils.makeError(cx, thisObj, "Invalid FD " + self.fd);
                 }
-                try {
-                    StreamDescriptor<?> sd = (StreamDescriptor<?>)descriptor;
-                    if (sd.getStream() instanceof InputStream) {
-                        self.input = (InputStream)sd.getStream();
-                    } else if (sd.getStream() instanceof OutputStream) {
-                        self.output = (OutputStream)sd.getStream();
+
+                if (descriptor.getType() == AbstractDescriptor.DescriptorType.PIPE) {
+                    // Set up a pipe to the file descriptor that has been put here, such as a file
+                    try {
+                        StreamDescriptor<?> sd = (StreamDescriptor<?>)descriptor;
+                        if (sd.getStream() instanceof InputStream) {
+                            if (log.isDebugEnabled()) {
+                                log.debug("Setting up an input pipe for fd {} from {}", self.fd, sd.getStream());
+                            }
+                            self.input = (InputStream)sd.getStream();
+                        } else if (sd.getStream() instanceof OutputStream) {
+                            if (log.isDebugEnabled()) {
+                                log.debug("Setting up an output pipe for fd {} to {}", self.fd, sd.getStream());
+                            }
+                            self.output = (OutputStream)sd.getStream();
+                        }
+                    } catch (ClassCastException cce) {
+                        throw Utils.makeError(cx, thisObj, "Invalid FD " + self.fd);
                     }
-                } catch (ClassCastException cce) {
-                    throw Utils.makeError(cx, thisObj, "Invalid FD " + self.fd);
+                    // Only support async mode for non-stdio streams
+                    self.asyncMode = true;
+
+                } else if (descriptor.getType() == AbstractDescriptor.DescriptorType.IPC) {
+                    // Set up a bi-directional pipe to the specified FD.
+                    if (log.isDebugEnabled()) {
+                        log.debug("Setting up a thread-safe two-way pipe from fd {}", self.fd);
+                    }
+                    IPCDescriptor ipcd = (IPCDescriptor)descriptor;
+                    self.setupPipe(ipcd.getPipe());
+                    ipcd.getPipe().setupPipe(self);
+
+                } else {
+                    throw Utils.makeError(cx, thisObj, "FD has invalid type: " + self.fd);
                 }
-                // Only support async mode for non-stdio streams
-                self.asyncMode = true;
                 break;
             }
+
+            self.open = true;
+            if (log.isDebugEnabled()) {
+                log.debug("Opened fd {} in {}", self.fd, self);
+            }
+        }
+
+        /**
+         * This method is used when setting up child processes.
+         */
+        public void openInputStream(InputStream in)
+        {
+            if (log.isDebugEnabled()) {
+                log.debug("Assigning {} as input", in);
+            }
+            assert(output == null);
+            assert(srcPipe == null);
+            input = in;
+            open = true;
+        }
+
+        public void openOutputStream(OutputStream out)
+        {
+            if (log.isDebugEnabled()) {
+                log.debug("Assigning {} as output", out);
+            }
+            assert(input == null);
+            assert(targetPipe == null);
+            output = out;
+            open = true;
+        }
+
+        /**
+         * This method is used to pipe one pipe to another -- it's used when forking the process in the JVM.
+         * <i>This</i> pipe will be the source, and the other the target -- that means that this pipe is
+         * writable and stuff that you write gets written to the target.
+         */
+        public void setupPipe(PipeImpl target)
+        {
+            assert(input == null);
+            assert(output == null);
+            assert(targetPipe == null);
+            assert(target.srcPipe == null);
+
+            // TODO check synchronization here? Can we start to push before everything is assigned?
+            targetQueue = new ConcurrentLinkedQueue<Buffer.BufferImpl>();
+            targetPipe = target;
+            target.srcPipe = this;
+            open = true;
+        }
+
+        /**
+         * For unit tests.
+         */
+        @SuppressWarnings("unused")
+        @JSFunction
+        public static void _setupPipe(Context cx, Scriptable thisObj, Object[] args, Function func)
+        {
+            PipeImpl target = objArg(args, 0, PipeImpl.class, true);
+            ((PipeImpl)thisObj).setupPipe(target);
         }
 
         @SuppressWarnings("unused")
@@ -144,9 +263,6 @@ public class PipeWrap
         public static void readStart(Context cx, Scriptable thisObj, Object[] args, Function func)
         {
             PipeImpl self = (PipeImpl)thisObj;
-            if (self.input == null) {
-                throw Utils.makeError(cx, thisObj, "Pipe cannot be opened for read");
-            }
             self.startReading();
         }
 
@@ -170,41 +286,52 @@ public class PipeWrap
         @JSFunction
         public void close()
         {
+            if (!open) {
+                return;
+            }
+            if (log.isDebugEnabled()) {
+                log.debug("Closing pipe {}", this);
+            }
             stopReading();
-            StreamDescriptor<?> sd = (StreamDescriptor<?>)runner.getDescriptor(fd);
+            // TODO do we need to remove the descriptor from "runner"?
             try {
-                if (log.isDebugEnabled()) {
-                    log.debug("Closing fd {} = {}", fd, sd);
+                if (input != null) {
+                    input.close();
                 }
-                if ((sd != null) && (sd.getStream() != null)) {
-                    sd.getStream().close();
+                if (output != null) {
+                    output.close();
                 }
             } catch (IOException ioe) {
                 if (log.isDebugEnabled()) {
                     log.debug("Error closing fd {}: {}", fd, ioe);
                 }
             }
+            open = false;
             super.close();
         }
 
         private void startReading()
         {
-            if (reading) {
+            if (!open) {
+                // "net" may call this even if there can be nothing to read -- so ignore it
                 return;
             }
             assert(onRead != null);
-            assert(input != null);
 
-            // Submit the read job in the "unbounded" thread pool, which is a CachedThreadPool, because
-            // it may run for a long time
-            readJob = runner.getUnboundedPool().submit(new Runnable() {
-                @Override
-                public void run()
-                {
-                    readFromStream();
-                }
-            });
             reading = true;
+            if (input != null) {
+                // Submit the read job in the "unbounded" thread pool, which is a CachedThreadPool, because
+                // it may run for a long time
+                readJob = runner.getUnboundedPool().submit(new Runnable() {
+                    @Override
+                    public void run()
+                    {
+                        readFromStream();
+                    }
+                });
+            } else if (srcPipe != null) {
+                drainQueue();
+            }
         }
 
         private void stopReading()
@@ -212,10 +339,26 @@ public class PipeWrap
             if (!reading) {
                 return;
             }
-            assert(readJob != null);
-            // We must interrupt the read thread or it will never exit
-            readJob.cancel(true);
+            if (readJob != null) {
+                // We must interrupt the read thread or it will never exit
+                readJob.cancel(true);
+            }
             reading = false;
+        }
+
+        /**
+         * Read from the output queue on the target until it is empty. This is idempotent as long as it's
+         * always invoked from the main script thread of the correct script.
+         */
+        private void drainQueue()
+        {
+            Buffer.BufferImpl buf;
+            do {
+                buf = srcPipe.targetQueue.poll();
+                if (buf != null) {
+                    runner.enqueueCallback(onRead, this, this, new Object[] { buf, 0, buf.getLength()});
+                }
+            } while (buf != null);
         }
 
         /**
@@ -267,7 +410,7 @@ public class PipeWrap
             if (self.output == null) {
                 throw Utils.makeError(cx, thisObj, "Pipe does not support writing");
             }
-            return self.offerWrite(cx, buf.getBuffer());
+            return self.offerWrite(cx, buf, buf.getBuffer());
         }
 
         @SuppressWarnings("unused")
@@ -295,41 +438,52 @@ public class PipeWrap
         {
             String str = stringArg(args, 0);
             PipeImpl self = (PipeImpl)thisObj;
-            if (self.output == null) {
-                throw Utils.makeError(cx, thisObj, "Pipe does not support writing");
-            }
 
-            return self.offerWrite(cx, Utils.stringToBuffer(str, cs));
+            return self.offerWrite(cx, null, Utils.stringToBuffer(str, cs));
         }
 
         /**
          * Execute the write. Make it non-blocking by dispatching it to the thread pool. These are short-running
          * tasks so use the regular async pool. Return a "writeReq" object that net.js will use to track status.
          */
-        private Object offerWrite(Context cx, final ByteBuffer buf)
+        private Object offerWrite(Context cx, Buffer.BufferImpl buf, final ByteBuffer bb)
         {
             final Scriptable domain = runner.getDomain();
             final Scriptable ret = cx.newObject(this);
-            ret.put("bytes", ret, buf.remaining());
+            ret.put("bytes", ret, bb.remaining());
 
-            if (asyncMode) {
-                queueSize.incrementAndGet();
-                runner.pin(this);
-                runner.getAsyncPool().submit(new Runnable() {
-                @Override
-                public void run()
-                {
-                    sendBuffer(buf, ret, domain);
+            if (output != null) {
+                if (asyncMode) {
+                    queueSize.incrementAndGet();
+                    runner.pin(this);
+                    runner.getAsyncPool().submit(new Runnable() {
+                        @Override
+                        public void run()
+                        {
+                            sendBuffer(bb, ret, domain);
+                        }
+                    });
+                    return ret;
                 }
-            });
-                return ret;
-            }
 
-            // In the synchronous case, as for standard output and error, write synchronously
-            try {
-                writeOutput(buf);
-            } catch (IOException ioe) {
-                throw Utils.makeError(cx, this, ioe.toString());
+                // In the synchronous case, as for standard output and error, write synchronously
+                try {
+                    writeOutput(bb);
+                } catch (IOException ioe) {
+                    throw Utils.makeError(cx, this, ioe.toString());
+                }
+
+            } else if (targetPipe != null) {
+                if (buf == null) {
+                    // in the string case there was never a buffer object
+                    buf = Buffer.BufferImpl.newBuffer(cx, this, bb, false);
+                }
+                targetQueue.offer(buf);
+                if (targetPipe.reading) {
+                    targetPipe.drainQueue();
+                }
+            } else {
+                throw Utils.makeError(cx, this, "Pipe does not support writing");
             }
             return ret;
         }

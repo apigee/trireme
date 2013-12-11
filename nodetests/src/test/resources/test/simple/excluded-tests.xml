@@ -446,6 +446,10 @@
         <Name>test-stream-pipe-multi.js</Name>
         <Description>One of those tests that tries to run until it runs out of stack space.</Description>
     </Excluded>
+    <Excluded>
+        <Name>test-child-process-exec-error.js</Name>
+        <Description>Don't see how this could work from the code that expects an error code but ignores it in JS.</Description>
+    </Excluded>
 
     <!-- DEPRECATION
          These tests depend on the "&amp;&amp;throw-deprecation" feature of Node, not implemented here.

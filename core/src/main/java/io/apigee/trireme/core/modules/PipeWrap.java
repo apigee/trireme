@@ -91,6 +91,7 @@ public class PipeWrap
         private PipeImpl srcPipe;
         private ConcurrentLinkedQueue<Buffer.BufferImpl> targetQueue;
 
+        private static final Buffer.BufferImpl eofSentinel = new Buffer.BufferImpl();
         private final AtomicInteger queueSize = new AtomicInteger();
 
         @Override
@@ -105,9 +106,9 @@ public class PipeWrap
             if (!inNew) {
                 return cx.newObject(func, CLASS_NAME, args);
             }
-            // TODO check for "ipc" flag?
 
-            return new PipeImpl();
+            PipeImpl ret = new PipeImpl();
+            return ret;
         }
 
         public PipeImpl()
@@ -284,30 +285,39 @@ public class PipeWrap
 
         @SuppressWarnings("unused")
         @JSFunction
-        public void close()
+        public static void close(Context cx, Scriptable thisObj, Object[] args, Function func)
         {
-            if (!open) {
-                return;
-            }
+            Function closeFunc = functionArg(args, 0, false);
             if (log.isDebugEnabled()) {
-                log.debug("Closing pipe {}", this);
+                log.debug("Closing pipe {}", thisObj);
             }
-            stopReading();
+
+            PipeImpl self = (PipeImpl)thisObj;
+            self.stopReading();
             // TODO do we need to remove the descriptor from "runner"?
             try {
-                if (input != null) {
-                    input.close();
+                if (self.input != null) {
+                    self.input.close();
                 }
-                if (output != null) {
-                    output.close();
+                if (self.output != null) {
+                    self.output.close();
+                }
+                if (self.targetPipe != null) {
+                    // Put a message on the queue that will cause the other side to close
+                    self.offerViaIPC(self.eofSentinel);
+                    self.targetPipe = null;
                 }
             } catch (IOException ioe) {
                 if (log.isDebugEnabled()) {
-                    log.debug("Error closing fd {}: {}", fd, ioe);
+                    log.debug("Error closing fd {}: {}", self.fd, ioe);
                 }
             }
-            open = false;
-            super.close();
+            self.open = false;
+            self.close();
+
+            if (closeFunc != null) {
+                closeFunc.call(cx, thisObj, thisObj, null);
+            }
         }
 
         private void startReading()
@@ -354,9 +364,36 @@ public class PipeWrap
         {
             Buffer.BufferImpl buf;
             do {
+                if ((srcPipe == null) || (srcPipe.targetQueue == null)) {
+                    // Already closed
+                    return;
+                }
                 buf = srcPipe.targetQueue.poll();
-                if (buf != null) {
-                    runner.enqueueCallback(onRead, this, this, new Object[] { buf, 0, buf.getLength()});
+                if (log.isDebugEnabled() && (buf != null)) {
+                    log.debug("Got a buffer of length {} from the IPC queue", buf.getLength());
+                    if (log.isTraceEnabled()) {
+                        log.trace("  Got {}", buf.getString("utf8"));
+                    }
+                }
+                if (buf == eofSentinel) {
+                    // The other side of this pipe shut us down.
+                    runner.enqueueTask(new ScriptTask() {
+                        @Override
+                        public void execute(Context cx, Scriptable scope)
+                        {
+                            if (onRead != null) {
+                                setErrno(Constants.EOF);
+                                onRead.call(cx, PipeImpl.this, PipeImpl.this,  new Object[]{null, 0, 0});
+                            }
+                        }
+                    });
+                    srcPipe = null;
+                    targetPipe = null;
+
+                } else if (buf != null) {
+                    if (onRead != null) {
+                        runner.enqueueCallback(onRead, this, this, new Object[] { buf, 0, buf.getLength()});
+                    }
                 }
             } while (buf != null);
         }
@@ -381,12 +418,28 @@ public class PipeWrap
                     if (log.isTraceEnabled()) {
                         log.trace("Input stream {} read returned {}", input, count);
                     }
+
                     if (count > 0) {
                         // As always, we must ensure that what we read is passed back to the thread where
                         // the script runs.
-                        Buffer.BufferImpl resultBuf =
-                            Buffer.BufferImpl.newBuffer(cx, this, readBuf, 0, count);
-                        runner.enqueueCallback(onRead, this, this, new Object[]{resultBuf, 0, count});
+                        if (onRead != null) {
+                            Buffer.BufferImpl resultBuf =
+                                Buffer.BufferImpl.newBuffer(cx, this, readBuf, 0, count);
+                            runner.enqueueCallback(onRead, this, this, new Object[]{resultBuf, 0, count});
+                        }
+                    } else if (count < 0) {
+                        // Reached EOF, so we need to notify the other end
+                        runner.enqueueTask(new ScriptTask() {
+                            @Override
+                            public void execute(Context cx, Scriptable scope)
+                            {
+                                if (onRead != null) {
+                                    setErrno(Constants.EOF);
+                                    onRead.call(cx, PipeImpl.this, PipeImpl.this, new Object[] { null, 0, 0 });
+                                }
+                            }
+                        });
+                        reading = false;
                     }
                 } while (count >= 0);
             } catch (InterruptedIOException ie) {
@@ -478,14 +531,19 @@ public class PipeWrap
                     // in the string case there was never a buffer object
                     buf = Buffer.BufferImpl.newBuffer(cx, this, bb, false);
                 }
-                targetQueue.offer(buf);
-                if (targetPipe.reading) {
-                    targetPipe.drainQueue();
-                }
+                offerViaIPC(buf);
             } else {
                 throw Utils.makeError(cx, this, "Pipe does not support writing");
             }
             return ret;
+        }
+
+        private void offerViaIPC(Buffer.BufferImpl buf)
+        {
+            targetQueue.offer(buf);
+            if (targetPipe.reading) {
+                targetPipe.drainQueue();
+            }
         }
 
         private void writeOutput(ByteBuffer buf)
@@ -507,6 +565,7 @@ public class PipeWrap
             try {
                 writeOutput(buf);
             } catch (IOException e) {
+                runner.unPin(this);
                 ioe = e;
             } finally {
                 queueSize.decrementAndGet();
@@ -525,7 +584,7 @@ public class PipeWrap
                     Scriptable err =
                         (fioe == null ? null : Utils.makeErrorObject(cx, scope, fioe.toString()));
 
-                    runner.enqueueCallback(oc, PipeImpl.this, PipeImpl.this,
+                    runner.getProcess().submitTick(cx, oc, PipeImpl.this, PipeImpl.this,
                                            domain, new Object[] { err, PipeImpl.this, req });
                 }
             }, domain);

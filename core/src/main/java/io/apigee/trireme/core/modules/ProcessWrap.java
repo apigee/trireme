@@ -95,13 +95,10 @@ public class ProcessWrap
     public Scriptable registerExports(Context cx, Scriptable scope, NodeRuntime runner)
         throws InvocationTargetException, IllegalAccessException, InstantiationException
     {
-        // TODO do we need this any more? Probably not...
-        ScriptRunner internalRunner = (ScriptRunner)runner;
-        internalRunner.requireInternal(NativeInputStreamAdapter.MODULE_NAME, cx);
-        internalRunner.requireInternal(NativeOutputStreamAdapter.MODULE_NAME, cx);
-        internalRunner.require("stream", cx);
-
         Scriptable exports = cx.newObject(scope);
+        exports.setPrototype(scope);
+        exports.setParentScope(null);
+
         ScriptableObject.defineClass(exports, Referenceable.class, false, true);
         ScriptableObject.defineClass(exports, ProcessImpl.class, false, true);
         return exports;
@@ -148,6 +145,7 @@ public class ProcessWrap
         {
             if (spawned != null) {
                 spawned.close();
+                spawned = null;
             }
             super.close();
         }
@@ -199,17 +197,17 @@ public class ProcessWrap
                 return self.spawned.spawn(cx, execArgs, options);
             } catch (NodeOSException noe) {
                 self.runner.setErrno(noe.getCode());
-                self.callOnExit(-1, 0);
+                self.callOnExit(-1, null);
                 return null;
             } finally {
                 self.ref();
             }
         }
 
-        private void callOnExit(final int code, final int signal)
+        private void callOnExit(final int code, final String errno)
         {
             if (log.isDebugEnabled()) {
-                log.debug("Process {} exited with code {} and signal {}", spawned, code, signal);
+                log.debug("Process {} exited with code {}", spawned, code);
             }
             spawned.setFinished(true);
             processTable.remove(pid);
@@ -219,22 +217,35 @@ public class ProcessWrap
                 @Override
                 public void execute(Context cx, Scriptable scope)
                 {
-                    onExit.call(cx, scope, ProcessImpl.this, new Object[]{code, signal});
+                    if (errno != null) {
+                        runner.setErrno(errno);
+                    }
+                    onExit.call(cx, ProcessImpl.this, ProcessImpl.this, new Object[]{code});
                 }
             }, domain);
         }
 
         @SuppressWarnings("unused")
         @JSFunction
-        public Object kill(String signal)
+        public int kill(String signal)
         {
-            if (spawned != null) {
-                if (log.isDebugEnabled()) {
-                    log.debug("Killing {}", spawned);
-                }
-                spawned.terminate(signal);
+            if (log.isDebugEnabled()) {
+                log.debug("Received signal {}. running = {}", signal, (spawned != null));
             }
-            return null;
+
+            // Since we are not really anything but Java we only support these signals
+            if (!"SIGTERM".equals(signal) && !"SIGKILL".equals(signal)) {
+                setErrno(Constants.EINVAL);
+                return -1;
+            }
+
+            if (spawned == null) {
+                setErrno(Constants.ESRCH);
+                return -1;
+            }
+
+            spawned.terminate(signal);
+            return 0;
         }
 
         @SuppressWarnings("unused")
@@ -564,10 +575,10 @@ public class ProcessWrap
                         if (log.isDebugEnabled()) {
                             log.debug("Child process exited with {}", exitCode);
                         }
-                        parent.callOnExit(exitCode, 0);
+                        parent.callOnExit(exitCode, null);
                     } catch (InterruptedException ie) {
                         // TODO some signal?
-                        parent.callOnExit(0, 0);
+                        parent.callOnExit(0, null);
                     }
                 }
             });
@@ -747,7 +758,6 @@ public class ProcessWrap
             }
 
             // TODO cwd
-            // TODO env
 
             String scriptPath = null;
             int i;
@@ -834,7 +844,7 @@ public class ProcessWrap
                 if (log.isDebugEnabled()) {
                     log.debug("Error starting internal script: {}", ne);
                 }
-                return Constants.EIO;
+                throw new NodeOSException(Constants.EINVAL, ne);
             }
 
             future.setListener(new ScriptStatusListener()
@@ -847,7 +857,9 @@ public class ProcessWrap
                     }
                     finished = true;
                     script.close();
-                    parent.callOnExit(status.getExitCode(), 0);
+                    String errno = status.isOk() ? null : Constants.EIO;
+
+                    parent.callOnExit(status.getExitCode(), errno);
                 }
             });
             return Context.getUndefinedValue();

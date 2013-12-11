@@ -846,11 +846,14 @@ function writeCleartext(self, data, offset, cb) {
     if (debugEnabled) {
       debug(self.id + ' Writing ' + sslResult.data.length);
     }
-    self.socket.write(sslResult.data, function() {
-      if (debugEnabled) {
-        debug(self.id + ' write complete');
-      }
-      continueWriteCleartext(self, sslResult.status, data, newOffset, bytesConsumed, cb);
+    // setImmediate because this may result in recursive nextTick calls otherwise
+    setImmediate(function() {
+      self.socket.write(sslResult.data, function() {
+        if (debugEnabled) {
+          debug(self.id + ' write complete');
+        }
+        continueWriteCleartext(self, sslResult.status, data, newOffset, bytesConsumed, cb);
+      });
     });
   } else {
     continueWriteCleartext(self, sslResult.status, data, newOffset, bytesConsumed, cb);

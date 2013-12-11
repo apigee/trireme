@@ -65,6 +65,8 @@ public class NodeEnvironment
     private RhinoContextFactory contextFactory;
     private long                scriptTimeLimit;
 
+    private boolean             throwDeprecation;
+
     private int                 optLevel = DEFAULT_OPT_LEVEL;
     private boolean             sealRoot = DEFAULT_SEAL_ROOT;
 
@@ -179,6 +181,18 @@ public class NodeEnvironment
 
     public long getScriptTimeLimit() {
         return scriptTimeLimit;
+    }
+
+    /**
+     * Throw an Error when a deprecated function is called. Same as the "--throw-deprecation" switch to regular
+     * Node.js.
+     */
+    public void setThrowDeprecation(boolean throwDeprecation) {
+        this.throwDeprecation = throwDeprecation;
+    }
+
+    public boolean isThrowDeprecation() {
+        return throwDeprecation;
     }
 
     /**

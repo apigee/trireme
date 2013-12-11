@@ -1107,6 +1107,10 @@ public class ScriptRunner
                 process.put("stderr", process, sandbox.getStderrStream());
             }
         }
+
+        if (env.isThrowDeprecation()) {
+            process.put("throwDeprecation", process, true);
+        }
     }
 
     /**

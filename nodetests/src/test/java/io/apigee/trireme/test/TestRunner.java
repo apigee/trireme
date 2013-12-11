@@ -37,6 +37,9 @@ public class TestRunner
             timeout = Integer.parseInt(args[2]);
         }
 
+        // Uncomment to trace deprecation issues like nested nextTick calls
+        //env.setThrowDeprecation(true);
+
         try {
             NodeScript script = env.createScript(fileName.getName(), fileName, null);
 

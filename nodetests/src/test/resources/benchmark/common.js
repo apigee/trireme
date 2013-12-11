@@ -55,6 +55,11 @@ function Benchmark(fn, options) {
   this._start = [0,0];
   this._started = false;
   var self = this;
+  // The large number of async child processes that we spawn means that we might sometimes have lots of
+  // event emitters on the standard output and input streams -- fix that here.
+  process.stdin.setMaxListeners(100);
+  process.stdout.setMaxListeners(100);
+  process.stderr.setMaxListeners(100);
   process.nextTick(function() {
     self._run();
   });

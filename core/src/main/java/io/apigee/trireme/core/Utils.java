@@ -366,4 +366,16 @@ public class Utils
         d.put(b);
         return d;
     }
+
+    /**
+     * Just copy a ByteBuffer and all its content.
+     */
+    public static ByteBuffer copyBuffer(ByteBuffer b)
+    {
+        ByteBuffer n = ByteBuffer.allocate(b.remaining());
+        ByteBuffer tmp = b.duplicate();
+        n.put(tmp);
+        n.flip();
+        return n;
+    }
 }

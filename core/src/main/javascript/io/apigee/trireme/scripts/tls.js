@@ -110,6 +110,11 @@ function getContext(opts, rejectUnauthorized) {
   return ctx;
 }
 
+/*
+ * tls.Server is a new class that delegates to a net.Server object for the real work.
+ * It then replaces the guts of any connection that it receives so that it turns into a TLS connection.
+ */
+
 function Server() {
   var options, listener;
 
@@ -209,29 +214,42 @@ function Server() {
   }
 
   self.netServer = net.createServer(options, function(connection) {
-    var engine = self.context.createEngine(false);
-    if (options.requestCert) {
-      if (self.rejectUnauthorized) {
-        debug('Client auth required');
-        engine.setClientAuthRequired(true);
-      } else {
-        debug('Client auth requested');
-        engine.setClientAuthRequested(true);
-      }
-    }
-
-    if (options.ciphers) {
-      engine.setCiphers(options.ciphers);
-    }
-    var clearStream = new CleartextStream();
-    clearStream.init(true, self, connection, engine);
-    clearStream.setHandshakeTimeout(handshakeTimeout);
-    clearStream.rejectUnauthorized = self.rejectUnauthorized && options.requestCert;
+    onServerConnection(self, connection, options);
+    self.emit('secureConnection', connection);
   });
   return self;
 }
 util.inherits(Server, net.Server);
 exports.Server = Server;
+
+function onServerConnection(self, connection, options) {
+  var engine = self.context.createEngine(false);
+  if (options.requestCert) {
+    if (self.rejectUnauthorized) {
+      debug('Client auth required');
+      engine.setClientAuthRequired(true);
+    } else {
+      debug('Client auth requested');
+      engine.setClientAuthRequested(true);
+    }
+  }
+
+  if (options.ciphers) {
+    engine.setCiphers(options.ciphers);
+  }
+
+  assert(connection._handle);
+
+  engine.setUpConnection(true, connection._handle);
+  engine.onread = connection._handle.onread;
+  connection._handle.onread = null;
+  engine.owner = connection._handle.owner;
+  connection._handle = engine;
+
+  // TODO setHandshakeTimeout(handshakeTimeout)
+  // TODO rejectUnauthorized = self.rejectUnauthorized && options.requestCert;
+
+}
 
 exports.createServer = function () {
   return new Server(arguments[0], arguments[1]);
@@ -268,6 +286,9 @@ Server.prototype.listen = function() {
   }
 };
 
+/*
+ * Connect by opening a regular net.Socket, then replacing the guts with guts that will implement the TLS protocol.
+ */
 exports.connect = function() {
   var options;
   var callback;
@@ -317,10 +338,12 @@ exports.connect = function() {
   var sslContext = getContext(options, rejectUnauthorized);
 
   var engine = sslContext.createEngine(true);
-  var sslConn = new CleartextStream();
   var netConn;
   if (options.socket) {
+    engine.setUpConnection(false, options.socket._handle);
+    options.socket._handle = engine;
     netConn = options.socket;
+
   } else {
     var netOptions = {
       host: options.host,
@@ -337,22 +360,25 @@ exports.connect = function() {
       debug('Connecting with ' + JSON.stringify(netOptions));
     }
     netConn = net.connect(netOptions, function() {
-      sslConn.remoteAddress = netConn.remoteAddress;
-      sslConn.remotePort = netConn.remotePort;
-      sslConn.engine.beginHandshake();
-      writeCleartext(sslConn);
+      onClientConnect(engine, netConn);
     });
   }
-  sslConn.init(false, undefined, netConn, engine);
   if (callback) {
-    sslConn.on('secureConnect', callback);
+    netConn.on('secureConnect', callback);
   }
-  if (options.socket) {
-    sslConn.engine.beginHandshake();
-    writeCleartext(sslConn);
-  }
-  return sslConn;
+  return netConn;
 };
+
+function onClientConnect(engine, connection) {
+  engine.setUpConnection(false, connection._handle);
+  engine.onread = connection._handle.onread;
+  connection._handle.onread = null;
+  engine.owner = connection._handle.owner;
+  connection._handle = engine;
+  // TODO beginHandshake();
+  // TODO write cleartext
+  connection.emit('secureConnect');
+}
 
 exports.createSecurePair = function() {
   throw 'Not implemented';
@@ -378,6 +404,8 @@ Server.prototype.addContext = function(hostname, credentials) {
 Server.prototype.address = function() {
   return this.netServer.address();
 };
+
+/*
 
 var counter = 0;
 
@@ -634,12 +662,12 @@ function handleEnd(self) {
       if (debugEnabled) {
         debug(self.id + ' Closing SSL inbound without a close from the client', self.id);
       }
-      /* assess if we need this.
-      self.engine.closeInbound();
-      while (!self.engine.isInboundDone()) {
-        writeCleartext(self);
-      }
-      */
+      // assess if we need this.
+      //self.engine.closeInbound();
+      //while (!self.engine.isInboundDone()) {
+      //  writeCleartext(self);
+      //}
+
       pushRead(self, END_SENTINEL);
       doClose(self);
     }
@@ -930,3 +958,4 @@ function continueWriteCleartext(self, status, data, offset, bytesConsumed, c) {
   }
   return bytesConsumed;
 }
+*/

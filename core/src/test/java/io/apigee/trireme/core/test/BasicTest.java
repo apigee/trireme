@@ -478,7 +478,7 @@ public class BasicTest
     public void testRunModule()
         throws InterruptedException, ExecutionException, NodeException
     {
-        NodeScript script = env.createScript("testmodue.js",
+        NodeScript script = env.createScript("testmodule.js",
                                              new File("./target/test-classes/tests/testmodule"),
                                              null);
         ScriptFuture future = script.executeModule();
@@ -494,6 +494,20 @@ public class BasicTest
         throws InterruptedException, ExecutionException, NodeException
     {
         runTest("pipepipetest.js");
+    }
+
+    @Test
+    public void testBasicNet()
+        throws InterruptedException, ExecutionException, NodeException
+    {
+        runTest("basicnettest.js");
+    }
+
+    @Test
+    public void testBasicTLS()
+        throws InterruptedException, ExecutionException, NodeException
+    {
+        runTest("basictlstest.js");
     }
 
     private void runTest(String name)

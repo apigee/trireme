@@ -22,6 +22,8 @@
 package io.apigee.trireme.core.modules;
 
 import io.apigee.trireme.core.NodeRuntime;
+import io.apigee.trireme.core.ScriptTask;
+import io.apigee.trireme.core.internal.Charsets;
 import io.apigee.trireme.core.internal.CompositeTrustManager;
 import io.apigee.trireme.core.internal.CryptoException;
 import io.apigee.trireme.core.internal.CryptoService;
@@ -35,6 +37,7 @@ import org.mozilla.javascript.Scriptable;
 import org.mozilla.javascript.ScriptableObject;
 import org.mozilla.javascript.annotations.JSFunction;
 import org.mozilla.javascript.annotations.JSGetter;
+import org.mozilla.javascript.annotations.JSSetter;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -72,18 +75,20 @@ import java.security.cert.X509CRL;
 import java.security.cert.X509Certificate;
 import java.text.DateFormat;
 import java.text.SimpleDateFormat;
+import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.HashSet;
 import java.util.List;
 import java.util.ServiceLoader;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.regex.Pattern;
 
 /**
  * This module is used in a similar way to "TCPWrap," but it is entirely internal to NodeRunner and different
  * from what's in regular Node. Regular Node is based on OpenSSL and Java has its own SSLEngine. This module
- * is a wrapper around SSLEngine.
+ * is a wrapper around SSLEngine. And yes, it should be called "tls_wrap".
  */
 public class SSLWrap
     implements InternalNodeModule
@@ -104,9 +109,11 @@ public class SSLWrap
     public Scriptable registerExports(Context cx, Scriptable scope, NodeRuntime runner)
         throws InvocationTargetException, IllegalAccessException, InstantiationException
     {
-        ScriptableObject.defineClass(scope, WrapperImpl.class);
-        ScriptableObject.defineClass(scope, EngineImpl.class);
-        ScriptableObject.defineClass(scope, ContextImpl.class);
+        ScriptableObject.defineClass(scope, WrapperImpl.class, false, true);
+        ScriptableObject.defineClass(scope, Referenceable.class, false, true);
+        ScriptableObject.defineClass(scope, EngineImpl.class, false, true);
+        ScriptableObject.defineClass(scope, ContextImpl.class, false, true);
+        ScriptableObject.defineClass(scope, QueuedWrite.class, false, true);
         WrapperImpl wrapper = (WrapperImpl)cx.newObject(scope, WrapperImpl.CLASS_NAME);
         wrapper.init(runner);
         loadCryptoService();
@@ -117,10 +124,10 @@ public class SSLWrap
     {
         ServiceLoader<CryptoService> loc = ServiceLoader.load(CryptoService.class);
         if (loc.iterator().hasNext()) {
+            cryptoService = loc.iterator().next();
             if (log.isDebugEnabled()) {
                 log.debug("Using crypto service implementation {}", cryptoService);
             }
-            cryptoService = loc.iterator().next();
         } else if (log.isDebugEnabled()) {
             log.debug("No crypto service available");
         }
@@ -145,6 +152,7 @@ public class SSLWrap
         }
 
         @JSFunction
+        @SuppressWarnings("unused")
         public static Object createContext(Context cx, Scriptable thisObj, Object[] args, Function func)
         {
             WrapperImpl self = (WrapperImpl)thisObj;
@@ -154,6 +162,7 @@ public class SSLWrap
         }
 
         @JSFunction
+        @SuppressWarnings("unused")
         public static Object getCiphers(Context cx, Scriptable thisObj, Object[] args, Function func)
         {
             try {
@@ -193,6 +202,7 @@ public class SSLWrap
         private X509TrustManager trustedCertManager;
         private boolean trustStoreValidation;
 
+        @Override
         public String getClassName() {
             return CLASS_NAME;
         }
@@ -203,6 +213,7 @@ public class SSLWrap
         }
 
         @JSFunction
+        @SuppressWarnings("unused")
         public void setKeyStore(String name, String p)
         {
             char[] passphrase = p.toCharArray();
@@ -231,6 +242,7 @@ public class SSLWrap
         }
 
         @JSFunction
+        @SuppressWarnings("unused")
         public static void setPfx(Context cx, Scriptable thisObj, Object[] args, Function func)
         {
             Buffer.BufferImpl pfxBuf = objArg(args, 0, Buffer.BufferImpl.class, true);
@@ -259,6 +271,7 @@ public class SSLWrap
         }
 
         @JSFunction
+        @SuppressWarnings("unused")
         public static void setKey(Context cx, Scriptable thisObj, Object[] args, Function func)
         {
             if (cryptoService == null) {
@@ -266,7 +279,7 @@ public class SSLWrap
             }
             Buffer.BufferImpl keyBuf = objArg(args, 0, Buffer.BufferImpl.class, true);
             String p = stringArg(args, 1, null);
-            char[] passphrase = (p == null ? null : p.toCharArray());
+            char[] passphrase = (p == null) ? null : p.toCharArray();
             ContextImpl self = (ContextImpl)thisObj;
 
             try {
@@ -281,11 +294,14 @@ public class SSLWrap
             } catch (IOException ioe) {
                 throw Utils.makeError(cx, thisObj, ioe.toString());
             } finally {
-                Arrays.fill(passphrase, '\0');
+                if (passphrase != null) {
+                    Arrays.fill(passphrase, '\0');
+                }
             }
         }
 
         @JSFunction
+        @SuppressWarnings("unused")
         public static void setCert(Context cx, Scriptable thisObj, Object[] args, Function func)
         {
             if (cryptoService == null) {
@@ -312,6 +328,7 @@ public class SSLWrap
         }
 
         @JSFunction
+        @SuppressWarnings("unused")
         public void setTrustStore(String name)
         {
             try {
@@ -335,6 +352,7 @@ public class SSLWrap
         }
 
         @JSFunction
+        @SuppressWarnings("unused")
         public static void addTrustedCert(Context cx, Scriptable thisObj, Object[] args, Function func)
         {
             if (cryptoService == null) {
@@ -376,6 +394,7 @@ public class SSLWrap
         }
 
         @JSFunction
+        @SuppressWarnings("unused")
         public static void setCRL(Context cx, Scriptable thisObj, Object[] args, Function func)
         {
             Buffer.BufferImpl crlBuf = objArg(args, 0, Buffer.BufferImpl.class, true);
@@ -397,6 +416,7 @@ public class SSLWrap
         }
 
         @JSFunction
+        @SuppressWarnings("unused")
         public static void init(Context cx, Scriptable thisObj, Object[] args, Function func)
         {
             ContextImpl self = (ContextImpl)thisObj;
@@ -475,12 +495,14 @@ public class SSLWrap
         }
 
         @JSFunction
+        @SuppressWarnings("unused")
         public void setTrustEverybody()
         {
             trustManagers = new TrustManager[] { AllTrustingManager.INSTANCE };
         }
 
         @JSFunction
+        @SuppressWarnings("unused")
         public static Object createEngine(Context cx, Scriptable thisObj, Object[] args, Function func)
         {
             boolean clientMode = booleanArg(args, 0);
@@ -491,8 +513,13 @@ public class SSLWrap
         }
     }
 
+    /**
+     * This class is the heart of TLS support. It actually extends "TCPWrap" because it acts exactly like
+     * a regular socket. However it replaces part of the "TCPWrap" code with code that adds the SSL layer
+     * on top using SSLEngine. This class is also responsible for setting up the SSLEngine and all its state.
+     */
     public static class EngineImpl
-        extends ScriptableObject
+        extends Referenceable
     {
         public static final String CLASS_NAME = "_sslEngineClass";
 
@@ -507,14 +534,24 @@ public class SSLWrap
 
         private static final int MIN_BUFFER_SIZE =     128;
 
+        private int index;
         private SSLEngine engine;
         private NodeRuntime runner;
         private X509TrustManager trustManager;
         private boolean peerAuthorized;
         private Scriptable authorizationError;
         private boolean trustStoreValidation;
+        private TCPWrap.TCPImpl tcpHandle;
+        private Function onRead;
+        private int byteCount;
+
+        private final ArrayDeque<QueuedWrite> writeQueue = new ArrayDeque<QueuedWrite>();
+        private final ArrayDeque<ByteBuffer> readQueue = new ArrayDeque<ByteBuffer>();
 
         private static final ByteBuffer EMPTY_BUF = ByteBuffer.allocate(0);
+        private static final ByteBuffer EOF_SENTINEL = ByteBuffer.allocate(0);
+
+        private static final AtomicInteger nextIndex = new AtomicInteger();
 
         @Override
         public String getClassName() {
@@ -527,6 +564,7 @@ public class SSLWrap
             this.runner = runner;
             this.trustManager = trustManager;
             this.trustStoreValidation = trustStoreValidation;
+            this.index = nextIndex.getAndIncrement();
 
             engine = ctx.createSSLEngine();
             engine.setUseClientMode(clientMode);
@@ -540,12 +578,557 @@ public class SSLWrap
             return ret;
         }
 
+        @JSSetter("onread")
+        @SuppressWarnings("unused")
+        public void setOnRead(Function r) {
+            this.onRead = r;
+        }
+
+        @JSGetter("onread")
+        @SuppressWarnings("unused")
+        public Function getOnRead() {
+            return onRead;
+        }
+
+        @JSGetter("bytes")
+        @SuppressWarnings("unused")
+        public int getByteCount()
+        {
+            return byteCount;
+        }
+
+        @JSFunction
+        @SuppressWarnings("unused")
+        public void readStart()
+        {
+           if (tcpHandle != null) {
+               tcpHandle.readStart();
+           }
+        }
+
+        @JSFunction
+        @SuppressWarnings("unused")
+        public void readStop()
+        {
+            if (tcpHandle != null) {
+                tcpHandle.readStop();
+            }
+        }
+
+        /**
+         * Called by TCPWrap when data has been read from the socket.
+         */
+        void onRead(Context cx, ByteBuffer buf)
+        {
+            if (log.isTraceEnabled()) {
+                log.trace("Adding {} to read queue", buf);
+            }
+            readQueue.add(buf);
+            processReadQueue(cx, false);
+        }
+
+        /**
+         * Called by TCPWrap when the EOF has been read from the socket, at the network level.
+         */
+        void onEof(Context cx)
+        {
+            if (log.isDebugEnabled()) {
+                log.debug("Engine {} got EOF from the client socket", index);
+            }
+            readQueue.add(EOF_SENTINEL);
+            processReadQueue(cx, false);
+        }
+
+        protected void processReadQueue(Context cx, boolean force)
+        {
+            SSLEngineResult sslResult = null;
+
+            while (force || (!readQueue.isEmpty() && canEngineRead())) {
+                ByteBuffer toUnwrap = readQueue.isEmpty() ? EMPTY_BUF : readQueue.peek();
+                force = false;
+
+                // For unwrapping, calculate an output buffer no bigger than what SSLEngine might give us
+                int bufLen = Math.max(toUnwrap.remaining(), MIN_BUFFER_SIZE);
+                bufLen = Math.min(bufLen, engine.getSession().getApplicationBufferSize());
+                ByteBuffer fromUnwrap = ByteBuffer.allocate(bufLen);
+
+                try {
+                    if (toUnwrap == EOF_SENTINEL) {
+                        if (log.isDebugEnabled()) {
+                            log.debug("Engine {} closing input after EOF from client", index);
+                        }
+                        engine.closeInbound();
+                    }
+                    do {
+                        if (log.isTraceEnabled()) {
+                            log.trace("SSLEngine unwrap {} -> {} inboundDone = {}",
+                                      toUnwrap, fromUnwrap, engine.isInboundDone());
+                        }
+                        sslResult = engine.unwrap(toUnwrap, fromUnwrap);
+                        if (log.isDebugEnabled()) {
+                            log.debug("Engine {} unwrap {} -> {} = {}", index, toUnwrap, fromUnwrap, sslResult);
+                        }
+                        if (sslResult.getStatus() == SSLEngineResult.Status.BUFFER_OVERFLOW) {
+                            fromUnwrap = ByteBuffer.allocate(fromUnwrap.capacity() * 2);
+                        }
+                    } while (sslResult.getStatus() == SSLEngineResult.Status.BUFFER_OVERFLOW);
+
+                    if (!toUnwrap.hasRemaining() && !readQueue.isEmpty()) {
+                        readQueue.remove();
+                    }
+
+                    if (sslResult.bytesProduced() > 0) {
+                        fromUnwrap.flip();
+                        handleReadSuccess(cx, fromUnwrap);
+                    } else if (sslResult.getStatus() == SSLEngineResult.Status.CLOSED) {
+                        handleReadEof();
+                    }
+
+                } catch (SSLException ssle) {
+                    if (!readQueue.isEmpty()) {
+                        readQueue.remove();
+                    }
+                    handleReadFailure(cx, ssle);
+                }
+            }
+
+            if (sslResult == null) {
+                return;
+            }
+
+            switch (sslResult.getHandshakeStatus()) {
+            case NEED_WRAP:
+                // Seed the write queue with an empty buffer so that something happens
+                if (sslResult.getStatus() != SSLEngineResult.Status.BUFFER_UNDERFLOW) {
+                    processWriteQueue(cx, true);
+                }
+                break;
+            case NEED_UNWRAP:
+                if (sslResult.getStatus() != SSLEngineResult.Status.BUFFER_UNDERFLOW) {
+                    processReadQueue(cx, true);
+                }
+                break;
+            case NEED_TASK:
+                processTask(true);
+                break;
+            case FINISHED:
+                processWriteQueue(cx, false);
+                processReadQueue(cx, false);
+                break;
+            default:
+                // Nothing else to to
+                break;
+            }
+
+            if ((sslResult.getStatus() == SSLEngineResult.Status.CLOSED) &&
+                engine.isOutboundDone() && engine.isInboundDone()) {
+                if (log.isDebugEnabled()) {
+                    log.debug("Engine {} closing TCP socket because input was closed", index);
+                }
+                tcpHandle.doClose(cx, null);
+            }
+        }
+
+        private void handleReadFailure(Context cx, SSLException ssle)
+        {
+            if (log.isDebugEnabled()) {
+                log.debug("Error on SSL unwrap: {}", ssle);
+            }
+
+            if (onRead != null) {
+                runner.enqueueTask(new ScriptTask() {
+                    @Override
+                    public void execute(Context cx, Scriptable scope)
+                    {
+                        setErrno(Constants.EIO);
+                         onRead.call(cx, EngineImpl.this, EngineImpl.this, new Object[]{null, 0, 0});
+                    }
+                });
+            }
+        }
+
+        private void handleReadSuccess(Context cx, ByteBuffer bb)
+        {
+            if (onRead != null) {
+                if (log.isTraceEnabled()) {
+                    log.trace("Pushing {} to onread", bb);
+                }
+                Buffer.BufferImpl buf = Buffer.BufferImpl.newBuffer(cx, this, bb, false);
+                runner.enqueueCallback(onRead, this, this, new Object[] { buf, 0, buf.getLength() });
+            }
+        }
+
+        private void handleReadEof()
+        {
+            if (onRead != null) {
+                if (log.isTraceEnabled()) {
+                    log.trace("Pushing EOF to onread");
+                }
+                runner.enqueueTask(new ScriptTask() {
+                    @Override
+                    public void execute(Context cx, Scriptable scope)
+                    {
+                        setErrno(Constants.EOF);
+                        onRead.call(cx, EngineImpl.this, EngineImpl.this, new Object[]{null, 0, 0});
+                    }
+                });
+            }
+        }
+
+        private void processTask(final boolean wasReading)
+        {
+            runner.getAsyncPool().execute(new Runnable() {
+                @Override
+                public void run()
+                {
+                    Runnable task;
+                    do {
+                        task = engine.getDelegatedTask();
+                        if (task != null) {
+                            if (log.isTraceEnabled()) {
+                                log.trace("Executing delegated SSL task {}", task);
+                            }
+                            task.run();
+                        }
+                    } while (task != null);
+
+                    runner.enqueueTask(new ScriptTask() {
+                        @Override
+                        public void execute(Context cx, Scriptable scope)
+                        {
+                            if (log.isTraceEnabled()) {
+                                log.trace("Back to SSLEngine after task. {} wasReading = {}",
+                                          engine.getHandshakeStatus(), wasReading);
+                            }
+                            if (wasReading) {
+                                processReadQueue(cx, true);
+                            } else {
+                                processWriteQueue(cx, true);
+                            }
+                        }
+                    });
+                }
+            });
+        }
+
+        // TODO Write queue length, like in "net"
+
+        @JSFunction
+        @SuppressWarnings("unused")
+        public static Object writeBuffer(Context cx, Scriptable thisObj, Object[] args, Function func)
+        {
+            Buffer.BufferImpl buf = objArg(args, 0, Buffer.BufferImpl.class, true);
+            EngineImpl self = (EngineImpl)thisObj;
+
+            return self.offerWrite(cx, buf.getBuffer());
+        }
+
+        @JSFunction
+        @SuppressWarnings("unused")
+        public static Object writeUtf8String(Context cx, Scriptable thisObj, Object[] args, Function func)
+        {
+            String s = stringArg(args, 0);
+            EngineImpl self = (EngineImpl)thisObj;
+
+            ByteBuffer bb = Utils.stringToBuffer(s, Charsets.UTF8);
+            return self.offerWrite(cx, bb);
+        }
+
+        @JSFunction
+        @SuppressWarnings("unused")
+        public static Object writeAsciiString(Context cx, Scriptable thisObj, Object[] args, Function func)
+        {
+            String s = stringArg(args, 0);
+            EngineImpl self = (EngineImpl)thisObj;
+
+            ByteBuffer bb = Utils.stringToBuffer(s, Charsets.ASCII);
+            return self.offerWrite(cx, bb);
+        }
+
+        @JSFunction
+        @SuppressWarnings("unused")
+        public static Object writeUcs2String(Context cx, Scriptable thisObj, Object[] args, Function func)
+        {
+            String s = stringArg(args, 0);
+            EngineImpl self = (EngineImpl)thisObj;
+
+            ByteBuffer bb = Utils.stringToBuffer(s, Charsets.UCS2);
+            return self.offerWrite(cx, bb);
+        }
+
+        private QueuedWrite offerWrite(Context cx, ByteBuffer bb)
+        {
+            QueuedWrite qw = QueuedWrite.newQueuedWrite(cx, this, bb);
+            writeQueue.add(qw);
+            processWriteQueue(cx, false);
+            return qw;
+        }
+
+        protected void processWriteQueue(Context cx, boolean force)
+        {
+            if (force || (!writeQueue.isEmpty() && canEngineWrite())) {
+                QueuedWrite qw =
+                    writeQueue.isEmpty() ? QueuedWrite.newQueuedWrite(cx, this, EMPTY_BUF) : writeQueue.peek();
+                if (log.isTraceEnabled()) {
+                    log.trace("About to write {}", qw);
+                }
+
+                SSLEngineResult sslResult = null;
+                try {
+                    switch (qw.type) {
+                    case NORMAL:
+                        sslResult = processSslWrite(cx, qw);
+                        break;
+                    case SHUTDOWN:
+                    case SHUTDOWN_CLOSE:
+                        if (log.isDebugEnabled()) {
+                            log.debug("Engine {} closing outbound", index);
+                        }
+                        engine.closeOutbound();
+                        sslResult = processSslWrite(cx, qw);
+                        break;
+                    case CLOSE:
+                        if (log.isDebugEnabled()) {
+                            log.debug("Engine {} closing TCP socket", index);
+                        }
+                        tcpHandle.doClose(cx, qw.onComplete);
+                        break;
+                    }
+
+
+                } catch (SSLException ssle) {
+                    // Write failed -- remove from queue and notify
+                    if (!writeQueue.isEmpty()) {
+                        writeQueue.poll();
+                    }
+                    processFailedWrite(cx, qw, ssle);
+                    return;
+                }
+
+                switch (engine.getHandshakeStatus()) {
+                case NEED_UNWRAP:
+                    // Seed the read queue with an empty buffer so that something happens,
+                    // but not if we are waiting for more data
+                    if ((sslResult != null) && (sslResult.getStatus() != SSLEngineResult.Status.BUFFER_UNDERFLOW)) {
+                        processReadQueue(cx, true);
+                    }
+                    break;
+                case NEED_WRAP:
+                    if ((sslResult != null) && (sslResult.getStatus() != SSLEngineResult.Status.BUFFER_UNDERFLOW)) {
+                        processWriteQueue(cx, true);
+                    }
+                    break;
+                case NEED_TASK:
+                    processTask(false);
+                    break;
+                case FINISHED:
+                    // TODO Handshake just finished -- we owe a callback
+                    processReadQueue(cx, false);
+                    processWriteQueue(cx, false);
+                    break;
+                default:
+                    // Nothing else to to
+                    break;
+                }
+            }
+        }
+
+        private SSLEngineResult processSslWrite(Context cx, final QueuedWrite qw)
+            throws SSLException
+        {
+            // For wrapping, SSLEngine will not write even a single byte until the whole output buffer
+            // is the appropriate size.
+            // This ends up allocating a new ~16K ByteBuffer for each SSL
+            // packet, but it is passed to JS with zero copying.
+            // Possible performance tweak: Pre-allocate a buffer once during the lifetime of the SSLengine,
+            // and copy to a (usually smaller) JS buffer.
+
+            ByteBuffer fromWrap = ByteBuffer.allocate(engine.getSession().getPacketBufferSize());
+            SSLEngineResult result;
+            do {
+                if (log.isTraceEnabled()) {
+                    log.trace("SSLEngine wrap {} -> {} done = {}",
+                              qw.buf, fromWrap, engine.isOutboundDone());
+                }
+                result = engine.wrap(qw.buf, fromWrap);
+                if (log.isDebugEnabled()) {
+                    log.debug("Engine {} wrap {} -> {} = {}", index, qw.buf, fromWrap, result);
+                }
+                if (result.getStatus() == SSLEngineResult.Status.BUFFER_OVERFLOW) {
+                    fromWrap = doubleBuffer(fromWrap);
+                }
+            } while (result.getStatus() == SSLEngineResult.Status.BUFFER_OVERFLOW);
+
+            if ((qw.type == QueuedWrite.Type.NORMAL) && !qw.buf.hasRemaining()) {
+                // We wrote the whole message so remove it now no matter what
+                qw.writeComplete = true;
+                if (!writeQueue.isEmpty()) {
+                    writeQueue.poll();
+                }
+            }
+
+            if (result.bytesProduced() > 0) {
+                fromWrap.flip();
+                final SSLEngineResult tResult = result;
+                tcpHandle.internalWrite(fromWrap, cx, new ScriptTask() {
+                    @Override
+                    public void execute(Context cx, Scriptable scope)
+                    {
+                        processSuccessfulWrite(cx, qw, tResult);
+                    }
+                });
+            } else {
+                processSuccessfulWrite(cx, qw, result);
+            }
+            return result;
+        }
+
+        /**
+         * We get here if write of a message failed. We expect net.js to call "close" if this happens so that
+         * we can actually close the connection.
+         */
+        protected void processFailedWrite(Context cx, final QueuedWrite qw, SSLException ssle)
+        {
+            if (log.isDebugEnabled()) {
+                log.debug("Error in SSL wrap: {}", ssle);
+            }
+            if (qw.onComplete != null) {
+                final Scriptable err = Utils.makeErrorObject(cx, this, ssle.toString());
+                runner.enqueueTask(new ScriptTask() {
+                    @Override
+                    public void execute(Context cx, Scriptable scope)
+                    {
+                        setErrno(Constants.EIO);
+                        qw.onComplete.call(cx, EngineImpl.this, EngineImpl.this, new Object[] { err });
+                    }
+                });
+            }
+        }
+
+        /**
+         * We get here when write of a message is fully complete.
+         */
+        protected void processSuccessfulWrite(Context cx, QueuedWrite qw, SSLEngineResult result)
+        {
+            switch (qw.type) {
+            case NORMAL:
+                // Normal packet -- process callback if necessary and keep on writing
+                if (qw.writeComplete && (qw.onComplete != null)) {
+                    runner.enqueueCallback(qw.onComplete, this, this,
+                                           new Object[]{Context.getUndefinedValue(), this, qw});
+                }
+
+                if (result.getStatus() == SSLEngineResult.Status.CLOSED) {
+                    if (log.isDebugEnabled()) {
+                        log.debug("Engine {}  got an SSL close from the other side", index);
+                    }
+                    //handleEngineClosed(cx);
+                } else {
+                    processWriteQueue(cx, false);
+                }
+                break;
+
+            case SHUTDOWN:
+            case CLOSE:
+                // Called closeOutput and the write completed
+                if (result.getStatus() == SSLEngineResult.Status.CLOSED) {
+                    // OK to close now.
+                    writeQueue.remove();
+                } else {
+                    // Keep writing
+                    processWriteQueue(cx, false);
+                }
+                break;
+
+            case SHUTDOWN_CLOSE:
+                // Called closeOutput and the write completed
+                if (result.getStatus() == SSLEngineResult.Status.CLOSED) {
+                    // OK to close now.
+                    writeQueue.remove();
+                    QueuedWrite qw2 = QueuedWrite.newQueuedWrite(cx, this, EMPTY_BUF);
+                    qw2.onComplete = qw.onComplete;
+                    qw2.type = QueuedWrite.Type.CLOSE;
+                    writeQueue.add(qw2);
+                }
+                processWriteQueue(cx, false);
+                break;
+            }
+        }
+
+        private boolean canEngineWrite()
+        {
+            switch (engine.getHandshakeStatus()) {
+            case NEED_WRAP:
+            case FINISHED:
+            case NOT_HANDSHAKING:
+                return true;
+            default:
+                return false;
+            }
+        }
+
+        private boolean canEngineRead()
+        {
+            switch (engine.getHandshakeStatus()) {
+            case NEED_UNWRAP:
+            case FINISHED:
+            case NOT_HANDSHAKING:
+                return true;
+            default:
+                return false;
+            }
+        }
+
+        @JSFunction
+        @SuppressWarnings("unused")
+        public static void close(Context cx, Scriptable thisObj, Object[] args, Function func)
+        {
+            if (log.isDebugEnabled()) {
+                log.debug("Closing SSL connection");
+            }
+            Function callback = functionArg(args, 0, false);
+            EngineImpl self = (EngineImpl)thisObj;
+
+            QueuedWrite qw = QueuedWrite.newQueuedWrite(cx, self, EMPTY_BUF);
+            qw.type = QueuedWrite.Type.CLOSE;
+            qw.onComplete = callback;
+
+            if (self.engine.isOutboundDone() && self.engine.isInboundDone()) {
+                // We are already closed, so just close the socket.
+                qw.type = QueuedWrite.Type.CLOSE;
+            } else {
+                qw.type = QueuedWrite.Type.SHUTDOWN_CLOSE;
+            }
+
+            self.writeQueue.add(qw);
+            self.processWriteQueue(cx, false);
+        }
+
+        @JSFunction
+        @SuppressWarnings("unused")
+        public static Object shutdown(Context cx, Scriptable thisObj, Object[] args, Function func)
+        {
+            if (log.isDebugEnabled()) {
+                log.debug("Shutting down SSL connection for output");
+            }
+            EngineImpl self = (EngineImpl)thisObj;
+
+            // Queue up an object that will trigger us to close the outbound when we get there
+            QueuedWrite qw = QueuedWrite.newQueuedWrite(cx, self, EMPTY_BUF);
+            qw.type = QueuedWrite.Type.SHUTDOWN;
+            self.writeQueue.add(qw);
+            self.processWriteQueue(cx, false);
+            return qw;
+        }
+
         @JSGetter("peerAuthorized")
+        @SuppressWarnings("unused")
         public boolean isPeerAuthorized() {
             return peerAuthorized;
         }
 
         @JSGetter("authorizationError")
+        @SuppressWarnings("unused")
         public Object getAuthorizationError()
         {
             if (authorizationError == null) {
@@ -555,6 +1138,27 @@ public class SSLWrap
         }
 
         @JSFunction
+        @SuppressWarnings("unused")
+        public static void setUpConnection(Context cx, Scriptable thisObj, Object[] args, Function func)
+        {
+            boolean serverMode = booleanArg(args, 0);
+            Scriptable handle = objArg(args, 1, Scriptable.class, true);
+            EngineImpl self = (EngineImpl)thisObj;
+
+            if (log.isDebugEnabled()) {
+                log.debug("Setting up TLS for {}. Server mode = {}", handle, serverMode);
+            }
+
+            try {
+                self.tcpHandle = (TCPWrap.TCPImpl)handle;
+                self.tcpHandle.setSSLReader(self);
+            } catch (ClassCastException cce) {
+                throw Utils.makeError(cx, thisObj, "Passed network handle is not a TCP handle");
+            }
+        }
+
+        @JSFunction
+        @SuppressWarnings("unused")
         public static Object wrap(Context cx, Scriptable thisObj, Object[] args, Function func)
         {
             Buffer.BufferImpl buf = objArg(args, 0, Buffer.BufferImpl.class, false);
@@ -600,6 +1204,7 @@ public class SSLWrap
         }
 
         @JSFunction
+        @SuppressWarnings("unused")
         public static Object unwrap(Context cx, Scriptable thisObj, Object[] args, Function func)
         {
             Buffer.BufferImpl buf = objArg(args, 0, Buffer.BufferImpl.class, false);
@@ -712,6 +1317,7 @@ public class SSLWrap
         }
 
         @JSFunction
+        @SuppressWarnings("unused")
         public void runTask(final Function callback)
         {
             final Runnable task = engine.getDelegatedTask();
@@ -735,6 +1341,7 @@ public class SSLWrap
         }
 
         @JSFunction
+        @SuppressWarnings("unused")
         public void beginHandshake()
         {
             try {
@@ -745,6 +1352,7 @@ public class SSLWrap
         }
 
         @JSFunction
+        @SuppressWarnings("unused")
         public void closeInbound()
         {
             try {
@@ -755,12 +1363,14 @@ public class SSLWrap
         }
 
         @JSFunction
+        @SuppressWarnings("unused")
         public void closeOutbound()
         {
             engine.closeOutbound();
         }
 
         @JSFunction
+        @SuppressWarnings("unused")
         public boolean isOutboundDone()
         {
             return engine.isOutboundDone();
@@ -829,6 +1439,7 @@ public class SSLWrap
         }
 
         @JSFunction
+        @SuppressWarnings("unused")
         public static Object getCipher(Context cx, Scriptable thisObj, Object[] args, Function func)
         {
             EngineImpl self = (EngineImpl)thisObj;
@@ -844,6 +1455,7 @@ public class SSLWrap
         }
 
         @JSFunction
+        @SuppressWarnings("unused")
         public boolean validateCiphers(String cipherList)
         {
             boolean ret = true;
@@ -862,18 +1474,21 @@ public class SSLWrap
         }
 
         @JSFunction
+        @SuppressWarnings("unused")
         public void setClientAuthRequired(boolean required)
         {
             engine.setNeedClientAuth(required);
         }
 
         @JSFunction
+        @SuppressWarnings("unused")
         public void setClientAuthRequested(boolean requested)
         {
             engine.setWantClientAuth(requested);
         }
 
         @JSFunction
+        @SuppressWarnings("unused")
         public void setCiphers(String cipherList)
         {
             ArrayList<String> finalList = new ArrayList<String>();
@@ -888,6 +1503,7 @@ public class SSLWrap
         }
 
         @JSFunction
+        @SuppressWarnings("unused")
         public static Object getPeerCertificate(Context cx, Scriptable thisObj, Object[] args, Function func)
         {
             EngineImpl self = (EngineImpl)thisObj;
@@ -963,6 +1579,7 @@ public class SSLWrap
         }
 
         @JSFunction
+        @SuppressWarnings("unused")
         public static Object getSession(Context cx, Scriptable thisObj, Object[] args, Function func)
         {
             EngineImpl self = (EngineImpl)thisObj;
@@ -972,6 +1589,7 @@ public class SSLWrap
         }
 
         @JSFunction
+        @SuppressWarnings("unused")
         public static boolean isSessionReused(Context cx, Scriptable thisObj, Object[] args, Function func)
         {
             return false;
@@ -1023,10 +1641,6 @@ public class SSLWrap
     {
         static final AllTrustingManager INSTANCE = new AllTrustingManager();
 
-        private AllTrustingManager()
-        {
-        }
-
         @Override
         public void checkClientTrusted(X509Certificate[] x509Certificates, String s)
         {
@@ -1041,6 +1655,57 @@ public class SSLWrap
         public X509Certificate[] getAcceptedIssuers()
         {
             return new X509Certificate[0];
+        }
+    }
+
+    public static class QueuedWrite
+        extends ScriptableObject
+    {
+        public static final String CLASS_NAME = "_tlsWriteWrap";
+
+        enum Type { NORMAL, SHUTDOWN, SHUTDOWN_CLOSE, CLOSE }
+
+        ByteBuffer buf;
+        int length;
+        Function onComplete;
+        boolean writeComplete;
+        Type type = Type.NORMAL;
+
+        public static QueuedWrite newQueuedWrite(Context cx, Scriptable scope, ByteBuffer buf) {
+            QueuedWrite qw = (QueuedWrite)cx.newObject(scope, CLASS_NAME);
+            qw.buf = buf;
+            qw.length = buf.remaining();
+            return qw;
+        }
+
+        @Override
+        public String getClassName()
+        {
+            return CLASS_NAME;
+        }
+
+        @JSSetter("oncomplete")
+        @SuppressWarnings("unused")
+        public void setOnComplete(Function c)
+        {
+            this.onComplete = c;
+        }
+
+        @JSGetter("oncomplete")
+        @SuppressWarnings("unused")
+        public Function getOnComplete() {
+            return onComplete;
+        }
+
+        @JSGetter("bytes")
+        @SuppressWarnings("unused")
+        public int getLength() {
+            return length;
+        }
+
+        @Override
+        public String toString() {
+            return type + ": " + ((buf == null) ? "(null)" : buf.toString());
         }
     }
 }

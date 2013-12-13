@@ -28,7 +28,8 @@ var util = require('util');
 
 var clientConnected = 0;
 var serverConnected = 0;
-var request = new Buffer(new Array(1024 * 256).join('ABCD')); // 1mb
+//var request = new Buffer(new Array(1024 * 256).join('ABCD')); // 1mb
+var request = new Buffer(new Array(1024 * 20).join('ABCD')); // 1mb
 
 var options = {
   key: fs.readFileSync(common.fixturesDir + '/keys/agent1-key.pem'),
@@ -45,6 +46,8 @@ Mediator.prototype._write = function write(data, enc, cb) {
   this.buf += data;
   setTimeout(cb, 0);
 
+  console.log('_write: data length = %d buf length = %d request length = %d',
+              data.length, this.buf.length, request.length);
   if (this.buf.length >= request.length) {
     assert.equal(this.buf, request.toString());
     server.close();
@@ -54,6 +57,7 @@ Mediator.prototype._write = function write(data, enc, cb) {
 var mediator = new Mediator();
 
 var server = tls.Server(options, function(socket) {
+  console.log('Server: connected');
   socket.pipe(mediator);
   serverConnected++;
 });
@@ -63,6 +67,7 @@ server.listen(common.PORT, function() {
     port: common.PORT,
     rejectUnauthorized: false
   }, function() {
+    console.log('Client: connected');
     ++clientConnected;
     client1.end(request);
   });

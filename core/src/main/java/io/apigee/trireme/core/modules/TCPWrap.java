@@ -23,6 +23,7 @@ package io.apigee.trireme.core.modules;
 
 import io.apigee.trireme.core.NetworkPolicy;
 import io.apigee.trireme.core.NodeRuntime;
+import io.apigee.trireme.core.ScriptTask;
 import io.apigee.trireme.core.Utils;
 import io.apigee.trireme.core.internal.Charsets;
 import io.apigee.trireme.core.InternalNodeModule;
@@ -94,6 +95,8 @@ public class TCPWrap
         private Function          onConnection;
         private Function          onRead;
         private int               byteCount;
+        private SSLWrap.EngineImpl sslReader;
+        private boolean           closed;
 
         private ServerSocketChannel     svrChannel;
         private SocketChannel           clientChannel;
@@ -108,6 +111,9 @@ public class TCPWrap
         @SuppressWarnings("unused")
         public static Object newTCPImpl(Context cx, Object[] args, Function ctorObj, boolean inNewExpr)
         {
+            if (!inNewExpr) {
+                return cx.newObject(ctorObj, CLASS_NAME);
+            }
             TCPImpl tcp = new TCPImpl();
             tcp.ref();
             return tcp;
@@ -187,6 +193,14 @@ public class TCPWrap
             return byteCount;
         }
 
+        /**
+         * Used to intercept read handling and pass it to the SSL implementation. This could be an interface
+         * and all that nice stuff, and yet there will only be one implementation right now.
+         */
+        void setSSLReader(SSLWrap.EngineImpl ssl) {
+            this.sslReader = ssl;
+        }
+
         @JSGetter("writeQueueSize")
         @SuppressWarnings("unused")
         public int getWriteQueueSize()
@@ -228,12 +242,18 @@ public class TCPWrap
             self.doClose(cx, callback);
         }
 
+        boolean isClosed() {
+            return closed;
+        }
 
-
-        private void doClose(Context cx, Function callback)
+        void doClose(Context cx, Function callback)
         {
+            if (closed) {
+                return;
+            }
             super.close();
             try {
+                closed = true;
                 ScriptRunner runner = getRunner();
                 if (clientChannel != null) {
                     if (log.isDebugEnabled()) {
@@ -454,6 +474,16 @@ public class TCPWrap
             return qw;
         }
 
+        void internalWrite(ByteBuffer bb, Context cx, ScriptTask cb)
+        {
+            clearErrno();
+            QueuedWrite qw = (QueuedWrite)cx.newObject(this, QueuedWrite.CLASS_NAME);
+            qw.initialize(bb);
+            qw.callback = cb;
+            byteCount += bb.remaining();
+            offerWrite(qw, cx);
+        }
+
         private void offerWrite(QueuedWrite qw, Context cx)
         {
             if (writeQueue.isEmpty() && !qw.shutdown) {
@@ -473,9 +503,13 @@ public class TCPWrap
                     // We didn't write the whole thing.
                     writeReady = false;
                     queueWrite(qw);
-                } else if (qw.onComplete != null) {
-                    qw.onComplete.call(cx, qw.onComplete, this,
-                                       new Object[] { 0, this, qw });
+                } else {
+                    if (qw.onComplete != null) {
+                        qw.onComplete.call(cx, qw.onComplete, this,
+                                           new Object[] { 0, this, qw });
+                    } else if (qw.callback != null) {
+                        qw.callback.execute(cx, this);
+                    }
                 }
             } else {
                 queueWrite(qw);
@@ -711,19 +745,25 @@ public class TCPWrap
                 }
                 if (read > 0) {
                     readBuffer.flip();
-                    Buffer.BufferImpl buf = Buffer.BufferImpl.newBuffer(cx, this, readBuffer, true);
-                    readBuffer.clear();
 
                     if (onRead != null) {
+                        Buffer.BufferImpl buf = Buffer.BufferImpl.newBuffer(cx, this, readBuffer, true);
                         onRead.call(cx, onRead, this,
                                     new Object[] { buf, 0, read });
+
+                    } else if (sslReader != null) {
+                        sslReader.onRead(cx, Utils.copyBuffer(readBuffer));
                     }
+                    readBuffer.clear();
+
                 } else if (read < 0) {
-                    setErrno(Constants.EOF);
                     removeInterest(SelectionKey.OP_READ);
                     if (onRead != null) {
+                        setErrno(Constants.EOF);
                         onRead.call(cx, onRead, this,
                                     new Object[] { null, 0, 0 });
+                    } else if (sslReader != null) {
+                        sslReader.onEof(cx);
                     }
                 }
             } while (readStarted && (read > 0));
@@ -825,6 +865,7 @@ public class TCPWrap
         int length;
         Function onComplete;
         boolean shutdown;
+        ScriptTask callback;
 
         void initialize(ByteBuffer buf)
         {

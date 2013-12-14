@@ -211,11 +211,11 @@ function Server() {
   var handshakeTimeout = options.handshakeTimeout;
   if (!handshakeTimeout) {
     handshakeTimeout = DEFAULT_HANDSHAKE_TIMEOUT;
+    handshakeTimeout = DEFAULT_HANDSHAKE_TIMEOUT;
   }
 
   self.netServer = net.createServer(options, function(connection) {
     onServerConnection(self, connection, options);
-    self.emit('secureConnection', connection);
   });
   return self;
 }
@@ -240,15 +240,22 @@ function onServerConnection(self, connection, options) {
 
   assert(connection._handle);
 
+  connection._tlsServer = self;
   engine.setUpConnection(true, connection._handle);
   engine.onread = connection._handle.onread;
   connection._handle.onread = null;
   engine.owner = connection._handle.owner;
   connection._handle = engine;
+  initTlsMethods(connection);
 
-  // TODO setHandshakeTimeout(handshakeTimeout)
-  // TODO rejectUnauthorized = self.rejectUnauthorized && options.requestCert;
+  self.rejectUnauthorized = self.rejectUnauthorized && options.requestCert;
 
+  engine.onhandshake = function(err) {
+    if (debugEnabled) {
+      debug('Server handshake complete. err = ' + err);
+    }
+    onHandshakeComplete(connection, err);
+  };
 }
 
 exports.createServer = function () {
@@ -336,12 +343,12 @@ exports.connect = function() {
   options.host = hostname;
 
   var sslContext = getContext(options, rejectUnauthorized);
+  var sslContext = getContext(options, rejectUnauthorized);
 
   var engine = sslContext.createEngine(true);
   var netConn;
   if (options.socket) {
-    engine.setUpConnection(false, options.socket._handle);
-    options.socket._handle = engine;
+    onClientConnect(engine, options.socket);
     netConn = options.socket;
 
   } else {
@@ -375,9 +382,40 @@ function onClientConnect(engine, connection) {
   connection._handle.onread = null;
   engine.owner = connection._handle.owner;
   connection._handle = engine;
-  // TODO beginHandshake();
-  // TODO write cleartext
-  connection.emit('secureConnect');
+  initTlsMethods(connection);
+
+  // Lots of tests expect that we'll actually handshake before the first write
+  debug('Initiating TLS handshake');
+  connection._handle.initiateHandshake(function(err) {
+    onHandshakeComplete(connection, err);
+  });
+}
+
+function onHandshakeComplete(conn, err) {
+  conn.authorized = conn._handle.peerAuthorized;
+  conn.handshakeComplete = true;
+  // TODO clear timeout
+  if (err) {
+    debug('Error on handshake: ' + err);
+    conn.authorizationError = conn._handle.authorizationError;
+    if (conn._tlsServer) {
+      // On the server -- just emit and close
+      conn._tlsServer.emit('clientError', err, this);
+      conn._handle.forceClose();
+    } else {
+      // On the client, just emit and we close later, right?
+      conn.authorized = false;
+      conn.authorizationError = err;
+      conn.emit('error', err);
+      conn._handle.forceClose();
+    }
+  } else if (conn._tlsServer) {
+    debug('TLS secure connection established on server');
+    conn._tlsServer.emit('secureConnection', conn);
+  } else {
+    debug('TLS secure connection established on client');
+    conn.emit('secureConnect');
+  }
 }
 
 exports.createSecurePair = function() {
@@ -404,6 +442,37 @@ Server.prototype.addContext = function(hostname, credentials) {
 Server.prototype.address = function() {
   return this.netServer.address();
 };
+
+function initTlsMethods(conn) {
+  conn.getCipher = function() {
+    return this._handle.getCipher();
+  };
+
+  conn.getSession = function() {
+    return this._handle.getSession();
+  };
+
+  conn.isSessionReused = function() {
+    return this._handle.isSessionReused();
+  };
+
+  conn.getPeerCertificate = function() {
+    var cert = this._handle.getPeerCertificate();
+    if (cert === undefined) {
+      return undefined;
+    }
+    if (cert.subject) {
+      cert.subject = tlscheckidentity.parseCertString(cert.subject);
+    }
+    if (cert.issuer) {
+      cert.issuer = tlscheckidentity.parseCertString(cert.issuer);
+    }
+    if (cert.subjectAltName) {
+      cert.subject.subjectAltName = cert.subjectAltName;
+    }
+    return cert;
+  };
+}
 
 /*
 

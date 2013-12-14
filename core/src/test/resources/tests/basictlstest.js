@@ -2,6 +2,7 @@ var tls = require('tls');
 var assert = require('assert');
 var fs = require('fs');
 var path = require('path');
+var util = require('util');
 
 var PORT = 22223;
 var MSG = 'Hello, Server!';
@@ -47,6 +48,7 @@ function onListening() {
     console.log('Client got chunk of length %d', chunk.length);
     fromServer += chunk;
     if (fromServer === MSG2) {
+      console.log('Conn: %s', util.inspect(conn));
       console.log('Client ending socket');
       conn.end();
     }

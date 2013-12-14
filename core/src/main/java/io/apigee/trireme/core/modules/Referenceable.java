@@ -74,6 +74,11 @@ public class Referenceable
         ((ScriptRunner)getRunner()).clearErrno();
     }
 
+    protected static String getErrno()
+    {
+         return ((ScriptRunner)getRunner()).getErrno();
+    }
+
     protected static ScriptRunner getRunner(Context cx)
     {
         return (ScriptRunner) cx.getThreadLocal(ScriptRunner.RUNNER);

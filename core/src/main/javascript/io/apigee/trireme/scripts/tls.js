@@ -208,10 +208,9 @@ function Server() {
     }
   }
 
-  var handshakeTimeout = options.handshakeTimeout;
-  if (!handshakeTimeout) {
-    handshakeTimeout = DEFAULT_HANDSHAKE_TIMEOUT;
-    handshakeTimeout = DEFAULT_HANDSHAKE_TIMEOUT;
+  self._handshakeTimeout = options.handshakeTimeout;
+  if (!self._handshakeTimeout) {
+    self._handshakeTimeout = DEFAULT_HANDSHAKE_TIMEOUT;
   }
 
   self.netServer = net.createServer(options, function(connection) {
@@ -246,16 +245,35 @@ function onServerConnection(self, connection, options) {
   connection._handle.onread = null;
   engine.owner = connection._handle.owner;
   connection._handle = engine;
+  connection.socket = connection;
   initTlsMethods(connection);
 
   self.rejectUnauthorized = self.rejectUnauthorized && options.requestCert;
+
+  if (debugEnabled) {
+    debug('Setting handshake timeout to ' + self._handshakeTimeout);
+  }
+  connection._handshakeTimeoutKey = setTimeout(function() {
+    onServerHandshakeTimeout(self, connection);
+  }, self._handshakeTimeout);
 
   engine.onhandshake = function(err) {
     if (debugEnabled) {
       debug('Server handshake complete. err = ' + err);
     }
+    if (connection._handshakeTimeoutKey) {
+      clearTimeout(connection._handshakeTimeoutKey);
+    }
     onHandshakeComplete(connection, err);
   };
+}
+
+function onServerHandshakeTimeout(self, connection) {
+  if (debugEnabled) {
+    debug('Firing handshake timeout');
+  }
+  connection._handle.forceClose();
+  self.emit('clientError', new Error('Server-side handshake timeout'), connection);
 }
 
 exports.createServer = function () {
@@ -382,6 +400,8 @@ function onClientConnect(engine, connection) {
   connection._handle.onread = null;
   engine.owner = connection._handle.owner;
   connection._handle = engine;
+  // A hack to make a few internal things work
+  connection.socket = connection;
   initTlsMethods(connection);
 
   // Lots of tests expect that we'll actually handshake before the first write

@@ -515,6 +515,15 @@ public class ScriptRunner
         process.put("_errno", process, 0);
     }
 
+    public String getErrno()
+    {
+        String err = Context.toString(process.get("_errno", process));
+        if ((err == null) || "0".equals(err)) {
+            return null;
+        }
+        return err;
+    }
+
     @Override
     public void registerCloseable(Closeable c)
     {

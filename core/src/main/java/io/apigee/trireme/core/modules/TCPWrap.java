@@ -504,12 +504,7 @@ public class TCPWrap
                     writeReady = false;
                     queueWrite(qw);
                 } else {
-                    if (qw.onComplete != null) {
-                        qw.onComplete.call(cx, qw.onComplete, this,
-                                           new Object[] { 0, this, qw });
-                    } else if (qw.callback != null) {
-                        qw.callback.execute(cx, this);
-                    }
+                    sendWriteCallback(cx, qw, null);
                 }
             } else {
                 queueWrite(qw);
@@ -683,7 +678,7 @@ public class TCPWrap
                             log.debug("Sending shutdown for {}", clientChannel);
                         }
                         clientChannel.socket().shutdownOutput();
-                        sendWriteCallback(cx, qw, Context.getUndefinedValue());
+                        sendWriteCallback(cx, qw, null);
                     } else {
                         int written = clientChannel.write(qw.buf);
                         if (log.isDebugEnabled()) {
@@ -695,7 +690,7 @@ public class TCPWrap
                             addInterest(SelectionKey.OP_WRITE);
                             break;
                         } else {
-                            sendWriteCallback(cx, qw, Context.getUndefinedValue());
+                            sendWriteCallback(cx, qw, null);
                         }
                     }
 
@@ -720,8 +715,16 @@ public class TCPWrap
         {
             writeQueue.poll();
             if (qw.onComplete != null) {
+                Object jerr = (err == null) ? Context.getUndefinedValue() : err;
                 qw.onComplete.call(cx, qw.onComplete, this,
-                                   new Object[] { err, this, qw });
+                                   new Object[] { jerr, this, qw });
+            } else if (qw.callback != null) {
+                if (err == null) {
+                    clearErrno();
+                } else {
+                    setErrno(Constants.EIO);
+                }
+                qw.callback.execute(cx, this);
             }
         }
 

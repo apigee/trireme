@@ -941,7 +941,7 @@ public class SSLWrap
                 } catch (SSLException ssle) {
                     // Write failed -- remove from queue and notify
                     writeQueue.poll();
-                    processFailedWrite(cx, qw, ssle);
+                    processFailedWrite(cx, qw, ssle.toString());
                     return;
                 }
 
@@ -994,10 +994,6 @@ public class SSLWrap
                 }
             } while (result.getStatus() == SSLEngineResult.Status.BUFFER_OVERFLOW);
 
-            if (result.getHandshakeStatus() == SSLEngineResult.HandshakeStatus.FINISHED) {
-                processCompletedHandshake(cx);
-            }
-
             if (result.bytesProduced() > 0) {
                 fromWrap.flip();
                 final SSLEngineResult tResult = result;
@@ -1008,11 +1004,19 @@ public class SSLWrap
                         if (log.isTraceEnabled()) {
                             log.trace("TCP write successful");
                         }
-                        processSuccessfulWrite(cx, qw, tResult);
+                        if (getErrno() == null) {
+                            processSuccessfulWrite(cx, qw, tResult);
+                        } else {
+                            processFailedWrite(cx, qw, getErrno());
+                        }
                     }
                 });
             } else {
                 processSuccessfulWrite(cx, qw, result);
+            }
+
+            if (result.getHandshakeStatus() == SSLEngineResult.HandshakeStatus.FINISHED) {
+                processCompletedHandshake(cx);
             }
             return result;
         }
@@ -1021,17 +1025,17 @@ public class SSLWrap
          * We get here if write of a message failed. We expect net.js to call "close" if this happens so that
          * we can actually close the connection.
          */
-        protected void processFailedWrite(Context cx, QueuedWrite qw, SSLException ssle)
+        protected void processFailedWrite(Context cx, QueuedWrite qw, String msg)
         {
             if (log.isDebugEnabled()) {
-                log.debug("Error in SSL wrap: {}", ssle);
+                log.debug("Error in SSL wrap: {}", msg);
             }
-            Scriptable err = Utils.makeErrorObject(cx, this, ssle.toString());
+            Scriptable err = Utils.makeErrorObject(cx, this, msg);
             if (!handshakeComplete && (handshakeCallback != null)) {
                 handshakeCallback.call(cx, this, this, new Object[] { err, this });
             } else if (qw.onComplete != null) {
                 setErrno(Constants.EIO);
-                qw.onComplete.call(cx, EngineImpl.this, EngineImpl.this, new Object[] { err });
+                qw.onComplete.call(cx, this, this, new Object[] { err, this, qw });
             }
         }
 
@@ -1046,8 +1050,8 @@ public class SSLWrap
                 if (!qw.buf.hasRemaining()) {
                     writeQueue.poll();
                     if (qw.onComplete != null) {
-                        qw.onComplete.call(cx, EngineImpl.this, EngineImpl.this,
-                                           new Object[]{Context.getUndefinedValue(), EngineImpl.this, qw});
+                        qw.onComplete.call(cx, this, this,
+                                           new Object[]{Context.getUndefinedValue(), this, qw});
                     }
                 }
 
@@ -1234,6 +1238,41 @@ public class SSLWrap
             } catch (ClassCastException cce) {
                 throw Utils.makeError(cx, thisObj, "Passed network handle is not a TCP handle");
             }
+        }
+
+        @JSFunction
+        @SuppressWarnings("unused")
+        public static Object getsockname(Context cx, Scriptable thisObj, Object[] args, Function func)
+        {
+            return TCPWrap.TCPImpl.getsockname(cx, ((EngineImpl)thisObj).tcpHandle, args, func);
+        }
+
+        @JSFunction
+        @SuppressWarnings("unused")
+        public static Object getpeername(Context cx, Scriptable thisObj, Object[] args, Function func)
+        {
+            return TCPWrap.TCPImpl.getpeername(cx, ((EngineImpl)thisObj).tcpHandle, args, func);
+        }
+
+        @JSFunction
+        @SuppressWarnings("unused")
+        public void setNoDelay(boolean nd)
+        {
+            tcpHandle.setNoDelay(nd);
+        }
+
+        @JSFunction
+        @SuppressWarnings("unused")
+        public void setKeepAlive(boolean nd)
+        {
+            tcpHandle.setKeepAlive(nd);
+        }
+
+        @JSFunction
+        @SuppressWarnings("unused")
+        public void setSimultaneousAccepts(int accepts)
+        {
+            tcpHandle.setSimultaneousAccepts(accepts);
         }
 
         @JSFunction

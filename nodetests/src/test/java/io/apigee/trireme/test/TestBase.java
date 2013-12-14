@@ -35,6 +35,10 @@ public abstract class TestBase
 
         if ((java6Command != null) && (java7Command != null)) {
             javaVersions = new String[] { "6", "7" };
+        } else if (java7Command != null) {
+            javaVersions = new String[] { "7" };
+        } else if (java6Command != null) {
+            javaVersions = new String[] { "6" };
         } else {
             javaVersions = new String[] { "default" };
         }

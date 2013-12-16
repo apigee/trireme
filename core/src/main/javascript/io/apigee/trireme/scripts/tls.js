@@ -448,6 +448,7 @@ function doClose(self, err) {
   if (debugEnabled) {
     debug(self.id + ' destroy');
   }
+  self.writable = self.readable = false;
   self.closed = true;
   self.socket.destroy();
   process.nextTick(function() {
@@ -508,6 +509,7 @@ CleartextStream.prototype.end = function(data, encoding) {
     debug(this.id + ' end(' + (data ? data.length : 0) + ')');
   }
 
+  this.writable = false;
   var self = this;
   if (this.handshakeComplete) {
     doEnd(self, data, encoding);

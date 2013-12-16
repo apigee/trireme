@@ -244,7 +244,7 @@ function onwrite(stream, er) {
   var state = stream._writableState;
   var sync = state.sync;
   var cb = state.writecb;
-
+  assert(state.writecb !== null);
   onwriteStateUpdate(state);
 
   if (er)

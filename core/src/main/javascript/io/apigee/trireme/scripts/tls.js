@@ -406,6 +406,7 @@ function onClientConnect(engine, connection) {
 
   // Lots of tests expect that we'll actually handshake before the first write
   debug('Initiating TLS handshake');
+
   connection._handle.initiateHandshake(function(err) {
     onHandshakeComplete(connection, err);
   });

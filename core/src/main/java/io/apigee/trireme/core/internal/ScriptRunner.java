@@ -419,6 +419,12 @@ public class ScriptRunner
         selector.wakeup();
     }
 
+    @Override
+    public void executeCallback(Context cx, Function f, Scriptable scope, Scriptable thisObj, Scriptable domain, Object[] args)
+    {
+        process.submitTick(cx, f, scope, thisObj, domain, args);
+    }
+
     /**
      * This method is used specifically by process.nextTick, and stuff submitted here is subject to
      * process.maxTickCount.

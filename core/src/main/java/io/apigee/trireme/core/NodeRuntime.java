@@ -107,6 +107,10 @@ public interface NodeRuntime
      */
     void enqueueTask(ScriptTask taskm, Scriptable domain);
 
+    /**
+     * Execute a callback right now. Best used within a ScriptTask.
+     */
+    void executeCallback(Context cx, Function f, Scriptable scope, Scriptable thisObj, Scriptable domain, Object[] args);
 
     /**
      * Put a task on the tick queue to run the specified function in the specified scope.

@@ -841,7 +841,7 @@
   startup.processTrireme = function() {
     function copyArgs(args) {
       var a = [];
-      for (var i = 2; i < args.length; i++) {
+      for (var i = 3; i < args.length; i++) {
         a.push(args[i]);
       }
       return a;
@@ -849,9 +849,9 @@
 
     // This is a function that will be called when some Java code is done with an async operation
     // and wants to call a callback back in the main script thread.
-    process._submitTick = function(func, domain) {
+    process._submitTick = function(func, thisObj, domain) {
       var fArgs = copyArgs(arguments);
-      func.apply(this, fArgs);
+      func.apply(thisObj, fArgs);
     };
 
     // This function is called whenever the JavaScript code switches over to domain mode.
@@ -869,12 +869,12 @@
 
       // A function that will be called by the main runtime when it needs to have a function run in this
       // thread, optionally with a domain
-      process._submitTick = function(func, domain) {
+      process._submitTick = function(func, thisObj, domain) {
         var fArgs = copyArgs(arguments);
         if (domain) {
           domain.enter();
         }
-        func.apply(this, fArgs);
+        func.apply(thisObj, fArgs);
         if (domain) {
           // Do not exit the domain in a "finally" -- if we throw, the exception handler will clear it
           domain.exit();

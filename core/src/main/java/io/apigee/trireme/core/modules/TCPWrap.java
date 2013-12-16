@@ -711,20 +711,30 @@ public class TCPWrap
             }
         }
 
-        private void sendWriteCallback(Context cx, QueuedWrite qw, Object err)
+        private void sendWriteCallback(Context cx, final QueuedWrite qw, final Object err)
         {
             writeQueue.poll();
-            if (qw.onComplete != null) {
-                Object jerr = (err == null) ? Context.getUndefinedValue() : err;
-                qw.onComplete.call(cx, qw.onComplete, this,
-                                   new Object[] { jerr, this, qw });
-            } else if (qw.callback != null) {
+            if (qw.callback != null) {
                 if (err == null) {
                     clearErrno();
                 } else {
                     setErrno(Constants.EIO);
                 }
                 qw.callback.execute(cx, this);
+            } else {
+                final Scriptable domain = getRunner().getDomain();
+                getRunner().enqueueTask(new ScriptTask() {
+                    @Override
+                    public void execute(Context cx, Scriptable scope)
+                    {
+                        if (qw.onComplete != null) {
+                            Object jerr = (err == null) ? Context.getUndefinedValue() : err;
+                            getRunner().executeCallback(cx, qw.onComplete,
+                                                        TCPImpl.this, TCPImpl.this, domain,
+                                                        new Object[] { jerr, TCPImpl.this, qw });
+                        }
+                    }
+                });
             }
         }
 

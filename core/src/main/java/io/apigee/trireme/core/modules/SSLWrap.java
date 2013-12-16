@@ -771,7 +771,7 @@ public class SSLWrap
 
             if (!handshakeComplete && (handshakeCallback != null)) {
                 Scriptable err = Utils.makeErrorObject(cx, this, ssle.toString());
-                handshakeCallback.call(cx, this, this, new Object[] { err, this });
+                handshakeCallback.call(cx, handshakeCallback, this, new Object[]{err, this});
             } else if (onRead != null) {
                 setErrno(Constants.EIO);
                 onRead.call(cx, this, this, new Object[]{null, 0, 0});
@@ -1025,34 +1025,55 @@ public class SSLWrap
          * We get here if write of a message failed. We expect net.js to call "close" if this happens so that
          * we can actually close the connection.
          */
-        protected void processFailedWrite(Context cx, QueuedWrite qw, String msg)
+        protected void processFailedWrite(Context cx, final QueuedWrite qw, String msg)
         {
             if (log.isDebugEnabled()) {
                 log.debug("Error in SSL wrap: {}", msg);
             }
-            Scriptable err = Utils.makeErrorObject(cx, this, msg);
+            final Scriptable err = Utils.makeErrorObject(cx, this, msg);
             if (!handshakeComplete && (handshakeCallback != null)) {
-                handshakeCallback.call(cx, this, this, new Object[] { err, this });
-            } else if (qw.onComplete != null) {
-                setErrno(Constants.EIO);
-                qw.onComplete.call(cx, this, this, new Object[] { err, this, qw });
+                handshakeCallback.call(cx, handshakeCallback, this,
+                                       new Object[]{err, this});
+            } else {
+                final Scriptable domain = runner.getDomain();
+                runner.enqueueTask(new ScriptTask() {
+                    @Override
+                    public void execute(Context cx, Scriptable scope)
+                    {
+                        if (qw.onComplete != null) {
+                            setErrno(Constants.EIO);
+                            runner.executeCallback(cx, qw.onComplete,
+                                                   qw.onComplete, EngineImpl.this, domain,
+                                                   new Object[] { err, EngineImpl.this, qw });
+                        }
+                    }
+                });
             }
         }
 
         /**
          * We get here when write of a message is fully complete.
          */
-        protected void processSuccessfulWrite(Context cx, QueuedWrite qw, SSLEngineResult result)
+        protected void processSuccessfulWrite(Context cx, final QueuedWrite qw, SSLEngineResult result)
         {
             switch (qw.type) {
             case NORMAL:
                 // Normal packet -- process callback if necessary and keep on writing
                 if (!qw.buf.hasRemaining()) {
                     writeQueue.poll();
-                    if (qw.onComplete != null) {
-                        qw.onComplete.call(cx, this, this,
-                                           new Object[]{Context.getUndefinedValue(), this, qw});
-                    }
+                    final Scriptable domain = runner.getDomain();
+                    // Need to put onComplete on the callback queue, because the caller in net.js sets
+                    // it only after the "write" call has returned
+                    runner.enqueueTask(new ScriptTask() {
+                        @Override
+                        public void execute(Context cx, Scriptable scope)
+                        {
+                            if (qw.onComplete != null) {
+                                runner.executeCallback(cx, qw.onComplete, qw.onComplete, EngineImpl.this, domain,
+                                                       new Object[]{Context.getUndefinedValue(), EngineImpl.this, qw});
+                            }
+                        }
+                    });
                 }
 
                 if (result.getStatus() == SSLEngineResult.Status.CLOSED) {
@@ -1103,7 +1124,9 @@ public class SSLWrap
                     log.trace("Engine {} invoking completed handshake", index);
                 }
                 handshakeComplete = true;
-                handshakeCallback.call(cx, this, this,
+                // Need to call handshakeCallback synchronously becuase it depends on stuff that gets reset
+                // after it's done, it seems, in net.js...
+                handshakeCallback.call(cx, handshakeCallback, this,
                                        new Object[]{Context.getUndefinedValue(), this});
                 handshakeCallback = null;
             } else {

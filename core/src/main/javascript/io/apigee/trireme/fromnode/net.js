@@ -702,6 +702,7 @@ Socket.prototype.__defineGetter__('bytesWritten', function() {
 
 
 function afterWrite(status, handle, req) {
+  debug('afterWrite: status = %j handle = %s req = %s', status, handle, req);
   var self = handle.owner;
   var state = self._writableState;
   if (self !== process.stderr && self !== process.stdout)

@@ -360,13 +360,14 @@ public class Process
             if (log.isTraceEnabled()) {
                 log.trace("Executing function {} args = {} domain = {}", f, numArgs, domain);
             }
-            Object[] callArgs = new Object[numArgs + 2];
+            Object[] callArgs = new Object[numArgs + 3];
             callArgs[0] = f;
-            callArgs[1] = domain;
+            callArgs[1] = thisObj;
+            callArgs[2] = domain;
             if (numArgs > 0) {
-                System.arraycopy(args, 0, callArgs, 2, numArgs);
+                System.arraycopy(args, 0, callArgs, 3, numArgs);
             }
-            submitTick.call(cx, scope, thisObj, callArgs);
+            submitTick.call(cx, scope, this, callArgs);
         }
 
         @SuppressWarnings("unused")

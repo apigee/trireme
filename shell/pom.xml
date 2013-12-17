@@ -4,28 +4,28 @@
   <parent>
     <groupId>io.apigee.trireme</groupId>
     <artifactId>trireme</artifactId>
-    <version>0.6.8-SNAPSHOT</version>
+    <version>0.6.8</version>
   </parent>
 
   <name>trireme-shell</name>
   <artifactId>trireme-shell</artifactId>
-  <version>0.6.8-SNAPSHOT</version>
+  <version>0.6.8</version>
 
   <dependencies>
     <dependency>
       <groupId>io.apigee.trireme</groupId>
       <artifactId>trireme-core</artifactId>
-      <version>0.6.8-SNAPSHOT</version>
+      <version>0.6.8</version>
     </dependency>
     <dependency>
       <groupId>io.apigee.trireme</groupId>
       <artifactId>trireme-crypto</artifactId>
-      <version>0.6.8-SNAPSHOT</version>
+      <version>0.6.8</version>
     </dependency>
     <dependency>
       <groupId>io.apigee.trireme</groupId>
       <artifactId>trireme-util</artifactId>
-      <version>0.6.8-SNAPSHOT</version>
+      <version>0.6.8</version>
     </dependency>
 
     <dependency>

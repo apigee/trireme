@@ -48,6 +48,17 @@ a "409" (conflict) status. You can fix this by using the Archiva web app to
 manually delete the artifacts and try again. I'm not sure of a better way
 to do this.
 
+* What to do next.
+
+You need to log in to "oss.sonatype.org". Look for "Staging Repositories"
+and find the one named "io.apigee-something".
+
+Check it and press the "Close" button on top. A bunch of validation happens
+and you have to wait for it to complete. Eventually, it will be done
+and you can press "Promote."
+
+Apparently this can be automated, but it has not been automated yet.
+
 * How to update the license:
 
 mvn -Dyear=2013 license:format

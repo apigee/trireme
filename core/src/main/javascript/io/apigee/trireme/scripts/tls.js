@@ -202,8 +202,7 @@ function Server() {
   self.context.init();
 
   if (options.ciphers) {
-    var tmpEngine = self.context.createEngine(false);
-    if (!tmpEngine.validateCiphers(options.ciphers)) {
+    if (!self.context.validateCiphers(options.ciphers)) {
       throw 'Invalid cipher list: ' + options.ciphers;
     }
   }
@@ -214,6 +213,7 @@ function Server() {
   }
 
   self.netServer = net.createServer(options, function(connection) {
+    // TODO make sure not to call "readStart" until TLS is wired
     onServerConnection(self, connection, options);
   });
   return self;
@@ -222,30 +222,26 @@ util.inherits(Server, net.Server);
 exports.Server = Server;
 
 function onServerConnection(self, connection, options) {
-  var engine = self.context.createEngine(false);
+  debug('Connection received by server');
+  // Set up the SSL context, and then enable SSL on the underlying TCP socket handle
   if (options.requestCert) {
     if (self.rejectUnauthorized) {
       debug('Client auth required');
-      engine.setClientAuthRequired(true);
+      self.context.setClientAuthRequired(true);
     } else {
       debug('Client auth requested');
-      engine.setClientAuthRequested(true);
+      self.context.setClientAuthRequested(true);
     }
   }
 
   if (options.ciphers) {
-    engine.setCiphers(options.ciphers);
+    self.context.setCiphers(options.ciphers);
   }
 
   assert(connection._handle);
 
-  connection._tlsServer = self;
-  engine.setUpConnection(true, connection._handle);
-  engine.onread = connection._handle.onread;
-  connection._handle.onread = null;
-  engine.owner = connection._handle.owner;
-  connection._handle = engine;
   connection.socket = connection;
+  connection._tlsServer = self;
   initTlsMethods(connection);
 
   self.rejectUnauthorized = self.rejectUnauthorized && options.requestCert;
@@ -253,27 +249,11 @@ function onServerConnection(self, connection, options) {
   if (debugEnabled) {
     debug('Setting handshake timeout to ' + self._handshakeTimeout);
   }
-  connection._handshakeTimeoutKey = setTimeout(function() {
-    onServerHandshakeTimeout(self, connection);
-  }, self._handshakeTimeout);
+  connection._handle.setTlsHandshakeTimeout(self._handshakeTimeout);
 
-  engine.onhandshake = function(err) {
-    if (debugEnabled) {
-      debug('Server handshake complete. err = ' + err);
-    }
-    if (connection._handshakeTimeoutKey) {
-      clearTimeout(connection._handshakeTimeoutKey);
-    }
-    onHandshakeComplete(connection, err);
-  };
-}
+  connection._handle.onhandshake = onHandshakeComplete;
 
-function onServerHandshakeTimeout(self, connection) {
-  if (debugEnabled) {
-    debug('Firing handshake timeout');
-  }
-  connection._handle.forceClose();
-  self.emit('clientError', new Error('Server-side handshake timeout'), connection);
+  connection._handle.enableTls(self.context, false);
 }
 
 exports.createServer = function () {
@@ -290,7 +270,7 @@ Server.prototype.listen = function() {
   var host;
   var callback;
 
-  if (typeof arguments[1] === 'function') {
+  if (typeof arguments[1]   === 'function') {
     callback = arguments[1];
   } else if (typeof arguments[2] === 'function') {
     host = arguments[1];
@@ -361,12 +341,10 @@ exports.connect = function() {
   options.host = hostname;
 
   var sslContext = getContext(options, rejectUnauthorized);
-  var sslContext = getContext(options, rejectUnauthorized);
 
-  var engine = sslContext.createEngine(true);
   var netConn;
   if (options.socket) {
-    onClientConnect(engine, options.socket);
+    onClientConnect(sslContext, options.socket);
     netConn = options.socket;
 
   } else {
@@ -384,8 +362,9 @@ exports.connect = function() {
     if (debugEnabled) {
       debug('Connecting with ' + JSON.stringify(netOptions));
     }
+
     netConn = net.connect(netOptions, function() {
-      onClientConnect(engine, netConn);
+      onClientConnect(sslContext, netConn);
     });
   }
   if (callback) {
@@ -394,41 +373,41 @@ exports.connect = function() {
   return netConn;
 };
 
-function onClientConnect(engine, connection) {
-  engine.setUpConnection(false, connection._handle);
-  engine.onread = connection._handle.onread;
-  connection._handle.onread = null;
-  engine.owner = connection._handle.owner;
-  connection._handle = engine;
+function onClientConnect(ctx, connection) {
+  if (debugEnabled) {
+    debug('Client connected');
+  }
+
   // A hack to make a few internal things work
   connection.socket = connection;
   initTlsMethods(connection);
+  connection._handle.onhandshake = onHandshakeComplete;
 
-  // Lots of tests expect that we'll actually handshake before the first write
-  debug('Initiating TLS handshake');
-
-  connection._handle.initiateHandshake(function(err) {
-    onHandshakeComplete(connection, err);
-  });
+  connection._handle.enableTls(ctx, true);
 }
 
-function onHandshakeComplete(conn, err) {
-  conn.authorized = conn._handle.peerAuthorized;
+function onHandshakeComplete(err, handle) {
+  if (debugEnabled) {
+    debug('handshake complete for ' + handle + ' err: ' + err);
+  }
+  var conn = handle.owner;
+  conn.authorized = handle.peerAuthorized;
   conn.handshakeComplete = true;
-  // TODO clear timeout
+
   if (err) {
     debug('Error on handshake: ' + err);
-    conn.authorizationError = conn._handle.authorizationError;
+    conn.authorizationError = handle.authorizationError;
     if (conn._tlsServer) {
       // On the server -- just emit and close
-      conn._tlsServer.emit('clientError', err, this);
-      conn._handle.forceClose();
+      conn._tlsServer.emit('clientError', err, conn);
+      // TODO go back to a "forceCLose" that ignores SSL?
+      handle.close();
     } else {
       // On the client, just emit and we close later, right?
       conn.authorized = false;
       conn.authorizationError = err;
       conn.emit('error', err);
-      conn._handle.forceClose();
+      handle.close();
     }
   } else if (conn._tlsServer) {
     debug('TLS secure connection established on server');

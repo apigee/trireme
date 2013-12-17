@@ -170,5 +170,5 @@ public interface NodeRuntime
     /**
      * Remove the object from the list of handles that will be closed.
      */
-    void unregisterCloseable(Closeable c);
+    void unregisterCloseable(Object o);
 }

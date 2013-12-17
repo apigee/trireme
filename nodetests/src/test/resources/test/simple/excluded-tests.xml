@@ -294,10 +294,6 @@
         <Description>Internal Node module.</Description>
     </Excluded>
     <Excluded>
-        <Name>test-net-buffersize.js</Name>
-        <Description>We don't track buffers the same way</Description>
-    </Excluded>
-    <Excluded>
         <Name>test-process-active-wraps.js</Name>
         <Description>Tests internal attributes of "process"</Description>
     </Excluded>

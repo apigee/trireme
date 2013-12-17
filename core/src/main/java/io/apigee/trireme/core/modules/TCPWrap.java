@@ -27,9 +27,28 @@ import io.apigee.trireme.core.ScriptTask;
 import io.apigee.trireme.core.Utils;
 import io.apigee.trireme.core.internal.Charsets;
 import io.apigee.trireme.core.InternalNodeModule;
+import io.apigee.trireme.core.internal.SSLCiphers;
 import io.apigee.trireme.core.internal.ScriptRunner;
-import io.apigee.trireme.net.SelectorHandler;
 import io.apigee.trireme.net.NetUtils;
+import io.netty.bootstrap.Bootstrap;
+import io.netty.bootstrap.ServerBootstrap;
+import io.netty.buffer.ByteBuf;
+import io.netty.buffer.Unpooled;
+import io.netty.channel.Channel;
+import io.netty.channel.ChannelFuture;
+import io.netty.channel.ChannelFutureListener;
+import io.netty.channel.ChannelHandlerContext;
+import io.netty.channel.ChannelInboundHandlerAdapter;
+import io.netty.channel.ChannelInitializer;
+import io.netty.channel.ChannelOption;
+import io.netty.channel.ServerChannel;
+import io.netty.channel.socket.ChannelInputShutdownEvent;
+import io.netty.channel.socket.SocketChannel;
+import io.netty.channel.socket.nio.NioServerSocketChannel;
+import io.netty.channel.socket.nio.NioSocketChannel;
+import io.netty.handler.logging.LoggingHandler;
+import io.netty.handler.ssl.SslHandler;
+import io.netty.handler.ssl.SslHandshakeCompletionEvent;
 import org.mozilla.javascript.Context;
 import org.mozilla.javascript.Function;
 import org.mozilla.javascript.Scriptable;
@@ -41,21 +60,25 @@ import org.mozilla.javascript.annotations.JSSetter;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import javax.net.ssl.SSLEngine;
+import javax.net.ssl.SSLPeerUnverifiedException;
+import javax.net.ssl.SSLSession;
+import javax.net.ssl.X509TrustManager;
+
 import static io.apigee.trireme.core.ArgUtils.*;
 
-import java.io.IOException;
 import java.lang.reflect.InvocationTargetException;
 import java.net.BindException;
 import java.net.ConnectException;
 import java.net.InetSocketAddress;
-import java.net.SocketException;
 import java.nio.ByteBuffer;
 import java.nio.channels.ClosedChannelException;
-import java.nio.channels.SelectionKey;
-import java.nio.channels.ServerSocketChannel;
-import java.nio.channels.SocketChannel;
 import java.nio.charset.Charset;
-import java.util.ArrayDeque;
+import java.security.cert.Certificate;
+import java.security.cert.CertificateException;
+import java.security.cert.X509Certificate;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
 
 /**
  * Node's own script modules use this internal module to implement the guts of async TCP.
@@ -89,23 +112,31 @@ public class TCPWrap
         extends Referenceable
     {
         public static final String CLASS_NAME       = "TCP";
-        public static final int    READ_BUFFER_SIZE = 65536;
 
+        private ScriptRunner      runner;
         private InetSocketAddress boundAddress;
         private Function          onConnection;
         private Function          onRead;
+        private Function          onHandshake;
         private int               byteCount;
-        private SSLWrap.EngineImpl sslReader;
         private boolean           closed;
 
-        private ServerSocketChannel     svrChannel;
+        private ServerChannel           svrChannel;
         private SocketChannel           clientChannel;
-        private SelectionKey            selKey;
-        private boolean                 readStarted;
-        private ArrayDeque<QueuedWrite> writeQueue;
-        private ByteBuffer              readBuffer;
+        private volatile boolean        readStarted;
+        private volatile boolean        setupComplete;
         private PendingOp               pendingConnect;
-        private boolean                 writeReady;
+
+        private SSLEngine               sslEngine;
+        private boolean                 trustStoreValidation;
+        private X509TrustManager        trustManager;
+        private boolean                 peerAuthorized;
+        private String                  sslHandshakeError;
+        private long                    sslHandshakeTimeout;
+
+        private final AtomicInteger queueSize = new AtomicInteger();
+        private static final AtomicInteger nextId = new AtomicInteger();
+        private int                 id;
 
         @JSConstructor
         @SuppressWarnings("unused")
@@ -114,7 +145,10 @@ public class TCPWrap
             if (!inNewExpr) {
                 return cx.newObject(ctorObj, CLASS_NAME);
             }
+
             TCPImpl tcp = new TCPImpl();
+            tcp.runner = getRunner();
+            tcp.id = nextId.getAndIncrement();
             tcp.ref();
             return tcp;
         }
@@ -129,31 +163,6 @@ public class TCPWrap
             } else {
                 return super.toString();
             }
-        }
-
-        private void clientInit()
-            throws IOException
-        {
-            writeQueue = new ArrayDeque<QueuedWrite>();
-            readBuffer = ByteBuffer.allocate(READ_BUFFER_SIZE);
-            clientChannel.configureBlocking(false);
-            setNoDelay(true);
-        }
-
-        private void initializeClient(SocketChannel clientChannel)
-            throws IOException
-        {
-            this.clientChannel = clientChannel;
-            clientInit();
-            selKey = clientChannel.register(getRunner().getSelector(), SelectionKey.OP_WRITE,
-                                            new SelectorHandler()
-                                            {
-                                                @Override
-                                                public void selected(SelectionKey key)
-                                                {
-                                                    clientSelected(key);
-                                                }
-                                            });
         }
 
         @Override
@@ -186,6 +195,18 @@ public class TCPWrap
             return onRead;
         }
 
+        @JSSetter("onhandshake")
+        @SuppressWarnings("unused")
+        public void setOnHandshake(Function r) {
+            this.onHandshake = r;
+        }
+
+        @JSGetter("onhandshake")
+        @SuppressWarnings("unused")
+        public Function getOnHandshake() {
+            return onHandshake;
+        }
+
         @JSGetter("bytes")
         @SuppressWarnings("unused")
         public int getByteCount()
@@ -193,45 +214,13 @@ public class TCPWrap
             return byteCount;
         }
 
-        /**
-         * Used to intercept read handling and pass it to the SSL implementation. This could be an interface
-         * and all that nice stuff, and yet there will only be one implementation right now.
-         */
-        void setSSLReader(SSLWrap.EngineImpl ssl) {
-            this.sslReader = ssl;
-        }
-
         @JSGetter("writeQueueSize")
         @SuppressWarnings("unused")
         public int getWriteQueueSize()
         {
-            if (writeQueue == null) {
-                return 0;
-            }
-            int s = 0;
-            for (QueuedWrite qw : writeQueue) {
-                s += qw.getLength();
-            }
-            return s;
+            return queueSize.get();
         }
 
-        private void addInterest(int i)
-        {
-            selKey.interestOps(selKey.interestOps() | i);
-            if (log.isDebugEnabled()) {
-                log.debug("Interest now {}", selKey.interestOps());
-            }
-        }
-
-        private void removeInterest(int i)
-        {
-            if (selKey.isValid()) {
-                selKey.interestOps(selKey.interestOps() & ~i);
-                if (log.isDebugEnabled()) {
-                    log.debug("Interest now {}", selKey.interestOps());
-                }
-            }
-        }
         @JSFunction
         @SuppressWarnings("unused")
         public static void close(Context cx, Scriptable thisObj, Object[] args, Function func)
@@ -246,36 +235,46 @@ public class TCPWrap
             return closed;
         }
 
-        void doClose(Context cx, Function callback)
+        void doClose(Context cx, final Function callback)
         {
             if (closed) {
                 return;
             }
             super.close();
-            try {
-                closed = true;
-                ScriptRunner runner = getRunner();
-                if (clientChannel != null) {
-                    if (log.isDebugEnabled()) {
-                        log.debug("Closing client channel {}", clientChannel);
-                    }
-                    clientChannel.close();
-                    runner.unregisterCloseable(clientChannel);
-                }
-                if (svrChannel != null) {
-                    if (log.isDebugEnabled()) {
-                        log.debug("Closing server channel {}", svrChannel);
-                    }
-                    svrChannel.close();
-                    runner.unregisterCloseable(svrChannel);
-                }
 
-                if (callback != null) {
-                    runner.enqueueCallback(callback, this, null, runner.getDomain(), new Object[] {});
+            closed = true;
+            ChannelFuture closeFuture = null;
+            if (clientChannel != null) {
+                if (log.isDebugEnabled()) {
+                    log.debug("Closing client channel {}", clientChannel);
                 }
-            } catch (IOException ioe) {
-                log.debug("Uncaught exception in channel close: {}", ioe);
-                setErrno(Constants.EIO);
+                // Close the client asynchronously -- this may involve TLS shutdown sequences, etc.
+                closeFuture = clientChannel.close();
+                runner.unregisterCloseable(clientChannel);
+            }
+            if (svrChannel != null) {
+                if (log.isDebugEnabled()) {
+                    log.debug("Closing server channel {}", svrChannel);
+                }
+                // Close the server synchronously -- way too many tests break if you change this
+                svrChannel.close().syncUninterruptibly();
+                runner.unregisterCloseable(svrChannel);
+            }
+
+            if (callback != null) {
+                if (closeFuture == null) {
+                    callback.call(cx, callback, this, null);
+                } else {
+                    // Call back, asynchronously, when the close is done
+                    final Scriptable domain = runner.getDomain();
+                    closeFuture.addListener(new ChannelFutureListener() {
+                        @Override
+                        public void operationComplete(ChannelFuture channelFuture)
+                        {
+                            runner.enqueueCallback(callback, callback, TCPImpl.this, domain, null);
+                        }
+                    });
+                }
             }
         }
 
@@ -321,92 +320,211 @@ public class TCPWrap
             }
 
             boolean success = false;
+
             try {
-                svrChannel = ServerSocketChannel.open();
-                getRunner().registerCloseable(svrChannel);
-                svrChannel.configureBlocking(false);
-                svrChannel.socket().setReuseAddress(true);
-                svrChannel.socket().bind(boundAddress, backlog);
-                svrChannel.register(getRunner().getSelector(), SelectionKey.OP_ACCEPT,
-                                    new SelectorHandler()
-                                    {
-                                        @Override
-                                        public void selected(SelectionKey key)
-                                        {
-                                            serverSelected(key);
-                                        }
-                                    });
+                if (log.isDebugEnabled()) {
+                    log.debug("Server about to listen on {}", boundAddress);
+                }
+                ServerBootstrap bootstrap = new ServerBootstrap();
+                bootstrap.group(runner.getEnvironment().getEventLoop()).
+                          channel(NioServerSocketChannel.class).
+                          option(ChannelOption.SO_REUSEADDR, true).
+                          childHandler(new ChannelInitializer<Channel>() {
+                              @Override
+                              protected void initChannel(Channel c)
+                              {
+                                  initializeClientFromServer((SocketChannel)c);
+                              }
+                          });
+
+                ChannelFuture bindFuture =
+                    bootstrap.bind(boundAddress.getAddress(), boundAddress.getPort());
+                bindFuture.awaitUninterruptibly();
+
+                if (!bindFuture.isSuccess()) {
+                    if (log.isDebugEnabled()) {
+                        log.debug("Exception in bind: {}", bindFuture.cause());
+                    }
+                    if (bindFuture.cause() instanceof BindException) {
+                        setErrno(Constants.EADDRINUSE);
+                        return Constants.EADDRINUSE;
+                    }
+                    setErrno(Constants.EIO);
+                    return Constants.EIO;
+                }
+
+                svrChannel = (ServerChannel)bindFuture.channel();
+
+                runner.registerCloseable(svrChannel);
                 success = true;
                 return null;
 
-            } catch (BindException be) {
-                log.debug("Error listening: {}", be);
-                setErrno(Constants.EADDRINUSE);
-                return Constants.EADDRINUSE;
-            } catch (IOException ioe) {
-                log.debug("Error listening: {}", ioe);
-                setErrno(Constants.EIO);
-                return Constants.EIO;
             } finally {
                 if (!success && (svrChannel != null)) {
-                    getRunner().unregisterCloseable(svrChannel);
-                    try {
-                        svrChannel.close();
-                    } catch (IOException ioe) {
-                        log.debug("Error closing channel that might be closed: {}", ioe);
-                    }
+                    runner.unregisterCloseable(svrChannel);
+                    svrChannel.close();
                 }
             }
         }
 
-        private void serverSelected(SelectionKey key)
+        private void configureSocket(SocketChannel clientChannel)
         {
-            if (!key.isValid()) {
-                return;
-            }
-            if (log.isDebugEnabled()) {
-                log.debug("Server selected: a = {}", key.isAcceptable());
+             clientChannel.config().setAutoRead(false )
+                                   .setTcpNoDelay(true)
+                                   .setAllowHalfClosure(true);
+        }
+
+        private void setUpSocket(SocketChannel clientChannel)
+        {
+            if (log.isTraceEnabled()) {
+                clientChannel.pipeline().addFirst(new LoggingHandler());
             }
 
-            Context cx = Context.getCurrentContext();
-            if (key.isAcceptable()) {
-                SocketChannel child = null;
-                do {
-                    try {
-                        child = svrChannel.accept();
-                        if (child != null) {
-                            if (log.isDebugEnabled()) {
-                                log.debug("Accepted new socket {}", child);
-                            }
+            clientChannel.pipeline().addLast(new ChannelInboundHandlerAdapter()
+            {
+                @Override
+                public void channelRead(ChannelHandlerContext ctx, Object msg)
+                {
+                    processRead(ctx, (ByteBuf) msg);
+                }
 
-                            boolean success = false;
-                            try {
-                                getRunner().registerCloseable(child);
-                                TCPImpl sock = (TCPImpl)cx.newObject(this, CLASS_NAME);
-                                sock.initializeClient(child);
-                                if (onConnection != null) {
-                                    onConnection.call(cx, onConnection, this, new Object[] { sock });
-                                }
-                                success = true;
-                            } finally {
-                                if (!success) {
-                                    getRunner().unregisterCloseable(child);
-                                    try {
-                                        child.close();
-                                    } catch (IOException ioe) {
-                                        log.debug("Error closing channel that might be closed: {}", ioe);
-                                    }
-                                }
-                            }
-                        }
-                    } catch (ClosedChannelException cce) {
-                        log.debug("Server channel has been closed");
-                        break;
-                    } catch (IOException ioe) {
-                        log.error("Error accepting a new socket: {}", ioe);
+                @Override
+                public void channelReadComplete(ChannelHandlerContext ctx)
+                {
+                    processReadComplete(ctx);
+                }
+
+                @Override
+                public void exceptionCaught(ChannelHandlerContext ctx, Throwable t)
+                {
+                    processError(ctx, t);
+                }
+
+                @Override
+                public void userEventTriggered(ChannelHandlerContext ctx, Object e)
+                {
+                    if (e instanceof ChannelInputShutdownEvent) {
+                        processPeerShutdown(ctx);
+                    } else if (e instanceof SslHandshakeCompletionEvent) {
+                        processCompletedHandshake(ctx, (SslHandshakeCompletionEvent) e);
                     }
-                } while (child != null);
+                }
+            });
+        }
+
+        /**
+         * This is called when a new connection is bound on the client.
+         */
+        protected void initializeClient(SocketChannel clientChannel)
+        {
+            this.clientChannel = clientChannel;
+            runner.registerCloseable(clientChannel);
+            configureSocket(clientChannel);
+            setUpSocket(clientChannel);
+        }
+
+        /**
+         * This is called when a new connection is accepted by the server.
+         */
+        protected void initializeClientFromServer(final SocketChannel clientChannel)
+        {
+            if (log.isDebugEnabled()) {
+                log.debug("Accepted a new channel from the client: {}", clientChannel);
             }
+
+            // Set modes like disabling auto-read right away
+            configureSocket(clientChannel);
+
+            // Submit a task to set up the JS stuff in the right thread.
+            runner.enqueueTask(new ScriptTask()
+            {
+                @Override
+                public void execute(Context cx, Scriptable scope)
+                {
+                    boolean success = false;
+                    TCPImpl sock = (TCPImpl) cx.newObject(TCPImpl.this, CLASS_NAME);
+                    sock.clientChannel = clientChannel;
+                    sock.setUpSocket(clientChannel);
+                    runner.registerCloseable(clientChannel);
+
+                    try {
+                        // TLS is set up in "onconnection". We don't want to start reading until that has been
+                        // called. So, defer starting to read until that function has completed.
+                        if (onConnection != null) {
+                            onConnection.call(cx, onConnection, TCPImpl.this, new Object[]{sock});
+                        }
+                        sock.setupComplete = true;
+                        sock.maybeStartReading();
+                        success = true;
+                    } finally {
+                        if (!success) {
+                            runner.unregisterCloseable(clientChannel);
+                            clientChannel.close();
+                        }
+                    }
+                }
+            });
+        }
+
+        @JSFunction
+        @SuppressWarnings("unused")
+        public static void enableTls(Context cx, Scriptable thisObj, Object[] args, Function func)
+        {
+            SSLWrap.ContextImpl context = objArg(args, 0, SSLWrap.ContextImpl.class, true);
+            boolean clientMode = booleanArg(args, 1);
+            TCPImpl self = (TCPImpl)thisObj;
+
+            if (log.isDebugEnabled()) {
+                log.debug("TCP {}: Initializing TLS using context {} clientMode = {}", self.id, context.getContext(), clientMode);
+            }
+
+            self.sslEngine = context.getContext().createSSLEngine();
+            self.sslEngine.setUseClientMode(clientMode);
+            self.trustStoreValidation = context.isTrustStoreValidationEnabled();
+            self.trustManager = context.getTrustManager();
+            if (context.isClientAuthRequired()) {
+                self.sslEngine.setNeedClientAuth(true);
+            }
+            if (context.isClientAuthRequested()) {
+                self.sslEngine.setWantClientAuth(true);
+            }
+            if (context.getEnabledCiphers() != null) {
+                self.sslEngine.setEnabledCipherSuites(
+                    context.getEnabledCiphers().toArray(new String[context.getEnabledCiphers().size()]));
+            }
+
+            //SslHandler ssl = new SslHandler(self.sslEngine, self.runner.getEnvironment().getAsyncPool());
+            SslHandler ssl = new SslHandler(self.sslEngine);
+            if (self.sslHandshakeTimeout > 0L) {
+                ssl.setHandshakeTimeout(self.sslHandshakeTimeout, TimeUnit.MILLISECONDS);
+            }
+
+            self.clientChannel.pipeline().addFirst(ssl);
+            if (log.isTraceEnabled()) {
+                self.clientChannel.pipeline().addFirst(new LoggingHandler());
+            }
+        }
+
+        @JSFunction
+        @SuppressWarnings("unused")
+        public static void setTlsHandshakeTimeout(Context cx, Scriptable thisObj, Object[] args, Function func)
+        {
+            long timeout = longArg(args, 0);
+            TCPImpl self = (TCPImpl)thisObj;
+
+            self.sslHandshakeTimeout = timeout;
+        }
+
+        @JSGetter("peerAuthorized")
+        @SuppressWarnings("unused")
+        public boolean isPeerAuthorized() {
+            return peerAuthorized;
+        }
+
+        @JSGetter("authorizationError")
+        @SuppressWarnings("unused")
+        public String getAuthorizationError() {
+            return sslHandshakeError;
         }
 
         @JSFunction
@@ -465,12 +583,33 @@ public class TCPWrap
         @SuppressWarnings("unused")
         public static Object shutdown(Context cx, Scriptable thisObj, Object[] args, Function func)
         {
-            TCPImpl tcp = (TCPImpl)thisObj;
+            final TCPImpl tcp = (TCPImpl)thisObj;
 
             clearErrno();
-            QueuedWrite qw = (QueuedWrite)cx.newObject(thisObj, QueuedWrite.CLASS_NAME);
-            qw.shutdown = true;
-            tcp.offerWrite(qw, cx);
+            final QueuedWrite qw = (QueuedWrite)cx.newObject(thisObj, QueuedWrite.CLASS_NAME);
+
+            if (log.isDebugEnabled()) {
+                log.debug("TCP {} shutdown called", tcp.id);
+            }
+
+            final ChannelFuture future = tcp.clientChannel.shutdownOutput();
+            final Scriptable domain = tcp.runner.getDomain();
+
+            future.addListener(new ChannelFutureListener()
+            {
+                @Override
+                public void operationComplete(ChannelFuture channelFuture) throws Exception
+                {
+                    tcp.runner.enqueueTask(new ScriptTask()
+                    {
+                        @Override
+                        public void execute(Context cx, Scriptable scope)
+                        {
+                            tcp.processShutdownComplete(future, cx, qw, domain);
+                        }
+                    });
+                }
+            });
             return qw;
         }
 
@@ -484,46 +623,57 @@ public class TCPWrap
             offerWrite(qw, cx);
         }
 
-        private void offerWrite(QueuedWrite qw, Context cx)
+        private void offerWrite(final QueuedWrite qw, Context cx)
         {
-            if (writeQueue.isEmpty() && !qw.shutdown) {
-                int written;
-                try {
-                    written = clientChannel.write(qw.buf);
-                } catch (IOException ioe) {
-                    // Hacky? We failed the immediate write, but the callback isn't set yet,
-                    // so go back and do it later
-                    queueWrite(qw);
-                    return;
-                }
-                if (log.isDebugEnabled()) {
-                    log.debug("Wrote {} to {} from {}", written, clientChannel, qw.buf);
-                }
-                if (qw.buf.hasRemaining()) {
-                    // We didn't write the whole thing.
-                    writeReady = false;
-                    queueWrite(qw);
-                } else {
-                    sendWriteCallback(cx, qw, null);
-                }
-            } else {
-                queueWrite(qw);
+            if (log.isDebugEnabled()) {
+                log.debug("TCP {}: Writing {}", id, qw.buf);
             }
+
+            final int bytes = qw.buf.remaining();
+            queueSize.addAndGet(bytes);
+            // Have to copy the original write buf for this to be safe. Consider pooling here.
+            final ChannelFuture future =
+                clientChannel.writeAndFlush(Unpooled.copiedBuffer(qw.buf));
+
+            final Scriptable domain = runner.getDomain();
+            future.addListener(new ChannelFutureListener()
+            {
+                @Override
+                public void operationComplete(ChannelFuture channelFuture)
+                {
+                    // Dispatch back to the right script thread now
+                    runner.enqueueTask(new ScriptTask()
+                    {
+                        @Override
+                        public void execute(Context cx, Scriptable scope)
+                        {
+                            processWriteComplete(future, cx, qw, domain, bytes);
+                        }
+                    });
+                }
+            });
         }
 
-        private void queueWrite(QueuedWrite qw)
+        private void maybeStartReading()
         {
-            addInterest(SelectionKey.OP_WRITE);
-            writeQueue.offer(qw);
+            if (setupComplete && (clientChannel != null)) {
+                if (log.isDebugEnabled()) {
+                    log.debug("TCP {}: Starting to read", id);
+                }
+                clientChannel.read();
+            }
         }
 
         @JSFunction
         @SuppressWarnings("unused")
         public void readStart()
         {
+            if (log.isDebugEnabled()) {
+                log.debug("TCP {}: readStart called, setupComplete = {}", id, setupComplete);
+            }
             clearErrno();
             if (!readStarted) {
-                addInterest(SelectionKey.OP_READ);
+                maybeStartReading();
                 readStarted = true;
             }
         }
@@ -533,10 +683,11 @@ public class TCPWrap
         public void readStop()
         {
             clearErrno();
-            if (readStarted) {
-                removeInterest(SelectionKey.OP_READ);
-                readStarted = false;
+            if (log.isDebugEnabled()) {
+                log.debug("Stopping reading from channel");
             }
+            // This will ensure that new reads are not issued, but the current read might continue
+            readStarted = false;
         }
 
         @JSFunction
@@ -562,42 +713,43 @@ public class TCPWrap
                     log.debug("Client connecting to {}:{}", host, port);
                 }
                 clearErrno();
+
+                Bootstrap boot = new Bootstrap().
+                    group(tcp.runner.getEnvironment().getEventLoop()).
+                    channel(NioSocketChannel.class).
+                    handler(new ChannelInitializer<SocketChannel>() {
+                        @Override
+                        protected void initChannel(SocketChannel socketChannel) throws Exception
+                        {
+                            tcp.initializeClient(socketChannel);
+                        }
+                    });
+
+                ChannelFuture future;
                 if (tcp.boundAddress == null) {
-                    newChannel = SocketChannel.open();
+                    future = boot.connect(targetAddress);
                 } else {
-                    newChannel = SocketChannel.open(tcp.boundAddress);
+                    future = boot.connect(targetAddress, tcp.boundAddress);
                 }
-                tcp.clientChannel = newChannel;
-                getRunner().registerCloseable(newChannel);
-                tcp.clientInit();
-                tcp.clientChannel.connect(targetAddress);
-                tcp.selKey = tcp.clientChannel.register(getRunner().getSelector(),
-                                                        SelectionKey.OP_CONNECT,
-                                                        new SelectorHandler()
-                                                        {
-                                                            @Override
-                                                            public void selected(SelectionKey key)
-                                                            {
-                                                                tcp.clientSelected(key);
-                                                            }
-                                                        });
 
                 tcp.pendingConnect = (PendingOp)cx.newObject(thisObj, PendingOp.CLASS_NAME);
+
+                final Scriptable domain = tcp.runner.getDomain();
+                future.addListener(new ChannelFutureListener() {
+                    @Override
+                    public void operationComplete(ChannelFuture channelFuture)
+                    {
+                        tcp.processConnectComplete(channelFuture, domain);
+                    }
+                });
+
                 success = true;
                 return tcp.pendingConnect;
 
-            } catch (IOException ioe) {
-                log.debug("Error on connect: {}", ioe);
-                setErrno(Constants.EIO);
-                return null;
             } finally {
                 if (!success && (newChannel != null)) {
                     getRunner().unregisterCloseable(newChannel);
-                    try {
-                        newChannel.close();
-                    } catch (IOException ioe) {
-                        log.debug("Error closing channel that might be closed: {}", ioe);
-                    }
+                    newChannel.close();
                 }
             }
         }
@@ -609,177 +761,325 @@ public class TCPWrap
             return connect(cx, thisObj,  args, func);
         }
 
-        private void clientSelected(SelectionKey key)
+        /**
+         * Called by Netty when a client is done establishing a connection.
+         */
+        protected void processConnectComplete(ChannelFuture future, final Scriptable domain)
         {
             if (log.isDebugEnabled()) {
-                log.debug("Client {} selected: interest = {} r = {} w = {} c = {}", clientChannel,
-                          selKey.interestOps(), key.isReadable(), key.isWritable(), key.isConnectable());
+                log.debug("TCP {}: Connect complete on the client", id);
             }
-            Context cx = Context.getCurrentContext();
-            if (key.isValid() && key.isConnectable()) {
-                processConnect(cx);
-            }
-            if (key.isValid() && (key.isWritable() || writeReady)) {
-                processWrites(cx);
-            }
-            if (key.isValid() && key.isReadable()) {
-                processReads(cx);
-            }
-        }
 
-        private void processConnect(Context cx)
-        {
-            try {
-                removeInterest(SelectionKey.OP_CONNECT);
-                addInterest(SelectionKey.OP_WRITE);
-                clientChannel.finishConnect();
-                if (log.isDebugEnabled()) {
-                    log.debug("Client {} connected", clientChannel);
-                }
-                sendOnConnectComplete(cx, 0, true, true);
+            String err;
+            if (future.isSuccess()) {
+                err = null;
 
-            } catch (ConnectException ce) {
-                if (log.isDebugEnabled()) {
-                    log.debug("Error completing connect: {}", ce);
-                }
-                setErrno(Constants.ECONNREFUSED);
-                sendOnConnectComplete(cx, Constants.ECONNREFUSED, false, false);
-
-
-            } catch (IOException ioe) {
-                if (log.isDebugEnabled()) {
-                    log.debug("Error completing connect: {}", ioe);
-                }
-                setErrno(Constants.EIO);
-                sendOnConnectComplete(cx, Constants.EIO, false, false);
-            }
-        }
-
-        private void sendOnConnectComplete(Context cx, Object status,
-                                           boolean readable, boolean writable)
-        {
-            if (pendingConnect.onComplete != null) {
-                pendingConnect.onComplete.call(cx, pendingConnect.onComplete, this,
-                                               new Object[] { status, this, pendingConnect,
-                                                              readable, writable });
-            }
-            pendingConnect = null;
-        }
-
-        private void processWrites(Context cx)
-        {
-            writeReady = true;
-            removeInterest(SelectionKey.OP_WRITE);
-            QueuedWrite qw = writeQueue.peek();
-            while (qw != null) {
-                try {
-                    if (qw.shutdown) {
-                        if (log.isDebugEnabled()) {
-                            log.debug("Sending shutdown for {}", clientChannel);
-                        }
-                        clientChannel.socket().shutdownOutput();
-                        sendWriteCallback(cx, qw, null);
-                    } else {
-                        int written = clientChannel.write(qw.buf);
-                        if (log.isDebugEnabled()) {
-                            log.debug("Wrote {} to {} from {}", written, clientChannel, qw.buf);
-                        }
-                        if (qw.buf.hasRemaining()) {
-                            // We didn't write the whole thing.
-                            writeReady = false;
-                            addInterest(SelectionKey.OP_WRITE);
-                            break;
-                        } else {
-                            sendWriteCallback(cx, qw, null);
-                        }
-                    }
-
-                } catch (ClosedChannelException cce) {
-                    if (log.isDebugEnabled()) {
-                        log.debug("Channel is closed");
-                    }
-                    setErrno(Constants.EOF);
-                    sendWriteCallback(cx, qw, Constants.EOF);
-                } catch (IOException ioe) {
-                    if (log.isDebugEnabled()) {
-                        log.debug("Error on write: {}", ioe);
-                    }
-                    setErrno(Constants.EIO);
-                    sendWriteCallback(cx, qw, Constants.EIO);
-                }
-                qw = writeQueue.peek();
-            }
-        }
-
-        private void sendWriteCallback(Context cx, final QueuedWrite qw, final Object err)
-        {
-            writeQueue.poll();
-            if (qw.callback != null) {
-                if (err == null) {
-                    clearErrno();
-                } else {
-                    setErrno(Constants.EIO);
-                }
-                qw.callback.execute(cx, this);
             } else {
-                final Scriptable domain = getRunner().getDomain();
-                getRunner().enqueueTask(new ScriptTask() {
-                    @Override
-                    public void execute(Context cx, Scriptable scope)
-                    {
-                        if (qw.onComplete != null) {
-                            Object jerr = (err == null) ? Context.getUndefinedValue() : err;
-                            getRunner().executeCallback(cx, qw.onComplete,
-                                                        TCPImpl.this, TCPImpl.this, domain,
-                                                        new Object[] { jerr, TCPImpl.this, qw });
+                if (log.isDebugEnabled()) {
+                    log.debug("Error on connect: {}", future.cause());
+                }
+                if (future.cause() instanceof ConnectException) {
+                    err = Constants.ECONNREFUSED;
+                } else {
+                    err = Constants.EIO;
+                }
+            }
+
+            final String ferr = err;
+            runner.enqueueTask(new ScriptTask() {
+                @Override
+                public void execute(Context cx, Scriptable scope)
+                {
+                    if (pendingConnect.onComplete != null) {
+                        int status = (ferr == null) ? 0 : -1;
+                        if (ferr == null) {
+                            clearErrno();
+                        } else {
+                            setErrno(ferr);
                         }
+                        runner.executeCallback(cx, pendingConnect.onComplete,
+                                               pendingConnect.onComplete, TCPImpl.this, domain,
+                                               new Object[] { status, TCPImpl.this, pendingConnect, true, true });
+
+                        setupComplete = true;
+                        maybeStartReading();
                     }
-                });
+                }
+            });
+        }
+
+        private String getError(ChannelFuture future, String opName)
+        {
+            if (future.isSuccess()) {
+                clearErrno();
+                return null;
+            }
+            if (log.isDebugEnabled()) {
+                log.debug("Error on {}: {}", opName, future.cause());
+            }
+            String err;
+            if (future.cause() instanceof ClosedChannelException) {
+                err = Constants.EOF;
+            } else {
+                err = Constants.EIO;
+            }
+            setErrno(err);
+            return err;
+        }
+
+        protected void processWriteComplete(ChannelFuture future, Context cx,
+                                             final QueuedWrite qw,
+                                             Scriptable domain, int bytes)
+        {
+            if (log.isDebugEnabled()) {
+                log.debug("TCP {}: write complete.", id);
+            }
+            queueSize.addAndGet(-bytes);
+
+            String err = getError(future, "write");
+
+            if (qw.callback != null) {
+                // Special handling for TLS -- remove when we refactor that.
+                qw.callback.execute(cx, this);
+
+            } else if (qw.onComplete != null) {
+                Object jerr = (err == null) ? Context.getUndefinedValue() : err;
+                runner.executeCallback(cx, qw.onComplete,
+                                       qw.onComplete, this, domain,
+                                       new Object[]{jerr, this, qw});
             }
         }
 
-        private void processReads(Context cx)
+        protected void processShutdownComplete(ChannelFuture future, Context cx,
+                                               final QueuedWrite qw, Scriptable domain)
         {
-            if (!readStarted) {
+            if (log.isDebugEnabled()) {
+                log.debug("TCP {}: shutdown complete.", id);
+            }
+
+            String err = getError(future, "shutdown");
+
+            if (qw.onComplete != null) {
+                 Object jerr = (err == null) ? Context.getUndefinedValue() : err;
+                runner.executeCallback(cx, qw.onComplete, qw.onComplete, this, domain,
+                                       new Object[]{jerr, this, qw});
+            }
+        }
+
+        /**
+         * Called whenever data is read on to the channel.
+         */
+        protected void processRead(ChannelHandlerContext ctx, final ByteBuf bb)
+        {
+            if (log.isDebugEnabled()) {
+                log.debug("TCP {}: Read {} bytes", id, bb.readableBytes());
+            }
+
+            // Copy the bytes. We're probably sharing a buffer in Netty, and we have no idea where they'll go here
+            final byte[] readBytes = new byte[bb.readableBytes()];
+            bb.readBytes(readBytes);
+
+            // Again, we are in the Netty I/O thread -- have to get out and run this in the right thread
+            runner.enqueueTask(new ScriptTask() {
+                @Override
+                public void execute(Context cx, Scriptable scope)
+                {
+                    if (onRead != null) {
+                        // Call onRead directly, and with no domain, since there's no way to apply one here
+                        Buffer.BufferImpl buf =
+                            Buffer.BufferImpl.newBuffer(cx, TCPImpl.this, readBytes);
+                        onRead.call(cx, onRead, TCPImpl.this, new Object[] { buf, 0, readBytes.length });
+                    }
+                }
+            });
+        }
+
+        /**
+         * Called when one read is done and it's time for another
+         */
+        protected void processReadComplete(ChannelHandlerContext ctx)
+        {
+            if (readStarted) {
+                if (log.isDebugEnabled()) {
+                    log.debug("TCP {}: Issuing another read", id);
+                }
+                clientChannel.read();
+            }
+        }
+
+        /**
+         * Called when the channel was shut down for output on the other side
+         */
+        protected void processPeerShutdown(ChannelHandlerContext ctx)
+        {
+            if (log.isDebugEnabled()) {
+                log.debug("TCP {}: Peer shutdown.", id);
+            }
+
+            // Again, we are in the Netty I/O thread -- have to get out and run this in the right thread
+            runner.enqueueTask(new ScriptTask() {
+                @Override
+                public void execute(Context cx, Scriptable scope)
+                {
+                    if (onRead != null) {
+                        // Call onRead directly, and with no domain, since there's no way to apply one here
+                        setErrno(Constants.EOF);
+                        onRead.call(cx, onRead, TCPImpl.this, new Object[]{null, 0, 0});
+                    }
+                }
+            });
+        }
+
+        /**
+         * Called when the SSL handshake has just completed.
+         */
+        protected void processCompletedHandshake(ChannelHandlerContext ctx, SslHandshakeCompletionEvent e)
+        {
+            if (log.isDebugEnabled()) {
+                log.debug("SSL handshake completed. err = {}", e.cause());
+            }
+
+            checkPeerAuthorization();
+
+            Object err;
+            if (e.isSuccess()) {
+                err = Context.getUndefinedValue();
+            } else {
+                err = Context.toString(e.cause().toString());
+            }
+
+            if (onHandshake != null) {
+                runner.enqueueCallback(onHandshake, onHandshake, this,
+                                       new Object[] { err, this });
+            }
+        }
+
+        private void checkPeerAuthorization()
+        {
+            Certificate[] certChain;
+
+            try {
+                certChain = sslEngine.getSession().getPeerCertificates();
+            } catch (SSLPeerUnverifiedException unver) {
+                if (log.isDebugEnabled()) {
+                    log.debug("Peer is unverified");
+                }
+                peerAuthorized = false;
                 return;
             }
-            int read;
-            do {
-                try {
-                    read = clientChannel.read(readBuffer);
-                } catch (IOException ioe) {
-                    if (log.isDebugEnabled()) {
-                        log.debug("Error reading from channel: {}", ioe, ioe);
-                    }
-                    read = -1;
-                }
+
+            if (certChain == null) {
+                // No certs -- same thing
                 if (log.isDebugEnabled()) {
-                    log.debug("Read {} bytes from {} into {}", read, clientChannel, readBuffer);
+                    log.debug("Peer has no client- or server-side certs");
                 }
-                if (read > 0) {
-                    readBuffer.flip();
+                peerAuthorized = false;
+                return;
+            }
 
+            if (trustManager == null) {
+                // Either the trust was already checked by SSL engine, so we wouldn't be here without
+                // authorization, in which case "trustStoreValidation" is true,
+                // or, the trust was not checked and we have no additional trust manager
+                peerAuthorized = trustStoreValidation;
+                return;
+            }
+
+            try {
+                if (sslEngine.getUseClientMode()) {
+                    trustManager.checkServerTrusted((X509Certificate[])certChain, "RSA");
+                } else {
+                    trustManager.checkClientTrusted((X509Certificate[])certChain, "RSA");
+                }
+                peerAuthorized = true;
+                if (log.isDebugEnabled()) {
+                    log.debug("SSL peer is valid");
+                }
+            } catch (CertificateException e) {
+                if (log.isDebugEnabled()) {
+                    log.debug("Error verifying SSL peer: {}", e);
+                }
+                sslHandshakeError = e.toString();
+                peerAuthorized = false;
+            }
+        }
+
+        @JSFunction
+        @SuppressWarnings("unused")
+        public static Object getCipher(Context cx, Scriptable thisObj, Object[] args, Function func)
+        {
+            TCPImpl self = (TCPImpl)thisObj;
+            if ((self.sslEngine == null) || (self.sslEngine.getSession() == null)) {
+                return null;
+            }
+            Scriptable ret = cx.newObject(thisObj);
+            SSLCiphers.Ciph ciph =
+                SSLCiphers.get().getJavaCipher(self.sslEngine.getSession().getCipherSuite());
+            ret.put("name", ret, (ciph == null) ? self.sslEngine.getSession().getCipherSuite() : ciph.getSslName());
+            ret.put("version", ret, self.sslEngine.getSession().getProtocol());
+            return ret;
+        }
+
+        @JSFunction
+        @SuppressWarnings("unused")
+        public static Object getPeerCertificate(Context cx, Scriptable thisObj, Object[] args, Function func)
+        {
+            TCPImpl self = (TCPImpl)thisObj;
+            if ((self.sslEngine == null) || (self.sslEngine.getSession() == null)) {
+                return Context.getUndefinedValue();
+            }
+            Certificate cert;
+            try {
+                cert = self.sslEngine.getSession().getPeerCertificates()[0];
+            } catch (SSLPeerUnverifiedException puve) {
+                log.debug("getPeerCertificates threw {}", puve);
+                cert = null;
+            }
+            if ((cert == null) || (!(cert instanceof X509Certificate))) {
+                log.debug("Peer certificate is not an X.509 cert");
+                return Context.getUndefinedValue();
+            }
+            return SSLWrap.makeCertificate(cx, thisObj, (X509Certificate) cert);
+        }
+
+        @JSFunction
+        @SuppressWarnings("unused")
+        public static Object getSession(Context cx, Scriptable thisObj, Object[] args, Function func)
+        {
+            TCPImpl self = (TCPImpl)thisObj;
+            SSLSession session = self.sslEngine.getSession();
+            Buffer.BufferImpl id = Buffer.BufferImpl.newBuffer(cx, thisObj, session.getId());
+            return id;
+        }
+
+        @JSFunction
+        @SuppressWarnings("unused")
+        public static boolean isSessionReused(Context cx, Scriptable thisObj, Object[] args, Function func)
+        {
+            return false;
+        }
+
+        /**
+         * Called whenever there is an exception reading from the channel. We just log here. The various
+         * callbacks for read and write will return errors or EOF as necessary.
+         */
+        protected void processError(ChannelHandlerContext ctx, Throwable t)
+        {
+            if (log.isDebugEnabled()) {
+                log.debug("TCP {}: Saw an error on the channel: {}", id, t);
+            }
+
+            /*
+            runner.enqueueTask(new ScriptTask() {
+                @Override
+                public void execute(Context cx, Scriptable scope) {
                     if (onRead != null) {
-                        Buffer.BufferImpl buf = Buffer.BufferImpl.newBuffer(cx, this, readBuffer, true);
-                        onRead.call(cx, onRead, this,
-                                    new Object[] { buf, 0, read });
-
-                    } else if (sslReader != null) {
-                        sslReader.onRead(cx, Utils.copyBuffer(readBuffer));
-                    }
-                    readBuffer.clear();
-
-                } else if (read < 0) {
-                    removeInterest(SelectionKey.OP_READ);
-                    if (onRead != null) {
-                        setErrno(Constants.EOF);
-                        onRead.call(cx, onRead, this,
-                                    new Object[] { null, 0, 0 });
-                    } else if (sslReader != null) {
-                        sslReader.onEof(cx);
+                        setErrno(Constants.EIO);
+                        onRead.call(cx, onRead, TCPImpl.this, new Object[] { null, 0, 0 });
                     }
                 }
-            } while (readStarted && (read > 0));
+            });
+            */
         }
 
         @JSFunction
@@ -791,9 +1091,9 @@ public class TCPWrap
 
             clearErrno();
             if (tcp.svrChannel == null) {
-                addr = (InetSocketAddress)(tcp.clientChannel.socket().getLocalSocketAddress());
+                addr = tcp.clientChannel.localAddress();
             } else {
-                 addr = (InetSocketAddress)(tcp.svrChannel.socket().getLocalSocketAddress());
+                 addr = (InetSocketAddress)tcp.svrChannel.localAddress();
             }
             if (addr == null) {
                 return null;
@@ -813,7 +1113,7 @@ public class TCPWrap
             if (tcp.clientChannel == null) {
                 return null;
             } else {
-                addr = (InetSocketAddress)(tcp.clientChannel.socket().getRemoteSocketAddress());
+                addr = tcp.clientChannel.remoteAddress();
             }
             if (addr == null) {
                 return null;
@@ -828,12 +1128,7 @@ public class TCPWrap
         {
             clearErrno();
             if (clientChannel != null) {
-                try {
-                    clientChannel.socket().setTcpNoDelay(nd);
-                } catch (SocketException e) {
-                    log.error("Error setting TCP no delay on {}: {}", this, e);
-                    setErrno(Constants.EIO);
-                }
+                clientChannel.config().setTcpNoDelay(nd);
             }
         }
 
@@ -843,12 +1138,7 @@ public class TCPWrap
         {
             clearErrno();
             if (clientChannel != null) {
-                try {
-                    clientChannel.socket().setKeepAlive(nd);
-                } catch (SocketException e) {
-                    log.error("Error setting TCP keep alive on {}: {}", this, e);
-                    setErrno(Constants.EIO);
-                }
+                clientChannel.config().setKeepAlive(nd);
             }
         }
 
@@ -862,10 +1152,10 @@ public class TCPWrap
 
         private NetworkPolicy getNetworkPolicy()
         {
-            if (getRunner().getSandbox() == null) {
+            if (runner.getSandbox() == null) {
                 return null;
             }
-            return getRunner().getSandbox().getNetworkPolicy();
+            return runner.getSandbox().getNetworkPolicy();
         }
     }
 
@@ -877,7 +1167,6 @@ public class TCPWrap
         ByteBuffer buf;
         int length;
         Function onComplete;
-        boolean shutdown;
         ScriptTask callback;
 
         void initialize(ByteBuffer buf)

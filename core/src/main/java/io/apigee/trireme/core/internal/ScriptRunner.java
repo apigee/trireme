@@ -36,6 +36,7 @@ import io.apigee.trireme.core.modules.NativeModule;
 import io.apigee.trireme.core.modules.PipeWrap;
 import io.apigee.trireme.core.modules.Process;
 import io.apigee.trireme.net.SelectorHandler;
+import io.netty.channel.Channel;
 import org.mozilla.javascript.Context;
 import org.mozilla.javascript.ContextAction;
 import org.mozilla.javascript.EcmaError;
@@ -99,8 +100,8 @@ public class ScriptRunner
     private final  Sandbox                 sandbox;
     private final  PathTranslator          pathTranslator;
     private final  ExecutorService         asyncPool;
-    private final IdentityHashMap<Closeable, Closeable> openHandles =
-        new IdentityHashMap<Closeable, Closeable>();
+    private final IdentityHashMap<Object, Object> openHandles =
+        new IdentityHashMap<Object, Object>();
     private final AtomicInteger nextFd = new AtomicInteger(FIRST_FD);
     private final ConcurrentHashMap<Integer, AbstractDescriptor> fileDescriptors =
         new ConcurrentHashMap<Integer, AbstractDescriptor>();
@@ -536,10 +537,15 @@ public class ScriptRunner
         openHandles.put(c, c);
     }
 
-    @Override
-    public void unregisterCloseable(Closeable c)
+    public void registerCloseable(Channel c)
     {
-        openHandles.remove(c);
+        openHandles.put(c, c);
+    }
+
+    @Override
+    public void unregisterCloseable(Object o)
+    {
+        openHandles.remove(o);
     }
 
     public int registerDescriptor(AbstractDescriptor d)
@@ -577,15 +583,25 @@ public class ScriptRunner
             }
         }
 
-        for (Closeable c: openHandles.values()) {
+        for (Object c: openHandles.values()) {
             if (log.isDebugEnabled()) {
                 log.debug("Closing leaked handle {}", c);
             }
             try {
-                c.close();
+                if (c instanceof Closeable) {
+                    ((Closeable)c).close();
+                } else if (c instanceof Channel) {
+                    ((Channel)c).close().sync();
+                } else {
+                    assert (false);
+                }
             } catch (IOException ioe) {
                 if (log.isDebugEnabled()) {
                     log.debug("Error closing leaked handle: {}", ioe);
+                }
+            } catch (InterruptedException ie) {
+                if (log.isDebugEnabled()) {
+                    log.debug("Error closing leaked handle: {}", ie);
                 }
             }
         }

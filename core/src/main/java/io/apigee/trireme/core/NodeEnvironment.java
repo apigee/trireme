@@ -24,6 +24,8 @@ package io.apigee.trireme.core;
 import io.apigee.trireme.core.internal.ModuleRegistry;
 import io.apigee.trireme.core.internal.RhinoContextFactory;
 import io.apigee.trireme.net.spi.HttpServerContainer;
+import io.netty.channel.EventLoopGroup;
+import io.netty.channel.nio.NioEventLoopGroup;
 import org.mozilla.javascript.Context;
 import org.mozilla.javascript.ContextAction;
 import org.mozilla.javascript.ContextFactory;
@@ -50,7 +52,8 @@ public class NodeEnvironment
     public static final long POOL_TIMEOUT_SECS = 60L;
 
     public static final int DEFAULT_JS_VERSION = Context.VERSION_1_8;
-    // Level 1 and level 9 are really the same. Level 1 calls to pre-compile the JS code into bytecode.
+    // Level 1 and level 9 are mostly the same. Level 1 calls to pre-compile the JS code into bytecode.
+    // Level 9 adds some optimizations related to integer operations.
     public static final int DEFAULT_OPT_LEVEL = 1;
     public static final boolean DEFAULT_SEAL_ROOT = true;
 
@@ -64,6 +67,8 @@ public class NodeEnvironment
     private Sandbox             sandbox;
     private RhinoContextFactory contextFactory;
     private long                scriptTimeLimit;
+    private int                 ioThreadPoolSize;
+    private EventLoopGroup      nettyEventLoop;
 
     private boolean             throwDeprecation;
 
@@ -97,6 +102,10 @@ public class NodeEnvironment
      */
     public void close()
     {
+        if (!initialized) {
+            return;
+        }
+        nettyEventLoop.shutdownGracefully();
     }
 
     /**
@@ -196,6 +205,19 @@ public class NodeEnvironment
     }
 
     /**
+     * Set the number of I/O threads. These threads are shared between all scripts running in this
+     * NodeEnvironment. The default is the number of CPUs. If set, this must be set before starting the
+     * first script.
+     */
+    public void setIoThreadPoolSize(int n) {
+        this.ioThreadPoolSize = n;
+    }
+
+    public int getIoThreadPoolSize() {
+        return ioThreadPoolSize;
+    }
+
+    /**
      * Internal: Get the global scope.
      */
     public ScriptableObject getScope() {
@@ -223,6 +245,13 @@ public class NodeEnvironment
         return scriptPool;
     }
 
+    /**
+     * Internal: Get the event loop group for Netty.
+     */
+    public EventLoopGroup getEventLoop() {
+        return nettyEventLoop;
+    }
+
     private void initialize()
     {
         synchronized (initializationLock) {
@@ -238,7 +267,8 @@ public class NodeEnvironment
 
             if (asyncPool == null) {
                 // This pool is used for operations that must appear async to JavaScript but are synchronous
-                // in Java. Right now this means file I/O, at least in Java 6.
+                // in Java. Right now this means file I/O, at least in Java 6, and things like DNS lookups
+                // and certain SSLEngine operations that may block the thread, but not permanently.
                 ThreadPoolExecutor pool =
                     new ThreadPoolExecutor(CORE_POOL_SIZE, MAX_POOL_SIZE, POOL_TIMEOUT_SECS, TimeUnit.SECONDS,
                                            new ArrayBlockingQueue<Runnable>(POOL_QUEUE_SIZE),
@@ -250,7 +280,7 @@ public class NodeEnvironment
 
             // This pool is used to run scripts. As a cached thread pool it will grow as necessary and shrink
             // down to zero when idle. This is a separate thread pool because these threads persist for the life
-            // of the script.
+            // of the script. This pool may be used by other operations that may block the thread permanently.
             scriptPool = Executors.newCachedThreadPool(new PoolNameFactory("Trireme Script Thread"));
 
             registry = new ModuleRegistry();
@@ -259,6 +289,11 @@ public class NodeEnvironment
             contextFactory.setJsVersion(DEFAULT_JS_VERSION);
             contextFactory.setOptLevel(optLevel);
             contextFactory.setCountOperations(scriptTimeLimit > 0L);
+
+            if (ioThreadPoolSize <= 0) {
+                ioThreadPoolSize = Runtime.getRuntime().availableProcessors();
+            }
+            nettyEventLoop = new NioEventLoopGroup(ioThreadPoolSize, new PoolNameFactory("Trireme I/O Thread"));
 
             contextFactory.call(new ContextAction()
             {

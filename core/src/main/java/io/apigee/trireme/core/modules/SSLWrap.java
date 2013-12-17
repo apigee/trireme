@@ -111,7 +111,7 @@ public class SSLWrap
     {
         ScriptableObject.defineClass(scope, WrapperImpl.class, false, true);
         ScriptableObject.defineClass(scope, Referenceable.class, false, true);
-        ScriptableObject.defineClass(scope, EngineImpl.class, false, true);
+        //ScriptableObject.defineClass(scope, EngineImpl.class, false, true);
         ScriptableObject.defineClass(scope, ContextImpl.class, false, true);
         ScriptableObject.defineClass(scope, QueuedWrite.class, false, true);
         WrapperImpl wrapper = (WrapperImpl)cx.newObject(scope, WrapperImpl.CLASS_NAME);
@@ -182,6 +182,61 @@ public class SSLWrap
         }
     }
 
+    static Object makeCertificate(Context cx, Scriptable scope, X509Certificate cert)
+    {
+        if (log.isDebugEnabled()) {
+            log.debug("Returning subject " + cert.getSubjectX500Principal());
+        }
+        Scriptable ret = cx.newObject(scope);
+        ret.put("subject", ret, cert.getSubjectX500Principal().getName(X500Principal.RFC2253));
+        ret.put("issuer", ret, cert.getIssuerX500Principal().getName(X500Principal.RFC2253));
+        ret.put("valid_from", ret, X509_DATE.format(cert.getNotBefore()));
+        ret.put("valid_to", ret, X509_DATE.format(cert.getNotAfter()));
+        //ret.put("fingerprint", ret, null);
+
+        try {
+            addAltNames(cx, ret, "subject", "subjectAltNames", cert.getSubjectAlternativeNames());
+            addAltNames(cx, ret, "issuer", "issuerAltNames", cert.getIssuerAlternativeNames());
+        } catch (CertificateParsingException e) {
+            log.debug("Error getting all the cert names: {}", e);
+        }
+        return ret;
+    }
+
+    private static void addAltNames(Context cx, Scriptable s, String attachment, String type, Collection<List<?>> altNames)
+    {
+        if (altNames == null) {
+            return;
+        }
+        // Create an object that contains the alt names
+        Scriptable o = cx.newObject(s);
+        s.put(type, s, o);
+        for (List<?> an : altNames) {
+            if ((an.size() >= 2) && (an.get(0) instanceof Integer) && (an.get(1) instanceof String)) {
+                int typeNum = (Integer)an.get(0);
+                String typeName;
+                switch (typeNum) {
+                case 1:
+                    typeName = "rfc822Name";
+                    break;
+                case 2:
+                    typeName = "dNSName";
+                    break;
+                case 6:
+                    typeName = "uniformResourceIdentifier";
+                    break;
+                default:
+                    return;
+                }
+                o.put(typeName, s, an.get(1));
+            }
+        }
+
+        Scriptable subject = (Scriptable)s.get(attachment, s);
+        subject.put(type, subject, o);
+    }
+
+
     public static class ContextImpl
         extends ScriptableObject
     {
@@ -201,6 +256,9 @@ public class SSLWrap
         private KeyStore trustedCertStore;
         private X509TrustManager trustedCertManager;
         private boolean trustStoreValidation;
+        private boolean clientAuthRequired;
+        private boolean clientAuthRequested;
+        private List<String> enabledCiphers;
 
         @Override
         public String getClassName() {
@@ -210,6 +268,18 @@ public class SSLWrap
         void init(NodeRuntime runner)
         {
             this.runner = runner;
+        }
+
+        SSLContext getContext() {
+            return context;
+        }
+
+        boolean isTrustStoreValidationEnabled() {
+            return trustStoreValidation;
+        }
+
+        X509TrustManager getTrustManager() {
+            return trustedCertManager;
         }
 
         @JSFunction
@@ -503,6 +573,69 @@ public class SSLWrap
 
         @JSFunction
         @SuppressWarnings("unused")
+        public void setClientAuthRequired(boolean required)
+        {
+            this.clientAuthRequired = required;
+        }
+
+        boolean isClientAuthRequired() {
+            return clientAuthRequired;
+        }
+
+        @JSFunction
+        @SuppressWarnings("unused")
+        public void setClientAuthRequested(boolean requested)
+        {
+           this.clientAuthRequested = requested;
+        }
+
+        boolean isClientAuthRequested() {
+            return clientAuthRequested;
+        }
+
+        @JSFunction
+        @SuppressWarnings("unused")
+        public void setCiphers(String cipherList)
+        {
+            ArrayList<String> finalList = new ArrayList<String>();
+            for (String cipher : COLON.split(cipherList)) {
+                SSLCiphers.Ciph c = SSLCiphers.get().getSslCipher("TLS", cipher);
+                if (c == null) {
+                    throw new EvaluatorException("Unsupported SSL cipher suite \"" + cipher + '\"');
+                }
+                finalList.add(c.getJavaName());
+            }
+            enabledCiphers = finalList;
+
+        }
+
+        List<String> getEnabledCiphers() {
+            return enabledCiphers;
+        }
+
+        @JSFunction
+        @SuppressWarnings("unused")
+        public boolean validateCiphers(String cipherList)
+        {
+            boolean ret = true;
+            SSLEngine engine = context.createSSLEngine();
+            HashSet<String> enabled = new HashSet<String>(Arrays.asList(engine.getEnabledCipherSuites()));
+            for (String cipher : COLON.split(cipherList)) {
+                SSLCiphers.Ciph c = SSLCiphers.get().getSslCipher("TLS", cipher);
+                if (c == null) {
+                    log.debug(cipher + " is unknown");
+                    ret = false;
+                } else if (!enabled.contains(c.getJavaName())) {
+                    log.debug(cipher + " is not supported in the JVM");
+                    ret = false;
+                }
+            }
+            return ret;
+        }
+
+        /*
+        @JSFunction
+        @SuppressWarnings("unused")
         public static Object createEngine(Context cx, Scriptable thisObj, Object[] args, Function func)
         {
             boolean clientMode = booleanArg(args, 0);
@@ -511,6 +644,7 @@ public class SSLWrap
             engine.init(self.runner, self.context, clientMode, self.trustStoreValidation, self.trustedCertManager);
             return engine;
         }
+        */
     }
 
     /**
@@ -518,6 +652,7 @@ public class SSLWrap
      * a regular socket. However it replaces part of the "TCPWrap" code with code that adds the SSL layer
      * on top using SSLEngine. This class is also responsible for setting up the SSLEngine and all its state.
      */
+    /*
     public static class EngineImpl
         extends Referenceable
     {
@@ -629,9 +764,9 @@ public class SSLWrap
             }
         }
 
-        /**
+        **
          * Called by TCPWrap when data has been read from the socket.
-         */
+         *
         void onRead(Context cx, ByteBuffer buf)
         {
             if (log.isTraceEnabled()) {
@@ -641,9 +776,9 @@ public class SSLWrap
             processReadQueue(cx, false);
         }
 
-        /**
+        **
          * Called by TCPWrap when the EOF has been read from the socket, at the network level.
-         */
+         *
         void onEof(Context cx)
         {
             if (log.isDebugEnabled()) {
@@ -1021,10 +1156,10 @@ public class SSLWrap
             return result;
         }
 
-        /**
+        **
          * We get here if write of a message failed. We expect net.js to call "close" if this happens so that
          * we can actually close the connection.
-         */
+         *
         protected void processFailedWrite(Context cx, final QueuedWrite qw, String msg)
         {
             if (log.isDebugEnabled()) {
@@ -1051,9 +1186,9 @@ public class SSLWrap
             }
         }
 
-        /**
+        **
          * We get here when write of a message is fully complete.
-         */
+         *
         protected void processSuccessfulWrite(Context cx, final QueuedWrite qw, SSLEngineResult result)
         {
             switch (qw.type) {
@@ -1776,6 +1911,7 @@ public class SSLWrap
             return STATUS_ERROR;
         }
     }
+    */
 
     private static final class AllTrustingManager
         implements X509TrustManager

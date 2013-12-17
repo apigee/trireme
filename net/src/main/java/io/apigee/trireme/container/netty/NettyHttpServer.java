@@ -27,21 +27,20 @@ import io.apigee.trireme.net.spi.HttpServerStub;
 import io.apigee.trireme.net.spi.TLSParams;
 import io.netty.channel.ChannelException;
 import io.netty.channel.ChannelHandlerContext;
-import io.netty.channel.ChannelInboundMessageHandlerAdapter;
+import io.netty.channel.ChannelInboundHandlerAdapter;
 import io.netty.channel.ChannelInitializer;
 import io.netty.channel.socket.SocketChannel;
 import io.netty.handler.codec.http.DefaultFullHttpResponse;
 import io.netty.handler.codec.http.DefaultHttpResponse;
 import io.netty.handler.codec.http.FullHttpResponse;
 import io.netty.handler.codec.http.HttpContent;
-import io.netty.handler.codec.http.HttpObject;
 import io.netty.handler.codec.http.HttpRequest;
 import io.netty.handler.codec.http.HttpRequestDecoder;
 import io.netty.handler.codec.http.HttpResponseEncoder;
 import io.netty.handler.codec.http.HttpResponseStatus;
 import io.netty.handler.codec.http.HttpVersion;
-import io.netty.handler.logging.ByteLoggingHandler;
 import io.netty.handler.logging.LogLevel;
+import io.netty.handler.logging.LoggingHandler;
 import io.netty.handler.ssl.SslHandler;
 import io.netty.handler.timeout.IdleStateHandler;
 import org.mozilla.javascript.EvaluatorException;
@@ -126,13 +125,13 @@ public class NettyHttpServer
                     c.pipeline().addLast(new SslHandler(engine));
                 }
                 if (log.isTraceEnabled()) {
-                    c.pipeline().addLast("loggingReq", new ByteLoggingHandler(LogLevel.DEBUG));
+                    c.pipeline().addLast("loggingReq", new LoggingHandler(LogLevel.DEBUG));
                 }
                 c.pipeline().addLast(new HttpRequestDecoder())
                             .addLast(new Handler())
                             .addLast(new HttpResponseEncoder());
                 if (log.isTraceEnabled()) {
-                    c.pipeline().addLast("loggingResp", new ByteLoggingHandler(LogLevel.DEBUG));
+                    c.pipeline().addLast("loggingResp", new LoggingHandler(LogLevel.DEBUG));
                 }
             }
         };
@@ -266,7 +265,7 @@ public class NettyHttpServer
     }
 
     private final class Handler
-        extends ChannelInboundMessageHandlerAdapter<HttpObject>
+        extends ChannelInboundHandlerAdapter
     {
         private NettyHttpRequest curRequest;
         private NettyHttpResponse curResponse;
@@ -302,13 +301,13 @@ public class NettyHttpServer
         }
 
         @Override
-        public void messageReceived(ChannelHandlerContext ctx, HttpObject httpObject)
+        public void channelRead(ChannelHandlerContext ctx, Object o)
         {
             if (log.isDebugEnabled()) {
-                log.debug("Received HTTP message {}", httpObject);
+                log.debug("Received HTTP message {}", o);
             }
-            if (httpObject instanceof HttpRequest) {
-                HttpRequest req = (HttpRequest)httpObject;
+            if (o instanceof HttpRequest) {
+                HttpRequest req = (HttpRequest)o;
                 SocketChannel channel = (SocketChannel)ctx.channel();
                 curRequest = new NettyHttpRequest(req, channel);
 
@@ -320,12 +319,12 @@ public class NettyHttpServer
                     NettyHttpServer.this);
                 stub.onRequest(curRequest, curResponse);
 
-            } else if (httpObject instanceof HttpContent) {
+            } else if (o instanceof HttpContent) {
                 if ((curRequest == null) || (curResponse == null)) {
                     log.error("Received an HTTP chunk without a request first");
                     return;
                 }
-                NettyHttpChunk chunk = new NettyHttpChunk((HttpContent)httpObject);
+                NettyHttpChunk chunk = new NettyHttpChunk((HttpContent)o);
                 if (chunk.hasData() && !curRequest.hasContentLength() && !curRequest.isChunked()) {
                     returnError(ctx, HttpResponseStatus.BAD_REQUEST);
                 } else {

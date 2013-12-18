@@ -306,10 +306,6 @@
         <Description>Uses V8 "gc" method.</Description>
     </Excluded>
     <Excluded>
-        <Name>test-tls-set-encoding.js</Name>
-        <Description>Depends on "readyState"</Description>
-    </Excluded>
-    <Excluded>
         <Name>test-tls-server-slab.js</Name>
         <Description>Depends on internal "slab buffer size"</Description>
     </Excluded>

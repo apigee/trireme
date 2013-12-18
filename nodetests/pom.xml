@@ -67,6 +67,9 @@
         <version>2.13</version>
         <configuration>
           <skipTests>${skipTests}</skipTests>
+          <systemPropertyVariables>
+            <CoverageArg>${argLine}</CoverageArg>
+          </systemPropertyVariables>
         </configuration>
       </plugin>
     </plugins>

@@ -3,6 +3,7 @@ package io.apigee.trireme.test;
 import java.io.File;
 import java.io.IOException;
 import java.io.OutputStream;
+import java.util.ArrayList;
 import java.util.Map;
 
 public abstract class TestBase
@@ -63,7 +64,7 @@ public abstract class TestBase
         this.javaVersion = javaVersion;
     }
 
-    protected int launchTest(int timeout, OutputStream o)
+    protected int launchTest(int timeout, OutputStream o, boolean coverage)
         throws IOException, InterruptedException
     {
         String command;
@@ -77,13 +78,18 @@ public abstract class TestBase
 
         OutputStream stdout = (o == null ? System.out : o);
 
-        String logLevel = System.getProperty("LOGLEVEL", "INFO");
-        ProcessBuilder pb = new ProcessBuilder(command,
-                                               "-DLOGLEVEL=" + logLevel,
-                                               "io.apigee.trireme.test.TestRunner",
-                                               fileName.getName(),
-                                               adapter,
-                                               String.valueOf(timeout));
+        ArrayList<String> args = new ArrayList<String>();
+        args.add(command);
+        args.add("-DLOGLEVEL=" + System.getProperty("LOGLEVEL", "INFO"));
+        if (coverage && (System.getProperty("CoverageArg") != null)) {
+            args.add(System.getProperty("CoverageArg"));
+        }
+        args.add("io.apigee.trireme.test.TestRunner");
+        args.add(fileName.getName());
+        args.add(adapter);
+        args.add(String.valueOf(timeout));
+
+        ProcessBuilder pb = new ProcessBuilder(args);
         pb.directory(fileName.getParentFile());
         pb.redirectErrorStream(true);
         Map<String, String> envVars = pb.environment();

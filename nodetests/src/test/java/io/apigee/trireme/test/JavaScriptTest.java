@@ -206,7 +206,7 @@ public class JavaScriptTest
     {
         System.out.println("**** Testing " + fileName.getName() + " (" + adapter + ", " + javaVersion + ")...");
 
-        int exitCode = launchTest(DEFAULT_TIMEOUT, null);
+        int exitCode = launchTest(DEFAULT_TIMEOUT, null, true);
 
         resultWriter.println(fileName.getName() + '\t' + adapter + '\t' + javaVersion + '\t' + exitCode);
         if (exitCode == 0) {

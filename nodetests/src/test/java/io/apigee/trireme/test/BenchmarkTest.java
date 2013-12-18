@@ -94,7 +94,7 @@ public class BenchmarkTest
         throws IOException, InterruptedException
     {
         System.out.println("Benchmark: " + fileName.getName());
-        int exitCode = launchTest(TEST_TIMEOUT, resultWriter);
+        int exitCode = launchTest(TEST_TIMEOUT, resultWriter, false);
         System.out.println("  = " + exitCode);
         assertEquals(fileName.getName() + " (" + adapter + ", " + javaVersion + ") failed with =" + exitCode,
                      0, exitCode);

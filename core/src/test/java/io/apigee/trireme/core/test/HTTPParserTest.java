@@ -95,6 +95,28 @@ public class HTTPParserTest
     }
 
     @Test
+    public void testThreeCompleteRequestsNoLength()
+    {
+        HTTPParsingMachine parser = new HTTPParsingMachine(HTTPParsingMachine.ParsingMode.REQUEST);
+        ByteBuffer buf = Utils.stringToBuffer(THREE_REQUESTS_NOLENGTH, Charsets.ASCII);
+        for (int i = 0; i < 3; i++) {
+            HTTPParsingMachine.Result r = parser.parse(buf);
+            assertFalse(r.isError());
+            assertTrue(r.isComplete());
+            assertTrue(r.isHeadersComplete());
+            assertTrue(r.hasHeaders());
+            assertFalse(r.hasBody());
+            assertEquals(1, r.getMajor());
+            assertEquals(1, r.getMinor());
+            assertEquals("GET", r.getMethod());
+            assertEquals("/foo/bar/baz", r.getUri());
+            assertEquals("Myself", getFirstHeader(r, "User-Agent"));
+            parser.reset();
+        }
+        parser.parse(null);
+    }
+
+    @Test
     public void testCompleteResponseLength()
     {
         HTTPParsingMachine parser = new HTTPParsingMachine(HTTPParsingMachine.ParsingMode.RESPONSE);
@@ -111,6 +133,47 @@ public class HTTPParserTest
         assertEquals("Myself", getFirstHeader(r, "Server"));
         assertEquals("Hello, World!", Utils.bufferToString(r.getBody(), Charsets.ASCII));
         parser.parse(null);
+    }
+
+    @Test
+    public void testCompleteResponseNolength()
+    {
+        HTTPParsingMachine parser = new HTTPParsingMachine(HTTPParsingMachine.ParsingMode.RESPONSE);
+        HTTPParsingMachine.Result r =
+            parser.parse(Utils.stringToBuffer(COMPLETE_RESPONSE_NOLENGTH, Charsets.ASCII));
+        assertFalse(r.isError());
+        assertFalse(r.isComplete());
+        assertTrue(r.isHeadersComplete());
+        assertTrue(r.hasHeaders());
+        assertTrue(r.hasBody());
+        assertEquals(1, r.getMajor());
+        assertEquals(1, r.getMinor());
+        assertEquals(200, r.getStatusCode());
+        assertEquals("Myself", getFirstHeader(r, "Server"));
+        assertEquals("Hello, World!", Utils.bufferToString(r.getBody(), Charsets.ASCII));
+
+        r = parser.parse(null);
+        assertTrue(r.isComplete());
+    }
+
+    @Test
+    public void testCompleteResponseNoHeaders()
+    {
+        HTTPParsingMachine parser = new HTTPParsingMachine(HTTPParsingMachine.ParsingMode.RESPONSE);
+        HTTPParsingMachine.Result r =
+            parser.parse(Utils.stringToBuffer(COMPLETE_RESPONSE_NOHEADERS, Charsets.ASCII));
+        assertFalse(r.isError());
+        assertFalse(r.isComplete());
+        assertTrue(r.isHeadersComplete());
+        assertFalse(r.hasHeaders());
+        assertTrue(r.hasBody());
+        assertEquals(1, r.getMajor());
+        assertEquals(1, r.getMinor());
+        assertEquals(200, r.getStatusCode());
+        assertEquals("Hello, World!", Utils.bufferToString(r.getBody(), Charsets.ASCII));
+
+        r = parser.parse(null);
+        assertTrue(r.isComplete());
     }
 
     @Test
@@ -450,10 +513,24 @@ public class HTTPParserTest
     "User-Agent: Myself\r\n" +
     "\r\n";
 
+    private static final String THREE_REQUESTS_NOLENGTH =
+        COMPLETE_REQUEST_NOLENGTH + COMPLETE_REQUEST_NOLENGTH + COMPLETE_REQUEST_NOLENGTH;
+
     private static final String COMPLETE_RESPONSE_LENGTH =
     "HTTP/1.1 200 OK\r\n" +
     "Server: Myself\r\n" +
     "Content-Length: 13\r\n" +
+    "\r\n" +
+    "Hello, World!";
+
+    private static final String COMPLETE_RESPONSE_NOLENGTH =
+    "HTTP/1.1 200 OK\r\n" +
+    "Server: Myself\r\n" +
+    "\r\n" +
+    "Hello, World!";
+
+    private static final String COMPLETE_RESPONSE_NOHEADERS =
+    "HTTP/1.1 200 OK\r\n" +
     "\r\n" +
     "Hello, World!";
 

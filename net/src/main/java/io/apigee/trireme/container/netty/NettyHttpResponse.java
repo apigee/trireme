@@ -131,6 +131,8 @@ public class NettyHttpResponse
 
         if (lastChunk) {
             future = sendLastChunk();
+        } else {
+            channel.flush();
         }
 
         return new NettyHttpFuture(future);
@@ -151,6 +153,8 @@ public class NettyHttpResponse
 
         if (lastChunk) {
             future = sendLastChunk();
+        } else {
+            channel.flush();
         }
 
         if (future == null) {
@@ -199,7 +203,7 @@ public class NettyHttpResponse
                 chunk.trailingHeaders().add(t.getKey(), t.getValue());
             }
         }
-        ChannelFuture ret = channel.write(chunk);
+        ChannelFuture ret = channel.writeAndFlush(chunk);
         if (!keepAlive || server.isClosing()) {
             channel.shutdownOutput();
         }

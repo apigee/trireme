@@ -500,9 +500,6 @@ public class TCPWrap
             }
 
             self.clientChannel.pipeline().addFirst(ssl);
-            if (log.isTraceEnabled()) {
-                self.clientChannel.pipeline().addFirst(new LoggingHandler());
-            }
         }
 
         @JSFunction
@@ -900,8 +897,8 @@ public class TCPWrap
         protected void processReadComplete(ChannelHandlerContext ctx)
         {
             if (readStarted) {
-                if (log.isDebugEnabled()) {
-                    log.debug("TCP {}: Issuing another read", id);
+                if (log.isTraceEnabled()) {
+                    log.trace("TCP {}: Issuing another read", id);
                 }
                 clientChannel.read();
             }

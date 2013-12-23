@@ -21,6 +21,10 @@
  */
 package io.apigee.trireme.core.internal;
 
+import io.apigee.trireme.core.internal.charsets.Base64Charset;
+import io.apigee.trireme.core.internal.charsets.BinaryCharset;
+import io.apigee.trireme.core.internal.charsets.HexCharset;
+
 import java.nio.charset.Charset;
 import java.nio.charset.CharsetDecoder;
 import java.nio.charset.CharsetEncoder;
@@ -31,15 +35,22 @@ public class Charsets
 {
     public static final String DEFAULT_ENCODING = "utf8";
 
+    // Note that our custom character sets are declared explicitly
+    // as there are problems with the JDK in that it expects the
+    // system class loader to be used when locating them. This
+    // presents an issue given class loader configurations associated
+    // with containers. For reference:
+    // https://github.com/apigee/trireme/issues/34#issuecomment-31147981
+
     public static final Charset UTF8 = Charset.forName("UTF8");
     public static final Charset UCS2 = Charset.forName("UTF-16LE");
     public static final Charset UTF16BE = Charset.forName("UTF-16BE");
     public static final Charset UTF32LE = Charset.forName("UTF-32LE");
     public static final Charset UTF32BE = Charset.forName("UTF-32BE");
-    public static final Charset BASE64 = Charset.forName("Node-Base64");
+    public static final Charset BASE64 = new Base64Charset();
     public static final Charset ASCII = Charset.forName("US-ASCII");
-    public static final Charset NODE_HEX = Charset.forName("Node-Hex");
-    public static final Charset NODE_BINARY = Charset.forName("Node-Binary");
+    public static final Charset NODE_HEX = new HexCharset();
+    public static final Charset NODE_BINARY = new BinaryCharset();
     public static final Charset DEFAULT = UTF8;
 
     private static final Charsets charsets = new Charsets();

@@ -13,7 +13,6 @@ import org.mozilla.javascript.Context;
 import org.mozilla.javascript.Function;
 import org.mozilla.javascript.Scriptable;
 import org.mozilla.javascript.ScriptableObject;
-import org.mozilla.javascript.annotations.JSConstructor;
 import org.mozilla.javascript.annotations.JSFunction;
 import org.mozilla.javascript.annotations.JSGetter;
 import org.mozilla.javascript.annotations.JSSetter;
@@ -97,18 +96,6 @@ public class PipeWrap
         @Override
         public String getClassName() {
             return CLASS_NAME;
-        }
-
-        @SuppressWarnings("unused")
-        @JSConstructor
-        public static Object init(Context cx, Object[] args, Function func, boolean inNew)
-        {
-            if (!inNew) {
-                return cx.newObject(func, CLASS_NAME, args);
-            }
-
-            PipeImpl ret = new PipeImpl();
-            return ret;
         }
 
         public PipeImpl()
@@ -304,7 +291,7 @@ public class PipeWrap
                 }
                 if (self.targetPipe != null) {
                     // Put a message on the queue that will cause the other side to close
-                    self.offerViaIPC(self.eofSentinel);
+                    self.offerViaIPC(eofSentinel);
                     self.targetPipe = null;
                 }
             } catch (IOException ioe) {
@@ -391,9 +378,19 @@ public class PipeWrap
                     targetPipe = null;
 
                 } else if (buf != null) {
-                    if (onRead != null) {
-                        runner.enqueueCallback(onRead, this, this, new Object[] { buf, 0, buf.getLength()});
-                    }
+                    final Buffer.BufferImpl fbuf = buf;
+                    runner.enqueueTask(new ScriptTask() {
+                        @Override
+                        public void execute(Context cx, Scriptable scope)
+                        {
+                            if (onRead != null) {
+                                onRead.call(cx, onRead, PipeImpl.this,
+                                            new Object[] { fbuf, 0, fbuf.getLength()});
+                                srcPipe.queueSize.addAndGet(-(fbuf.getLength()));
+                            }
+                        }
+                    });
+
                 }
             } while (buf != null);
         }
@@ -460,7 +457,7 @@ public class PipeWrap
         {
             Buffer.BufferImpl buf = objArg(args, 0, Buffer.BufferImpl.class, true);
             PipeImpl self = (PipeImpl)thisObj;
-            if (self.output == null) {
+            if ((self.output == null) && (self.targetPipe == null)) {
                 throw Utils.makeError(cx, thisObj, "Pipe does not support writing");
             }
             return self.offerWrite(cx, buf, buf.getBuffer());
@@ -503,17 +500,20 @@ public class PipeWrap
         {
             final Scriptable domain = runner.getDomain();
             final Scriptable ret = cx.newObject(this);
-            ret.put("bytes", ret, bb.remaining());
+
+            final int len = bb.remaining();
+            ret.put("bytes", ret, len);
 
             if (output != null) {
                 if (asyncMode) {
-                    queueSize.incrementAndGet();
+                    queueSize.addAndGet(len);
                     runner.pin(this);
                     runner.getAsyncPool().submit(new Runnable() {
                         @Override
                         public void run()
                         {
                             sendBuffer(bb, ret, domain);
+                            queueSize.addAndGet(-len);
                         }
                     });
                     return ret;
@@ -531,6 +531,7 @@ public class PipeWrap
                     // in the string case there was never a buffer object
                     buf = Buffer.BufferImpl.newBuffer(cx, this, bb, false);
                 }
+                queueSize.addAndGet(len);
                 offerViaIPC(buf);
             } else {
                 throw Utils.makeError(cx, this, "Pipe does not support writing");
@@ -584,10 +585,10 @@ public class PipeWrap
                     Scriptable err =
                         (fioe == null ? null : Utils.makeErrorObject(cx, scope, fioe.toString()));
 
-                    runner.getProcess().submitTick(cx, oc, PipeImpl.this, PipeImpl.this,
-                                           domain, new Object[] { err, PipeImpl.this, req });
+                    runner.executeCallback(cx, oc, oc, PipeImpl.this, domain,
+                                          new Object[] { err, PipeImpl.this, req });
                 }
-            }, domain);
+            });
         }
 
         // These three are implemented by the native Node.js "pipe_wrap" module, but they don't

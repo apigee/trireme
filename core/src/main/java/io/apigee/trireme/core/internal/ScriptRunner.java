@@ -409,9 +409,11 @@ public class ScriptRunner
     }
 
     /**
-     * This method uses a concurrent queue so it may be called from any thread.
+     * This method uses a concurrent queue so it may be called from any thread. It does not actually
+     * support the "domain" parameter and we should stop using it.
      */
     @Override
+    @Deprecated
     public void enqueueTask(ScriptTask task, Scriptable domain)
     {
         Task t = new Task(task, scope);
@@ -424,20 +426,6 @@ public class ScriptRunner
     public void executeCallback(Context cx, Function f, Scriptable scope, Scriptable thisObj, Scriptable domain, Object[] args)
     {
         process.submitTick(cx, f, scope, thisObj, domain, args);
-    }
-
-    /**
-     * This method is used specifically by process.nextTick, and stuff submitted here is subject to
-     * process.maxTickCount.
-     */
-    public void enqueueCallbackWithLimit(Function f, Scriptable scope, Scriptable thisObj,
-                                         Scriptable domain, Object[] args)
-    {
-        Callback cb = new Callback(f, scope, thisObj, args);
-        cb.setDomain(domain);
-        cb.setHasLimit(true);
-        tickFunctions.offer(cb);
-        selector.wakeup();
     }
 
     public Scriptable getDomain()

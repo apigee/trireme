@@ -196,22 +196,20 @@ public class ProcessWrap
             try {
                 return self.spawned.spawn(cx, execArgs, options);
             } catch (NodeOSException noe) {
-                self.runner.setErrno(noe.getCode());
-                self.callOnExit(-1, null);
+                self.callOnExit(-1, noe.getCode(), self.runner.getDomain());
                 return null;
             } finally {
                 self.ref();
             }
         }
 
-        private void callOnExit(final int code, final String errno)
+        private void callOnExit(final int code, final String errno, final Scriptable domain)
         {
             if (log.isDebugEnabled()) {
                 log.debug("Process {} exited with code {}", spawned, code);
             }
             spawned.setFinished(true);
             processTable.remove(pid);
-            Scriptable domain = runner.getDomain();
             runner.enqueueTask(new ScriptTask()
             {
                 @Override
@@ -220,9 +218,10 @@ public class ProcessWrap
                     if (errno != null) {
                         runner.setErrno(errno);
                     }
-                    onExit.call(cx, ProcessImpl.this, ProcessImpl.this, new Object[]{code});
+                    runner.executeCallback(cx, onExit, onExit, ProcessImpl.this, domain,
+                                           new Object[]{code});
                 }
-            }, domain);
+            });
         }
 
         @SuppressWarnings("unused")
@@ -531,6 +530,12 @@ public class ProcessWrap
                 if ((cwdo != null) && !Context.getUndefinedValue().equals(cwdo)) {
                     String cwd = Context.toString(cwdo);
                     File cwdf = parent.runner.translatePath(cwd);
+                    if (!cwdf.exists()) {
+                        throw new NodeOSException(Constants.ENOENT, cwd);
+                    }
+                    if (!cwdf.isDirectory()) {
+                        throw new NodeOSException(Constants.ENOTDIR, cwd);
+                    }
                     if (log.isDebugEnabled()) {
                         log.debug("Spawning the process in {}", cwdf);
                     }
@@ -565,6 +570,7 @@ public class ProcessWrap
             createInputStream(cx, stdio, 1, proc.getInputStream());
             createInputStream(cx, stdio, 2, proc.getErrorStream());
 
+            final Scriptable domain = parent.runner.getDomain();
             parent.runner.getUnboundedPool().submit(new Runnable()
             {
                 @Override
@@ -575,10 +581,10 @@ public class ProcessWrap
                         if (log.isDebugEnabled()) {
                             log.debug("Child process exited with {}", exitCode);
                         }
-                        parent.callOnExit(exitCode, null);
+                        parent.callOnExit(exitCode, null, domain);
                     } catch (InterruptedException ie) {
                         // TODO some signal?
-                        parent.callOnExit(0, null);
+                        parent.callOnExit(0, null, domain);
                     }
                 }
             });
@@ -847,6 +853,7 @@ public class ProcessWrap
                 throw new NodeOSException(Constants.EINVAL, ne);
             }
 
+            final Scriptable domain = parent.runner.getDomain();
             future.setListener(new ScriptStatusListener()
             {
                 @Override
@@ -857,9 +864,15 @@ public class ProcessWrap
                     }
                     finished = true;
                     script.close();
-                    String errno = status.isOk() ? null : Constants.EIO;
 
-                    parent.callOnExit(status.getExitCode(), errno);
+                    // On an uncaught exception we return a negative exit code -- but the caller
+                    // really just wants that and not an "errno" so emit that.
+                    int exitCode = status.getExitCode();
+                    if (exitCode < 0) {
+                        exitCode = 99;
+                    }
+
+                    parent.callOnExit(exitCode, null, domain);
                 }
             });
             return Context.getUndefinedValue();

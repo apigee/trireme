@@ -174,12 +174,14 @@ function parseOpts(options) {
 Benchmark.prototype.start = function() {
   if (this._started)
     throw new Error('Called start more than once in a single benchmark');
+  console.log('start');
   this._started = true;
   this._start = process.hrtime();
 };
 
 Benchmark.prototype.end = function(operations) {
   var elapsed = process.hrtime(this._start);
+  console.log('End %j', elapsed);
   if (!this._started)
     throw new Error('called end without start');
   if (typeof operations !== 'number')

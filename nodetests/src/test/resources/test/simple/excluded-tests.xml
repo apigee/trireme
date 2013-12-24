@@ -12,6 +12,26 @@
         <Description>cluster module support planned but not implemented.</Description>
     </Excluded>
     <Excluded>
+        <Name>test-child-process-fork-dgram.js</Name>
+        <Description>Passing network stuff to forked children not yet supported.</Description>
+    </Excluded>
+    <Excluded>
+        <Name>test-child-process-fork-getconnections.js</Name>
+        <Description>Passing network stuff to forked children not yet supported.</Description>
+    </Excluded>
+    <Excluded>
+        <Name>test-child-process-fork-net.js</Name>
+        <Description>Passing network stuff to forked children not yet supported.</Description>
+    </Excluded>
+    <Excluded>
+        <Name>test-child-process-fork-net2.js</Name>
+        <Description>Passing network stuff to forked children not yet supported.</Description>
+    </Excluded>
+    <Excluded>
+        <Name>test-child-process-recv-handle.js</Name>
+        <Description>Passing network stuff to forked children not yet supported.</Description>
+    </Excluded>
+    <Excluded>
         <Name>test-crypto-ecb.js</Name>
         <Description>Cipher not yet implemented</Description>
     </Excluded>
@@ -320,6 +340,10 @@
     <Excluded>
         <Name>test-https-no-reader.js</Name>
         <Description>Relies on internal readableState</Description>
+    </Excluded>
+    <Excluded>
+        <Name>test-child-process-fork-exec-argv.js</Name>
+        <Description>Node.js command-line params for V8 not supported.</Description>
     </Excluded>
 
     <!-- MISCELLANEOUS

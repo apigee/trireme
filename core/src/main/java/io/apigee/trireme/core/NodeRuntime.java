@@ -104,7 +104,9 @@ public interface NodeRuntime
      * Put a task on the tick queue to be run in the main script thread. This method may be called from
      * any thread and will cause the script to be run in the main script thread. This method is the <i>only</i>
      * way that code running outside the main script thread should cause work to be done in the main thread.
+     * This function does not actually preserve the "domain" parameter and we should stop using it.
      */
+    @Deprecated
     void enqueueTask(ScriptTask taskm, Scriptable domain);
 
     /**

@@ -257,5 +257,9 @@
         <name>Ed Anuff</name>
         <id>edanuff</id>
     </developer>
+    <developer>
+        <name>Christopher Hunt</name>
+        <id>huntc</id>
+    </developer>
   </developers>
 </project>

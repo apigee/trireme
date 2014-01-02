@@ -12,7 +12,6 @@ io.apigee.trireme.core.modules.ModuleLoader
 io.apigee.trireme.core.modules.NativeModule
 io.apigee.trireme.core.modules.NativeInputStreamAdapter
 io.apigee.trireme.core.modules.NativeOutputStreamAdapter
-io.apigee.trireme.core.modules.NoderunnerEvals
 io.apigee.trireme.core.modules.OS
 io.apigee.trireme.core.modules.Process
 io.apigee.trireme.core.modules.ProcessWrap

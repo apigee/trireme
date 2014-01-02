@@ -489,6 +489,13 @@ public class BasicTest
         future.cancel(true);
     }
 
+    @Test
+    public void testBigFile()
+        throws InterruptedException, ExecutionException, NodeException
+    {
+        runTest("bigfiletest.js");
+    }
+
     private void runTest(String name)
         throws InterruptedException, ExecutionException, NodeException
     {

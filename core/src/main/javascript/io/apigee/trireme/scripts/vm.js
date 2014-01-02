@@ -24,7 +24,7 @@
  * Java code complexity much lower.
  */
 
-var binding = process.binding('trireme_evals');
+var evals = process.binding('evals').NodeScript;
 
 var debug;
 if (process.env.NODE_DEBUG && /vm/.test(process.env.NODE_DEBUG)) {
@@ -37,9 +37,9 @@ module.exports = Script;
 Script.Script = Script;
 
 function Script(code, ctx, filename) {
-  this.compiled = binding.compile(code, filename);
+  this.compiled = evals.compile(code, filename);
   if (ctx === undefined) {
-    this.context = binding.globalContext;
+    this.context = evals.getGlobalContext();
   } else {
     this.context = ctx;
   }
@@ -50,28 +50,23 @@ Script.createScript = function(code, ctx, name) {
 };
 
 Script.runInThisContext = function(code, filename) {
-  //var compiled = binding.compile(code, filename);
-  //return binding.run(binding.globalContext, compiled);
-  return binding.compileAndRun(code, filename, binding.globalContext);
-}
+  return evals.runInNewContext(code, evals.getGlobalContext(), filename);
+};
 
 Script.runInNewContext = function (code, sandbox, filename) {
-  var compiled = binding.compile(code, filename);
-  var ctx = binding.createContext();
+  var ctx = evals.createContext();
   copyFromSandbox(sandbox, ctx);
-  var result = binding.run(ctx, compiled);
+  var result = evals.runInNewContext(code, ctx, filename);
   copyToSandbox(ctx, sandbox);
   return result;
 };
 
 Script.runInContext = function(code, context, filename) {
-  //var compiled = binding.compile(code, filename);
-  //return binding.run(context, compiled);
-  return binding.compileAndRun(code, filename, context);
+  return evals.runInNewContext(code, context, filename);
 };
 
 Script.createContext = function(sandbox) {
-  var ctx = binding.createContext();
+  var ctx = evals.createContext();
   debug('Creating context using sandbox ' + JSON.stringify(sandbox));
   copyFromSandbox(sandbox, ctx);
   debug('Context after sandbox ' + JSON.stringify(ctx));
@@ -83,13 +78,13 @@ Script.createScript = function(code, filename) {
 };
 
 Script.prototype.runInThisContext = function() {
-  return binding.run(this.context, this.compiled);
+  return evals.run(this.context, this.compiled);
 };
 
 Script.prototype.runInNewContext = function(sandbox) {
-  var ctx = binding.createContext();
+  var ctx = evals.createContext();
   copyFromSandbox(sandbox, ctx);
-  var result = binding.run(ctx, this.compiled);
+  var result = evals.run(ctx, this.compiled);
   copyToSandbox(ctx, sandbox);
   return result;
 };
@@ -97,7 +92,7 @@ Script.prototype.runInNewContext = function(sandbox) {
 Script.prototype.createContext = Script.createContext;
 
 Script.prototype.runInContext = function(ctx) {
-  return binding.run(ctx, this.compiled);
+  return evals.run(ctx, this.compiled);
 };
 
 /*

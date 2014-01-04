@@ -34,10 +34,9 @@ public class CipherSuiteTest
         ensureAlgorithm("aes-128-ecb", "AES/ECB/PKCS5Padding", 16, true);
         ensureAlgorithm("des-cbc", "DES/CBC/PKCS5Padding", 8, true);
         ensureAlgorithm("des", "DES/CBC/PKCS5Padding", 8, true);
-        ensureAlgorithm("des-ede-cbc", "DESede/CBC/PKCS5Padding", 14, true);
-        ensureAlgorithm("des-ede", "DESede/ECB/PKCS5Padding", 14, true);
-        ensureAlgorithm("des-ede3", "DESede/ECB/PKCS5Padding", 21, true);
-        ensureAlgorithm("des3", "DESede/CBC/PKCS5Padding", 21, true);
+        ensureAlgorithm("des-ede3-cbc", "DESede/CBC/PKCS5Padding", 24, true);
+        ensureAlgorithm("des-ede3", "DESede/ECB/PKCS5Padding", 24, true);
+        ensureAlgorithm("des3", "DESede/CBC/PKCS5Padding", 24, true);
     }
 
     private void ensureAlgorithm(String name, String javaName, int len, boolean pad)
@@ -58,7 +57,7 @@ public class CipherSuiteTest
 
     /*
      * Uncomment these tests to help diagnose what's going wrong by dumping internal tables of ciphers.
-     */
+     *
     @Test
     public void dumpCiphers()
     {
@@ -96,5 +95,5 @@ public class CipherSuiteTest
         } catch (NoSuchAlgorithmException nse) {
         }
     }
-    /**/
+    */
 }

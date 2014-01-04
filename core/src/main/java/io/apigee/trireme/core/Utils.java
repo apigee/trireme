@@ -366,4 +366,28 @@ public class Utils
         d.put(b);
         return d;
     }
+
+    /**
+     * Fill a ByteBuffer with zeros, useful if it has been used to store a password or something.
+     */
+    public static void zeroBuffer(ByteBuffer b)
+    {
+        b.clear();
+        while (b.hasRemaining()) {
+            b.put((byte)0);
+        }
+        b.clear();
+    }
+
+    /**
+     * Make a duplicate of a ByteBuffer.
+     */
+    public static ByteBuffer duplicateBuffer(ByteBuffer b)
+    {
+        ByteBuffer ret = ByteBuffer.allocate(b.remaining());
+        ByteBuffer tmp = b.duplicate();
+        ret.put(tmp);
+        ret.flip();
+        return ret;
+    }
 }

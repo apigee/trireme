@@ -558,23 +558,11 @@ verStream.end('3');
 verified = verStream.verify(certPem, s3);
 assert.strictEqual(verified, true, 'sign and verify (stream)');
 
-/*
- * Noderunner: Not yet
- */
-
-assert.throws(function() {
-  crypto.createCipher('aes192', 'key');
-});
-
-assert.throws(function() {
-  crypto.createDecipher('aes192', 'key');
-});
-
-/*
 function testCipher1(key) {
   // Test encryption and decryption
   var plaintext = 'Keep this a secret? No! Tell everyone about node.js!';
-  var cipher = crypto.createCipher('aes192', key);
+  //var cipher = crypto.createCipher('aes192', key);
+  var cipher = crypto.createCipher('aes128', key);
 
   // encrypt plaintext which is in utf8 format
   // to a ciphertext which will be in hex
@@ -582,7 +570,8 @@ function testCipher1(key) {
   // Only use binary or hex, not base64.
   ciph += cipher.final('hex');
 
-  var decipher = crypto.createDecipher('aes192', key);
+  // var decipher = crypto.createDecipher('aes192', key);
+  var decipher = crypto.createDecipher('aes128', key);
   var txt = decipher.update(ciph, 'hex', 'utf8');
   txt += decipher.final('utf8');
 
@@ -592,11 +581,13 @@ function testCipher1(key) {
   // NB: In real life, it's not guaranteed that you can get all of it
   // in a single read() like this.  But in this case, we know it's
   // quite small, so there's no harm.
-  var cStream = crypto.createCipher('aes192', key);
+  //var cStream = crypto.createCipher('aes192', key);
+  var cStream = crypto.createCipher('aes128', key);
   cStream.end(plaintext);
   ciph = cStream.read();
 
-  var dStream = crypto.createDecipher('aes192', key);
+  //var dStream = crypto.createDecipher('aes192', key);
+  var dStream = crypto.createDecipher('aes128', key);
   dStream.end(ciph);
   txt = dStream.read().toString('utf8');
 
@@ -611,7 +602,8 @@ function testCipher2(key) {
       '32|RmVZZkFUVmpRRkp0TmJaUm56ZU9qcnJkaXNNWVNpTTU*|iXmckfRWZBGWWELw' +
       'eCBsThSsfUHLeRe0KCsK8ooHgxie0zOINpXxfZi/oNG7uq9JWFVCk70gfzQH8ZUJ' +
       'jAfaFg**';
-  var cipher = crypto.createCipher('aes256', key);
+  //var cipher = crypto.createCipher('aes256', key);
+  var cipher = crypto.createCipher('aes128', key);
 
   // encrypt plaintext which is in utf8 format
   // to a ciphertext which will be in Base64
@@ -619,6 +611,7 @@ function testCipher2(key) {
   ciph += cipher.final('base64');
 
   var decipher = crypto.createDecipher('aes256', key);
+  var decipher = crypto.createDecipher('aes128', key);
   var txt = decipher.update(ciph, 'base64', 'utf8');
   txt += decipher.final('utf8');
 
@@ -688,7 +681,6 @@ testCipher3(new Buffer('0123456789abcd0123456789'), '12345678');
 testCipher3(new Buffer('0123456789abcd0123456789'), new Buffer('12345678'));
 
 testCipher4(new Buffer('0123456789abcd0123456789'), new Buffer('12345678'));
-*/
 
 // update() should only take buffers / strings
 assert.throws(function() {

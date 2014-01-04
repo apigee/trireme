@@ -22,14 +22,15 @@
 package io.apigee.trireme.core.modules;
 
 import io.apigee.trireme.core.internal.Charsets;
+import io.apigee.trireme.core.internal.CryptoAlgorithms;
 import io.apigee.trireme.core.internal.CryptoException;
 import io.apigee.trireme.core.internal.CryptoService;
 import io.apigee.trireme.core.InternalNodeModule;
+import io.apigee.trireme.core.internal.KeyGenerator;
 import io.apigee.trireme.core.internal.SignatureAlgorithms;
 import io.apigee.trireme.core.Utils;
 import io.apigee.trireme.core.NodeRuntime;
 import org.mozilla.javascript.Context;
-import org.mozilla.javascript.EvaluatorException;
 import org.mozilla.javascript.Function;
 import org.mozilla.javascript.FunctionObject;
 import org.mozilla.javascript.Scriptable;
@@ -40,9 +41,12 @@ import org.mozilla.javascript.annotations.JSFunction;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import javax.crypto.Cipher;
 import javax.crypto.Mac;
+import javax.crypto.NoSuchPaddingException;
 import javax.crypto.SecretKey;
 import javax.crypto.SecretKeyFactory;
+import javax.crypto.spec.IvParameterSpec;
 import javax.crypto.spec.PBEKeySpec;
 import javax.crypto.spec.SecretKeySpec;
 import java.io.ByteArrayInputStream;
@@ -190,12 +194,14 @@ public class Crypto
         }
 
         @JSFunction
+        @SuppressWarnings("unused")
         public static Object randomBytes(Context cx, Scriptable thisObj, Object[] args, Function func)
         {
             return randomBytesCommon(cx, thisObj, args, func, secureRandom);
         }
 
         @JSFunction
+        @SuppressWarnings("unused")
         public static Object pseudoRandomBytes(Context cx, Scriptable thisObj, Object[] args, Function func)
         {
             return randomBytesCommon(cx, thisObj, args, func, pseudoRandom);
@@ -235,19 +241,21 @@ public class Crypto
         }
 
         @JSFunction
+        @SuppressWarnings("unused")
         public static Scriptable getCiphers(Context cx, Scriptable thisObj, Object[] args, Function func)
         {
-            // TODO: getCiphers
-            throw new EvaluatorException("Not implemented");
+            return cx.newArray(thisObj, CryptoAlgorithms.get().getCiphers().toArray());
         }
 
         @JSFunction
+        @SuppressWarnings("unused")
         public static Scriptable getHashes(Context cx, Scriptable thisObj, Object[] args, Function func)
         {
             return cx.newArray(thisObj, HashImpl.SUPPORTED_ALGORITHMS.toArray());
         }
 
         @JSFunction
+        @SuppressWarnings("unused")
         public static Scriptable PBKDF2(Context cx, Scriptable thisObj, Object[] args, Function func)
         {
             String pw = stringArg(args, 0);
@@ -318,6 +326,7 @@ public class Crypto
         }
 
         @JSConstructor
+        @SuppressWarnings("unused")
         public static Object hashConstructor(Context cx, Object[] args, Function ctorObj, boolean inNewExpr)
         {
             HashImpl ret;
@@ -347,6 +356,7 @@ public class Crypto
         }
 
         @JSFunction
+        @SuppressWarnings("unused")
         public static void update(Context cx, Scriptable thisObj, Object[] args, Function func)
         {
             HashImpl thisClass = (HashImpl) thisObj;
@@ -366,6 +376,7 @@ public class Crypto
         }
 
         @JSFunction
+        @SuppressWarnings("unused")
         public static Object digest(Context cx, Scriptable thisObj, Object[] args, Function func)
         {
             HashImpl thisClass = (HashImpl) thisObj;
@@ -406,6 +417,7 @@ public class Crypto
         }
 
         @JSFunction
+        @SuppressWarnings("unused")
         public static void init(Context cx, Scriptable thisObj, Object[] args, Function func)
         {
             String nodeAlgorithm = stringArg(args, 0);
@@ -435,6 +447,7 @@ public class Crypto
         }
 
         @JSFunction
+        @SuppressWarnings("unused")
         public static void update(Context cx, Scriptable thisObj, Object[] args, Function func)
         {
             MacImpl thisClass = (MacImpl) thisObj;
@@ -454,6 +467,7 @@ public class Crypto
         }
 
         @JSFunction
+        @SuppressWarnings("unused")
         public static Object digest(Context cx, Scriptable thisObj, Object[] args, Function func)
         {
             MacImpl thisClass = (MacImpl) thisObj;
@@ -470,19 +484,161 @@ public class Crypto
         }
     }
 
-    /*
-     * To make Cipher and Decipher work, we have to do this:
-     * . Map algorithm names from OpenSSL to Java. We have some work for this in a branch.
-     * . Support "setAutoPadding" to select PKCS5 or "No" padding. Can't init cipher until then.
-     * . If the cipher requires it, hash the password and trim or expand to the right length. Node uses MD5 for this.
-     * . If the cipher requires it, generate a random IV and prepend it to the ciphertext.
-     * . If the cipher requires it, retrieve the IV from the ciphertext before decrypting.
-     * . Remember that you won't always get the first 16 bytes or whatever all at once.
-     * . After all that will the corresponding code be compatible with Node? Is that even possible given the
-     *   total lack of docs or specification? Should we even bother with this?
-     */
-    public static class CipherImpl
+    public static abstract class AbstractCipherImpl
         extends ScriptableObject
+    {
+        private Cipher cipher;
+        private String algorithm;
+        protected boolean autoPadding = true;
+        private ByteBuffer key;
+        private ByteBuffer iv;
+        private int mode;
+
+        protected boolean init(Context cx, Object[] args, int mode)
+        {
+            String algoName = stringArg(args, 0);
+            Buffer.BufferImpl pwBuf = objArg(args, 1, Buffer.BufferImpl.class, true);
+
+            this.algorithm = algoName;
+            this.mode = mode;
+
+            CryptoAlgorithms.Spec spec = CryptoAlgorithms.get().getAlgorithm(algoName);
+            if (spec == null) {
+                throw Utils.makeError(cx, this, "Unknown cipher " + algoName);
+            }
+
+            MessageDigest digest;
+            try {
+                digest = MessageDigest.getInstance("MD5");
+            } catch (NoSuchAlgorithmException ne) {
+                throw new AssertionError(ne);
+            }
+
+            // Generate a key using the same algorithm used by the real Node code. It is not as secure as
+            // PBKDF as there is no salt and MD5 is used, but this is what Node uses.
+            KeyGenerator.Key generatedKey =
+                KeyGenerator.generateKey(digest,
+                                         pwBuf.getArray(), pwBuf.getArrayOffset(), pwBuf.getLength(),
+                                         spec.getKeyLen(), spec.getIvLen(), 1);
+
+            key = ByteBuffer.wrap(generatedKey.getKey());
+            if (generatedKey.getIv() != null) {
+                iv = ByteBuffer.wrap(generatedKey.getIv());
+            }
+
+            return true;
+        }
+
+        protected boolean initiv(Context cx, Object[] args, int mode)
+        {
+            String algoName = stringArg(args, 0);
+            Buffer.BufferImpl keyBuf = objArg(args, 1, Buffer.BufferImpl.class, true);
+            Buffer.BufferImpl ivBuf = objArg(args, 2, Buffer.BufferImpl.class, false);
+
+            this.algorithm = algoName;
+            this.mode = mode;
+
+            CryptoAlgorithms.Spec spec = CryptoAlgorithms.get().getAlgorithm(algoName);
+            if (spec == null) {
+                throw Utils.makeError(cx, this, "Unknown cipher " + algoName);
+            }
+
+            // Copy the buffers, because we are going to zero our copies and we don't know if the caller
+            // intends to reuse them.
+            key = Utils.duplicateBuffer(keyBuf.getBuffer());
+            if (ivBuf != null) {
+                iv = Utils.duplicateBuffer(ivBuf.getBuffer());
+            }
+
+            return true;
+        }
+
+        /**
+         * Actually create the cipher and initialize it using the key. This happens on the first "update"
+         * call. It happens here, and not before, because "setAutoPadding" can be called after the cipher
+         * is initialized.
+         */
+        private void initCipher(Context cx)
+        {
+            if (cipher == null) {
+                if (key == null) {
+                    throw Utils.makeError(cx, this, "Cipher was not initialized");
+                }
+                try {
+                    CryptoAlgorithms.Spec spec = CryptoAlgorithms.get().getAlgorithm(algorithm);
+                    try {
+                        cipher = Cipher.getInstance(spec.getFullName(autoPadding));
+                    } catch (NoSuchAlgorithmException e) {
+                        throw Utils.makeError(cx, this, "No such algorithm: " + algorithm);
+                    } catch (NoSuchPaddingException e) {
+                        throw Utils.makeError(cx, this, "No such algorithm: " + algorithm + " with padding " + autoPadding);
+                    }
+
+                    try {
+                        SecretKey jcaKey =
+                            new SecretKeySpec(key.array(), key.arrayOffset(), key.remaining(), spec.getAlgo());
+                        if ((iv != null) && iv.hasRemaining()) {
+                            IvParameterSpec ivSpec = new IvParameterSpec(iv.array(), iv.arrayOffset(), iv.remaining());
+                            cipher.init(mode, jcaKey, ivSpec);
+                        } else {
+                            cipher.init(mode, jcaKey);
+                        }
+                    } catch (GeneralSecurityException gse) {
+                        throw Utils.makeError(cx, this, "Error initializing cipher: " + gse);
+                    }
+                } finally {
+                    // Clear the key and iv if they were generated so that we don't leave them sitting in memory
+                    if (key != null) {
+                        Utils.zeroBuffer(key);
+                        key = null;
+                    }
+                    if (iv != null) {
+                        Utils.zeroBuffer(iv);
+                        iv = null;
+                    }
+                }
+            }
+        }
+
+        protected Object update(Context cx, Object[] args)
+        {
+            ensureArg(args, 0);
+            ByteBuffer buf;
+
+            initCipher(cx);
+
+            if (args[0] instanceof String) {
+                String enc = stringArg(args, 1, "binary");
+                buf = Utils.stringToBuffer((String)args[0], Charsets.get().resolveCharset(enc));
+            } else {
+                Buffer.BufferImpl jsBuf = objArg(args, 0, Buffer.BufferImpl.class, true);
+                buf = jsBuf.getBuffer();
+            }
+
+            byte[] out =
+                cipher.update(buf.array(), buf.arrayOffset() + buf.position(), buf.remaining());
+            if (out == null) {
+                return null;
+            }
+            return Buffer.BufferImpl.newBuffer(cx, this, out);
+        }
+
+        protected Object doFinal(Context cx)
+        {
+            try {
+                byte[] out = cipher.doFinal();
+                if (out == null) {
+                    return null;
+                }
+                return Buffer.BufferImpl.newBuffer(cx, this, out);
+            } catch (GeneralSecurityException gse) {
+                throw Utils.makeError(cx, this, gse.toString());
+            }
+        }
+    }
+
+    public static class CipherImpl
+        extends AbstractCipherImpl
     {
         @Override
         public String getClassName()
@@ -490,15 +646,49 @@ public class Crypto
             return "Cipher";
         }
 
-        @JSConstructor
-        public static void construct(Context cx, Object[] args, Function ctor, boolean inNew)
+        @JSFunction
+        @SuppressWarnings("unused")
+        public static boolean init(Context cx, Scriptable thisObj, Object[] args, Function func)
         {
-            throw Utils.makeError(cx, ctor, "Cipher is not supported in Trireme");
+            CipherImpl self = (CipherImpl)thisObj;
+            return self.init(cx, args, Cipher.ENCRYPT_MODE);
+        }
+
+        @JSFunction
+        @SuppressWarnings("unused")
+        public static boolean initiv(Context cx, Scriptable thisObj, Object[] args, Function func)
+        {
+            CipherImpl self = (CipherImpl)thisObj;
+            return self.initiv(cx, args, Cipher.ENCRYPT_MODE);
+        }
+
+        @JSFunction
+        @SuppressWarnings("unused")
+        public static void setAutoPadding(Context cx, Scriptable thisObj, Object[] args, Function func)
+        {
+            CipherImpl self = (CipherImpl)thisObj;
+            self.autoPadding = booleanArg(args, 0);
+        }
+
+        @JSFunction
+        @SuppressWarnings("unused")
+        public static Object update(Context cx, Scriptable thisObj, Object[] args, Function func)
+        {
+            CipherImpl self = (CipherImpl)thisObj;
+            return self.update(cx, args);
+        }
+
+        @JSFunction("final")
+        @SuppressWarnings("unused")
+        public static Object doFinal(Context cx, Scriptable thisObj, Object[] args, Function func)
+        {
+            CipherImpl self = (CipherImpl)thisObj;
+            return self.doFinal(cx);
         }
     }
 
     public static class DecipherImpl
-        extends ScriptableObject
+        extends AbstractCipherImpl
     {
         @Override
         public String getClassName()
@@ -506,10 +696,44 @@ public class Crypto
             return "Decipher";
         }
 
-        @JSConstructor
-        public static void construct(Context cx, Object[] args, Function ctor, boolean inNew)
+        @JSFunction
+        @SuppressWarnings("unused")
+        public static boolean init(Context cx, Scriptable thisObj, Object[] args, Function func)
         {
-            throw Utils.makeError(cx, ctor, "Decipher is not supported in Trireme");
+            DecipherImpl self = (DecipherImpl)thisObj;
+            return self.init(cx, args, Cipher.DECRYPT_MODE);
+        }
+
+        @JSFunction
+        @SuppressWarnings("unused")
+        public static boolean initiv(Context cx, Scriptable thisObj, Object[] args, Function func)
+        {
+            DecipherImpl self = (DecipherImpl)thisObj;
+            return self.initiv(cx, args, Cipher.DECRYPT_MODE);
+        }
+
+        @JSFunction
+        @SuppressWarnings("unused")
+        public static void setAutoPadding(Context cx, Scriptable thisObj, Object[] args, Function func)
+        {
+            DecipherImpl self = (DecipherImpl)thisObj;
+            self.autoPadding = booleanArg(args, 0);
+        }
+
+        @JSFunction
+        @SuppressWarnings("unused")
+        public static Object update(Context cx, Scriptable thisObj, Object[] args, Function func)
+        {
+            DecipherImpl self = (DecipherImpl)thisObj;
+            return self.update(cx, args);
+        }
+
+        @JSFunction("final")
+        @SuppressWarnings("unused")
+        public static Object doFinal(Context cx, Scriptable thisObj, Object[] args, Function func)
+        {
+            DecipherImpl self = (DecipherImpl)thisObj;
+            return self.doFinal(cx);
         }
     }
 
@@ -526,6 +750,7 @@ public class Crypto
         }
 
         @JSFunction
+        @SuppressWarnings("unused")
         public static void init(Context cx, Scriptable thisObj, Object[] args, Function func)
         {
             ensureCryptoService(cx, thisObj);
@@ -540,6 +765,7 @@ public class Crypto
         }
 
         @JSFunction
+        @SuppressWarnings("unused")
         public static void update(Context cx, Scriptable thisObj, Object[] args, Function func)
         {
             ensureArg(args, 0);
@@ -553,6 +779,7 @@ public class Crypto
         }
 
         @JSFunction
+        @SuppressWarnings("unused")
         public static Object sign(Context cx, Scriptable thisObj, Object[] args, Function func)
         {
             Buffer.BufferImpl keyBuf = objArg(args, 0, Buffer.BufferImpl.class, true);
@@ -611,6 +838,7 @@ public class Crypto
         }
 
         @JSFunction
+        @SuppressWarnings("unused")
         public static void init(Context cx, Scriptable thisObj, Object[] args, Function func)
         {
             ensureCryptoService(cx, thisObj);
@@ -625,6 +853,7 @@ public class Crypto
         }
 
         @JSFunction
+        @SuppressWarnings("unused")
         public static void update(Context cx, Scriptable thisObj, Object[] args, Function func)
         {
             ensureArg(args, 0);
@@ -719,6 +948,7 @@ public class Crypto
         }
 
         @JSConstructor
+        @SuppressWarnings("unused")
         public static void construct(Context cx, Object[] args, Function ctor, boolean inNew)
         {
             throw Utils.makeError(cx, ctor, "SecureContext is not supported in Trireme");
@@ -738,6 +968,7 @@ public class Crypto
         }
 
         @JSConstructor
+        @SuppressWarnings("unused")
         public static void construct(Context cx, Object[] args, Function ctor, boolean inNew)
         {
             throw Utils.makeError(cx, ctor, "DiffieHellman is not supported in Trireme");
@@ -754,6 +985,7 @@ public class Crypto
         }
 
         @JSConstructor
+        @SuppressWarnings("unused")
         public static void construct(Context cx, Object[] args, Function ctor, boolean inNew)
         {
             throw Utils.makeError(cx, ctor, "DiffieHellmanGroup is not supported in Trireme");

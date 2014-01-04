@@ -16,22 +16,6 @@
         <Description>Support for handles and sockets not done yet.</Description>
     </Excluded>
     <Excluded>
-        <Name>test-crypto-ecb.js</Name>
-        <Description>Cipher not yet implemented</Description>
-    </Excluded>
-    <Excluded>
-        <Name>test-crypto-padding-aes256.js</Name>
-        <Description>Cipher not yet implemented</Description>
-    </Excluded>
-    <Excluded>
-        <Name>test-crypto-padding.js</Name>
-        <Description>Cipher not yet implemented</Description>
-    </Excluded>
-    <Excluded>
-        <Name>test-domain-crypto.js</Name>
-        <Description>Not all of crypto implemented.</Description>
-    </Excluded>
-    <Excluded>
         <Name>test-dgram.*address.*\.js</Name>
         <Description>Can't support IPv6 addresses yet.</Description>
     </Excluded>
@@ -196,6 +180,14 @@
     <Excluded>
         <Name>test-event-emitter-memory-leak.js</Name>
         <Description>Requires --expose-gc</Description>
+    </Excluded>
+    <Excluded>
+        <Name>test-crypto-padding-aes256.js</Name>
+        <Description>Default Java installations do not support 256-bit AES</Description>
+    </Excluded>
+    <Excluded>
+        <Name>test-crypto-ecb.js</Name>
+        <Description>Depends on Blowfish support for an odd key size - not supported in Java</Description>
     </Excluded>
 
     <!-- DIFFERENT TESTS

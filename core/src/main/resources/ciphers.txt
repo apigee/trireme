@@ -1,0 +1,207 @@
+# This file lists the names of all the ciphers that might be supported. The runtime will only make each
+# of these available if it is actually present in the JCE runtime when the "CryptoAlgorithms" class
+# is loaded.
+#
+# The format is as follows:
+# {OpenSSL algorithm name} {JCA Cipher Name} {JCA Algorithm} {Key length in bits} {IV length in bytes}
+# JCA cipher name includes the mode but not the padding -- that is added later.
+# Blowfish
+bf-cbc       Blowfish/CBC    Blowfish  128 8
+bf-cfb       Blowfish/CFB    Blowfish  128 8
+bf-cfb8      Blowfish/CFB8   Blowfish  128 8
+bf-cfb16     Blowfish/CFB16  Blowfish  128 8
+bf-cfb24     Blowfish/CFB24  Blowfish  128 8
+bf-cfb32     Blowfish/CFB32  Blowfish  128 8
+bf-cfb40     Blowfish/CFB40  Blowfish  128 8
+bf-cfb48     Blowfish/CFB48  Blowfish  128 8
+bf-cfb56     Blowfish/CFB56  Blowfish  128 8
+bf-cfb64     Blowfish/CFB64  Blowfish  128 8
+bf-ctr       Blowfish/CTR    Blowfish  128 8
+bf-cts       Blowfish/CTS    Blowfish  128 8
+bf-ecb       Blowfish/ECB    Blowfish  128 0
+bf-ofb       Blowfish/OFB    Blowfish  128 8
+bf-ofb8      Blowfish/OFB8   Blowfish  128 8
+bf-ofb16     Blowfish/OFB16  Blowfish  128 8
+bf-ofb24     Blowfish/OFB24  Blowfish  128 8
+bf-ofb32     Blowfish/OFB32  Blowfish  128 8
+bf-ofb40     Blowfish/OFB40  Blowfish  128 8
+bf-ofb48     Blowfish/OFB48  Blowfish  128 8
+bf-ofb56     Blowfish/OFB56  Blowfish  128 8
+bf-ofb64     Blowfish/OFB64  Blowfish  128 8
+bf           Blowfish/CBC    Blowfish  128 8
+# DES
+des-cbc      DES/CBC       DES       64  8
+des-cfb      DES/CFB       DES       64  8
+des-cfb8     DES/CFB8      DES       64  8
+des-cfb16    DES/CFB16     DES       64  8
+des-cfb24    DES/CFB24     DES       64  8
+des-cfb32    DES/CFB32     DES       64  8
+des-cfb40    DES/CFB40     DES       64  8
+des-cfb56    DES/CFB56     DES       64  8
+des-cfb64    DES/CFB64     DES       64  8
+des-ctr      DES/CTR       DES       64  8
+des-cts      DES/CTS       DES       64  8
+des-ofb      DES/OFB       DES       64  8
+des-ofb8     DES/OFB8      DES       64  8
+des-ofb16    DES/OFB16     DES       64  8
+des-ofb24    DES/OFB24     DES       64  8
+des-ofb32    DES/OFB32     DES       64  8
+des-ofb40    DES/OFB40     DES       64  8
+des-ofb56    DES/OFB56     DES       64  8
+des-ofb64    DES/OFB64     DES       64  8
+des-ecb      DES/ECB       DES       64  0
+des          DES/CBC       DES       64  8
+# Triple DES
+des-ede3-cbc   DESede/CBC    DESede    192 8
+des-ede3-cfb   DESede/CFB    DESede    192 8
+des-ede3-cfb8  DESede/CFB8   DESede    192 8
+des-ede3-cfb16 DESede/CFB16  DESede    192 8
+des-ede3-cfb24 DESede/CFB24  DESede    192 8
+des-ede3-cfb32 DESede/CFB32  DESede    192 8
+des-ede3-cfb40 DESede/CFB40  DESede    192 8
+des-ede3-cfb48 DESede/CFB48  DESede    192 8
+des-ede3-cfb56 DESede/CFB56  DESede    192 8
+des-ede3-cfb64 DESede/CFB64  DESede    192 8
+des-ede3-ctr   DESede/CTR    DESede    192 8
+des-ede3-cts   DESede/CTS    DESede    192 8
+des-ede3-ofb   DESede/OFB    DESede    192 8
+des-ede3-ofb8  DESede/OFB8   DESede    192 8
+des-ede3-ofb16 DESede/OFB16  DESede    192 8
+des-ede3-ofb24 DESede/OFB24  DESede    192 8
+des-ede3-ofb32 DESede/OFB32  DESede    192 8
+des-ede3-ofb40 DESede/OFB40  DESede    192 8
+des-ede3-ofb48 DESede/OFB48  DESede    192 8
+des-ede3-ofb56 DESede/OFB56  DESede    192 8
+des-ede3-ofb64 DESede/OFB64  DESede    192 8
+des-ede3-ecb   DESede/ECB    DESede    192 0
+des-ede3       DESede/ECB    DESede    192 0
+des3           DESede/CBC    DESede    192 8
+# AES 128
+aes-128-cbc   AES/CBC      AES       128 16
+aes-128-ctr   AES/CTR      AES       128 16
+aes-128-cts   AES/CTS      AES       128 16
+aes-128-cfb   AES/CFB      AES       128 16
+aes-128-cfb8  AES/CFB8     AES       128 16
+aes-128-cfb16 AES/CFB16    AES       128 16
+aes-128-cfb24 AES/CFB24    AES       128 16
+aes-128-cfb32 AES/CFB32    AES       128 16
+aes-128-cfb40 AES/CFB40    AES       128 16
+aes-128-cfb48 AES/CFB48    AES       128 16
+aes-128-cfb56 AES/CFB56    AES       128 16
+aes-128-cfb64 AES/CFB64    AES       128 16
+aes-128-cfb72 AES/CFB72    AES       128 16
+aes-128-cfb80 AES/CFB80    AES       128 16
+aes-128-cfb88 AES/CFB88    AES       128 16
+aes-128-cfb96 AES/CFB96    AES       128 16
+aes-128-cfb104 AES/CFB104   AES       128 16
+aes-128-cfb112 AES/CFB112   AES       128 16
+aes-128-cfb120 AES/CFB120   AES       128 16
+aes-128-cfb128 AES/CFB128   AES       128 16
+aes-128-ecb   AES/ECB      AES       128 0
+aes-128-ofb   AES/OFB      AES       128 16
+aes-128-ofb8  AES/OFB8     AES       128 16
+aes-128-ofb16 AES/OFB16    AES       128 16
+aes-128-ofb24 AES/OFB24    AES       128 16
+aes-128-ofb32 AES/OFB32    AES       128 16
+aes-128-ofb40 AES/OFB40    AES       128 16
+aes-128-ofb48 AES/OFB48    AES       128 16
+aes-128-ofb56 AES/OFB56    AES       128 16
+aes-128-ofb64 AES/OFB64    AES       128 16
+aes-128-ofb72 AES/OFB72    AES       128 16
+aes-128-ofb80 AES/OFB80    AES       128 16
+aes-128-ofb88 AES/OFB88    AES       128 16
+aes-128-ofb96 AES/OFB96    AES       128 16
+aes-128-ofb104 AES/OFB104   AES       128 16
+aes-128-ofb112 AES/OFB112   AES       128 16
+aes-128-ofb120 AES/OFB120   AES       128 16
+aes-128-ofb128 AES/OFB128   AES       128 16
+aes-128       AES/CBC      AES       128 16
+aes128        AES/CBC      AES       128 16
+# AES 192
+aes-192-cbc   AES/CBC      AES       192 16
+aes-192-cfb   AES/CFB      AES       192 16
+aes-192-cfb8  AES/CFB8     AES       192 16
+aes-192-cfb16 AES/CFB16    AES       192 16
+aes-192-cfb24 AES/CFB24    AES       192 16
+aes-192-cfb32 AES/CFB32    AES       192 16
+aes-192-cfb40 AES/CFB40    AES       192 16
+aes-192-cfb48 AES/CFB48    AES       192 16
+aes-192-cfb56 AES/CFB56    AES       192 16
+aes-192-cfb64 AES/CFB64    AES       192 16
+aes-192-cfb72 AES/CFB72    AES       192 16
+aes-192-cfb80 AES/CFB80    AES       192 16
+aes-192-cfb88 AES/CFB88    AES       192 16
+aes-192-cfb96 AES/CFB96    AES       192 16
+aes-192-cfb104 AES/CFB104   AES       192 16
+aes-192-cfb112 AES/CFB112   AES       192 16
+aes-192-cfb120 AES/CFB120   AES       192 16
+aes-192-cfb128 AES/CFB128   AES       192 16
+aes-192-ctr   AES/CTR      AES       192 16
+aes-192-cts   AES/CTS      AES       192 16
+aes-192-ecb   AES/ECB      AES       192 0
+aes-192-ofb   AES/OFB      AES       192 16
+aes-192-ofb8  AES/OFB8     AES       192 16
+aes-192-ofb16 AES/OFB16    AES       192 16
+aes-192-ofb24 AES/OFB24    AES       192 16
+aes-192-ofb32 AES/OFB32    AES       192 16
+aes-192-ofb40 AES/OFB40    AES       192 16
+aes-192-ofb48 AES/OFB48    AES       192 16
+aes-192-ofb56 AES/OFB56    AES       192 16
+aes-192-ofb64 AES/OFB64    AES       192 16
+aes-192-ofb72 AES/OFB72    AES       192 16
+aes-192-ofb80 AES/OFB80    AES       192 16
+aes-192-ofb88 AES/OFB88    AES       192 16
+aes-192-ofb96 AES/OFB96    AES       192 16
+aes-192-ofb104 AES/OFB104   AES       192 16
+aes-192-ofb112 AES/OFB112   AES       192 16
+aes-192-ofb120 AES/OFB120   AES       192 16
+aes-192-ofb128 AES/OFB128   AES       192 16
+aes-192       AES/CBC      AES       192 16
+aes192        AES/CBC      AES       192 16
+# AES 256
+aes-256-cbc   AES/CBC      AES       256 16
+aes-256-ctr   AES/CTR      AES       256 16
+aes-256-cts   AES/CTS      AES       256 16
+aes-256-cfb   AES/CFB      AES       256 16
+aes-256-cfb8  AES/CFB8     AES       256 16
+aes-256-cfb16 AES/CFB16    AES       256 16
+aes-256-cfb24 AES/CFB24    AES       256 16
+aes-256-cfb32 AES/CFB32    AES       256 16
+aes-256-cfb40 AES/CFB40    AES       256 16
+aes-256-cfb48 AES/CFB48    AES       256 16
+aes-256-cfb56 AES/CFB56    AES       256 16
+aes-256-cfb64 AES/CFB64    AES       256 16
+aes-256-cfb72 AES/CFB72    AES       256 16
+aes-256-cfb80 AES/CFB80    AES       256 16
+aes-256-cfb88 AES/CFB88    AES       256 16
+aes-256-cfb96 AES/CFB96    AES       256 16
+aes-256-cfb104 AES/CFB104   AES       256 16
+aes-256-cfb112 AES/CFB112   AES       256 16
+aes-256-cfb120 AES/CFB120   AES       256 16
+aes-256-cfb128 AES/CFB128   AES       256 16
+aes-256-ecb   AES/ECB      AES       256 0
+aes-256-ofb   AES/OFB      AES       256 16
+aes-256-ofb8  AES/OFB8     AES       256 16
+aes-256-ofb16 AES/OFB16    AES       256 16
+aes-256-ofb24 AES/OFB24    AES       256 16
+aes-256-ofb32 AES/OFB32    AES       256 16
+aes-256-ofb40 AES/OFB40    AES       256 16
+aes-256-ofb48 AES/OFB48    AES       256 16
+aes-256-ofb56 AES/OFB56    AES       256 16
+aes-256-ofb64 AES/OFB64    AES       256 16
+aes-256-ofb72 AES/OFB72    AES       256 16
+aes-256-ofb80 AES/OFB80    AES       256 16
+aes-256-ofb88 AES/OFB88    AES       256 16
+aes-256-ofb96 AES/OFB96    AES       256 16
+aes-256-ofb104 AES/OFB104   AES       256 16
+aes-256-ofb112 AES/OFB112   AES       256 16
+aes-256-ofb120 AES/OFB120   AES       256 16
+aes-256-ofb128 AES/OFB128   AES       256 16
+aes-256       AES/CBC      AES       256 16
+aes256        AES/CBC      AES       256 16
+# Notes on the cipher suites:
+# des-ede: In OpenSSL, this is "Triple DES with two keys," or DESede with a 112-byte key in Java.
+#          Java docs indicates that this should work but we couldn't get it working so it's not in yet.
+# rc2: This is supported in Java but more research is needed in order to make it work
+# rc4: This is also supported in Java, and again more research is needed.
+

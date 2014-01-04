@@ -496,6 +496,13 @@ public class BasicTest
         runTest("bigfiletest.js");
     }
 
+    @Test
+    public void testBasicCrypto()
+        throws InterruptedException, ExecutionException, NodeException
+    {
+        runTest("cryptotests.js");
+    }
+
     private void runTest(String name)
         throws InterruptedException, ExecutionException, NodeException
     {

@@ -33,6 +33,7 @@ var StringDecoder = exports.StringDecoder = function(enc) {
   }
 
   this.decoder = new decoderWrap.Decoder(encoding);
+  this.encoding = encoding;
 };
 
 function toBuf(o) {

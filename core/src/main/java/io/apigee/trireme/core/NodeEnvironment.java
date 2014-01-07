@@ -27,7 +27,6 @@ import io.apigee.trireme.net.spi.HttpServerContainer;
 import org.mozilla.javascript.Context;
 import org.mozilla.javascript.ContextAction;
 import org.mozilla.javascript.ContextFactory;
-import org.mozilla.javascript.ScriptableObject;
 
 import java.io.File;
 import java.util.concurrent.ArrayBlockingQueue;
@@ -56,7 +55,6 @@ public class NodeEnvironment
 
     private boolean             initialized;
     private final Object        initializationLock = new Object();
-    private ScriptableObject    rootScope;
     private ModuleRegistry      registry;
     private ExecutorService     asyncPool;
     private ExecutorService     scriptPool;
@@ -148,18 +146,17 @@ public class NodeEnvironment
         return this;
     }
 
+    @Deprecated
     public boolean isSealRoot()
     {
         return sealRoot;
     }
 
     /**
-     * Seal the root context, meaning that prototypes of language-level objects such as Object, Date, etc
-     * cannot be modified. Since all scripts inside the JVM use the same top-level context, it is very
-     * important that this be left alone in any multi-tenant VM -- but some test environments require it...
-     * Must be set before
-     * any calls to "createScript" in order to have any effect.
+     * Formerly used to seal the root context so that scripts could not modify it. Now, all scripts have their
+     * own root context and there is no need to seal it, so this method does nothing.
      */
+    @Deprecated
     public NodeEnvironment setSealRoot(boolean sealRoot)
     {
         this.sealRoot = sealRoot;
@@ -179,13 +176,6 @@ public class NodeEnvironment
 
     public long getScriptTimeLimit() {
         return scriptTimeLimit;
-    }
-
-    /**
-     * Internal: Get the global scope.
-     */
-    public ScriptableObject getScope() {
-        return rootScope;
     }
 
     /**
@@ -224,7 +214,8 @@ public class NodeEnvironment
 
             if (asyncPool == null) {
                 // This pool is used for operations that must appear async to JavaScript but are synchronous
-                // in Java. Right now this means file I/O, at least in Java 6.
+                // in Java. Right now this means file I/O, at least in Java 6, plus DNS queries and certain
+                // SSLEngine functions.
                 ThreadPoolExecutor pool =
                     new ThreadPoolExecutor(CORE_POOL_SIZE, MAX_POOL_SIZE, POOL_TIMEOUT_SECS, TimeUnit.SECONDS,
                                            new ArrayBlockingQueue<Runnable>(POOL_QUEUE_SIZE),
@@ -252,12 +243,6 @@ public class NodeEnvironment
                 public Object run(Context cx)
                 {
                     registry.load(cx);
-                    // The standard objects, which are slow to create, are shared between scripts. Seal them so that
-                    // one script can't modify another's.
-                    rootScope = cx.initStandardObjects(null, sealRoot);
-                    if (sealRoot) {
-                        rootScope.sealObject();
-                    }
                     return null;
                 }
             });

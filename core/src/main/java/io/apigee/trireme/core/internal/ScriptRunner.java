@@ -537,10 +537,11 @@ public class ScriptRunner
         cx.putThreadLocal(RUNNER, this);
 
         try {
-            // Re-use the global scope from before, but make it top-level so that there are no shared variables
-            scope = (ScriptableObject)cx.newObject(env.getScope());
-            scope.setPrototype(env.getScope());
-            scope.setParentScope(null);
+            // All scripts get their own global scope. This is a lot safer than sharing them in case a script wants
+            // to add to the prototype of String or Date or whatever (as they often do)
+            // This uses a bit more memory and in theory slows down script startup but in practice it is
+            // a drop in the bucket.
+            scope = cx.initStandardObjects();
 
             try {
                 initGlobals(cx);

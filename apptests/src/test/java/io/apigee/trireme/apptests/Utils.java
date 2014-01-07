@@ -69,7 +69,7 @@ public class Utils
                 s.close();
                 return;
             } catch (IOException ioe) {
-                System.out.println("Port " + port + " not open yet: " + ioe);
+                // System.out.println("Port " + port + " not open yet: " + ioe);
             }
         }
     }

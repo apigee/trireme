@@ -1,6 +1,13 @@
 var express = require('express');
 var app = express();
 
+var port;
+if (process.argv.length > 2) {
+  port = process.argv[2];
+} else {
+  port = 33333;
+}
+
 app.use(express.bodyParser());
 
 app.get('/dogs', function(req, res) {
@@ -23,5 +30,5 @@ app.post('/dogs2', function(req, res) {
   });
 });
 
-app.listen(33333);
-console.log('Listening on port 33333');
+app.listen(port);
+

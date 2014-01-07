@@ -36,24 +36,4 @@
       <scope>test</scope>
     </dependency>
   </dependencies>
-
-    <build>
-        <plugins>
-            <!-- This little bit disables jacoco, because this module has no java files for it to run on. -->
-            <plugin>
-                <groupId>org.jacoco</groupId>
-                <artifactId>jacoco-maven-plugin</artifactId>
-                <version>0.6.4.201312101107</version>
-                <executions>
-                    <execution>
-                        <id>default-prepare-agen</id>
-                    </execution>
-                    <execution>
-                        <id>default-report</id>
-                        <phase>none</phase>
-                    </execution>
-                </executions>
-            </plugin>
-        </plugins>
-    </build>
 </project>

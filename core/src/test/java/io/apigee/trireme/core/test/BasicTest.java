@@ -338,13 +338,6 @@ public class BasicTest
     }
 
     @Test
-    public void testSealing()
-        throws InterruptedException, ExecutionException, NodeException
-    {
-        runTest("rootsealtest.js");
-    }
-
-    @Test
     public void testSpawnSuccess()
         throws InterruptedException, ExecutionException, NodeException
     {

@@ -84,7 +84,7 @@ public class JavaScriptTest
         throws IOException, SAXException, ParserConfigurationException
     {
         String testFile = System.getProperty(TEST_FILE_NAME_PROP);
-        String adapter = System.getProperty(TEST_ADAPTER_PROP);
+        final String adapter = System.getProperty(TEST_ADAPTER_PROP);
         Pattern namePattern;
         if (testFile == null) {
             namePattern = null;
@@ -99,16 +99,17 @@ public class JavaScriptTest
         ArrayList<File> files = new ArrayList<File>();
         for (String bd : BASE_DIRS) {
             File baseDir = new File(bd);
-            final Collection<Pattern> excluded = loadExclusions(baseDir);
+            final Collection<Exclusion> excluded = loadExclusions(baseDir);
             final Pattern np = namePattern;
             File[] theseFiles = baseDir.listFiles(new FilenameFilter()
             {
                 @Override
                 public boolean accept(File file, String s)
                 {
-                    for (Pattern ep : excluded) {
+                    for (Exclusion ex : excluded) {
                         // Yes, this is O(N*M). But for the number of exclusions it's fine.
-                        if (ep.matcher(s).matches()) {
+                        if (ex.pattern.matcher(s).matches() &&
+                            ((ex.adapter == null) || ex.adapter.equalsIgnoreCase(adapter))) {
                             System.out.println("Skipping: " + s);
                             return false;
                         }
@@ -146,10 +147,10 @@ public class JavaScriptTest
         return ret;
     }
 
-    private static Collection<Pattern> loadExclusions(File baseDir)
+    private static Collection<Exclusion> loadExclusions(File baseDir)
         throws IOException, SAXException, ParserConfigurationException
     {
-        ArrayList<Pattern> ret = new ArrayList<Pattern>();
+        ArrayList<Exclusion> ret = new ArrayList<Exclusion>();
         // Maybe by 2020 we can get JSON parsing built in to Java, but I am hesitant to pull in another dependency
         File ef = new File(baseDir, "excluded-tests.xml");
         if (!ef.exists()) {
@@ -167,11 +168,17 @@ public class JavaScriptTest
             while (n != null) {
                 if ("Excluded".equals(n.getNodeName())) {
                     Node c = n.getFirstChild();
+                    Exclusion ex = new Exclusion();
                     while (c != null) {
                         if ("Name".equals(c.getNodeName())) {
-                            ret.add(Pattern.compile(getTextChildren(c)));
+                            ex.pattern = Pattern.compile(getTextChildren(c));
+                        } else if ("Adapter".equals(c.getNodeName())) {
+                            ex.adapter = getTextChildren(c);
                         }
                         c = c.getNextSibling();
+                    }
+                    if (ex.pattern != null) {
+                        ret.add(ex);
                     }
                 }
                 n = n.getNextSibling();
@@ -216,6 +223,12 @@ public class JavaScriptTest
         }
         assertEquals(fileName.getName() + " (" + adapter + ", " + javaVersion + ") failed with =" + exitCode,
                      0, exitCode);
+    }
+
+    private static final class Exclusion
+    {
+        Pattern pattern;
+        String adapter;
     }
 }
 

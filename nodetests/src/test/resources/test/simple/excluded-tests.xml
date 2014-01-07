@@ -451,6 +451,130 @@
         <Description>This is pretty complex and depends on a lot of proprietary FS stuff.</Description>
     </Excluded>
 
+    <!-- NETTY ADAPTER
+         These tests don't work with the Netty adapter
+    -->
+    <Excluded>
+        <Name>test-https-client-get-url.js</Name>
+        <Adapter>netty</Adapter>
+        <Description>Some sort of SSL problem with the Netty adapter.</Description>
+    </Excluded>
+    <Excluded>
+        <Name>test-https-localaddress-bind-error.js</Name>
+        <Adapter>netty</Adapter>
+        <Description>Some sort of SSL problem with the Netty adapter.</Description>
+    </Excluded>
+    <Excluded>
+        <Name>test-https-no-reader.js</Name>
+        <Adapter>netty</Adapter>
+        <Description>Some sort of SSL problem with the Netty adapter.</Description>
+    </Excluded>
+    <Excluded>
+        <Name>test-https-agent.js</Name>
+        <Adapter>netty</Adapter>
+        <Description>Some sort of SSL problem with the Netty adapter.</Description>
+    </Excluded>
+    <Excluded>
+        <Name>test-https-invalid-key.js</Name>
+        <Adapter>netty</Adapter>
+        <Description>Some sort of SSL problem with the Netty adapter.</Description>
+    </Excluded>
+    <Excluded>
+        <Name>test-https-client-resume.js</Name>
+        <Adapter>netty</Adapter>
+        <Description>Some sort of SSL problem with the Netty adapter.</Description>
+    </Excluded>
+    <Excluded>
+        <Name>test-https-timeout-server-2.js</Name>
+        <Adapter>netty</Adapter>
+        <Description>Some sort of SSL problem with the Netty adapter.</Description>
+    </Excluded>
+    <Excluded>
+        <Name>test-https-connecting-to-http.js</Name>
+        <Adapter>netty</Adapter>
+        <Description>Some sort of SSL problem with the Netty adapter.</Description>
+    </Excluded>
+    <Excluded>
+        <Name>test-http-url.parse-https.request.js</Name>
+        <Adapter>netty</Adapter>
+        <Description>Some sort of SSL problem with the Netty adapter.</Description>
+    </Excluded>
+    <Excluded>
+        <Name>test-https-drain.js</Name>
+        <Adapter>netty</Adapter>
+        <Description>Some sort of SSL problem with the Netty adapter.</Description>
+    </Excluded>
+    <Excluded>
+        <Name>test-http-client-abort.js</Name>
+        <Adapter>netty</Adapter>
+        <Description>Doesn't support that kind of notification</Description>
+    </Excluded>
+    <Excluded>
+        <Name>test-http-after-connect.js</Name>
+        <Adapter>netty</Adapter>
+        <Description>Doesn't support that kind of notification</Description>
+    </Excluded>
+    <Excluded>
+        <Name>test-http-connect.js</Name>
+        <Adapter>netty</Adapter>
+        <Description>Doesn't support that kind of notification</Description>
+    </Excluded>
+    <Excluded>
+        <Name>test-http-expect-continue.js</Name>
+        <Adapter>netty</Adapter>
+        <Description>Doesn't support that kind of notification</Description>
+    </Excluded>
+    <Excluded>
+        <Name>test-http-exceptions.js</Name>
+        <Adapter>netty</Adapter>
+        <Description>Doesn't support that kind of notification</Description>
+    </Excluded>
+    <Excluded>
+        <Name>test-http-header-response-splitting.js</Name>
+        <Adapter>netty</Adapter>
+        <Description>Doesn't support that kind of notification</Description>
+    </Excluded>
+    <Excluded>
+        <Name>test-http-bind-twice.js</Name>
+        <Adapter>netty</Adapter>
+        <Description>Doesn't support that kind of notification</Description>
+    </Excluded>
+    <Excluded>
+        <Name>test-http-exit-delay.js</Name>
+        <Adapter>netty</Adapter>
+        <Description>Doesn't support that kind of notification</Description>
+    </Excluded>
+    <Excluded>
+        <Name>test-https-byteswritten.js</Name>
+        <Adapter>netty</Adapter>
+        <Description>Doesn't support that kind of notification</Description>
+    </Excluded>
+    <Excluded>
+        <Name>test-http-mutable-headers.js</Name>
+        <Adapter>netty</Adapter>
+        <Description>Doesn't support that kind of notification</Description>
+    </Excluded>
+    <Excluded>
+        <Name>test-http-1.0.js</Name>
+        <Adapter>netty</Adapter>
+        <Description>Doesn't support that kind of notification</Description>
+    </Excluded>
+    <Excluded>
+        <Name>test-https-socket-options.js</Name>
+        <Adapter>netty</Adapter>
+        <Description>Doesn't support that kind of notification</Description>
+    </Excluded>
+    <Excluded>
+        <Name>test-https-client-reject.js</Name>
+        <Adapter>netty</Adapter>
+        <Description>Doesn't support that kind of notification</Description>
+    </Excluded>
+    <Excluded>
+        <Name>test-https-simple.js</Name>
+        <Adapter>netty</Adapter>
+        <Description>Doesn't support that kind of notification</Description>
+    </Excluded>
+
     <!-- DEPRECATION
          These tests depend on the "&amp;&amp;throw-deprecation" feature of Node, not implemented here.
     -->

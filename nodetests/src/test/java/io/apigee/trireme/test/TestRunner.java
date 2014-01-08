@@ -73,6 +73,7 @@ public class TestRunner
                 Object value = ((JavaScriptException)cause).getValue();
                 Context.enter();
                 System.err.println(Context.toString(value));
+                System.err.println(((JavaScriptException)cause).getScriptStackTrace());
                 Context.exit();
             } else if (cause instanceof RhinoException) {
                 RhinoException re = (RhinoException)cause;

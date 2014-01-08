@@ -49,7 +49,7 @@ public class HTTPParsingMachine
      */
     private enum Status { START, HEADERS, BODY, CHUNK_HEADER, CHUNK_BODY, CHUNK_TRAILER, TRAILERS, COMPLETE, ERROR }
 
-    private enum BodyMode { UNDELIMITED, LENGTH, CHUNKED }
+    private enum BodyMode { NONE, LENGTH, CHUNKED }
 
     public static final String CONNECT_METHOD = "CONNECT";
 
@@ -70,6 +70,7 @@ public class HTTPParsingMachine
     private boolean     shouldKeepAlive;
     private boolean     upgradeHeader;
     private boolean     connectionUpgrade;
+    private boolean     connectMethod;
     private Map.Entry<String, String> lastHeader;
     private Map.Entry<String, String> lastTrailer;
     private int         contentLength;
@@ -143,7 +144,7 @@ public class HTTPParsingMachine
      */
     public void reset()
     {
-        bodyMode = BodyMode.UNDELIMITED;
+        bodyMode = BodyMode.NONE;
         state = Status.START;
         oddData = null;
         readCR = false;
@@ -156,6 +157,7 @@ public class HTTPParsingMachine
         shouldKeepAlive = false;
         upgradeHeader = false;
         connectionUpgrade = false;
+        connectMethod = false;
         lastHeader = null;
         contentLength = 0;
         readLength = -1;
@@ -194,6 +196,9 @@ public class HTTPParsingMachine
                 return true;
             }
             method = m.group(1);
+            if (CONNECT_METHOD.equalsIgnoreCase(method)) {
+                connectMethod = true;
+            }
             uri = m.group(2);
             try {
                 majorVersion = Integer.parseInt(m.group(3));
@@ -245,7 +250,7 @@ public class HTTPParsingMachine
         while (line != null) {
             if (line.isEmpty()) {
                 state = Status.BODY;
-                if ((upgradeHeader && connectionUpgrade) || CONNECT_METHOD.equalsIgnoreCase(method)) {
+                if ((upgradeHeader && connectionUpgrade) || connectMethod) {
                     // Stop processing data after headers on a CONNECT or Upgrade
                     return false;
                 }
@@ -363,7 +368,7 @@ public class HTTPParsingMachine
      */
     private boolean processBody(ByteBuffer buf, Result r)
     {
-        if ((bodyMode == BodyMode.UNDELIMITED) &&
+        if ((bodyMode == BodyMode.NONE) &&
             ((mode == ParsingMode.REQUEST) ||
              ((mode == ParsingMode.RESPONSE) && (statusCode == 204)))) {
             // A request with no content length and no chunking has length zero.
@@ -374,7 +379,7 @@ public class HTTPParsingMachine
         }
 
         switch (bodyMode) {
-        case UNDELIMITED:
+        case NONE:
             // No content length -- assume that the length is zero
             return processUndelimitedBody(buf, r);
         case LENGTH:
@@ -612,6 +617,11 @@ public class HTTPParsingMachine
         public boolean isUpgradeRequested()
         {
             return (upgradeHeader && connectionUpgrade);
+        }
+
+        public boolean isConnectRequest()
+        {
+            return connectMethod;
         }
 
         public String getUri()

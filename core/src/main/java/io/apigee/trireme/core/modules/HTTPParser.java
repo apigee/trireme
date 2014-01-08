@@ -24,6 +24,8 @@ package io.apigee.trireme.core.modules;
 import io.apigee.trireme.core.NodeRuntime;
 import io.apigee.trireme.core.InternalNodeModule;
 import io.apigee.trireme.core.Utils;
+import io.apigee.trireme.core.internal.Charsets;
+import io.apigee.trireme.core.internal.NodeOSException;
 import io.apigee.trireme.net.HTTPParsingMachine;
 import org.mozilla.javascript.Context;
 import org.mozilla.javascript.Function;
@@ -80,13 +82,14 @@ public class HTTPParser
     {
         public static final String CLASS_NAME = "_httpParserClass";
 
+        private static final ByteBuffer EMPTY_BUF = ByteBuffer.allocate(0);
+
         public static final int REQUEST  = 1;
         public static final int RESPONSE = 2;
 
         private HTTPParsingMachine parser;
         private boolean sentPartialHeaders;
         private boolean sentCompleteHeaders;
-        private boolean sentComplete;
 
         private Function onHeaders;
         private Function onHeadersComplete;
@@ -114,54 +117,63 @@ public class HTTPParser
         }
 
         @JSGetter("onHeaders")
+        @SuppressWarnings("unused")
         public Function getOnHeaders()
         {
             return onHeaders;
         }
 
         @JSSetter("onHeaders")
+        @SuppressWarnings("unused")
         public void setOnHeaders(Function onHeaders)
         {
             this.onHeaders = onHeaders;
         }
 
         @JSGetter("onHeadersComplete")
+        @SuppressWarnings("unused")
         public Function getOnHeadersComplete()
         {
             return onHeadersComplete;
         }
 
         @JSSetter("onHeadersComplete")
+        @SuppressWarnings("unused")
         public void setOnHeadersComplete(Function onHeadersComplete)
         {
             this.onHeadersComplete = onHeadersComplete;
         }
 
         @JSGetter("onBody")
+        @SuppressWarnings("unused")
         public Function getOnBody()
         {
             return onBody;
         }
 
         @JSSetter("onBody")
+        @SuppressWarnings("unused")
         public void setOnBody(Function onBody)
         {
             this.onBody = onBody;
         }
 
         @JSGetter("onMessageComplete")
+        @SuppressWarnings("unused")
         public Function getOnMessageComplete()
         {
             return onMessageComplete;
         }
 
         @JSSetter("onMessageComplete")
+        @SuppressWarnings("unused")
         public void setOnMessageComplete(Function onMessageComplete)
         {
             this.onMessageComplete = onMessageComplete;
         }
 
         @JSFunction
+        @SuppressWarnings("unused")
         public void reinitialize(int type)
         {
             log.debug("HTTP parser: init");
@@ -169,6 +181,7 @@ public class HTTPParser
         }
 
         @JSFunction
+        @SuppressWarnings("unused")
         public void pause()
         {
             // I don't think that we have anything to pause in this implementation. The implementation
@@ -176,73 +189,71 @@ public class HTTPParser
         }
 
         @JSFunction
+        @SuppressWarnings("unused")
         public void resume()
         {
         }
 
         @JSFunction
+        @SuppressWarnings("unused")
         public static void finish(Context cx, Scriptable thisObj, Object[] args, Function ctorObj)
         {
             log.debug("HTTP parser finished with input");
             ((ParserImpl)thisObj).finish(cx);
         }
 
-        private void finish(Context cx)
+        private Object finish(Context cx)
         {
-            HTTPParsingMachine.Result result = parser.parse(null);
-            if (!sentComplete && result.isComplete()) {
-                callOnComplete(cx);
-                sentComplete = true;
+            try {
+                execute(cx, EMPTY_BUF);
+                return Context.getUndefinedValue();
+            } catch (NodeOSException ne) {
+                return Utils.makeErrorObject(cx, this, "Parse Error", ne.getCode());
             }
-            parser = null;
         }
 
         @JSFunction
+        @SuppressWarnings("unused")
         public static Object execute(Context cx, Scriptable thisObj, Object[] args, Function ctorObj)
         {
-            ensureArg(args, 0);
-            if (!(args[0] instanceof Buffer.BufferImpl)) {
-                throw Utils.makeError(cx, thisObj, "Not a Buffer");
-            }
-            Buffer.BufferImpl bufObj = (Buffer.BufferImpl)args[0];
+            Buffer.BufferImpl bufObj = objArg(args, 0, Buffer.BufferImpl.class, true);
             int offset = intArg(args, 1);
             int length = intArg(args, 2);
             ParserImpl p = (ParserImpl)thisObj;
-            return p.execute(cx, bufObj, offset, length);
-        }
-
-        private Object execute(Context cx, Buffer.BufferImpl bufObj, int offset, int length)
-        {
-            if (log.isDebugEnabled()) {
-                log.debug("Parser.execute: start = {} len = {}", offset, length);
-            }
-            if (log.isTraceEnabled()) {
-                log.trace("buffer: " + bufObj.getString("utf8"));
-            }
-
-            if (sentComplete) {
-                sentComplete = false;
-                sentPartialHeaders = false;
-                sentCompleteHeaders = false;
-                parser.reset();
-            }
 
             ByteBuffer bBuf = bufObj.getBuffer();
-            int startPos = bBuf.position();
             bBuf.position(bBuf.position() + offset);
             bBuf.limit(bBuf.position() + length);
 
+            try {
+                return p.execute(cx, bBuf);
+            } catch (NodeOSException noe) {
+                return Utils.makeErrorObject(cx, thisObj, "Parse Error", noe.getCode());
+            }
+        }
+
+        private int execute(Context cx, ByteBuffer bBuf)
+        {
             HTTPParsingMachine.Result result;
             boolean hadSomething;
             boolean wasComplete;
+            int startPos = bBuf.position();
+
             do {
+                if (log.isDebugEnabled()) {
+                    log.debug("Parser.execute: buf = {}", bBuf);
+                    if (log.isTraceEnabled()) {
+                        log.trace("buffer: " + Utils.bufferToString(bBuf, Charsets.DEFAULT));
+                    }
+                }
                 hadSomething = false;
                 wasComplete = false;
                 result = parser.parse(bBuf);
                 if (result.isError()) {
-                    Scriptable err = Utils.makeErrorObject(cx, this, "Parse Error");
-                    err.put("code", err, "HPE_INVALID_CONSTANT");
-                    return err;
+                    if (log.isDebugEnabled()) {
+                        log.debug("HTTP parser error");
+                    }
+                    throw new NodeOSException("HPE_INVALID_CONSTANT");
                 }
                 if (!sentCompleteHeaders) {
                     if (result.isHeadersComplete() || result.isComplete()) {
@@ -279,13 +290,21 @@ public class HTTPParser
                 }
                 if (result.isComplete()) {
                     log.debug("Sending HTTP request complete");
+                    hadSomething = true;
                     wasComplete = true;
                     callOnComplete(cx);
-                    sentComplete = true;
+
+                    // Reset so that the loop starts where we picked up
+                    sentPartialHeaders = false;
+                    sentCompleteHeaders = false;
+                    parser.reset();
                 }
                 log.debug("hadSomething = {} result.isComplete = {} remaining = {} ret = {}",
                           hadSomething, wasComplete, bBuf.remaining(), bBuf.position() - startPos);
-            } while (hadSomething && !wasComplete && bBuf.hasRemaining());
+                // We're done consuming input, but re-loop in case the buffer has more.
+                // however we need special handling for CONNECT requests so we don't consume the body.
+                // TODO maybe we loop at the top level...
+            } while (hadSomething && bBuf.hasRemaining() && !result.isConnectRequest());
             return bBuf.position() - startPos;
         }
 

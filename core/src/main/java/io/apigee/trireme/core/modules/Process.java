@@ -516,7 +516,10 @@ public class Process
 
         public void checkImmediateTasks(Context cx)
         {
-            while (needImmediateCallback) {
+            if (needImmediateCallback) {
+                if (log.isTraceEnabled()) {
+                    log.trace("Calling immediate timer tasks");
+                }
                 immediateCallback.call(cx, immediateCallback, null, null);
             }
         }

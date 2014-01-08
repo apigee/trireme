@@ -414,7 +414,7 @@ public class ScriptRunner
      * assertion check, or synchronize the timer queue.
      */
     public Activity createTimer(long delay, boolean repeating, long repeatInterval, ScriptTask task,
-                                Scriptable scope, Scriptable domain)
+                                Scriptable scope)
     {
         Task t = new Task(task, scope);
         long timeout = System.currentTimeMillis() + delay;
@@ -424,7 +424,6 @@ public class ScriptRunner
             log.debug("Going to fire timeout {} at {}", seq, timeout);
         }
         t.setId(seq);
-        t.setDomain(domain);
         t.setTimeout(timeout);
         if (repeating) {
             t.setInterval(repeatInterval);
@@ -620,7 +619,7 @@ public class ScriptRunner
         throws IOException
     {
         // Exit if there's no work do to but only if we're not pinned by a module.
-        while (!tickFunctions.isEmpty() || (pinCount.get() > 0)) {
+        while (!tickFunctions.isEmpty() || (pinCount.get() > 0) || process.isNeedImmediateCallback()) {
             try {
                 if ((future != null) && future.isCancelled()) {
                     return ScriptStatus.CANCELLED;
@@ -630,7 +629,7 @@ public class ScriptRunner
 
                 // Calculate how long we will wait in the call to select
                 long pollTimeout;
-                if (!tickFunctions.isEmpty()) {
+                if (!tickFunctions.isEmpty() || process.isNeedImmediateCallback()) {
                     pollTimeout = 0;
                 } else if (timerQueue.isEmpty()) {
                     pollTimeout = DEFAULT_DELAY;

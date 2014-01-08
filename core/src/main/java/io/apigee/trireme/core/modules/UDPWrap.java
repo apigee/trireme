@@ -85,10 +85,10 @@ public class UDPWrap
         private ScriptRunner runner;
 
         @JSConstructor
+        @SuppressWarnings("unused")
         public static Object newUDPImpl(Context cx, Object[] args, Function ctorObj, boolean inNewExpr)
         {
             UDPImpl udp = new UDPImpl();
-            udp.ref();
             udp.runner = getRunner(cx);
             return udp;
         }
@@ -100,18 +100,21 @@ public class UDPWrap
         }
 
         @JSSetter("onmessage")
+        @SuppressWarnings("unused")
         public void setOnMessage(Function onmessage)
         {
             this.onMessage = onmessage;
         }
 
         @JSGetter("onmessage")
+        @SuppressWarnings("unused")
         public Object getOnMessage()
         {
             return onMessage;
         }
 
         @JSFunction
+        @SuppressWarnings("unused")
         public static int bind(Context cx, Scriptable thisObj, Object[] args, Function func)
         {
             String address = stringArg(args, 0);
@@ -155,12 +158,14 @@ public class UDPWrap
         }
 
         @JSFunction
+        @SuppressWarnings("unused")
         public static int bind6(Context cx, Scriptable thisObj, Object[] args, Function func)
         {
             return bind(cx, thisObj, args, func);
         }
 
         @JSFunction
+        @SuppressWarnings("unused")
         public void close()
         {
             super.close();
@@ -173,6 +178,7 @@ public class UDPWrap
         }
 
         @JSFunction
+        @SuppressWarnings("unused")
         public static Object send(Context cx, Scriptable thisObj, Object[] args, Function func)
         {
             ensureArg(args, 0);
@@ -233,12 +239,14 @@ public class UDPWrap
         }
 
         @JSFunction
+        @SuppressWarnings("unused")
         public static Object send6(Context cx, Scriptable thisObj, Object[] args, Function func)
         {
             return send(cx, thisObj, args, func);
         }
 
         @JSFunction
+        @SuppressWarnings("unused")
         public void recvStart()
         {
             final UDPImpl self = this;
@@ -288,14 +296,17 @@ public class UDPWrap
                         }
                     }
                 }, "Trireme UDP read thread");
+                ref();
                 readThread.setDaemon(true);
                 readThread.start();
             }
         }
 
         @JSFunction
+        @SuppressWarnings("unused")
         public void recvStop()
         {
+            unref();
             clearErrno();
             if (readThread != null) {
                 readThread.interrupt();
@@ -304,6 +315,7 @@ public class UDPWrap
         }
 
         @JSFunction
+        @SuppressWarnings("unused")
         public static Object getsockname(Context cx, Scriptable thisObj, Object[] args, Function func)
         {
             UDPImpl self = (UDPImpl)thisObj;
@@ -319,6 +331,7 @@ public class UDPWrap
         }
 
         @JSFunction
+        @SuppressWarnings("unused")
         public static int addMembership(Context cx, Scriptable thisObj, Object[] args, Function func)
         {
             setErrno(Constants.EINVAL);
@@ -326,6 +339,7 @@ public class UDPWrap
         }
 
         @JSFunction
+        @SuppressWarnings("unused")
         public static int dropMembership(Context cx, Scriptable thisObj, Object[] args, Function func)
         {
             setErrno(Constants.EINVAL);
@@ -333,6 +347,7 @@ public class UDPWrap
         }
 
         @JSFunction
+        @SuppressWarnings("unused")
         public static int setMulticastTTL(Context cx, Scriptable thisObj, Object[] args, Function func)
         {
             setErrno(Constants.EINVAL);
@@ -340,6 +355,7 @@ public class UDPWrap
         }
 
         @JSFunction
+        @SuppressWarnings("unused")
         public static int setMulticastLoopback(Context cx, Scriptable thisObj, Object[] args, Function func)
         {
             setErrno(Constants.EINVAL);
@@ -347,6 +363,7 @@ public class UDPWrap
         }
 
         @JSFunction
+        @SuppressWarnings("unused")
         public int setBroadcast(int on)
         {
             try {
@@ -363,6 +380,7 @@ public class UDPWrap
         }
 
         @JSFunction
+        @SuppressWarnings("unused")
         public static int setTTL(Context cx, Scriptable thisObj, Object[] args, Function func)
         {
             // TODO not implements
@@ -404,12 +422,14 @@ public class UDPWrap
         }
 
         @JSSetter("oncomplete")
+        @SuppressWarnings("unused")
         public void setOnComplete(Function c)
         {
             this.onComplete = c;
         }
 
         @JSGetter("oncomplete")
+        @SuppressWarnings("unused")
         public Function getOnComplete() {
             return onComplete;
         }

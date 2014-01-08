@@ -96,55 +96,71 @@ public class JavaScriptTest
             }
         }
 
-        ArrayList<File> files = new ArrayList<File>();
+        ArrayList<Object[]> ret = new ArrayList<Object[]>();
+
         for (String bd : BASE_DIRS) {
             File baseDir = new File(bd);
-            final Collection<Exclusion> excluded = loadExclusions(baseDir);
+            Collection<Exclusion> excluded = loadExclusions(baseDir);
             final Pattern np = namePattern;
+
+            // Build a list of files that match the "-DTestFile" pattern, or are just .js files otherwise
             File[] theseFiles = baseDir.listFiles(new FilenameFilter()
             {
                 @Override
                 public boolean accept(File file, String s)
                 {
-                    for (Exclusion ex : excluded) {
-                        // Yes, this is O(N*M). But for the number of exclusions it's fine.
-                        if (ex.pattern.matcher(s).matches() &&
-                            ((ex.adapter == null) || ex.adapter.equalsIgnoreCase(adapter))) {
-                            System.out.println("Skipping: " + s);
+                    if (np == null) {
+                        if (!isJs.matcher(s).matches()) {
+                            // Only run .js files
+                            return false;
+                        }
+                    } else {
+                        if (!np.matcher(s).matches()) {
+                            // -DTestFile was specified -- only run files that match the pattern
                             return false;
                         }
                     }
-                    if (np == null) {
-                        Matcher m = isJs.matcher(s);
-                        return m.matches();
-                    } else {
-                        Matcher m = np.matcher(s);
-                        return m.matches();
-                    }
+                    return true;
                 }
             });
-            if (theseFiles != null) {
-                files.addAll(Arrays.asList(theseFiles));
-            }
-        }
 
-        ArrayList<Object[]> ret = new ArrayList<Object[]>();
-        if (files == null) {
-            return ret;
-        }
-        for (File f : files) {
-            for (String version : javaVersions) {
-                if (adapter != null) {
-                    ret.add(new Object[] { f, adapter, version });
-                } else {
-                    ret.add(new Object[] { f, DEFAULT_ADAPTER, version });
-                    if (isHttp.matcher(f.getName()).matches()) {
-                        ret.add(new Object[] { f, NETTY_ADAPTER, version });
+            // For each file that matches, we may run it under multiple adapters and Java versions
+            if (theseFiles != null) {
+                for (File f : theseFiles) {
+                    for (String version : javaVersions) {
+                        if (adapter != null) {
+                            if (!isExcluded(f.getName(), adapter, excluded)) {
+                                ret.add(new Object[] { f, adapter, version });
+                            }
+                        } else {
+                            if (!isExcluded(f.getName(), DEFAULT_ADAPTER, excluded)) {
+                                ret.add(new Object[] { f, DEFAULT_ADAPTER, version });
+                            }
+                            if (isHttp.matcher(f.getName()).matches() &&
+                                !isExcluded(f.getName(), NETTY_ADAPTER, excluded)) {
+                                ret.add(new Object[] { f, NETTY_ADAPTER, version });
+                            }
+                        }
                     }
                 }
             }
         }
         return ret;
+    }
+
+    /**
+     * Test if the specified test file and adapter matches the exclusion list.
+     */
+    private static boolean isExcluded(String name, String adapter, Collection<Exclusion> excs)
+    {
+        for (Exclusion ex : excs) {
+            if  (ex.pattern.matcher(name).matches() &&
+                ((ex.adapter == null) || ex.adapter.equalsIgnoreCase(adapter))) {
+                System.out.println(name + " (" + adapter + "): excluded");
+                return true;
+            }
+        }
+        return false;
     }
 
     private static Collection<Exclusion> loadExclusions(File baseDir)

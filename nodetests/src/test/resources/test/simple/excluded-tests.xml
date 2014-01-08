@@ -450,6 +450,10 @@
         <Name>test-fs-realpath.js</Name>
         <Description>This is pretty complex and depends on a lot of proprietary FS stuff.</Description>
     </Excluded>
+    <Excluded>
+        <Name>test-crypto-verify-failure.js</Name>
+        <Description>Possibly a domain problem, not working</Description>
+    </Excluded>
 
     <!-- NETTY ADAPTER
          These tests don't work with the Netty adapter

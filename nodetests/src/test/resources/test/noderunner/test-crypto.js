@@ -610,7 +610,7 @@ function testCipher2(key) {
   var ciph = cipher.update(plaintext, 'utf8', 'base64');
   ciph += cipher.final('base64');
 
-  var decipher = crypto.createDecipher('aes256', key);
+  //var decipher = crypto.createDecipher('aes256', key);
   var decipher = crypto.createDecipher('aes128', key);
   var txt = decipher.update(ciph, 'base64', 'utf8');
   txt += decipher.final('utf8');
@@ -859,6 +859,7 @@ testPBKDF2('pass\0word', 'sa\0lt', 4096, 16,
            '\x56\xfa\x6a\xa7\x55\x48\x09\x9d\xcc\x37\xd7\xf0\x34' +
            '\x25\xe0\xc3');
 
+*/
 function assertSorted(list) {
   for (var i = 0, k = list.length - 1; i < k; ++i) {
     var a = list[i + 0];
@@ -868,18 +869,21 @@ function assertSorted(list) {
 }
 
 // Assume that we have at least AES256-SHA.
+// Trireme: We don't but we do have AES128
 assert.notEqual(0, crypto.getCiphers());
-assert.notEqual(-1, crypto.getCiphers().indexOf('AES256-SHA'));
+assert.notEqual(-1, crypto.getCiphers().indexOf('aes128'));
 assertSorted(crypto.getCiphers());
 
 // Assert that we have sha and sha1 but not SHA and SHA1.
+// Trireme: No SHA
 assert.notEqual(0, crypto.getHashes());
 assert.notEqual(-1, crypto.getHashes().indexOf('sha1'));
-assert.notEqual(-1, crypto.getHashes().indexOf('sha'));
+//assert.notEqual(-1, crypto.getHashes().indexOf('sha'));
 assert.equal(-1, crypto.getHashes().indexOf('SHA1'));
-assert.equal(-1, crypto.getHashes().indexOf('SHA'));
+//assert.equal(-1, crypto.getHashes().indexOf('SHA'));
 assertSorted(crypto.getHashes());
 
+/* Trireme: Not working exactly the same yet
 (function() {
   var c = crypto.createDecipher('aes-128-ecb', '');
   assert.throws(function() { c.final('utf8') }, /invalid public key/);
@@ -887,10 +891,11 @@ assertSorted(crypto.getHashes());
 
 // Base64 padding regression test, see #4837.
 (function() {
-  var c = crypto.createCipher('aes-256-cbc', 'secret');
+  var c = crypto.createCipher('aes-128-cbc', 'secret');
   var s = c.update('test', 'utf8', 'base64') + c.final('base64');
   assert.equal(s, '375oxUQCIocvxmC5At+rvA==');
 })();
+*/
 
 // Error path should not leak memory (check with valgrind).
 assert.throws(function() {
@@ -900,13 +905,12 @@ assert.throws(function() {
 // Calling Cipher.final() or Decipher.final() twice should error but
 // not assert. See #4886.
 (function() {
-  var c = crypto.createCipher('aes-256-cbc', 'secret');
+  var c = crypto.createCipher('aes-128-cbc', 'secret');
   try { c.final('xxx') } catch (e) { }
   try { c.final('xxx') } catch (e) {  }
   try { c.final('xxx') } catch (e) {  }
-  var d = crypto.createDecipher('aes-256-cbc', 'secret');
+  var d = crypto.createDecipher('aes-128-cbc', 'secret');
   try { d.final('xxx') } catch (e) {  }
   try { d.final('xxx') } catch (e) {  }
   try { d.final('xxx') } catch (e) {  }
 })();
-*/

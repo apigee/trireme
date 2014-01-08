@@ -625,6 +625,7 @@ public class Crypto
 
         protected Object doFinal(Context cx)
         {
+            initCipher(cx);
             try {
                 byte[] out = cipher.doFinal();
                 if (out == null) {

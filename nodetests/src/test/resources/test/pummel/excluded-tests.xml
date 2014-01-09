@@ -82,4 +82,8 @@
         <Name>test-vm-memleak.js</Name>
         <Description>Memory threshold (50mb) is too low.</Description>
     </Excluded>
+    <Excluded>
+        <Name>test-next-tick-loops-quick.js</Name>
+        <Description>Recursive nextTick. Doesn't work on Node either.</Description>
+    </Excluded>
 </ExcludedTests>

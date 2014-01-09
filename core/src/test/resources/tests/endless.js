@@ -5,7 +5,7 @@ var looping = function() {
   if ((count++ % 10000) == 0) {
     console.log('Looping(' + count + ')...');
   }
-  process.nextTick(looping);
+  setImmediate(looping);
 }
 
 looping();

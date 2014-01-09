@@ -283,7 +283,7 @@
     </Excluded>
     <Excluded>
         <Name>test-next-tick-starvation.js</Name>
-        <Description>Give us a break and increase the timeout -- still a valid test.</Description>
+        <Description>Recursive next tick -- doesn't work on node either.</Description>
     </Excluded>
     <Excluded>
         <Name>test-http-client-parse-error.js</Name>

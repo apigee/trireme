@@ -93,6 +93,8 @@ public class Process
     {
         protected static final String CLASS_NAME = "_processClass";
 
+        private static final int DEFAULT_TICK_DEPTH = 1000;
+
         private Scriptable stdout;
         private Scriptable stderr;
         private Scriptable stdin;
@@ -109,8 +111,12 @@ public class Process
         private boolean exiting;
         private NodeExitException exitStatus;
         private int umask = DEFAULT_UMASK;
+        private boolean throwDeprecation;
+        private boolean traceDeprecation;
+        private int maxTickDepth = DEFAULT_TICK_DEPTH;
 
         @JSConstructor
+        @SuppressWarnings("unused")
         public static Object ProcessImpl(Context cx, Object[] args, Function ctorObj, boolean inNewExpr)
         {
             ProcessImpl ret = new ProcessImpl();
@@ -133,11 +139,13 @@ public class Process
         }
 
         @JSGetter("mainModule")
+        @SuppressWarnings("unused")
         public Object getMainModule() {
             return mainModule;
         }
 
         @JSSetter("mainModule")
+        @SuppressWarnings("unused")
         public void setMainModule(Object m) {
             this.mainModule = m;
         }
@@ -147,6 +155,7 @@ public class Process
          * namespace and a different cache. These types of modules must be implemented in Java.
          */
         @JSFunction
+        @SuppressWarnings("unused")
         public static Object binding(Context cx, Scriptable thisObj, Object[] args, Function func)
         {
             String name = stringArg(args, 0);
@@ -190,6 +199,7 @@ public class Process
         }
 
         @JSGetter("stdout")
+        @SuppressWarnings("unused")
         public Object getStdout()
         {
             if (stdout == null) {
@@ -212,6 +222,7 @@ public class Process
         }
 
         @JSGetter("stderr")
+        @SuppressWarnings("unused")
         public Object getStderr()
         {
             if (stderr == null) {
@@ -234,6 +245,7 @@ public class Process
         }
 
         @JSGetter("stdin")
+        @SuppressWarnings("unused")
         public Object getStdin()
         {
             if (stdin == null) {
@@ -256,6 +268,7 @@ public class Process
         }
 
         @JSGetter("argv")
+        @SuppressWarnings("unused")
         public Object getArgv()
         {
             return argv;
@@ -271,6 +284,7 @@ public class Process
         }
 
         @JSGetter("execArgv")
+        @SuppressWarnings("unused")
         public Object getExecArgv()
         {
             return Context.getCurrentContext().newArray(this, 0);
@@ -281,12 +295,14 @@ public class Process
         }
 
         @JSGetter("execPath")
+        @SuppressWarnings("unused")
         public String getExecPath()
         {
             return EXECUTABLE_NAME;
         }
 
         @JSFunction
+        @SuppressWarnings("unused")
         public void abort()
             throws NodeExitException
         {
@@ -295,24 +311,28 @@ public class Process
         }
 
         @JSFunction
+        @SuppressWarnings("unused")
         public void chdir(String cd)
         {
             runner.setWorkingDirectory(cd);
         }
 
         @JSFunction
+        @SuppressWarnings("unused")
         public String cwd()
         {
             return runner.getWorkingDirectory();
         }
 
         @JSGetter("env")
+        @SuppressWarnings("unused")
         public Scriptable getEnv()
         {
             return env;
         }
 
         @JSFunction
+        @SuppressWarnings("unused")
         public static void exit(Context cx, Scriptable thisObj, Object[] args, Function func)
             throws NodeExitException
         {
@@ -327,6 +347,7 @@ public class Process
         }
 
         @JSFunction
+        @SuppressWarnings("unused")
         public static void reallyExit(Context cx, Scriptable thisObj, Object[] args, Function func)
             throws NodeExitException
         {
@@ -340,12 +361,14 @@ public class Process
         // TODO setuid
 
         @JSGetter("version")
+        @SuppressWarnings("unused")
         public String getVersion()
         {
             return "v" + Version.NODE_VERSION;
         }
 
         @JSGetter("versions")
+        @SuppressWarnings("unused")
         public Object getVersions()
         {
             Scriptable env = Context.getCurrentContext().newObject(this);
@@ -356,6 +379,7 @@ public class Process
         }
 
         @JSGetter("config")
+        @SuppressWarnings("unused")
         public Scriptable getConfig()
         {
             Scriptable c = Context.getCurrentContext().newObject(this);
@@ -366,18 +390,21 @@ public class Process
         }
 
         @JSGetter("title")
+        @SuppressWarnings("unused")
         public String getTitle()
         {
             return "trireme";
         }
 
         @JSSetter("title")
+        @SuppressWarnings("unused")
         public void setTitle(String title)
         {
             // You can't set it
         }
 
         @JSGetter("arch")
+        @SuppressWarnings("unused")
         public String getArch()
         {
             // This is actually the bitness of the JRE, not necessarily the system
@@ -393,6 +420,7 @@ public class Process
         }
 
         @JSFunction
+        @SuppressWarnings("unused")
         public static void kill(Context cx, Scriptable thisObj, Object[] args, Function func)
         {
             int pid = intArg(args, 0);
@@ -405,6 +433,7 @@ public class Process
         }
 
         @JSGetter("pid")
+        @SuppressWarnings("unused")
         public int getPid()
         {
             // Java doesn't give us the OS pid. However this is used for debug to show different Node scripts
@@ -413,6 +442,7 @@ public class Process
         }
 
         @JSFunction
+        @SuppressWarnings("unused")
         public static void send(Context cx, Scriptable thisObj, Object[] args, Function func)
         {
             Object message = objArg(args, 0, Object.class, true);
@@ -427,18 +457,21 @@ public class Process
         }
 
         @JSGetter("_errno")
+        @SuppressWarnings("unused")
         public Object getErrno()
         {
             return runner.getErrno();
         }
 
         @JSGetter("platform")
+        @SuppressWarnings("unused")
         public String getPlatform()
         {
             return "java";
         }
 
         @JSFunction
+        @SuppressWarnings("unused")
         public static Object memoryUsage(Context cx, Scriptable thisObj, Object[] args, Function func)
         {
             Runtime r = Runtime.getRuntime();
@@ -450,12 +483,14 @@ public class Process
         }
 
         @JSFunction
+        @SuppressWarnings("unused")
         public static void _usingDomains(Context cx, Scriptable thisObj, Object[] args, Function func)
         {
             ((ProcessImpl)thisObj).usingDomains = true;
         }
 
         @JSFunction
+        @SuppressWarnings("unused")
         public static void nextTick(Context cx, Scriptable thisObj, Object[] args, Function func)
         {
             Function f = functionArg(args, 0, true);
@@ -464,10 +499,33 @@ public class Process
             if (proc.usingDomains) {
                 domain = ensureValid(proc.domain);
             }
-            proc.runner.enqueueCallbackWithLimit(f, f, thisObj, domain, new Object[0]);
+
+            int depth = proc.runner.getCurrentTickDepth() + 1;
+            if (depth >= proc.maxTickDepth) {
+                proc.maxTickWarn(cx);
+            }
+
+            proc.runner.enqueueCallback(f, f, thisObj, domain, new Object[0], depth);
+        }
+
+        private void maxTickWarn(Context cx)
+        {
+            String msg = "(node) warning: Recursive process.nextTick detected. " +
+                         "This will break in the next version of node. " +
+                         "Please use setImmediate for recursive deferral.";
+            if (throwDeprecation) {
+                throw Utils.makeError(cx, this, msg);
+            } else if (traceDeprecation) {
+                if (log.isDebugEnabled()) {
+                    log.debug(msg);
+                }
+            } else {
+                log.warn(msg);
+            }
         }
 
         @JSFunction
+        @SuppressWarnings("unused")
         public static void _tickCallback(Context cx, Scriptable thisObj, Object[] args, Function func)
         {
             ProcessImpl proc = (ProcessImpl)thisObj;
@@ -475,56 +533,64 @@ public class Process
         }
 
         @JSGetter("maxTickDepth")
+        @SuppressWarnings("unused")
         public int getMaxTickDepth()
         {
-            return runner.getMaxTickDepth();
+            return maxTickDepth;
         }
 
         @JSSetter("maxTickDepth")
+        @SuppressWarnings("unused")
         public void setMaxTickDepth(double depth)
         {
             if (Double.isInfinite(depth)) {
-                runner.setMaxTickDepth(Integer.MAX_VALUE);
+                maxTickDepth = Integer.MAX_VALUE;
             } else {
-                runner.setMaxTickDepth((int)depth);
+                maxTickDepth = (int)depth;
             }
         }
 
         @JSSetter("_needImmediateCallback")
+        @SuppressWarnings("unused")
         public void setNeedImmediateCallback(boolean n)
         {
             this.needImmediateCallback = n;
         }
 
         @JSGetter("_needImmediateCallback")
+        @SuppressWarnings("unused")
         public boolean isNeedImmediateCallback()
         {
             return needImmediateCallback;
         }
 
         @JSSetter("_immediateCallback")
+        @SuppressWarnings("unused")
         public void setImmediateCallback(Function f)
         {
             this.immediateCallback = f;
         }
 
         @JSGetter("_immediateCallback")
+        @SuppressWarnings("unused")
         public Function getImmediateCallback()
         {
             return immediateCallback;
         }
 
-        public void checkImmediateTasks(Context cx)
+        public void callImmediateTasks(Context cx)
         {
-            if (needImmediateCallback) {
-                if (log.isTraceEnabled()) {
-                    log.trace("Calling immediate timer tasks");
-                }
-                immediateCallback.call(cx, immediateCallback, null, null);
+            if (log.isTraceEnabled()) {
+                log.trace("Calling immediate timer tasks");
+            }
+            immediateCallback.call(cx, immediateCallback, this, null);
+            if (log.isTraceEnabled()) {
+                log.trace("Immediate tasks done. needImmediateCallback = {}", needImmediateCallback);
             }
         }
 
         @JSFunction
+        @SuppressWarnings("unused")
         public static Object umask(Context cx, Scriptable thisObj, Object[] args, Function func)
         {
             ProcessImpl self = (ProcessImpl)thisObj;
@@ -544,6 +610,7 @@ public class Process
         }
 
         @JSFunction
+        @SuppressWarnings("unused")
         public static Object uptime(Context cx, Scriptable thisObj, Object[] args, Function func)
         {
             ProcessImpl self = (ProcessImpl)thisObj;
@@ -552,6 +619,7 @@ public class Process
         }
 
         @JSFunction
+        @SuppressWarnings("unused")
         public static Object hrtime(Context cx, Scriptable thisObj, Object[] args, Function func)
         {
             long nanos = System.nanoTime();
@@ -575,6 +643,7 @@ public class Process
         }
 
         @JSGetter("features")
+        @SuppressWarnings("unused")
         public Object getFeatures()
         {
             Scriptable features = Context.getCurrentContext().newObject(this);
@@ -582,27 +651,55 @@ public class Process
         }
 
         @JSGetter("domain")
+        @SuppressWarnings("unused")
         public Object getDomain()
         {
             return domain;
         }
 
         @JSSetter("domain")
+        @SuppressWarnings("unused")
         public void setDomain(Object d)
         {
             this.domain = d;
         }
 
         @JSGetter("_exiting")
+        @SuppressWarnings("unused")
         public boolean isExiting()
         {
             return exiting;
         }
 
         @JSSetter("_exiting")
+        @SuppressWarnings("unused")
         public void setExiting(boolean e)
         {
             this.exiting = e;
+        }
+
+        @JSSetter("throwDeprecation")
+        @SuppressWarnings("unused")
+        public void setThrowDeprecation(boolean d) {
+            this.throwDeprecation = d;
+        }
+
+        @JSGetter("throwDeprecation")
+        @SuppressWarnings("unused")
+        public boolean isThrowDeprecation() {
+            return throwDeprecation;
+        }
+
+        @JSSetter("traceDeprecation")
+        @SuppressWarnings("unused")
+        public void setTraceDeprecation(boolean d) {
+            this.traceDeprecation = d;
+        }
+
+        @JSGetter("traceDeprecation")
+        @SuppressWarnings("unused")
+        public boolean isTraceDeprecation() {
+            return traceDeprecation;
         }
 
         public NodeExitException getExitStatus()
@@ -616,6 +713,7 @@ public class Process
         }
 
         @JSGetter("EventEmitter")
+        @SuppressWarnings("unused")
         public Object getEventEmitter()
         {
             return this.eventEmitter;

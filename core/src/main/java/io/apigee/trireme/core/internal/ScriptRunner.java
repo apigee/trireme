@@ -79,7 +79,6 @@ public class ScriptRunner
     private static final Logger log = LoggerFactory.getLogger(ScriptRunner.class);
 
     private static final long DEFAULT_DELAY = Integer.MAX_VALUE;
-    private static final int DEFAULT_TICK_DEPTH = 10000;
 
     public static final String TIMEOUT_TIMESTAMP_KEY = "_tickTimeout";
 
@@ -104,7 +103,7 @@ public class ScriptRunner
     private final  Selector                      selector;
     private        int                           timerSequence;
     private final  AtomicInteger                 pinCount      = new AtomicInteger(0);
-    private        int                           maxTickDepth = DEFAULT_TICK_DEPTH;
+    private        int                           currentTickDepth;
 
     // Globals that are set up for the process
     private NativeModule.NativeImpl nativeModule;
@@ -255,6 +254,10 @@ public class ScriptRunner
         return selector;
     }
 
+    public int getCurrentTickDepth() {
+        return currentTickDepth;
+    }
+
     @Override
     public ExecutorService getAsyncPool() {
         return asyncPool;
@@ -263,14 +266,6 @@ public class ScriptRunner
     @Override
     public ExecutorService getUnboundedPool() {
         return env.getScriptPool();
-    }
-
-    public int getMaxTickDepth() {
-        return maxTickDepth;
-    }
-
-    public void setMaxTickDepth(int maxTickDepth) {
-        this.maxTickDepth = maxTickDepth;
     }
 
     public InputStream getStdin() {
@@ -393,12 +388,12 @@ public class ScriptRunner
      * This method is used specifically by process.nextTick, and stuff submitted here is subject to
      * process.maxTickCount.
      */
-    public void enqueueCallbackWithLimit(Function f, Scriptable scope, Scriptable thisObj,
-                                         Scriptable domain, Object[] args)
+    public void enqueueCallback(Function f, Scriptable scope, Scriptable thisObj,
+                                Scriptable domain, Object[] args, int depth)
     {
         Callback cb = new Callback(f, scope, thisObj, args);
         cb.setDomain(domain);
-        cb.setHasLimit(true);
+        cb.setTickDepth(depth);
         tickFunctions.offer(cb);
         selector.wakeup();
     }
@@ -619,18 +614,29 @@ public class ScriptRunner
         throws IOException
     {
         // Exit if there's no work do to but only if we're not pinned by a module.
+        // We might exit if there are events on the timer queue if they are not also pinned.
         while (!tickFunctions.isEmpty() || (pinCount.get() > 0) || process.isNeedImmediateCallback()) {
             try {
                 if ((future != null) && future.isCancelled()) {
                     return ScriptStatus.CANCELLED;
                 }
 
-                long now = System.currentTimeMillis();
+                // Call tick functions scheduled by process.nextTick and also by Java code. Node.js docs for
+                // process.nextTick say that these things run before anything else in the event loop.
+                executeTicks(cx);
 
-                // Calculate how long we will wait in the call to select
+                // If necessary, call into the timer module to fire all the tasks set up with "setImmediate."
+                // Again, like regular Node, the docs say that these run before all I/O activity and all timers.
+                executeImmediateCallbacks(cx);
+
+                // Calculate how long we will wait in the call to select, taking into consideration
+                // what is on the timer queue and if there are pending ticks or immediate tasks.
+                long now = System.currentTimeMillis();
                 long pollTimeout;
-                if (!tickFunctions.isEmpty() || process.isNeedImmediateCallback()) {
-                    pollTimeout = 0;
+                if (!tickFunctions.isEmpty() || process.isNeedImmediateCallback() || (pinCount.get() == 0)) {
+                    // Immediate work -- need to keep spinning
+                    // Also keep spinning if we have no reason to keep the loop open
+                    pollTimeout = 0L;
                 } else if (timerQueue.isEmpty()) {
                     pollTimeout = DEFAULT_DELAY;
                 } else {
@@ -638,7 +644,14 @@ public class ScriptRunner
                     pollTimeout = (nextActivity.timeout - now);
                 }
 
-                // Check for network I/O and also sleep if necessary
+                if (log.isTraceEnabled()) {
+                    log.trace("PollDelay = {}. tickFunctions = {} needImmediate = {} timerQueue = {} pinCount = {}",
+                              pollTimeout, tickFunctions.size(), process.isNeedImmediateCallback(),
+                              timerQueue.size(), pinCount.get());
+                }
+
+                // Check for network I/O and also sleep if necessary.
+                // Any new timer or tick will wake up the selector immediately
                 if (pollTimeout > 0L) {
                     if (log.isDebugEnabled()) {
                         log.debug("mainLoop: sleeping for {} pinCount = {}", pollTimeout, pinCount.get());
@@ -649,54 +662,10 @@ public class ScriptRunner
                 }
 
                 // Fire any selected I/O functions
-                // Don't rely on the returned "int" from "select" because we may have recovered from an exception
-                // and some selected keys are stuck there.
-                Iterator<SelectionKey> keys = selector.selectedKeys().iterator();
-                while (keys.hasNext()) {
-                    SelectionKey selKey = keys.next();
-                    boolean timed = startTiming(cx);
-                    try {
-                        ((SelectorHandler)selKey.attachment()).selected(selKey);
-                    } finally {
-                        if (timed) {
-                            endTiming(cx);
-                        }
-                    }
-                    keys.remove();
-                }
-
-                // Call tick functions but don't let everything else starve unless configured to do so.
-                executeTicks(cx);
-
-                // And call another mechanism, this one in timers.js, for queuing tasks
-                process.checkImmediateTasks(cx);
+                executeNetworkCallbacks(cx);
 
                 // Check the timer queue for all expired timers
-                Activity timed = timerQueue.peek();
-                while ((timed != null) && (timed.timeout <= now)) {
-                    timerQueue.poll();
-                    if (!timed.cancelled) {
-                        boolean timing = startTiming(cx);
-                        try {
-                            if (log.isDebugEnabled()) {
-                                log.debug("Executing timer {}", timed.id);
-                            }
-                            timed.execute(cx);
-                        } finally {
-                            if (timing) {
-                                endTiming(cx);
-                            }
-                        }
-                        if (timed.repeating && !timed.cancelled) {
-                            timed.timeout = now + timed.interval;
-                            if (log.isDebugEnabled()) {
-                                log.debug("Re-registering {} to fire at {}", timed.id, timed.timeout);
-                            }
-                            timerQueue.add(timed);
-                        }
-                    }
-                    timed = timerQueue.peek();
-                }
+                executeTimerTasks(cx, now);
 
             } catch (NodeExitException ne) {
                 // This exception is thrown by process.exit()
@@ -706,19 +675,9 @@ public class ScriptRunner
                 if (process.getExitStatus() != null) {
                     return process.getExitStatus().getStatus();
                 }
-                Scriptable err = makeError(cx, re);
-                try {
-                    boolean handled = handleScriptException(cx, err, re);
-                    if (!handled) {
-                        return new ScriptStatus(re);
-                    }
-                } catch (NodeExitException ne2) {
-                    // Called process.exit from the uncaught exception
-                    return ne2.getStatus();
-                } catch (RhinoException re2) {
-                    // Exception from the exception handler
-                    return new ScriptStatus(re2);
-                }
+                // All domain and process-wide error handling happened before we got here, so
+                // if we get a RhinoException here, then we know that it is fatal.
+                return new ScriptStatus(re);
             }
         }
         return ScriptStatus.OK;
@@ -736,8 +695,15 @@ public class ScriptRunner
         }
     }
 
-    private boolean handleScriptException(Context cx, Scriptable error, RhinoException re)
+    private boolean handleScriptException(Context cx, RhinoException re)
     {
+        if (re instanceof NodeExitException) {
+            return false;
+        }
+
+        // Stop script timing before we run this, so that we don't end up timing out the script twice!
+        endTiming(cx);
+
         Function handleFatal = (Function)ScriptableObject.getProperty(fatalHandler, "handleFatal");
 
         if (log.isDebugEnabled()) {
@@ -745,6 +711,8 @@ public class ScriptRunner
                       re, System.identityHashCode(process.getDomain()), re.getScriptStackTrace());
             log.debug("Fatal Java exception: {}", re);
         }
+
+        Scriptable error = makeError(cx, re);
         boolean handled =
             Context.toBoolean(handleFatal.call(cx, scope, null, new Object[] { error, log.isDebugEnabled() }));
         if (log.isDebugEnabled()) {
@@ -754,29 +722,121 @@ public class ScriptRunner
     }
 
     /**
-     * Execute up to "maxTickDepth" ticks. The count is in there to prevent starvation of timers and I/O.
+     * Execute ticks as defined by process.nextTick() and anything put on the queue from Java code.
+     * Each one is timed separately, and error handling is done in here
+     * so that we fire other things in the loop (such as timers) in the event of an error.
      */
     public void executeTicks(Context cx)
         throws RhinoException
     {
-        int tickCount = 0;
-        Activity nextCall = tickFunctions.poll();
-        while (nextCall != null) {
-            boolean timing = startTiming(cx);
+        Activity nextCall;
+        do {
+            nextCall = tickFunctions.poll();
+            if (nextCall != null) {
+                boolean timing = startTiming(cx);
+                currentTickDepth = nextCall.getTickDepth();
+                try {
+                    nextCall.execute(cx);
+                } catch (RhinoException re) {
+                    boolean handled = handleScriptException(cx, re);
+                    if (!handled) {
+                        throw re;
+                    } else {
+                        // We can't keep looping here, because all these errors could cause starvation.
+                        // Let timers and network I/O run instead.
+                        return;
+                    }
+                } finally {
+                    if (timing) {
+                        endTiming(cx);
+                    }
+                    currentTickDepth = 0;
+                }
+            }
+        } while (nextCall != null);
+    }
+
+    /**
+     * Execute everything set up by setImmediate().
+     */
+    private void executeImmediateCallbacks(Context cx)
+        throws RhinoException
+    {
+        if (process.isNeedImmediateCallback()) {
+            boolean timed = startTiming(cx);
             try {
-                nextCall.execute(cx);
+                process.callImmediateTasks(cx);
+            } catch (RhinoException re) {
+                boolean handled = handleScriptException(cx, re);
+                if (!handled) {
+                    throw re;
+                }
             } finally {
-                if (timing) {
+                if (timed) {
                     endTiming(cx);
                 }
             }
-            if (nextCall.hasLimit) {
-                tickCount++;
+        }
+    }
+
+    /**
+     * Execute everything that the selector has told is is ready.
+     */
+    private void executeNetworkCallbacks(Context cx)
+        throws RhinoException
+    {
+        Iterator<SelectionKey> keys = selector.selectedKeys().iterator();
+        while (keys.hasNext()) {
+            SelectionKey selKey = keys.next();
+            boolean timed = startTiming(cx);
+            try {
+                ((SelectorHandler)selKey.attachment()).selected(selKey);
+            } catch (RhinoException re) {
+                boolean handled = handleScriptException(cx, re);
+                if (!handled) {
+                    throw re;
+                }
+            } finally {
+                if (timed) {
+                    endTiming(cx);
+                }
             }
-            if (tickCount >= maxTickDepth) {
-                break;
+            keys.remove();
+        }
+    }
+
+    private void executeTimerTasks(Context cx, long now)
+        throws RhinoException
+    {
+        Activity timed = timerQueue.peek();
+        while ((timed != null) && (timed.timeout <= now)) {
+            timerQueue.poll();
+            if (!timed.cancelled) {
+                boolean timing = startTiming(cx);
+                try {
+                    if (log.isDebugEnabled()) {
+                        log.debug("Executing timer {}", timed.id);
+                    }
+                    timed.execute(cx);
+                } catch (RhinoException re) {
+                    boolean handled = handleScriptException(cx, re);
+                    if (!handled) {
+                        throw re;
+                    }
+                } finally {
+                    if (timing) {
+                        endTiming(cx);
+                    }
+                }
+                if (timed.repeating && !timed.cancelled) {
+                    timed.timeout = now + timed.interval;
+                    if (log.isDebugEnabled()) {
+                        log.debug("Re-registering {} to fire at {}", timed.id, timed.timeout);
+                    }
+                    timerQueue.add(timed);
+                }
             }
-            nextCall = tickFunctions.poll();
+            timed = timerQueue.peek();
         }
     }
 
@@ -991,8 +1051,8 @@ public class ScriptRunner
         protected long interval;
         protected boolean repeating;
         protected boolean cancelled;
-        protected boolean hasLimit;
         protected Scriptable domain;
+        protected int tickDepth;
 
         protected abstract void executeInternal(Context cx);
 
@@ -1065,20 +1125,20 @@ public class ScriptRunner
             this.cancelled = cancelled;
         }
 
-        public boolean hasLimit() {
-            return hasLimit;
-        }
-
-        public void setHasLimit(boolean l) {
-            this.hasLimit = l;
-        }
-
         public Scriptable getDomain() {
             return domain;
         }
 
         public void setDomain(Scriptable domain) {
             this.domain = domain;
+        }
+
+        public int getTickDepth() {
+            return tickDepth;
+        }
+
+        public void setTickDepth(int tickDepth) {
+            this.tickDepth = tickDepth;
         }
 
         @Override

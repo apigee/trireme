@@ -477,6 +477,17 @@
         <Adapter>netty</Adapter>
         <Description>Doesn't work the same way.</Description>
     </Excluded>
+    <Excluded>
+        <Name>test-http-host-headers.js</Name>
+        <Adapter>netty</Adapter>
+        <Description>Doesn't work the same way.</Description>
+    </Excluded>
+    <Excluded>
+        <Name>test-http-pipeline-flood.js</Name>
+        <Adapter>netty</Adapter>
+        <Description>Doesn't work the same way.</Description>
+    </Excluded>
+
 
     <Excluded>
         <Name>test-https-client-get-url.js</Name>
@@ -606,4 +617,17 @@
         <Name>test-fs-readfile-error.js</Name>
         <Reason>Depends on --throw-deprecation</Reason>
     </Excluded>
+
+    <!-- FLAKY
+         These tests seem very sensitive to network blips and deployment environments.
+    -->
+    <Excluded>
+        <Name>test-http-curl-chunk-problem.js</Name>
+        <Description>Actually works but not always on the CI machine</Description>
+    </Excluded>
+
+    <!--
+         JUST BROKEN
+         These tests should be fixed but they are disabled so that we can track regression runs.
+    -->
 </ExcludedTests>

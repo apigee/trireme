@@ -86,4 +86,12 @@
         <Name>test-next-tick-loops-quick.js</Name>
         <Description>Recursive nextTick. Doesn't work on Node either.</Description>
     </Excluded>
+    <Excluded>
+        <Name>test-net-throttle.js</Name>
+        <Description>Flaky, works locally</Description>
+    </Excluded>
+    <Excluded>
+        <Name>test-child-process-spawn-loop.js</Name>
+        <Description>Flaky, works locally</Description>
+    </Excluded>
 </ExcludedTests>

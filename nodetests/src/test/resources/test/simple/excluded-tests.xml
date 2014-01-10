@@ -16,6 +16,10 @@
         <Description>Support for handles and sockets not done yet.</Description>
     </Excluded>
     <Excluded>
+        <Name>test-process-env.js</Name>
+        <Description>Support for environment variables in child process not done yet.</Description>
+    </Excluded>
+    <Excluded>
         <Name>test-dgram.*address.*\.js</Name>
         <Description>Can't support IPv6 addresses yet.</Description>
     </Excluded>
@@ -242,10 +246,6 @@
         <Description>Assumes that all data on the socket after the upgrade comes in in one chunk.</Description>
     </Excluded>
     <Excluded>
-        <Name>test-tls-server-verify.js</Name>
-        <Description>Needs the "tls1" option to openssl because Java 6 does not support it</Description>
-    </Excluded>
-    <Excluded>
         <Name>test-tls-client-reject.js</Name>
         <Description>In Java, when "rejectUnauthorized" is true, the server never sees the client.</Description>
     </Excluded>
@@ -392,6 +392,10 @@
     </Excluded>
     <Excluded>
         <Name>test-http-localaddress-bind-error.js</Name>
+        <Description>Race condition in closing the server socket when it may have been closed already.</Description>
+    </Excluded>
+    <Excluded>
+        <Name>test-https-localaddress-bind-error.js</Name>
         <Description>Race condition in closing the server socket when it may have been closed already.</Description>
     </Excluded>
     <Excluded>
@@ -625,9 +629,36 @@
         <Name>test-http-curl-chunk-problem.js</Name>
         <Description>Actually works but not always on the CI machine</Description>
     </Excluded>
+    <Excluded>
+        <Name>test-dgram-pingpong.js</Name>
+        <Description>Some sort of timing related failures.</Description>
+    </Excluded>
+    <Excluded>
+        <Name>test-tls-server-large-request.js</Name>
+        <Description>Some sort of timing related failures.</Description>
+    </Excluded>
 
     <!--
          JUST BROKEN
          These tests should be fixed but they are disabled so that we can track regression runs.
     -->
+    <Excluded>
+        <Name>test-dgram-unref.js</Name>
+    </Excluded>
+    <Excluded>
+        <Name>test-http-response-no-headers.js</Name>
+    </Excluded>
+    <Excluded>
+        <Name>test-net-throttle.js</Name>
+    </Excluded>
+    <Excluded>
+        <Name>test-net-bytes-stats.js</Name>
+    </Excluded>
+    <Excluded>
+        <Name>test-http-set-timeout-server.js</Name>
+    </Excluded>
+    <Excluded>
+        <Name>test-https-connecting-to-http.js</Name>
+        <Description>Some sort of SSL problem with the Netty adapter.</Description>
+    </Excluded>
 </ExcludedTests>

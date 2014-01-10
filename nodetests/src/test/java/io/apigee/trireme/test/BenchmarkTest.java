@@ -19,7 +19,7 @@ import static org.junit.Assert.*;
 public class BenchmarkTest
     extends TestBase
 {
-    public static final int TEST_TIMEOUT = 300;
+    public static final int TEST_TIMEOUT = 900;
 
     private static final String BASE_DIR = "target/test-classes/benchmark";
     public static final String RESULT_FILE = "target/benchmark.out";
@@ -57,7 +57,8 @@ public class BenchmarkTest
         "net/tcp-raw-pipe.js",
         "net/tcp-raw-s2c.js",
         "tls/throughput.js",
-        "tls/tls-connect.js"
+        "tls/tls-connect.js",
+        "iconv/iconv-performance.js"
     };
 
     @BeforeClass

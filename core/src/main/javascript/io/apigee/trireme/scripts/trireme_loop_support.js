@@ -24,7 +24,7 @@
  * loop of Trireme (in ScriptRunner) needs to do that are better off being done in JavaScript code.
  */
 
-var debug = false;
+var debug = (process.env.NODE_DEBUG && /trireme/.test(process.env.NODE_DEBUG));
 
 function copyArgs(args, skipCount) {
   var a = [];
@@ -45,7 +45,7 @@ module.exports.submitTick = submitTick;
 
 // This function is called on every fatal error and runs the "uncaughtException" handler.
 // It is replaced if domains are enabled with a version below.
-function handleFatal(er, debug) {
+function handleFatal(er) {
   if (debug) {
     console.log('Firing error "%s" to process exception handler', er);
   }
@@ -74,7 +74,6 @@ module.exports.handleFatal = handleFatal;
 // sensitive to domains.
 function usingDomains() {
   var domainModule = require('domain');
-  var domainStack = domainModule._stack;
 
   function submitDomainTick(func, thisObj, domain) {
     var fargs = copyArgs(arguments, 3);
@@ -89,10 +88,14 @@ function usingDomains() {
   }
   module.exports.submitTick = submitDomainTick;
 
-  function handleDomainFatal(er, debug) {
+  function handleDomainFatal(er) {
     var caught = false;
+    if (debug) {
+      console.log('handleDomainFatal: process.domain = %s', process.domain);
+    }
     if (process.domain) {
       var domain = process.domain;
+      var domainStack = domainModule._stack;
 
       // ignore errors on disposed domains.
       //
@@ -144,7 +147,7 @@ function usingDomains() {
         if (domainStack.length) {
           var parentDomain = domainStack[domainStack.length - 1];
           process.domain = domainModule.active = parentDomain;
-          caught = handleFatal(er2, debug);
+          caught = handleDomainFatal(er2, debug);
         } else {
           if (debug) {
             console.log('Domain stack is now empty');

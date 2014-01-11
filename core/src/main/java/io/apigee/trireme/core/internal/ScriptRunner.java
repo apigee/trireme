@@ -408,6 +408,7 @@ public class ScriptRunner
      */
     public void usingDomains(Context cx)
     {
+        log.debug("Switching to using domains");
         Function usingFunc = getSupportFunction("usingDomains");
         usingFunc.call(cx, usingFunc, process, null);
     }
@@ -723,7 +724,7 @@ public class ScriptRunner
 
         Scriptable error = makeError(cx, re);
         boolean handled =
-            Context.toBoolean(handleFatal.call(cx, scope, null, new Object[] { error, log.isDebugEnabled() }));
+            Context.toBoolean(handleFatal.call(cx, scope, null, new Object[] { error }));
         if (log.isDebugEnabled()) {
             log.debug("Handled = {}", handled);
         }
@@ -738,7 +739,6 @@ public class ScriptRunner
     public void executeTicks(Context cx)
         throws RhinoException
     {
-        Function submitTick = getSupportFunction("submitTick");
         Activity nextCall;
         do {
             nextCall = tickFunctions.poll();

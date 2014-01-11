@@ -140,7 +140,6 @@ public class ModuleRegistry
         // These modules are Noderunner-specific built-in modules that either replace regular Node
         // functionality or add to it.
         addCompiledModule("bootstrap", "io.apigee.trireme.scripts.bootstrap");
-        addCompiledModule("_fatal_handler", "io.apigee.trireme.scripts._fatal_handler");
         addCompiledModule("http", "io.apigee.trireme.scripts.adaptorhttp");
         addCompiledModule("https", "io.apigee.trireme.scripts.adaptorhttps");
         addCompiledModule("child_process", "io.apigee.trireme.scripts.child_process");
@@ -148,6 +147,7 @@ public class ModuleRegistry
         addCompiledModule("native_stream_writable", "io.apigee.trireme.scripts.native_stream_writable");
         addCompiledModule("trireme_metrics", "io.apigee.trireme.scripts.trireme_metrics");
         addCompiledModule("string_decoder", "io.apigee.trireme.scripts.trireme_string_decoder");
+        addCompiledModule("trireme_loop_support", "io.apigee.trireme.scripts.trireme_loop_support");
         addCompiledModule("trireme_uncloseable_transform", "io.apigee.trireme.scripts.trireme_uncloseable_transform");
         addCompiledModule("tls", "io.apigee.trireme.scripts.tls");
         addCompiledModule("tls_checkidentity", "io.apigee.trireme.scripts.tls_checkidentity");

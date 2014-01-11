@@ -107,11 +107,11 @@ public class ScriptRunner
 
     // Globals that are set up for the process
     private NativeModule.NativeImpl nativeModule;
-    private Process.ProcessImpl process;
+    protected Process.ProcessImpl process;
     private Buffer.BufferModuleImpl buffer;
     private Scriptable          mainModule;
     private Object              console;
-    private Scriptable          fatalHandler;
+    private Scriptable          supportModule;
     private String              workingDirectory;
     private String              scriptFileName;
     private String              scriptDirName;
@@ -401,6 +401,15 @@ public class ScriptRunner
     public Scriptable getDomain()
     {
         return ArgUtils.ensureValid(process.getDomain());
+    }
+
+    /**
+     * Switch up the methods in our "support" module to indicate that domains are being used.
+     */
+    public void usingDomains(Context cx)
+    {
+        Function usingFunc = getSupportFunction("usingDomains");
+        usingFunc.call(cx, usingFunc, process, null);
     }
 
     /**
@@ -704,7 +713,7 @@ public class ScriptRunner
         // Stop script timing before we run this, so that we don't end up timing out the script twice!
         endTiming(cx);
 
-        Function handleFatal = (Function)ScriptableObject.getProperty(fatalHandler, "handleFatal");
+        Function handleFatal = getSupportFunction("handleFatal");
 
         if (log.isDebugEnabled()) {
             log.debug("Handling fatal exception {} domain = {}\n{}",
@@ -729,6 +738,7 @@ public class ScriptRunner
     public void executeTicks(Context cx)
         throws RhinoException
     {
+        Function submitTick = getSupportFunction("submitTick");
         Activity nextCall;
         do {
             nextCall = tickFunctions.poll();
@@ -736,6 +746,7 @@ public class ScriptRunner
                 boolean timing = startTiming(cx);
                 currentTickDepth = nextCall.getTickDepth();
                 try {
+
                     nextCall.execute(cx);
                 } catch (RhinoException re) {
                     boolean handled = handleScriptException(cx, re);
@@ -918,7 +929,7 @@ public class ScriptRunner
                                  null, 0);
 
             // We will need this later for exception handling
-            fatalHandler = (Scriptable)require("_fatal_handler", cx);
+            supportModule = (Scriptable)require("trireme_loop_support", cx);
 
         } catch (InvocationTargetException e) {
             throw new NodeException(e);
@@ -1043,7 +1054,12 @@ public class ScriptRunner
         cx.removeThreadLocal(TIMEOUT_TIMESTAMP_KEY);
     }
 
-    public abstract static class Activity
+    protected Function getSupportFunction(String name)
+    {
+        return (Function)ScriptableObject.getProperty(supportModule, name);
+    }
+
+    public abstract class Activity
         implements Comparable<Activity>
     {
         protected int id;
@@ -1054,36 +1070,7 @@ public class ScriptRunner
         protected Scriptable domain;
         protected int tickDepth;
 
-        protected abstract void executeInternal(Context cx);
-
-        void execute(Context cx)
-        {
-            if (domain != null) {
-                if (ScriptableObject.hasProperty(domain, "_disposed")) {
-                    domain = null;
-                }
-            }
-            if (domain != null) {
-                if (log.isDebugEnabled()) {
-                    log.debug("Entering domain {}", System.identityHashCode(domain));
-                }
-                Function enter = (Function)ScriptableObject.getProperty(domain, "enter");
-                enter.call(cx, enter, domain, new Object[0]);
-            }
-
-            executeInternal(cx);
-
-            // Do NOT do this next bit in a try..finally block. Why not? Because the exception handling
-            // logic in runMain depends on "process.domain" still being set, and it will clean up
-            // on failure there.
-            if (domain != null) {
-                if (log.isDebugEnabled()) {
-                    log.debug("Exiting domain {}", System.identityHashCode(domain));
-                }
-                Function exit = (Function)ScriptableObject.getProperty(domain, "exit");
-                exit.call(cx, exit, domain, new Object[0]);
-            }
-        }
+        abstract void execute(Context cx);
 
         int getId() {
             return id;
@@ -1154,7 +1141,7 @@ public class ScriptRunner
         }
     }
 
-    private static final class Callback
+    private final class Callback
         extends Activity
     {
         Function function;
@@ -1170,14 +1157,30 @@ public class ScriptRunner
             this.args = args;
         }
 
+        /**
+         * Submit the tick, with support for domains handled in JavaScript.
+         * This is also necessary because not everything that we do is a "top level function" in JS
+         * and we cannot invoke those functions directly from Java code.
+         */
         @Override
-        protected void executeInternal(Context cx)
+        void execute(Context cx)
         {
-            function.call(cx, scope, thisObj, args);
+            Function submitTick = getSupportFunction("submitTick");
+            Object[] callArgs =
+                new Object[(args == null ? 0 : args.length) + 3];
+            callArgs[0] = function;
+            callArgs[1] = thisObj;
+            callArgs[2] = domain;
+            if (args != null) {
+                System.arraycopy(args, 0, callArgs, 3, args.length);
+            }
+            // Submit in the scope of "function"
+            // pass "this" and the args to "submitTick," which will honor them
+            submitTick.call(cx, function, process, callArgs);
         }
     }
 
-    private static final class Task
+    private final class Task
         extends Activity
     {
         private ScriptTask task;
@@ -1190,9 +1193,33 @@ public class ScriptRunner
         }
 
         @Override
-        protected void executeInternal(Context ctx)
+        void execute(Context cx)
         {
-            task.execute(ctx, scope);
+            if (domain != null) {
+                if (ScriptableObject.hasProperty(domain, "_disposed")) {
+                    domain = null;
+                }
+            }
+            if (domain != null) {
+                if (log.isDebugEnabled()) {
+                    log.debug("Entering domain {}", System.identityHashCode(domain));
+                }
+                Function enter = (Function)ScriptableObject.getProperty(domain, "enter");
+                enter.call(cx, enter, domain, new Object[0]);
+            }
+
+            task.execute(cx, scope);
+
+            // Do NOT do this next bit in a try..finally block. Why not? Because the exception handling
+            // logic in runMain depends on "process.domain" still being set, and it will clean up
+            // on failure there.
+            if (domain != null) {
+                if (log.isDebugEnabled()) {
+                    log.debug("Exiting domain {}", System.identityHashCode(domain));
+                }
+                Function exit = (Function)ScriptableObject.getProperty(domain, "exit");
+                exit.call(cx, exit, domain, new Object[0]);
+            }
         }
     }
 }

@@ -486,7 +486,9 @@ public class Process
         @SuppressWarnings("unused")
         public static void _usingDomains(Context cx, Scriptable thisObj, Object[] args, Function func)
         {
-            ((ProcessImpl)thisObj).usingDomains = true;
+            ProcessImpl self = (ProcessImpl)thisObj;
+            self.runner.usingDomains(cx);
+            self.usingDomains = true;
         }
 
         @JSFunction

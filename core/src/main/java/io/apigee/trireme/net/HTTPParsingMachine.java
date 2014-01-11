@@ -370,10 +370,10 @@ public class HTTPParsingMachine
     {
         if ((bodyMode == BodyMode.NONE) &&
             ((mode == ParsingMode.REQUEST) ||
-             ((mode == ParsingMode.RESPONSE) && (statusCode == 204)))) {
-            // A request with no content length and no chunking has length zero.
-            // But in the case of a response we read until EOF.
-            // Furthermore, if it's a response and the status is 204, then assume no content either.
+             ((mode == ParsingMode.RESPONSE) && ((statusCode >= 300) || (statusCode < 200) || (statusCode == 204))))) {
+            // If there is no content length, then the request MIGHT have content that runs until EOF, but
+            // only on a response and only if the status code is 20x and not 204!
+            // Otherwise, assume that the request is done at this point.
             contentLength = 0;
             bodyMode = BodyMode.LENGTH;
         }

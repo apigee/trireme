@@ -72,6 +72,7 @@ public class Constants
     public static final String ENOTFOUND = "ENOTFOUND";
     public static final String ENOENT = "ENOENT";
     public static final String ENOTDIR = "ENOTDIR";
+    public static final String ENOTEMPTY = "ENOTEMPTY";
     public static final String EOF = "EOF";
     public static final String EPERM = "EPERM";
     public static final String EPIPE = "EPIPE";
@@ -108,6 +109,7 @@ public class Constants
         errnos.put(EISDIR, 21);
         // TODO this isn't quite right -- not defined on my Mac at least
         errnos.put(ENOTFOUND, 2);
+        errnos.put(ENOTEMPTY, 66);
         errnos.put(ENOENT, 2);
         errnos.put(ENOTDIR, 20);
         errnos.put(EPERM, 1);

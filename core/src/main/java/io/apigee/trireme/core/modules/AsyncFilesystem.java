@@ -328,6 +328,8 @@ public class AsyncFilesystem
                 } catch (NoSuchFileException fnfe) {
                     log.debug("File not found");
                     throw new NodeOSException(Constants.ENOENT, pathStr);
+                } catch (FileAlreadyExistsException fae) {
+                    throw new NodeOSException(Constants.EEXIST, pathStr);
                 } catch (IOException ioe) {
                     if (log.isDebugEnabled()) {
                         log.debug("I/O error: {}", ioe);
@@ -775,6 +777,8 @@ public class AsyncFilesystem
                 Files.delete(p);
             } catch (NoSuchFileException nfe) {
                 throw new NodeOSException(Constants.ENOENT, nfe, path);
+            } catch (DirectoryNotEmptyException dne) {
+                throw new NodeOSException(Constants.ENOTEMPTY, dne, path);
             } catch (IOException ioe) {
                 throw new NodeOSException(Constants.EIO, ioe, path);
             }
@@ -813,7 +817,7 @@ public class AsyncFilesystem
             } catch (NoSuchFileException nfe) {
                 throw new NodeOSException(Constants.ENOENT, nfe, path);
             } catch (DirectoryNotEmptyException dne) {
-                throw new NodeOSException(Constants.EINVAL, dne, path);
+                throw new NodeOSException(Constants.EPERM, dne, path);
             } catch (IOException ioe) {
                 throw new NodeOSException(Constants.EIO, ioe, path);
             }

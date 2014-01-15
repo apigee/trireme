@@ -201,6 +201,10 @@ public class ProcessWrap
                 throw new EvaluatorException("Invalid to execute script with no argument 0");
             }
 
+            for (int i = 0; i < execArgs.size(); i++) {
+                execArgs.set(i, Utils.unquote(execArgs.get(i)));
+            }
+
             if (self.runner.getSandbox() != null) {
                 SubprocessPolicy policy = self.runner.getSandbox().getSubprocessPolicy();
                 if ((policy != null) && !policy.allowSubprocess(execArgs)) {

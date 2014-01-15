@@ -21,6 +21,7 @@
  */
 package io.apigee.trireme.core;
 
+import com.sun.org.apache.xerces.internal.impl.xpath.regex.Match;
 import io.apigee.trireme.core.internal.Charsets;
 import io.apigee.trireme.core.internal.NodeOSException;
 import io.apigee.trireme.core.modules.Constants;
@@ -43,13 +44,18 @@ import java.nio.charset.CharsetEncoder;
 import java.nio.charset.CoderResult;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 /**
  * A few utility functions, mainly for Rhino, that are useful when writing Node modules in Java.
  */
 public class Utils
 {
-    public static final Charset UTF8 = Charset.forName("UTF-8");
+    private static final Pattern DOUBLE_QUOTED =
+        Pattern.compile("^[\\s]*\"(.*)\"[\\s]*$");
+    private static final Pattern SINGLE_QUOTED =
+        Pattern.compile("^[\\s]*\'(.*)\'[\\s]*$");
 
     /**
      * Read an entire input stream into a single string, and interpret it as UTF-8.
@@ -57,7 +63,7 @@ public class Utils
     public static String readStream(InputStream in)
         throws IOException
     {
-        InputStreamReader rdr = new InputStreamReader(in, UTF8);
+        InputStreamReader rdr = new InputStreamReader(in, Charsets.UTF8);
         StringBuilder str = new StringBuilder();
         char[] buf = new char[4096];
         int r;
@@ -389,5 +395,21 @@ public class Utils
         ret.put(tmp);
         ret.flip();
         return ret;
+    }
+
+    /**
+     * Remove leading and trailing strings from a quoted string that has both leading and trailing quotes on it.
+     */
+    public static String unquote(String s)
+    {
+        Matcher m = DOUBLE_QUOTED.matcher(s);
+        if (m.matches()) {
+            return m.group(1);
+        }
+        Matcher m2 = SINGLE_QUOTED.matcher(s);
+        if (m2.matches()) {
+            return m2.group(1);
+        }
+        return s;
     }
 }

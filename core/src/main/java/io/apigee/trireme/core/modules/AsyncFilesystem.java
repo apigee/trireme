@@ -35,12 +35,14 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.File;
+import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.io.RandomAccessFile;
 import java.lang.reflect.InvocationTargetException;
 import java.nio.ByteBuffer;
 import java.nio.channels.AsynchronousFileChannel;
 import java.nio.channels.CompletionHandler;
+import java.nio.file.AccessDeniedException;
 import java.nio.file.DirectoryNotEmptyException;
 import java.nio.file.FileAlreadyExistsException;
 import java.nio.file.FileSystems;
@@ -49,6 +51,7 @@ import java.nio.file.FileVisitResult;
 import java.nio.file.Files;
 import java.nio.file.LinkOption;
 import java.nio.file.NoSuchFileException;
+import java.nio.file.NotDirectoryException;
 import java.nio.file.NotLinkException;
 import java.nio.file.OpenOption;
 import java.nio.file.Path;
@@ -209,6 +212,30 @@ public class AsyncFilesystem
             return null;
         }
 
+        private String getErrorCode(IOException ioe)
+        {
+            String code = Constants.EIO;
+            if (ioe instanceof FileNotFoundException) {
+                code = Constants.ENOENT;
+            } else if (ioe instanceof AccessDeniedException) {
+                code = Constants.EPERM;
+            } else if (ioe instanceof DirectoryNotEmptyException) {
+                code = Constants.ENOTEMPTY;
+            } else if (ioe instanceof FileAlreadyExistsException) {
+                code = Constants.EEXIST;
+            } else if (ioe instanceof NoSuchFileException) {
+                code = Constants.ENOENT;
+            } else if (ioe instanceof NotDirectoryException) {
+                code = Constants.ENOTDIR;
+            } else if (ioe instanceof NotLinkException) {
+                code = Constants.EINVAL;
+            }
+            if (log.isDebugEnabled()) {
+                log.debug("File system error {} = code {}", ioe, code);
+            }
+            return code;
+        }
+
         private Path translatePath(String path)
             throws NodeOSException
         {
@@ -325,16 +352,8 @@ public class AsyncFilesystem
                     file = AsynchronousFileChannel.open(path, options, pool,
                                                         PosixFilePermissions.asFileAttribute(modeToPerms(mode, true)));
 
-                } catch (NoSuchFileException fnfe) {
-                    log.debug("File not found");
-                    throw new NodeOSException(Constants.ENOENT, pathStr);
-                } catch (FileAlreadyExistsException fae) {
-                    throw new NodeOSException(Constants.EEXIST, pathStr);
                 } catch (IOException ioe) {
-                    if (log.isDebugEnabled()) {
-                        log.debug("I/O error: {}", ioe);
-                    }
-                    throw new NodeOSException(Constants.EIO, ioe, pathStr);
+                    throw new NodeOSException(getErrorCode(ioe), ioe, pathStr);
                 }
             }
 
@@ -359,10 +378,7 @@ public class AsyncFilesystem
                 descriptors.put(fd, fileHandle);
                 return new Object [] { Context.getUndefinedValue(), fd };
             } catch (IOException ioe) {
-                if (log.isDebugEnabled()) {
-                    log.debug("I/O error: {}", ioe);
-                }
-                throw new NodeOSException(Constants.EIO, ioe, pathStr);
+                throw new NodeOSException(getErrorCode(ioe), ioe, pathStr);
             }
         }
 
@@ -399,7 +415,7 @@ public class AsyncFilesystem
                 }
                 descriptors.remove(fd);
             } catch (IOException ioe) {
-                throw new NodeOSException(Constants.EIO, ioe);
+                throw new NodeOSException(getErrorCode(ioe), ioe);
             }
         }
 
@@ -660,7 +676,7 @@ public class AsyncFilesystem
             try {
                 handle.file.force(metaData);
             } catch (IOException ioe) {
-                throw new NodeOSException(Constants.EIO, ioe);
+                throw new NodeOSException(getErrorCode(ioe), ioe);
             }
         }
 
@@ -694,7 +710,7 @@ public class AsyncFilesystem
                 Files.copy(oldFile, newFile, StandardCopyOption.REPLACE_EXISTING);
 
             } catch (IOException ioe) {
-                throw new NodeOSException(Constants.EIO, ioe, oldPath);
+                throw new NodeOSException(getErrorCode(ioe), ioe, oldPath);
             }
         }
 
@@ -739,7 +755,7 @@ public class AsyncFilesystem
                     handle.file.truncate(len);
                 }
             } catch (IOException e) {
-                throw new NodeOSException(Constants.EIO, e);
+                throw new NodeOSException(getErrorCode(e), e);
             }
         }
 
@@ -775,12 +791,8 @@ public class AsyncFilesystem
 
             try {
                 Files.delete(p);
-            } catch (NoSuchFileException nfe) {
-                throw new NodeOSException(Constants.ENOENT, nfe, path);
-            } catch (DirectoryNotEmptyException dne) {
-                throw new NodeOSException(Constants.ENOTEMPTY, dne, path);
             } catch (IOException ioe) {
-                throw new NodeOSException(Constants.EIO, ioe, path);
+                throw new NodeOSException(getErrorCode(ioe), ioe, path);
             }
         }
 
@@ -814,12 +826,11 @@ public class AsyncFilesystem
             try {
                 Files.delete(p);
 
-            } catch (NoSuchFileException nfe) {
-                throw new NodeOSException(Constants.ENOENT, nfe, path);
             } catch (DirectoryNotEmptyException dne) {
+                // Special case because unlinking a directory should be a different error.
                 throw new NodeOSException(Constants.EPERM, dne, path);
             } catch (IOException ioe) {
-                throw new NodeOSException(Constants.EIO, ioe, path);
+                throw new NodeOSException(getErrorCode(ioe), ioe, path);
             }
         }
 
@@ -857,10 +868,8 @@ public class AsyncFilesystem
                 Files.createDirectory(p,
                                       PosixFilePermissions.asFileAttribute(perms));
 
-            } catch (FileAlreadyExistsException fee) {
-                throw new NodeOSException(Constants.EEXIST, fee, path);
             } catch (IOException ioe) {
-                throw new NodeOSException(Constants.EIO, ioe, path);
+                throw new NodeOSException(getErrorCode(ioe), ioe, path);
             }
         }
 
@@ -914,7 +923,7 @@ public class AsyncFilesystem
                 return new Object[] { Context.getUndefinedValue(), fileList };
 
             } catch (IOException ioe) {
-                throw new NodeOSException(Constants.EIO, ioe, dn);
+                throw new NodeOSException(getErrorCode(ioe), ioe, dn);
             } finally {
                 Context.exit();
             }
@@ -952,10 +961,8 @@ public class AsyncFilesystem
                 } else {
                     attrs = Files.readAttributes(p, PosixFileAttributes.class);
                 }
-                } catch (NoSuchFileException nfe) {
-                    throw new NodeOSException(Constants.ENOENT, nfe, p.toString());
                 } catch (IOException ioe) {
-                    throw new NodeOSException(Constants.EIO, ioe, p.toString());
+                    throw new NodeOSException(getErrorCode(ioe), ioe, p.toString());
                 }
 
                 StatsImpl s = (StatsImpl)cx.newObject(this, StatsImpl.CLASS_NAME);
@@ -1068,10 +1075,8 @@ public class AsyncFilesystem
                 FileTime newATime = FileTime.fromMillis((long)(atime * 1000.0));
                 FileTime newMTime = FileTime.fromMillis((long)(mtime * 1000.0));
                 attrView.setTimes(newMTime, newATime, attrs.creationTime());
-            } catch (NoSuchFileException nfe) {
-                throw new NodeOSException(Constants.ENOENT, nfe, path.toString());
             } catch (IOException ioe) {
-                throw new NodeOSException(Constants.EIO, ioe, path.toString());
+                throw new NodeOSException(getErrorCode(ioe), ioe, path.toString());
             }
             return new Object[] { Context.getUndefinedValue(), Context.getUndefinedValue() };
         }
@@ -1157,10 +1162,8 @@ public class AsyncFilesystem
                     Files.setAttribute(path, "posix:permissions", perms);
                 }
                 return new Object[] { Context.getUndefinedValue(), Context.getUndefinedValue() };
-            } catch (NoSuchFileException nfe) {
-                throw new NodeOSException(Constants.ENOENT, nfe, path.toString());
             } catch (IOException ioe) {
-                throw new NodeOSException(Constants.EIO, ioe, path.toString());
+                throw new NodeOSException(getErrorCode(ioe), ioe, path.toString());
             }
         }
 
@@ -1205,10 +1208,8 @@ public class AsyncFilesystem
                     Files.setAttribute(path, "posix:group", group);
                 }
                 return new Object[] { Context.getUndefinedValue(), Context.getUndefinedValue() };
-            } catch (NoSuchFileException nfe) {
-                throw new NodeOSException(Constants.ENOENT, nfe, path.toString());
             } catch (IOException ioe) {
-                throw new NodeOSException(Constants.EIO, ioe, path.toString());
+                throw new NodeOSException(getErrorCode(ioe), ioe, path.toString());
             }
         }
 
@@ -1287,15 +1288,8 @@ public class AsyncFilesystem
                 Files.createLink(dest, src);
                 return new Object[] { Context.getUndefinedValue(), Context.getUndefinedValue() };
 
-            } catch (FileAlreadyExistsException fae) {
-                log.debug("FileAlreadyExists");
-                throw new NodeOSException(Constants.EEXIST, fae, destPath);
-            } catch (NoSuchFileException nfe) {
-                log.debug("NoSuchFile");
-                throw new NodeOSException(Constants.ENOENT, nfe, srcPath);
             } catch (IOException ioe) {
-                log.debug("IOException: {}", ioe);
-                throw new NodeOSException(Constants.EIO, ioe, destPath);
+                throw new NodeOSException(getErrorCode(ioe), ioe, destPath);
             }
         }
 
@@ -1334,15 +1328,8 @@ public class AsyncFilesystem
                 Files.createSymbolicLink(dest, src);
                 return new Object[] { Context.getUndefinedValue(), Context.getUndefinedValue() };
 
-            } catch (FileAlreadyExistsException fae) {
-                log.debug("FileAlreadyExists");
-                throw new NodeOSException(Constants.EEXIST, fae, destPath);
-            } catch (NoSuchFileException nfe) {
-                log.debug("NoSuchFile");
-                throw new NodeOSException(Constants.ENOENT, nfe, srcPath);
             } catch (IOException ioe) {
-                log.debug("IOException: {}", ioe);
-                throw new NodeOSException(Constants.EIO, ioe, destPath);
+                throw new NodeOSException(getErrorCode(ioe), ioe, destPath);
             }
         }
 
@@ -1383,15 +1370,9 @@ public class AsyncFilesystem
                     result = target.toString();
                 }
                 return new Object[] { Context.getUndefinedValue(), result };
-            } catch (NoSuchFileException nfe) {
-                log.debug("NoSuchFile");
-                throw new NodeOSException(Constants.ENOENT, nfe, pathStr);
-            } catch (NotLinkException nle) {
-                log.debug("NotLink");
-                throw new NodeOSException(Constants.EINVAL, nle, pathStr);
             } catch (IOException ioe) {
                 log.debug("IOException: {}", ioe);
-                throw new NodeOSException(Constants.EIO, ioe, pathStr);
+                throw new NodeOSException(getErrorCode(ioe), ioe, pathStr);
             }
         }
     }

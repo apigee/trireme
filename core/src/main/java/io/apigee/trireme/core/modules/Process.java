@@ -41,6 +41,7 @@ import org.slf4j.LoggerFactory;
 
 import static io.apigee.trireme.core.ArgUtils.*;
 
+import java.io.IOException;
 import java.lang.reflect.InvocationTargetException;
 import java.util.Map;
 
@@ -312,9 +313,15 @@ public class Process
 
         @JSFunction
         @SuppressWarnings("unused")
-        public void chdir(String cd)
+        public static void chdir(Context cx, Scriptable thisObj, Object[] args, Function func)
         {
-            runner.setWorkingDirectory(cd);
+            String cd = stringArg(args, 0);
+            ProcessImpl self = (ProcessImpl)thisObj;
+            try {
+                self.runner.setWorkingDirectory(cd);
+            } catch (IOException ioe) {
+                throw Utils.makeError(cx, self, ioe.toString());
+            }
         }
 
         @JSFunction

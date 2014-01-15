@@ -24,10 +24,6 @@
         <Description>Can't support IPv6 addresses yet.</Description>
     </Excluded>
     <Excluded>
-        <Name>test-chdir.js</Name>
-        <Description>Not yet</Description>
-    </Excluded>
-    <Excluded>
         <Name>test-http-server-stale-close.js</Name>
         <Description>Depends on us adding environment variable support to "fork".</Description>
     </Excluded>
@@ -239,7 +235,7 @@
     </Excluded>
     <Excluded>
         <Name>test-util-inspect.js</Name>
-        <Description>Tries to modify objects that are sealed in Noderunner.</Description>
+        <Description>Checks for specific error messages that are differnet in Rhino.</Description>
     </Excluded>
     <Excluded>
         <Name>test-http-upgrade-.+\.js</Name>
@@ -287,7 +283,7 @@
     </Excluded>
     <Excluded>
         <Name>test-http-client-parse-error.js</Name>
-        <Description>We won't return an error until we get a CRLF -- shouldn't be a big deal.</Description>
+        <Description>We won't return an error until we get a CRLF -- shouldn't be a big deal but we should revisit.</Description>
     </Excluded>
 
     <!-- INTERNAL TESTS

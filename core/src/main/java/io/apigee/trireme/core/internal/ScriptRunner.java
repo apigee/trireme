@@ -233,9 +233,16 @@ public class ScriptRunner
     }
 
     public void setWorkingDirectory(String wd)
+        throws IOException
     {
-        this.workingDirectory = wd;
-        pathTranslator.setWorkingDir(wd);
+        File wdf = new File(wd);
+        if (wdf.isAbsolute()) {
+            this.workingDirectory = wd;
+        } else {
+            File newWdf = new File(this.workingDirectory, wd);
+            this.workingDirectory = newWdf.getCanonicalPath();
+        }
+        pathTranslator.setWorkingDir(this.workingDirectory);
     }
 
     public Scriptable getScriptScope() {

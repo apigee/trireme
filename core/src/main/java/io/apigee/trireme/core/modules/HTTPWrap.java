@@ -262,7 +262,10 @@ public class HTTPWrap
                         (ResponseAdapter)cx.newObject(ServerContainer.this, ResponseAdapter.CLASS_NAME);
                     respAdapter.init(response, ServerContainer.this);
 
-                    Scriptable socketObj = (Scriptable)makeSocket.call(cx, makeSocket, null, null);
+                    Scriptable socketInfo = makeSocketInfo(cx, request);
+
+                    Scriptable socketObj = (Scriptable)makeSocket.call(cx, makeSocket, null,
+                                                                       new Object[] { socketInfo });
                     Scriptable requestObj = (Scriptable)makeRequest.call(cx, makeRequest, null,
                                                                          new Object[] { reqAdapter, socketObj });
                     Scriptable responseObj = (Scriptable)makeResponse.call(cx, makeResponse, null,
@@ -534,6 +537,20 @@ public class HTTPWrap
                 }
             }
             return t;
+        }
+
+        /**
+         * Create an object that contains information about the client that made the request.
+         */
+        private Scriptable makeSocketInfo(Context cx, HttpRequestAdapter request)
+        {
+            Scriptable i = cx.newObject(this);
+            i.put("remoteAddress", i, request.getRemoteAddress());
+            i.put("remotePort", i, request.getRemotePort());
+            i.put("localAddress", i, request.getLocalAddress());
+            i.put("localPort", i, request.getLocalPort());
+            i.put("localFamily", i, (request.isLocalIPv6() ? "IPv6" : "IPv4"));
+            return i;
         }
     }
 

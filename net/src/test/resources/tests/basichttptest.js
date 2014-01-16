@@ -1,41 +1,62 @@
 var http = require('http');
 var assert = require('assert');
 
-var svr = http.createServer(function(req, resp) {
-  console.log('Got an HTTP request');
+var socketsMatch = false;
 
+var svr = http.createServer(function(req, resp) {
   if (process.env.ATTACHMENT) {
     console.log('Looking for attachment %s and found %s', process.env.ATTACHMENT, req.attachment);
     assert(req.attachment);
   }
 
   req.on('data', function(chunk) {
-    console.log('Server got data: ' + chunk);
+    console.error('Server should not have received any data on a GET');
+    assert(false);
   });
+
   req.on('end', function() {
-    console.log('Server got end');
-    resp.end('Hello, World!');
+    assert(req.socket);
+    assert(req.connection);
+    assert.equal(req.socket, resp.socket);
+    var msg = {
+      localAddress: req.socket.localAddress,
+      localPort: req.socket.localPort,
+      remoteAddress: req.socket.remoteAddress,
+      remotePort: req.socket.remotePort
+    };
+
+    resp.end(JSON.stringify(msg));
   });
 });
 
-console.log('Server starting to listen');
 svr.listen(33333, function() {
-  console.log('Server listening');
   http.get('http://localhost:33333/', function(resp) {
     var received = '';
-    console.log('Got a response with status code ' + resp.statusCode);
     resp.setEncoding('utf8');
     if (resp.statusCode != 200) {
       process.exit(1);
     }
+
     resp.on('data', function(chunk) {
-      console.log(chunk);
       received += chunk;
     });
+
     resp.on('end', function() {
-      console.log('Got the whole response');
       svr.close();
-      assert.equal('Hello, World!', received);
+
+      var msg = JSON.parse(received);
+      console.log('Received: %j', msg);
+
+      assert.equal(resp.socket.localAddress, msg.remoteAddress);
+      assert.equal(resp.socket.localPort, msg.remotePort);
+      assert.equal(resp.socket.remoteAddress, msg.localAddress);
+      assert.equal(resp.socket.remotePort, msg.localPort);
+      socketsMatch = true;
     });
   });
 });
+
+process.on('exit', function() {
+  assert(socketsMatch);
+});
+

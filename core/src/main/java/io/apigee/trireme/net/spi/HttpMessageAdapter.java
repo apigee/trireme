@@ -63,6 +63,16 @@ public interface HttpMessageAdapter
     int getMinorVersion();
     void setVersion(String protocol, int major, int minor);
 
+    /*
+     * Return the local address of the socket that this request came in on.
+     */
+    String getLocalAddress();
+    int getLocalPort();
+    /** Return true if the local address is definitely IPv6 */
+    boolean isLocalIPv6();
+    String getRemoteAddress();
+    int getRemotePort();
+
     /**
      * The JavaScript "request" or "response" object is attached here.
      */

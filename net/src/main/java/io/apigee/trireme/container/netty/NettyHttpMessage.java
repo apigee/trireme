@@ -27,6 +27,7 @@ import io.netty.handler.codec.http.HttpMessage;
 import io.netty.handler.codec.http.HttpVersion;
 import org.mozilla.javascript.Scriptable;
 
+import java.net.Inet6Address;
 import java.nio.ByteBuffer;
 import java.util.Collection;
 import java.util.List;
@@ -162,5 +163,30 @@ public abstract class NettyHttpMessage
     protected boolean isOlderHttpVersion()
     {
         return (msg.getProtocolVersion().compareTo(HttpVersion.HTTP_1_1) < 0);
+    }
+
+    @Override
+    public String getLocalAddress() {
+        return channel.localAddress().getAddress().getHostAddress();
+    }
+
+    @Override
+    public int getLocalPort() {
+        return channel.localAddress().getPort();
+    }
+
+    @Override
+    public boolean isLocalIPv6() {
+        return (channel.localAddress().getAddress() instanceof Inet6Address);
+    }
+
+    @Override
+    public String getRemoteAddress() {
+        return channel.remoteAddress().getAddress().getHostAddress();
+    }
+
+    @Override
+    public int getRemotePort() {
+        return channel.remoteAddress().getPort();
     }
 }

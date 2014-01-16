@@ -70,14 +70,27 @@ if (HttpWrap.hasServerAdapter()) {
 
   var END_OF_FILE = {};
 
-  function DummySocket() {
-    if (!(this instanceof DummySocket)) return new DummySocket();
+  function DummySocket(info) {
+    if (!(this instanceof DummySocket)) return new DummySocket(info);
     events.EventEmitter.call(this);
     // Need to make this socket "readable" or HTTP will assume that we are always at EOF
     this.readable = true;
+    this.remoteAddress = info.remoteAddress;
+    this.remotePort = info.remotePort;
+    this.localAddress = info.localAddress;
+    this.localPort = info.localPort;
+    this.localFamily = info.localFamily;
   }
 
   util.inherits(DummySocket, events.EventEmitter);
+
+  DummySocket.prototype.address = function() {
+    return {
+      port: this.localPort,
+      address: this.localAddress,
+      family: this.localFamily
+    };
+  };
 
   DummySocket.prototype.setTimeout = function(msecs, callback) {
     if (msecs > 0 && !isNaN(msecs) && isFinite(msecs)) {
@@ -147,6 +160,7 @@ if (HttpWrap.hasServerAdapter()) {
     this._headers = {};
     this._adapter = adapter;
     this.connection = conn;
+    this.socket = conn;
     this.attachment = adapter.attachment;
   }
 
@@ -326,7 +340,7 @@ if (HttpWrap.hasServerAdapter()) {
 
   function ServerRequest(adapter, conn) {
     if (!(this instanceof ServerRequest)) return new ServerRequest(adapter);
-    NodeHttp.IncomingMessage.call(this);
+    NodeHttp.IncomingMessage.call(this, conn);
 
     this._adapter = adapter;
     this.httpVersionMajor = adapter.requestMajorVersion;
@@ -334,8 +348,6 @@ if (HttpWrap.hasServerAdapter()) {
     this.httpVersion = adapter.requestMajorVersion + '.' + adapter.requestMinorVersion;
     this.url = adapter.requestUrl;
     this.attachment = adapter.attachment;
-    this.connection = conn;
-    this.socket = conn;
   }
 
   util.inherits(ServerRequest, NodeHttp.IncomingMessage);
@@ -417,9 +429,9 @@ if (HttpWrap.hasServerAdapter()) {
     }
   }
 
-  Server.prototype._makeSocket = function() {
+  Server.prototype._makeSocket = function(info) {
     var self = this;
-    var conn = new DummySocket();
+    var conn = new DummySocket(info);
     if (this.timeout && (this.timeout > 0)) {
       conn.setTimeout(this.timeout, function() {
         self.timeoutCallback(conn);
@@ -559,8 +571,8 @@ if (HttpWrap.hasServerAdapter()) {
     self._adapter.makeResponse = function(resp, conn) {
       return self._makeResponse(resp, conn);
     };
-    self._adapter.makeSocket = function() {
-      return self._makeSocket();
+    self._adapter.makeSocket = function(info) {
+      return self._makeSocket(info);
     };
     self._adapter.onheaders = function(request, response) {
       self._onHeaders(request, response);

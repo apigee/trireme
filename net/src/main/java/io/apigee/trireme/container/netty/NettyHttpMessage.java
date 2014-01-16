@@ -40,7 +40,8 @@ public abstract class NettyHttpMessage
 
     protected ByteBuffer data;
     protected boolean selfContained;
-    protected Scriptable attachment;
+    protected Scriptable scriptObject;
+    protected Object clientAttachment;
 
     protected NettyHttpMessage(HttpMessage msg, SocketChannel channel)
     {
@@ -139,15 +140,23 @@ public abstract class NettyHttpMessage
     }
 
     @Override
-    public void setAttachment(Scriptable att)
-    {
-        this.attachment = att;
+    public void setScriptObject(Scriptable s) {
+        this.scriptObject = s;
     }
 
     @Override
-    public Scriptable getAttachment()
-    {
-        return attachment;
+    public Scriptable getScriptObject() {
+        return scriptObject;
+    }
+
+    @Override
+    public void setClientAttachment(Object obj) {
+        this.clientAttachment = obj;
+    }
+
+    @Override
+    public Object getClientAttachment() {
+        return clientAttachment;
     }
 
     protected boolean isOlderHttpVersion()

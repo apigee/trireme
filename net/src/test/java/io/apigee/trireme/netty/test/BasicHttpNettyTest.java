@@ -9,6 +9,7 @@ import org.junit.BeforeClass;
 import org.junit.Test;
 
 import java.io.File;
+import java.util.HashMap;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
 
@@ -19,6 +20,7 @@ public class BasicHttpNettyTest
     private static NodeEnvironment env;
 
     private static final int TIME_LIMIT = 5;
+    private static final String ATTACHMENT_VAL = "basichttptest";
 
     @BeforeClass
     public static void init()
@@ -105,9 +107,13 @@ public class BasicHttpNettyTest
     private void runTest(String name)
         throws InterruptedException, ExecutionException, NodeException
     {
+        System.setProperty("TriremeInjectedAttachment", ATTACHMENT_VAL);
+        HashMap<String, String> scriptEnv = new HashMap<String, String>();
+        scriptEnv.put("ATTACHMENT", ATTACHMENT_VAL);
         NodeScript script = env.createScript(name,
                                              new File("./target/test-classes/tests/" + name),
                                              null);
+        script.setEnvironment(scriptEnv);
         ScriptStatus status = script.execute().get();
         assertEquals(0, status.getExitCode());
     }

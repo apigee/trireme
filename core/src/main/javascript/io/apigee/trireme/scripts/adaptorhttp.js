@@ -147,6 +147,7 @@ if (HttpWrap.hasServerAdapter()) {
     this._headers = {};
     this._adapter = adapter;
     this.connection = conn;
+    this.attachment = adapter.attachment;
   }
 
   util.inherits(ServerResponse, stream.Writable);
@@ -332,6 +333,7 @@ if (HttpWrap.hasServerAdapter()) {
     this.httpVersionMinor = adapter.requestMinorVersion;
     this.httpVersion = adapter.requestMajorVersion + '.' + adapter.requestMinorVersion;
     this.url = adapter.requestUrl;
+    this.attachment = adapter.attachment;
     this.connection = conn;
     this.socket = conn;
   }

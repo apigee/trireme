@@ -132,6 +132,7 @@ public class NettyHttpResponse
         if (lastChunk) {
             future = sendLastChunk();
         }
+        channel.flush();
 
         return new NettyHttpFuture(future);
     }
@@ -152,6 +153,7 @@ public class NettyHttpResponse
         if (lastChunk) {
             future = sendLastChunk();
         }
+        channel.flush();
 
         if (future == null) {
             DefaultChannelPromise doneFuture = new DefaultChannelPromise(channel);
@@ -178,7 +180,6 @@ public class NettyHttpResponse
         response.setStatus(HttpResponseStatus.INTERNAL_SERVER_ERROR);
         response.headers().add("Content-Type", "text/plain");
         response.headers().add("Content-Length", data.readableBytes());
-        response.headers().add("Connection", "close");
         calculateKeepAlive(true);
         channel.write(response);
 
@@ -186,6 +187,7 @@ public class NettyHttpResponse
         channel.write(chunk);
 
         sendLastChunk();
+        channel.flush();
     }
 
     private ChannelFuture sendLastChunk()

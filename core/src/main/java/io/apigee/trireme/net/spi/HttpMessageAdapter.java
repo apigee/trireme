@@ -64,9 +64,15 @@ public interface HttpMessageAdapter
     void setVersion(String protocol, int major, int minor);
 
     /**
-     * The runtime may attach an object here that it will need for the internal
-     * implementation.
+     * The JavaScript "request" or "response" object is attached here.
      */
-    void setAttachment(Scriptable obj);
-    Scriptable getAttachment();
+    void setScriptObject(Scriptable obj);
+    Scriptable getScriptObject();
+
+    /**
+     * The caller may also attach an object here that will be set on the "request" object in Java as the
+     * "attachment" field.
+     */
+    void setClientAttachment(Object obj);
+    Object getClientAttachment();
 }

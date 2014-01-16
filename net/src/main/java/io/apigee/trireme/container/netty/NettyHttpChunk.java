@@ -47,13 +47,13 @@ public class NettyHttpChunk
     @Override
     public boolean hasData()
     {
-        return (chunk.data() != null) && (chunk.data() != Unpooled.EMPTY_BUFFER);
+        return (chunk.content() != null) && (chunk.content() != Unpooled.EMPTY_BUFFER);
     }
 
     @Override
     public ByteBuffer getData()
     {
-        return NettyServer.copyBuffer(chunk.data());
+        return NettyServer.copyBuffer(chunk.content());
     }
 
     @Override

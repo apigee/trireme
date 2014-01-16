@@ -27,8 +27,8 @@ import io.apigee.trireme.net.spi.HttpServerStub;
 import io.apigee.trireme.net.spi.TLSParams;
 import io.netty.channel.ChannelException;
 import io.netty.channel.ChannelHandlerContext;
-import io.netty.channel.ChannelInboundMessageHandlerAdapter;
 import io.netty.channel.ChannelInitializer;
+import io.netty.channel.SimpleChannelInboundHandler;
 import io.netty.channel.socket.SocketChannel;
 import io.netty.handler.codec.http.DefaultFullHttpResponse;
 import io.netty.handler.codec.http.DefaultHttpResponse;
@@ -40,8 +40,8 @@ import io.netty.handler.codec.http.HttpRequestDecoder;
 import io.netty.handler.codec.http.HttpResponseEncoder;
 import io.netty.handler.codec.http.HttpResponseStatus;
 import io.netty.handler.codec.http.HttpVersion;
-import io.netty.handler.logging.ByteLoggingHandler;
 import io.netty.handler.logging.LogLevel;
+import io.netty.handler.logging.LoggingHandler;
 import io.netty.handler.ssl.SslHandler;
 import io.netty.handler.timeout.IdleStateHandler;
 import org.mozilla.javascript.EvaluatorException;
@@ -77,11 +77,15 @@ public class NettyHttpServer
 
     private final HttpServerStub stub;
     private       NettyServer    server;
+    private       String         injectedAttachment;
     private volatile boolean     closing;
 
     NettyHttpServer(HttpServerStub stub)
     {
         this.stub = stub;
+
+        // This is for testing the "attachment" feature
+        injectedAttachment = System.getProperty("TriremeInjectedAttachment");
     }
 
     @Override
@@ -126,13 +130,13 @@ public class NettyHttpServer
                     c.pipeline().addLast(new SslHandler(engine));
                 }
                 if (log.isTraceEnabled()) {
-                    c.pipeline().addLast("loggingReq", new ByteLoggingHandler(LogLevel.DEBUG));
+                    c.pipeline().addLast("loggingReq", new LoggingHandler(LogLevel.DEBUG));
                 }
                 c.pipeline().addLast(new HttpRequestDecoder())
                             .addLast(new Handler())
                             .addLast(new HttpResponseEncoder());
                 if (log.isTraceEnabled()) {
-                    c.pipeline().addLast("loggingResp", new ByteLoggingHandler(LogLevel.DEBUG));
+                    c.pipeline().addLast("loggingResp", new LoggingHandler(LogLevel.DEBUG));
                 }
             }
         };
@@ -246,6 +250,7 @@ public class NettyHttpServer
     }
 
     @JSFunction
+    @SuppressWarnings("unused")
     public X509CRL makeCRL(String fileName)
     {
         try {
@@ -266,7 +271,7 @@ public class NettyHttpServer
     }
 
     private final class Handler
-        extends ChannelInboundMessageHandlerAdapter<HttpObject>
+        extends SimpleChannelInboundHandler<HttpObject>
     {
         private NettyHttpRequest curRequest;
         private NettyHttpResponse curResponse;
@@ -302,7 +307,7 @@ public class NettyHttpServer
         }
 
         @Override
-        public void messageReceived(ChannelHandlerContext ctx, HttpObject httpObject)
+        protected void channelRead0(ChannelHandlerContext ctx, HttpObject httpObject)
         {
             if (log.isDebugEnabled()) {
                 log.debug("Received HTTP message {}", httpObject);
@@ -311,6 +316,8 @@ public class NettyHttpServer
                 HttpRequest req = (HttpRequest)httpObject;
                 SocketChannel channel = (SocketChannel)ctx.channel();
                 curRequest = new NettyHttpRequest(req, channel);
+                // Set the "attachment" field on the Java request object for testing
+                curRequest.setClientAttachment(injectedAttachment);
 
                 curResponse = new NettyHttpResponse(
                     new DefaultHttpResponse(req.getProtocolVersion(),
@@ -318,6 +325,7 @@ public class NettyHttpServer
                     channel,
                     curRequest.isKeepAlive(),
                     NettyHttpServer.this);
+                curResponse.setClientAttachment(injectedAttachment);
                 stub.onRequest(curRequest, curResponse);
 
             } else if (httpObject instanceof HttpContent) {
@@ -343,7 +351,7 @@ public class NettyHttpServer
                 log.debug("Returning an error on incoming message: {}", status);
             }
             FullHttpResponse response = new DefaultFullHttpResponse(HttpVersion.HTTP_1_1, status);
-            ctx.channel().write(response);
+            ctx.channel().writeAndFlush(response);
         }
     }
 }

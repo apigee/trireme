@@ -105,12 +105,14 @@ public class HTTPWrap
         }
 
         @JSFunction
+        @SuppressWarnings("unused")
         public boolean hasServerAdapter()
         {
             return runner.getEnvironment().getHttpContainer() != null;
         }
 
         @JSFunction
+        @SuppressWarnings("unused")
         public static Scriptable createServerAdapter(Context cx, Scriptable thisObj, Object[] args, Function fn)
         {
             HttpImpl http = (HttpImpl)thisObj;
@@ -165,12 +167,14 @@ public class HTTPWrap
         }
 
         @JSFunction
+        @SuppressWarnings("unused")
         public void setTLSParams(Scriptable tlsParams)
         {
             this.tlsParams = tlsParams;
         }
 
         @JSFunction
+        @SuppressWarnings("unused")
         public int listen(String host, int port, int backlog)
         {
             TLSParams tls = null;
@@ -183,6 +187,7 @@ public class HTTPWrap
         }
 
         @JSFunction
+        @SuppressWarnings("unused")
         public void close()
         {
             if (connectionCount.get() <= 0) {
@@ -208,6 +213,7 @@ public class HTTPWrap
          * This method is called when the whole server has failed or is shutting down prematurely.
          */
         @JSFunction
+        @SuppressWarnings("unused")
         public void fatalError(String message, Object stack)
         {
             if (log.isDebugEnabled()) {
@@ -262,8 +268,8 @@ public class HTTPWrap
                     Scriptable responseObj = (Scriptable)makeResponse.call(cx, makeResponse, null,
                                                                            new Object[] { respAdapter, socketObj });
 
-                    request.setAttachment(requestObj);
-                    response.setAttachment(responseObj);
+                    request.setScriptObject(requestObj);
+                    response.setScriptObject(responseObj);
 
                     onHeaders.call(cx, onHeaders, ServerContainer.this, new Object[] { requestObj, responseObj });
                 }
@@ -324,7 +330,7 @@ public class HTTPWrap
 
         private void callOnComplete(Context cx, HttpRequestAdapter request)
         {
-            Scriptable incoming = request.getAttachment();
+            Scriptable incoming = request.getScriptObject();
             if (log.isDebugEnabled()) {
                 log.debug("Calling onComplete with {}", incoming);
             }
@@ -336,7 +342,7 @@ public class HTTPWrap
                                 HttpRequestAdapter request,
                                 ByteBuffer requestData)
         {
-            Scriptable incoming = request.getAttachment();
+            Scriptable incoming = request.getScriptObject();
             if (log.isDebugEnabled()) {
                 log.debug("Calling onData with {}", incoming);
             }
@@ -357,10 +363,10 @@ public class HTTPWrap
                 runner.enqueueTask(new ScriptTask() {
                     @Override
                     public void execute(Context cx, Scriptable scope) {
-                        Scriptable reqObject = request.getAttachment();
+                        Scriptable reqObject = request.getScriptObject();
                         Object respObject;
                         if (response != null) {
-                            respObject = response.getAttachment();
+                            respObject = response.getScriptObject();
                         } else {
                             respObject = Context.getUndefinedValue();
                         }
@@ -392,84 +398,98 @@ public class HTTPWrap
         }
 
         @JSGetter("makeSocket")
+        @SuppressWarnings("unused")
         public Function getMakeSocket()
         {
             return makeSocket;
         }
 
         @JSSetter("makeSocket")
+        @SuppressWarnings("unused")
         public void setMakeSocket(Function mr)
         {
             this.makeSocket = mr;
         }
 
         @JSGetter("makeRequest")
+        @SuppressWarnings("unused")
         public Function getMakeRequest()
         {
             return makeRequest;
         }
 
         @JSSetter("makeRequest")
+        @SuppressWarnings("unused")
         public void setMakeRequest(Function mr)
         {
             this.makeRequest = mr;
         }
 
         @JSGetter("makeResponse")
+        @SuppressWarnings("unused")
         public Function getMakeResponse()
         {
             return makeResponse;
         }
 
         @JSSetter("makeResponse")
+        @SuppressWarnings("unused")
         public void setMakeResponse(Function mr)
         {
             this.makeResponse = mr;
         }
 
         @JSGetter("onheaders")
+        @SuppressWarnings("unused")
         public Function getOnHeaders()
         {
             return onHeaders;
         }
 
         @JSSetter("onheaders")
+        @SuppressWarnings("unused")
         public void setOnHeaders(Function onHeaders)
         {
             this.onHeaders = onHeaders;
         }
 
         @JSGetter("ondata")
+        @SuppressWarnings("unused")
         public Function getOnData()
         {
             return onData;
         }
 
         @JSSetter("ondata")
+        @SuppressWarnings("unused")
         public void setOnData(Function onData)
         {
             this.onData = onData;
         }
 
         @JSGetter("oncomplete")
+        @SuppressWarnings("unused")
         public Function getOnComplete()
         {
             return onComplete;
         }
 
         @JSSetter("oncomplete")
+        @SuppressWarnings("unused")
         public void setOnComplete(Function onComplete)
         {
             this.onComplete = onComplete;
         }
 
         @JSGetter("onclose")
+        @SuppressWarnings("unused")
         public Function getOnClose()
         {
             return onClose;
         }
 
         @JSSetter("onclose")
+        @SuppressWarnings("unused")
         public void setOnClose(Function oc)
         {
             this.onClose = oc;
@@ -539,27 +559,38 @@ public class HTTPWrap
             this.request = request;
         }
 
+        @JSGetter("attachment")
+        @SuppressWarnings("unused")
+        public Object getAttachment() {
+            return request.getClientAttachment();
+        }
+
         @JSGetter("requestUrl")
+        @SuppressWarnings("unused")
         public String getRequestUrl() {
             return request.getUrl();
         }
 
         @JSGetter("requestMajorVersion")
+        @SuppressWarnings("unused")
         public int getRequestMajorVersion() {
             return request.getMajorVersion();
         }
 
         @JSGetter("requestMinorVersion")
+        @SuppressWarnings("unused")
         public int getRequestMinorVersion() {
             return request.getMinorVersion();
         }
 
         @JSGetter("requestMethod")
+        @SuppressWarnings("unused")
         public String getRequestMethod() {
             return request.getMethod();
         }
 
         @JSFunction
+        @SuppressWarnings("unused")
         public static Scriptable getRequestHeaders(Context cx, Scriptable thisObj, Object[] args, Function func)
         {
             RequestAdapter ar = (RequestAdapter)thisObj;
@@ -572,12 +603,14 @@ public class HTTPWrap
         }
 
         @JSFunction
+        @SuppressWarnings("unused")
         public void pause()
         {
             request.pause();
         }
 
         @JSFunction
+        @SuppressWarnings("unused")
         public void resume()
         {
             request.resume();
@@ -611,27 +644,37 @@ public class HTTPWrap
         }
 
         @JSGetter("onwritecomplete")
+        @SuppressWarnings("unused")
         public Function getOnWriteComplete()
         {
             return onWriteComplete;
         }
 
         @JSSetter("onwritecomplete")
+        @SuppressWarnings("unused")
         public void setOnWriteComplete(Function onComplete)
         {
             this.onWriteComplete = onComplete;
         }
 
         @JSGetter("onchannelclosed")
+        @SuppressWarnings("unused")
         public Function getOnChannelClosed()
         {
             return onChannelClosed;
         }
 
         @JSSetter("onchannelclosed")
+        @SuppressWarnings("unused")
         public void setOnChannelClosed(Function cc)
         {
             this.onChannelClosed = cc;
+        }
+
+        @JSGetter("attachment")
+        @SuppressWarnings("unused")
+        public Object getAttachment() {
+            return response.getClientAttachment();
         }
 
         private ByteBuffer gatherData(Object data, Object encoding)
@@ -656,6 +699,7 @@ public class HTTPWrap
         }
 
         @JSFunction
+        @SuppressWarnings("unused")
         public boolean send(int statusCode, boolean sendDate, Scriptable headers,
                             Object data, Object encoding, Scriptable trailers, boolean last)
         {
@@ -710,6 +754,7 @@ public class HTTPWrap
         }
 
         @JSFunction
+        @SuppressWarnings("unused")
         public boolean sendChunk(Object data, Object encoding, Scriptable trailers, boolean last)
         {
             if (last) {
@@ -729,6 +774,7 @@ public class HTTPWrap
 
 
         @JSFunction
+        @SuppressWarnings("unused")
         public void destroy()
         {
             server.requestComplete(this);
@@ -736,6 +782,7 @@ public class HTTPWrap
         }
 
         @JSFunction
+        @SuppressWarnings("unused")
         public void fatalError(String message, Object stack)
         {
             String stackStr = null;

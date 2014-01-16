@@ -3,6 +3,12 @@ var assert = require('assert');
 
 var svr = http.createServer(function(req, resp) {
   console.log('Got an HTTP request');
+
+  if (process.env.ATTACHMENT) {
+    console.log('Looking for attachment %s and found %s', process.env.ATTACHMENT, req.attachment);
+    assert(req.attachment);
+  }
+
   req.on('data', function(chunk) {
     console.log('Server got data: ' + chunk);
   });

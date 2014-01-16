@@ -31,7 +31,7 @@ public class BenchmarkTest
         "buffers/buffer-creation.js",
         "buffers/buffer-read.js",
         "buffers/buffer-write.js",
-        // When implemented
+        // When implemented, need DH to be done.
         // "crypto/cipher-stream.js",
         "crypto/hash-stream-creation.js",
         "crypto/hash-stream-throughput.js",
@@ -56,7 +56,8 @@ public class BenchmarkTest
         "net/tcp-raw-c2s.js",
         "net/tcp-raw-pipe.js",
         "net/tcp-raw-s2c.js",
-        "tls/throughput.js",
+        // Uses recursive nextTick()
+        //"tls/throughput.js",
         "tls/tls-connect.js",
         "iconv/iconv-performance.js"
     };

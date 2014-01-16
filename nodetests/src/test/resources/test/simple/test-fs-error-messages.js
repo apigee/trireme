@@ -34,50 +34,62 @@ var path = require('path'),
 
 fs.stat(fn, function(err) {
   assert.equal(fn, err.path);
+  console.log(err.message);
   assert.ok(0 <= err.message.indexOf(fn));
 });
 
 fs.lstat(fn, function(err) {
+  console.log(err.message);
   assert.ok(0 <= err.message.indexOf(fn));
 });
 
 fs.readlink(fn, function(err) {
+  console.log(err.message);
   assert.ok(0 <= err.message.indexOf(fn));
 });
 
 fs.link(fn, 'foo', function(err) {
+  console.log(err.message);
   assert.ok(0 <= err.message.indexOf(fn));
 });
 
 fs.unlink(fn, function(err) {
+  console.log(err.message);
   assert.ok(0 <= err.message.indexOf(fn));
 });
 
 fs.rename(fn, 'foo', function(err) {
+  console.log(err.message);
   assert.ok(0 <= err.message.indexOf(fn));
 });
 
 fs.rmdir(fn, function(err) {
+  console.log(err.message);
   assert.ok(0 <= err.message.indexOf(fn));
 });
 
 fs.mkdir(existingFile, 0666, function(err) {
+  console.log(err.message);
   assert.ok(0 <= err.message.indexOf(existingFile));
 });
 
 fs.rmdir(existingFile, function(err) {
+  console.log(err.message);
   assert.ok(0 <= err.message.indexOf(existingFile));
 });
 
 fs.chmod(fn, 0666, function(err) {
+  console.log(err.message);
   assert.ok(0 <= err.message.indexOf(fn));
 });
 
 fs.open(fn, 'r', 0666, function(err) {
+  console.log(err.message);
   assert.ok(0 <= err.message.indexOf(fn));
 });
 
 fs.readFile(fn, function(err) {
+  console.log(err.message);
   assert.ok(0 <= err.message.indexOf(fn));
 });
 

@@ -9,6 +9,7 @@ import java.util.Map;
 public abstract class TestBase
 {
     public static final int DEFAULT_TIMEOUT = 60;
+    public static final String HEAP_SIZE = "-Xmx1g";
 
     protected final File fileName;
     protected final String adapter;
@@ -80,6 +81,7 @@ public abstract class TestBase
 
         ArrayList<String> args = new ArrayList<String>();
         args.add(command);
+        args.add(HEAP_SIZE);
         args.add("-DLOGLEVEL=" + System.getProperty("LOGLEVEL", "INFO"));
         if (coverage && (System.getProperty("CoverageArg") != null)) {
             args.add(System.getProperty("CoverageArg"));

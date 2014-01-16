@@ -619,7 +619,8 @@
     </Excluded>
 
     <!-- FLAKY
-         These tests seem very sensitive to network blips and deployment environments.
+         These tests seem very sensitive to network blips and deployment environments. They may work
+         locally but not on the CI server.
     -->
     <Excluded>
         <Name>test-http-curl-chunk-problem.js</Name>
@@ -640,6 +641,9 @@
     <Excluded>
         <Name>test-exec-max-buffer.js</Name>
         <Description>Not sure</Description>
+    </Excluded>
+    <Excluded>
+        <Name>test-net-bind-twice.js</Name>
     </Excluded>
 
     <!--

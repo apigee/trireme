@@ -45,6 +45,9 @@ import org.mozilla.javascript.annotations.JSSetter;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import static io.apigee.trireme.core.ArgUtils.*;
+
+import javax.net.ssl.SSLContext;
 import java.lang.reflect.InvocationTargetException;
 import java.nio.ByteBuffer;
 import java.text.SimpleDateFormat;
@@ -53,7 +56,6 @@ import java.util.Date;
 import java.util.IdentityHashMap;
 import java.util.Map;
 import java.util.TimeZone;
-import java.util.concurrent.atomic.AtomicInteger;
 
 /**
  * This is a special module that wraps the generic HTTP adapter so that it may be accessed from
@@ -142,10 +144,8 @@ public class HTTPWrap
         private Function onData;
         private Function onComplete;
         private Function onClose;
-        private Scriptable tlsParams;
+        private TLSParams tlsParams;
 
-        private final AtomicInteger connectionCount = new AtomicInteger();
-        private volatile boolean closed;
         private final IdentityHashMap<ResponseAdapter, ResponseAdapter> pendingRequests =
             new IdentityHashMap<ResponseAdapter, ResponseAdapter>();
 
@@ -166,22 +166,25 @@ public class HTTPWrap
             return runner;
         }
 
+        /**
+         * This will be called by the "adaptorhttps" module, which in turn uses our own "tls" module
+         * to create an SSL context that obeys all the various rules of Node.js.
+         */
         @JSFunction
         @SuppressWarnings("unused")
-        public void setTLSParams(Scriptable tlsParams)
+        public static void setSslContext(Context cx, Scriptable thisObj, Object[] args, Function func)
         {
-            this.tlsParams = tlsParams;
+            SSLWrap.ContextImpl ctx = objArg(args, 0, SSLWrap.ContextImpl.class, true);
+            Scriptable params = objArg(args, 1, Scriptable.class, true);
+            ServerContainer self = (ServerContainer)thisObj;
+            self.tlsParams = self.makeTLSParams(ctx.getSslContext(), params);
         }
 
         @JSFunction
         @SuppressWarnings("unused")
         public int listen(String host, int port, int backlog)
         {
-            TLSParams tls = null;
-            if (this.tlsParams != null) {
-                tls = makeTLSParams();
-            }
-            adapter.listen(host, port, backlog, tls);
+            adapter.listen(host, port, backlog, tlsParams);
             log.debug("Listening on port {}", port);
             return 0;
         }
@@ -190,19 +193,9 @@ public class HTTPWrap
         @SuppressWarnings("unused")
         public void close()
         {
-            if (connectionCount.get() <= 0) {
-                completeClose();
-            } else {
-                log.debug("Suspending HTTP server adapter until {} connections are closed", connectionCount);
-                closed = true;
-                adapter.suspend();
-            }
-        }
-
-        private void completeClose()
-        {
             log.debug("Closing HTTP server adapter completely");
             if (adapter != null) {
+                adapter.suspend();
                 adapter.close();
                 adapter = null;
             }
@@ -356,7 +349,6 @@ public class HTTPWrap
         @Override
         public void onConnection()
         {
-            connectionCount.incrementAndGet();
         }
 
         @Override
@@ -378,10 +370,6 @@ public class HTTPWrap
                                      new Object[] { reqObject, respObject });
                     }
                 });
-            }
-            int newCount = connectionCount.decrementAndGet();
-            if ((newCount == 0) && closed) {
-                completeClose();
             }
         }
 
@@ -498,43 +486,25 @@ public class HTTPWrap
             this.onClose = oc;
         }
 
-        private TLSParams makeTLSParams()
+        private TLSParams makeTLSParams(SSLContext ctx, Scriptable tlsParams)
         {
             TLSParams t = new TLSParams();
-            if (tlsParams.has("keystore", tlsParams)) {
-                String fn = Context.toString(tlsParams.get("keystore", tlsParams));
-                t.setKeyStore(runner.translatePath(fn).getPath());
-            }
-            if (tlsParams.has("truststore", tlsParams)) {
-                String fn = Context.toString(tlsParams.get("truststore", tlsParams));
-                t.setTrustStore(runner.translatePath(fn).getPath());
-            }
-            if (tlsParams.has("crl", tlsParams)) {
-                String fn = Context.toString(tlsParams.get("crl", tlsParams));
-                t.setCrl(runner.translatePath(fn).getPath());
-            }
-            if (tlsParams.has("passphrase", tlsParams)) {
-                t.setPassphrase(Context.toString(tlsParams.get("passphrase", tlsParams)));
-            }
+            t.setContext(ctx);
+
             if (tlsParams.has("ciphers", tlsParams)) {
-                String ciphers = Context.toString(tlsParams.get("truststore", tlsParams));
+                String ciphers = Context.toString(tlsParams.get("ciphers", tlsParams));
                 ArrayList<String> cl = new ArrayList<String>();
                 for (String c : ciphers.split(":")) {
                     cl.add(c);
                 }
-                t.setCiphers(cl);
+                t.setCiphers(cl.toArray(new String[0]));
             }
 
-            boolean requestCert = tlsParams.has("requestCert", tlsParams) &&
-                                  Context.toBoolean(tlsParams.get("requestCert", tlsParams));
-            boolean rejectUnauthorized = tlsParams.has("rejectUnauthorized", tlsParams) &&
-                                  Context.toBoolean(tlsParams.get("rejectUnauthorized", tlsParams));
-            if (requestCert) {
-                if (rejectUnauthorized) {
-                    t.setClientAuthRequired(true);
-                } else {
-                    t.setClientAuthRequested(true);
-                }
+            if (tlsParams.has("clientAuthRequired", tlsParams)) {
+                t.setClientAuthRequired(true);
+            }
+            if (tlsParams.has("clientAuthRequested", tlsParams)) {
+                t.setClientAuthRequested(true);
             }
             return t;
         }

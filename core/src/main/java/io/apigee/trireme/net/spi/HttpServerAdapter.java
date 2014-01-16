@@ -21,13 +21,15 @@
  */
 package io.apigee.trireme.net.spi;
 
+import javax.net.ssl.SSLContext;
+
 /**
- * This is the main clas implemented by an HTTP Server container.
+ * This is the main class implemented by an HTTP Server container.
  */
 public interface HttpServerAdapter
 {
     /** Start to listen on the specified host and port. */
-    void listen(String host, int port, int backlog, TLSParams tls);
+    void listen(String host, int port, int backlog, TLSParams tlsParams);
 
     /** Don't close the socket, but stop accepting new connections */
     void suspend();

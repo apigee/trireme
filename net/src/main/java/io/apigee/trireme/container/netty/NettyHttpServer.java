@@ -44,29 +44,11 @@ import io.netty.handler.logging.LogLevel;
 import io.netty.handler.logging.LoggingHandler;
 import io.netty.handler.ssl.SslHandler;
 import io.netty.handler.timeout.IdleStateHandler;
-import org.mozilla.javascript.EvaluatorException;
-import org.mozilla.javascript.annotations.JSFunction;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import javax.net.ssl.KeyManager;
-import javax.net.ssl.KeyManagerFactory;
-import javax.net.ssl.SSLContext;
 import javax.net.ssl.SSLEngine;
-import javax.net.ssl.TrustManager;
-import javax.net.ssl.TrustManagerFactory;
-import javax.net.ssl.X509TrustManager;
-import java.io.FileInputStream;
-import java.io.IOException;
-import java.security.GeneralSecurityException;
-import java.security.KeyManagementException;
-import java.security.KeyStore;
-import java.security.NoSuchAlgorithmException;
-import java.security.cert.CRLException;
-import java.security.cert.CertificateException;
-import java.security.cert.CertificateFactory;
-import java.security.cert.X509CRL;
-import java.util.Arrays;
+
 
 public class NettyHttpServer
     implements HttpServerAdapter
@@ -78,6 +60,7 @@ public class NettyHttpServer
     private final HttpServerStub stub;
     private       NettyServer    server;
     private       String         injectedAttachment;
+    private       boolean        isTls;
     private volatile boolean     closing;
 
     NettyHttpServer(HttpServerStub stub)
@@ -89,24 +72,14 @@ public class NettyHttpServer
     }
 
     @Override
-    public void listen(String host, int port, int backlog, TLSParams tls)
+    public void listen(String host, int port, int backlog, TLSParams tlsParams)
     {
-        SSLContext ssl = null;
-        if (tls != null) {
-            try {
-                ssl = makeSSLContext(tls);
-            } catch (NoSuchAlgorithmException e) {
-                throw new EvaluatorException(e.toString());
-            } catch (KeyManagementException e) {
-                throw new EvaluatorException(e.toString());
-            }
-        }
         log.debug("About to listen for HTTP on {}:{}", host, port);
-        if (ssl != null) {
-            log.debug("Using SSLContext " + ssl);
+        if (tlsParams != null) {
+            log.debug("Using SSLContext " + tlsParams.getContext());
         }
         try {
-            server = NettyFactory.get().createServer(port, host, backlog, makePipeline(tls, ssl));
+            server = NettyFactory.get().createServer(port, host, backlog, makePipeline(tlsParams));
             log.debug("Listening on port {}", port);
         } catch (ChannelException ce) {
             stub.onError(ce.getMessage());
@@ -114,7 +87,7 @@ public class NettyHttpServer
         }
     }
 
-    private ChannelInitializer<SocketChannel> makePipeline(final TLSParams tls, final SSLContext ssl)
+    private ChannelInitializer<SocketChannel> makePipeline(final TLSParams tls)
     {
         return new ChannelInitializer<SocketChannel>()
         {
@@ -125,8 +98,9 @@ public class NettyHttpServer
                 c.pipeline().addLast(new IdleStateHandler(
                                      IDLE_CONNECTION_SECONDS, IDLE_CONNECTION_SECONDS,
                                      IDLE_CONNECTION_SECONDS));
-                if (ssl != null) {
-                    SSLEngine engine = makeSSLEngine(tls, ssl);
+                if (tls != null) {
+                    isTls = true;
+                    SSLEngine engine = makeSSLEngine(tls);
                     c.pipeline().addLast(new SslHandler(engine));
                 }
                 if (log.isTraceEnabled()) {
@@ -162,37 +136,11 @@ public class NettyHttpServer
         stub.onClose(null, null);
     }
 
-    private SSLContext makeSSLContext(TLSParams p)
-        throws NoSuchAlgorithmException, KeyManagementException
+    private SSLEngine makeSSLEngine(TLSParams p)
     {
-        SSLContext ctx = SSLContext.getInstance("TLS");
-        KeyManager[] kms = null;
-        TrustManager[] tms = null;
-        X509CRL crl = null;
-
-        if (p.getKeyStore() != null) {
-            kms = makeKeyStore(p.getKeyStore(), p.getPassphrase());
-        }
-        if (p.getTrustStore() != null) {
-            tms = makeTrustStore(p.getTrustStore());
-        }
-        if (p.getCrl() != null) {
-            crl = makeCRL(p.getCrl());
-        }
-
-        if ((tms != null) && (crl != null)) {
-            tms[0] = new CompositeTrustManager((X509TrustManager)tms[0], crl);
-        }
-
-        ctx.init(kms, tms, null);
-        return ctx;
-    }
-
-    private SSLEngine makeSSLEngine(TLSParams p, SSLContext ctx)
-    {
-        SSLEngine eng = ctx.createSSLEngine();
+        SSLEngine eng = p.getContext().createSSLEngine();
         if (p.getCiphers() != null) {
-            eng.setEnabledCipherSuites(p.getCiphers().toArray(new String[p.getCiphers().size()]));
+            eng.setEnabledCipherSuites(p.getCiphers());
         }
         if (p.isClientAuthRequired()) {
             eng.setNeedClientAuth(true);
@@ -201,73 +149,6 @@ public class NettyHttpServer
         }
         eng.setUseClientMode(false);
         return eng;
-    }
-
-    public KeyManager[] makeKeyStore(String name, String p)
-    {
-        char[] passphrase = p.toCharArray();
-        try {
-            FileInputStream keyIn = new FileInputStream(name);
-            try {
-                KeyStore keyStore = KeyStore.getInstance("JKS");
-                keyStore.load(keyIn, passphrase);
-                KeyManagerFactory keyFactory = KeyManagerFactory.getInstance("SunX509");
-                keyFactory.init(keyStore, passphrase);
-                return keyFactory.getKeyManagers();
-            } finally {
-                if (passphrase != null) {
-                    Arrays.fill(passphrase, ' ');
-                }
-                keyIn.close();
-            }
-
-        } catch (GeneralSecurityException gse) {
-            throw new EvaluatorException("Error opening key store: " + gse);
-        } catch (IOException ioe) {
-            throw new EvaluatorException("I/O error reading key store: " + ioe);
-        }
-    }
-
-    public TrustManager[] makeTrustStore(String name)
-    {
-        try {
-            FileInputStream keyIn = new FileInputStream(name);
-            try {
-                KeyStore trustStore = KeyStore.getInstance("JKS");
-                trustStore.load(keyIn, null);
-                TrustManagerFactory trustFactory = TrustManagerFactory.getInstance("SunX509");
-                trustFactory.init(trustStore);
-                return trustFactory.getTrustManagers();
-            } finally {
-                keyIn.close();
-            }
-
-        } catch (GeneralSecurityException gse) {
-            throw new EvaluatorException("Error opening key store: " + gse);
-        } catch (IOException ioe) {
-            throw new EvaluatorException("I/O error reading key store: " + ioe);
-        }
-    }
-
-    @JSFunction
-    @SuppressWarnings("unused")
-    public X509CRL makeCRL(String fileName)
-    {
-        try {
-            FileInputStream crlFile = new FileInputStream(fileName);
-            try {
-                CertificateFactory certFactory = CertificateFactory.getInstance("X.509");
-                return (X509CRL)certFactory.generateCRL(crlFile);
-            } catch (CertificateException e) {
-                throw new EvaluatorException("Error opening trust store: " + e);
-            } catch (CRLException e) {
-                throw new EvaluatorException("Error opening trust store: " + e);
-            } finally {
-                crlFile.close();
-            }
-        } catch (IOException ioe) {
-            throw new EvaluatorException("I/O error reading trust store: " + ioe);
-        }
     }
 
     private final class Handler
@@ -323,7 +204,7 @@ public class NettyHttpServer
                     new DefaultHttpResponse(req.getProtocolVersion(),
                                             HttpResponseStatus.OK),
                     channel,
-                    curRequest.isKeepAlive(),
+                    curRequest.isKeepAlive(), isTls,
                     NettyHttpServer.this);
                 curResponse.setClientAttachment(injectedAttachment);
                 stub.onRequest(curRequest, curResponse);

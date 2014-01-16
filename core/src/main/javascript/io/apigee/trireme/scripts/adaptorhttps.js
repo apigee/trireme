@@ -38,11 +38,20 @@ if (HttpWrap.hasServerAdapter()) {
   debug('Using HTTP adapter for https');
   var http = require('http');
   var util = require('util');
+  // This will pull in the Trireme version of the TLS module
+  var tls = require('tls');
 
   function Server(opts, requestListener) {
     if (!(this instanceof Server)) return new Server(opts, requestListener);
     http.Server.call(this, requestListener);
-    this.tlsParams = opts;
+
+    this.rejectUnauthorized = opts.rejectUnauthorized;
+    if (this.rejectUnauthorized === undefined) {
+      this.rejectUnauthorized = tls.DEFAULT_REJECT_UNAUTHORIZED;
+    }
+
+    this.sslContext = tls._getServerContext(opts, this.rejectUnauthorized);
+    this.tlsParams = tls._getTlsParams(opts, this.rejectUnauthorized);
   }
   util.inherits(Server, http.Server);
 

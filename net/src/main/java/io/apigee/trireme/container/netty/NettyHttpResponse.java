@@ -51,16 +51,18 @@ public class NettyHttpResponse
     private final NettyHttpServer server;
 
     private boolean             keepAlive;
+    private final boolean       isTls;
     private ArrayList<Map.Entry<String, String>> trailers;
 
     public NettyHttpResponse(HttpResponse resp, SocketChannel channel,
-                             boolean keepAliveRequested,
+                             boolean keepAliveRequested, boolean isTls,
                              NettyHttpServer server)
     {
         super(resp, channel);
         this.response = resp;
         this.keepAlive = keepAliveRequested;
         this.server = server;
+        this.isTls = isTls;
     }
 
     @Override
@@ -81,7 +83,7 @@ public class NettyHttpResponse
             // HTTP 1.0 -- must close at end if no content length
             if (lastChunk) {
                 if (!response.headers().contains("Content-Length")) {
-                    response.headers().set("Content-Length", (data == null ? 0 : data.remaining()));
+                    keepAlive = false;
                 }
             } else {
                 keepAlive = false;
@@ -90,23 +92,39 @@ public class NettyHttpResponse
             // HTTP 1.1 -- we can use chunking
             if (lastChunk && (trailers == null)) {
                 // We can send it all in one big chunk, but only if no trailers
-                if (!response.headers().contains("Content-Length")) {
+                if (!response.headers().contains("Content-Length") &&
+                    !response.headers().contains("Transfer-Encoding")) {
                     response.headers().set("Content-Length", (data == null ? 0 : data.remaining()));
                 }
             } else {
                 // We must use chunking
-                if (!response.headers().contains("Transfer-Encoding")) {
+                if (!response.headers().contains("Transfer-Encoding") &&
+                    !response.headers().contains("Content-Length")) {
                     response.headers().set("Transfer-Encoding", "chunked");
                 }
             }
         }
 
         String connHeader = response.headers().get("Connection");
-        if ((connHeader != null) && "close".equalsIgnoreCase(connHeader)) {
+        if (server.isClosing()) {
+            keepAlive = false;
+        } else if ((connHeader != null) && "close".equalsIgnoreCase(connHeader)) {
             keepAlive = false;
         }
-        if (!keepAlive && !response.headers().contains("Connection")) {
+        if (!keepAlive && (connHeader == null)) {
             response.headers().add("Connection", "close");
+        }
+    }
+
+    private void shutDown()
+    {
+        if (log.isDebugEnabled()) {
+            log.debug("Shutting down HTTP output. TLS = {}", isTls);
+        }
+        if (isTls) {
+            channel.close();
+        } else {
+            channel.shutdownOutput();
         }
     }
 
@@ -133,6 +151,9 @@ public class NettyHttpResponse
             future = sendLastChunk();
         }
         channel.flush();
+        if (lastChunk && !keepAlive) {
+            shutDown();
+        }
 
         return new NettyHttpFuture(future);
     }
@@ -154,6 +175,9 @@ public class NettyHttpResponse
             future = sendLastChunk();
         }
         channel.flush();
+        if (lastChunk && !keepAlive) {
+            shutDown();
+        }
 
         if (future == null) {
             DefaultChannelPromise doneFuture = new DefaultChannelPromise(channel);
@@ -188,6 +212,9 @@ public class NettyHttpResponse
 
         sendLastChunk();
         channel.flush();
+        if (!keepAlive) {
+            shutDown();
+        }
     }
 
     private ChannelFuture sendLastChunk()
@@ -202,9 +229,6 @@ public class NettyHttpResponse
             }
         }
         ChannelFuture ret = channel.write(chunk);
-        if (!keepAlive || server.isClosing()) {
-            channel.shutdownOutput();
-        }
         return ret;
     }
 

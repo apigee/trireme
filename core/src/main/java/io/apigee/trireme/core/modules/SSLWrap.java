@@ -202,6 +202,10 @@ public class SSLWrap
             this.runner = runner;
         }
 
+        public SSLContext getSslContext() {
+            return context;
+        }
+
         @JSFunction
         public void setKeyStore(String name, String p)
         {

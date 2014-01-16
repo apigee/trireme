@@ -21,56 +21,24 @@
  */
 package io.apigee.trireme.net.spi;
 
+import javax.net.ssl.SSLContext;
 import java.util.List;
 
 public class TLSParams
 {
-    private String keyStore;
-    private String trustStore;
-    private String crl;
-    private String passphrase;
+    private SSLContext sslCtx;
     private boolean clientAuthRequired;
     private boolean clientAuthRequested;
-    private List<String> ciphers;
+    private String[] ciphers;
 
-    public String getKeyStore()
+    public SSLContext getContext()
     {
-        return keyStore;
+        return sslCtx;
     }
 
-    public void setKeyStore(String keyStore)
+    public void setContext(SSLContext sslCtx)
     {
-        this.keyStore = keyStore;
-    }
-
-    public String getTrustStore()
-    {
-        return trustStore;
-    }
-
-    public void setTrustStore(String trustStore)
-    {
-        this.trustStore = trustStore;
-    }
-
-    public String getCrl()
-    {
-        return crl;
-    }
-
-    public void setCrl(String crl)
-    {
-        this.crl = crl;
-    }
-
-    public String getPassphrase()
-    {
-        return passphrase;
-    }
-
-    public void setPassphrase(String passphrase)
-    {
-        this.passphrase = passphrase;
+        this.sslCtx = sslCtx;
     }
 
     public boolean isClientAuthRequired()
@@ -93,12 +61,12 @@ public class TLSParams
         this.clientAuthRequested = clientAuthRequested;
     }
 
-    public List<String> getCiphers()
+    public String[] getCiphers()
     {
         return ciphers;
     }
 
-    public void setCiphers(List<String> ciphers)
+    public void setCiphers(String[] ciphers)
     {
         this.ciphers = ciphers;
     }

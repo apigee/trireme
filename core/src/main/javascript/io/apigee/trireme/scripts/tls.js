@@ -48,6 +48,8 @@ var END_SENTINEL = {};
 var DEFAULT_REJECT_UNAUTHORIZED = ('0' !== process.env.NODE_TLS_REJECT_UNAUTHORIZED);
 var DEFAULT_HANDSHAKE_TIMEOUT = 60000;
 
+exports.DEFAULT_REJECT_UNAUTHORIZED = DEFAULT_REJECT_UNAUTHORIZED;
+
 function toBuf(b) {
   if (typeof b === 'string') {
     return new Buffer(b, 'ascii');
@@ -58,7 +60,7 @@ function toBuf(b) {
 }
 
 // Store the SSL context for a client. We could do some caching here to speed up clients.
-function getContext(opts, rejectUnauthorized) {
+function getClientContext(opts, rejectUnauthorized) {
   var ctx = wrap.createContext();
 
   if (!rejectUnauthorized) {
@@ -110,6 +112,94 @@ function getContext(opts, rejectUnauthorized) {
   return ctx;
 }
 
+function getServerContext(options, rejectUnauthorized) {
+  var context = wrap.createContext();
+
+  if (options.keystore) {
+    if (debugEnabled) {
+      debug('Server using Java key store ' + options.keystore);
+    }
+    context.setKeyStore(options.keystore, options.passphrase);
+  } else if (options.pfx) {
+    if (debugEnabled) {
+      debug('Server using PFX key and cert');
+    }
+    context.setPfx(toBuf(options.pfx), options.passphrase);
+  } else {
+    if (options.key) {
+      debug('Server using PEM key');
+      context.setKey(toBuf(options.key), options.passphrase);
+    }
+    if (options.cert) {
+      debug('Server using PEM cert');
+      context.setCert(toBuf(options.cert));
+    }
+  }
+  if (!options.keystore && !options.pfx && !options.cert) {
+    throw 'Missing certificate';
+  }
+  if (!options.keystore && !options.pfx && !options.key) {
+    throw 'Missing key';
+  }
+
+  if (options.truststore) {
+    // Use an explicit Java trust store
+    if (debugEnabled) {
+      debug('Server using trust store ' + options.truststore);
+    }
+    context.setTrustStore(options.truststore);
+  } else if (!rejectUnauthorized || !options.requestCert) {
+    // Client cert requested but we shouldn't reject everyone right away, but set "authorized".
+    // Do this using an all-trusting trust manager
+    context.setTrustEverybody();
+  }
+  // Otherwise, in "init" we will set up a Java trust manager only for the supplied CAs
+
+  if (options.ca) {
+    if (debugEnabled) {
+      debug('Server using array of ' + options.ca.length + ' certs');
+    }
+    if (options.ca.length === 0) {
+      // Special case
+      context.addTrustedCert(0, null);
+    } else {
+      for (var i = 0; i < options.ca.length; i++) {
+        context.addTrustedCert(i, toBuf(options.ca[i]));
+      }
+    }
+  }
+
+  if (options.crl) {
+    debug('Server using CRL');
+    context.setCRL(toBuf(options.crl));
+  }
+
+  context.init();
+  return context;
+}
+// We use this in the HTTPS adapter to achieve some code reuse
+exports._getServerContext = getServerContext;
+
+// We also use this there
+function getTlsParams(options, rejectUnauthorized) {
+  var p = {};
+  if (options.requestCert) {
+    if (self.rejectUnauthorized) {
+      debug('Client auth required');
+      p.clientAuthRequired = true;
+    } else {
+      debug('Client auth requested');
+      p.clientAuthRequested = true;
+    }
+  }
+
+  if (options.ciphers) {
+    p.ciphers = options.ciphers;
+  }
+  return p;
+}
+exports._getTlsParams = getTlsParams;
+
 function Server() {
   var options, listener;
 
@@ -133,70 +223,10 @@ function Server() {
     self.rejectUnauthorized = DEFAULT_REJECT_UNAUTHORIZED;
   }
 
-  self.context = wrap.createContext();
-
-  if (options.keystore) {
-    if (debugEnabled) {
-      debug('Server using Java key store ' + options.keystore);
-    }
-    self.context.setKeyStore(options.keystore, options.passphrase);
-  } else if (options.pfx) {
-    if (debugEnabled) {
-      debug('Server using PFX key and cert');
-    }
-    self.context.setPfx(toBuf(options.pfx), options.passphrase);
-  } else {
-    if (options.key) {
-      debug('Server using PEM key');
-      self.context.setKey(toBuf(options.key), options.passphrase);
-    }
-    if (options.cert) {
-      debug('Server using PEM cert');
-      self.context.setCert(toBuf(options.cert));
-    }
-  }
-  if (!options.keystore && !options.pfx && !options.cert) {
-    throw 'Missing certificate';
-  }
-  if (!options.keystore && !options.pfx && !options.key) {
-    throw 'Missing key';
-  }
-
-  if (options.truststore) {
-    // Use an explicit Java trust store
-    if (debugEnabled) {
-      debug('Server using trust store ' + options.truststore);
-    }
-    self.context.setTrustStore(options.truststore);
-  } else if (!self.rejectUnauthorized || !options.requestCert) {
-    // Client cert requested but we shouldn't reject everyone right away, but set "authorized".
-    // Do this using an all-trusting trust manager
-    self.context.setTrustEverybody();
-  }
-  // Otherwise, in "init" we will set up a Java trust manager only for the supplied CAs
-
-  if (options.ca) {
-    if (debugEnabled) {
-      debug('Server using array of ' + options.ca.length + ' certs');
-    }
-    if (options.ca.length === 0) {
-      // Special case
-      self.context.addTrustedCert(0, null);
-    } else {
-      for (var i = 0; i < options.ca.length; i++) {
-        self.context.addTrustedCert(i, toBuf(options.ca[i]));
-      }
-    }
-  }
-
-  if (options.crl) {
-    debug('Server using CRL');
-    self.context.setCRL(toBuf(options.crl));
-  }
-
-  self.context.init();
+  self.context = getServerContext(options, self.rejectUnauthorized);
 
   if (options.ciphers) {
+    // Create a temporary SSL engine just to validate that the cipher list is correct.
     var tmpEngine = self.context.createEngine(false);
     if (!tmpEngine.validateCiphers(options.ciphers)) {
       throw 'Invalid cipher list: ' + options.ciphers;
@@ -314,7 +344,7 @@ exports.connect = function() {
   var hostname = options.servername || options.host || 'localhost';
   options.host = hostname;
 
-  var sslContext = getContext(options, rejectUnauthorized);
+  var sslContext = getClientContext(options, rejectUnauthorized);
 
   var engine = sslContext.createEngine(true);
   var sslConn = new CleartextStream();

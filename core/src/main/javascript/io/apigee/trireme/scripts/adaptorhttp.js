@@ -550,8 +550,8 @@ if (HttpWrap.hasServerAdapter()) {
 
   function listen(self, address, port, addressType, backlog, fd) {
     self._adapter = HttpWrap.createServerAdapter();
-    if (self.tlsParams) {
-      self._adapter.setTLSParams(self.tlsParams);
+    if (self.sslContext) {
+      self._adapter.setSslContext(self.sslContext, self.tlsParams);
     }
     var r = self._adapter.listen(address, port, backlog);
 

@@ -490,22 +490,7 @@
 
 
     <Excluded>
-        <Name>test-https-client-get-url.js</Name>
-        <Adapter>netty</Adapter>
-        <Description>Some sort of SSL problem with the Netty adapter.</Description>
-    </Excluded>
-    <Excluded>
-        <Name>test-https-localaddress-bind-error.js</Name>
-        <Adapter>netty</Adapter>
-        <Description>Some sort of SSL problem with the Netty adapter.</Description>
-    </Excluded>
-    <Excluded>
         <Name>test-https-no-reader.js</Name>
-        <Adapter>netty</Adapter>
-        <Description>Some sort of SSL problem with the Netty adapter.</Description>
-    </Excluded>
-    <Excluded>
-        <Name>test-https-agent.js</Name>
         <Adapter>netty</Adapter>
         <Description>Some sort of SSL problem with the Netty adapter.</Description>
     </Excluded>
@@ -531,11 +516,6 @@
     </Excluded>
     <Excluded>
         <Name>test-http-url.parse-https.request.js</Name>
-        <Adapter>netty</Adapter>
-        <Description>Some sort of SSL problem with the Netty adapter.</Description>
-    </Excluded>
-    <Excluded>
-        <Name>test-https-drain.js</Name>
         <Adapter>netty</Adapter>
         <Description>Some sort of SSL problem with the Netty adapter.</Description>
     </Excluded>
@@ -586,26 +566,6 @@
     </Excluded>
     <Excluded>
         <Name>test-http-mutable-headers.js</Name>
-        <Adapter>netty</Adapter>
-        <Description>Doesn't support that kind of notification</Description>
-    </Excluded>
-    <Excluded>
-        <Name>test-http-1.0.js</Name>
-        <Adapter>netty</Adapter>
-        <Description>Doesn't support that kind of notification</Description>
-    </Excluded>
-    <Excluded>
-        <Name>test-https-socket-options.js</Name>
-        <Adapter>netty</Adapter>
-        <Description>Doesn't support that kind of notification</Description>
-    </Excluded>
-    <Excluded>
-        <Name>test-https-client-reject.js</Name>
-        <Adapter>netty</Adapter>
-        <Description>Doesn't support that kind of notification</Description>
-    </Excluded>
-    <Excluded>
-        <Name>test-https-simple.js</Name>
         <Adapter>netty</Adapter>
         <Description>Doesn't support that kind of notification</Description>
     </Excluded>
@@ -667,6 +627,5 @@
     </Excluded>
     <Excluded>
         <Name>test-https-connecting-to-http.js</Name>
-        <Description>Some sort of SSL problem with the Netty adapter.</Description>
     </Excluded>
 </ExcludedTests>

@@ -28,6 +28,7 @@ import io.netty.handler.codec.http.HttpVersion;
 import org.mozilla.javascript.Scriptable;
 
 import java.net.Inet6Address;
+import java.net.InetSocketAddress;
 import java.nio.ByteBuffer;
 import java.util.Collection;
 import java.util.List;
@@ -165,28 +166,41 @@ public abstract class NettyHttpMessage
         return (msg.getProtocolVersion().compareTo(HttpVersion.HTTP_1_1) < 0);
     }
 
+    private InetSocketAddress localAddress() {
+        return (channel == null ? null : channel.localAddress());
+    }
+
     @Override
     public String getLocalAddress() {
-        return channel.localAddress().getAddress().getHostAddress();
+        InetSocketAddress addr = localAddress();
+        return (addr == null ? null : addr.getAddress().getHostAddress());
     }
 
     @Override
     public int getLocalPort() {
-        return channel.localAddress().getPort();
+        InetSocketAddress addr = localAddress();
+        return (addr == null ? 0 : addr.getPort());
     }
 
     @Override
     public boolean isLocalIPv6() {
-        return (channel.localAddress().getAddress() instanceof Inet6Address);
+        InetSocketAddress addr = localAddress();
+        return ((addr != null) && (addr.getAddress() instanceof Inet6Address));
+    }
+
+    private InetSocketAddress remoteAddress() {
+        return (channel == null ? null : channel.remoteAddress());
     }
 
     @Override
     public String getRemoteAddress() {
-        return channel.remoteAddress().getAddress().getHostAddress();
+        InetSocketAddress addr = remoteAddress();
+        return (addr == null ? null : addr.getAddress().getHostAddress());
     }
 
     @Override
     public int getRemotePort() {
-        return channel.remoteAddress().getPort();
+        InetSocketAddress addr = remoteAddress();
+        return (addr == null ? 0 : addr.getPort());
     }
 }

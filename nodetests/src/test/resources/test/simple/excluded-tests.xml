@@ -595,10 +595,6 @@
         <Description>Some sort of timing related failures.</Description>
     </Excluded>
     <Excluded>
-        <Name>test-tls-server-verify.js</Name>
-        <Description>Some sort of timing related failures.</Description>
-    </Excluded>
-    <Excluded>
         <Name>test-exec-max-buffer.js</Name>
         <Description>Not sure</Description>
     </Excluded>

@@ -49,9 +49,9 @@ public class NodeEnvironment
     public static final long POOL_TIMEOUT_SECS = 60L;
 
     public static final int DEFAULT_JS_VERSION = Context.VERSION_1_8;
-    // Level 1 and level 9 are really the same. Level 1 calls to pre-compile the JS code into bytecode.
-    public static final int DEFAULT_OPT_LEVEL = 1;
-    public static final boolean DEFAULT_SEAL_ROOT = true;
+    // Level 1 and up compiles to byte code -- we always want that.
+    // Level 9 adds additional integer optimizations.
+    public static final int DEFAULT_OPT_LEVEL = 9;
 
     private boolean             initialized;
     private final Object        initializationLock = new Object();
@@ -64,7 +64,6 @@ public class NodeEnvironment
     private long                scriptTimeLimit;
 
     private int                 optLevel = DEFAULT_OPT_LEVEL;
-    private boolean             sealRoot = DEFAULT_SEAL_ROOT;
 
     /**
      * Create a new NodeEnvironment with all the defaults.
@@ -149,7 +148,7 @@ public class NodeEnvironment
     @Deprecated
     public boolean isSealRoot()
     {
-        return sealRoot;
+        return false;
     }
 
     /**
@@ -159,7 +158,6 @@ public class NodeEnvironment
     @Deprecated
     public NodeEnvironment setSealRoot(boolean sealRoot)
     {
-        this.sealRoot = sealRoot;
         return this;
     }
 

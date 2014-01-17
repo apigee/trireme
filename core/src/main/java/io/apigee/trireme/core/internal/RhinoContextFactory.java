@@ -26,6 +26,7 @@ import org.mozilla.javascript.ClassShutter;
 import org.mozilla.javascript.Context;
 import org.mozilla.javascript.ContextFactory;
 import org.mozilla.javascript.JavaScriptException;
+import org.mozilla.javascript.RhinoException;
 
 import java.util.HashSet;
 
@@ -66,6 +67,20 @@ public class RhinoContextFactory
 
         if (System.currentTimeMillis() > (Long)timeoutObj) {
             throw new JavaScriptException("Script timed out");
+        }
+    }
+
+    /**
+     * Override various default behaviors of Rhino.
+     */
+    @Override
+    protected boolean hasFeature(Context cx, int i)
+    {
+        switch (i) {
+        case Context.FEATURE_LOCATION_INFORMATION_IN_ERROR:
+            return true;
+        default:
+            return super.hasFeature(cx, i);
         }
     }
 

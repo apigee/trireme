@@ -51,8 +51,9 @@
           <codePrefix>(function (exports, require, module, __filename, __dirname) { </codePrefix>
           <codePostfix>});</codePostfix>
           <generateSource>false</generateSource>
-          <optimizationLevel>1</optimizationLevel>
+          <optimizationLevel>9</optimizationLevel>
           <debugInfo>true</debugInfo>
+          <generateObserverCount>false</generateObserverCount>
         </configuration>
         <executions>
           <execution>

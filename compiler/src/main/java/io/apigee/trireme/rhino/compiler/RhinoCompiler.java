@@ -75,6 +75,9 @@ public class RhinoCompiler
     @Parameter
     private boolean debugInfo;
 
+    @Parameter
+    private boolean generateObserverCount;
+
     private CompilerEnvirons createEnvironment()
     {
         // Since this is only used in our own project, we hard-code these. A "real" plugin would
@@ -86,7 +89,7 @@ public class RhinoCompiler
         env.setGeneratingSource(generateSource);
         env.setRecordingComments(false);
         env.setRecoverFromErrors(false);
-        env.setGenerateObserverCount(true);
+        env.setGenerateObserverCount(generateObserverCount);
         return env;
     }
 

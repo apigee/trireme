@@ -601,6 +601,18 @@
     <Excluded>
         <Name>test-net-bind-twice.js</Name>
     </Excluded>
+    <Excluded>
+        <Name>test-tls-fast-writing.js</Name>
+    </Excluded>
+    <Excluded>
+        <Name>test-tls-stream2-readable-empty-buffer-no-eof.js</Name>
+    </Excluded>
+    <Excluded>
+        <Name>test-http-client-timeout-agent.js</Name>
+    </Excluded>
+    <Excluded>
+        <Name>test-http-1.0.js</Name>
+    </Excluded>
 
     <!--
          JUST BROKEN
@@ -623,5 +635,11 @@
     </Excluded>
     <Excluded>
         <Name>test-https-connecting-to-http.js</Name>
+    </Excluded>
+    <Excluded>
+        <Name>test-tls-server-verify.js</Name>
+    </Excluded>
+    <Excluded>
+        <Name>test-fs-error-messages.js</Name>
     </Excluded>
 </ExcludedTests>

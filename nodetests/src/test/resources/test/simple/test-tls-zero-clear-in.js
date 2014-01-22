@@ -38,7 +38,8 @@ var errorEmitted = false;
 var server = tls.createServer({
   cert: cert,
   key: key
-}, onConnect).listen(common.PORT, function() {
+}, onConnect);
+server.listen(common.PORT, function() {
   var conn = tls.connect({
     cert: cert,
     key: key,

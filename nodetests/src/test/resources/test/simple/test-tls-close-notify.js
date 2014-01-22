@@ -24,51 +24,35 @@ if (!process.versions.openssl) {
   process.exit(0);
 }
 
-var common = require('../common');
 var assert = require('assert');
 var fs = require('fs');
+var net = require('net');
 var tls = require('tls');
-var path = require('path');
 
-var cert = fs.readFileSync(path.join(common.fixturesDir, 'test_cert.pem'));
-var key = fs.readFileSync(path.join(common.fixturesDir, 'test_key.pem'));
+var common = require('../common');
 
-var errorEmitted = false;
+var ended = 0;
 
 var server = tls.createServer({
-  cert: cert,
-  key: key
-}, onConnect).listen(common.PORT, function() {
-  var conn = tls.connect({
-    cert: cert,
-    key: key,
-    rejectUnauthorized: false,
-    port: common.PORT
+  key: fs.readFileSync(common.fixturesDir + '/keys/agent1-key.pem'),
+  cert: fs.readFileSync(common.fixturesDir + '/keys/agent1-cert.pem')
+}, function(c) {
+  // Send close-notify without shutting down TCP socket
+  if (c.pair.ssl.shutdown() !== 1)
+    c.pair.ssl.shutdown();
+}).listen(common.PORT, function() {
+  var c = tls.connect(common.PORT, {
+    rejectUnauthorized: false
   }, function() {
-    setTimeout(function() {
-      conn.destroy();
-    }, 20);
-  });
-
-  // SSL_write() call's return value, when called 0 bytes, should not be
-  // treated as error.
-  conn.end('');
-
-  conn.on('error', function(err) {
-    console.log(err);
-    errorEmitted = true;
+    // Ensure that we receive 'end' event anyway
+    c.on('end', function() {
+      ended++;
+      c.destroy();
+      server.close();
+    });
   });
 });
 
-function onConnect(c) {
-  // Nop
-  setTimeout(function() {
-    c.destroy();
-    server.close();
-  }, 20);
-}
-
-
 process.on('exit', function() {
-  assert.ok(!errorEmitted);
+  assert.equal(ended, 1);
 });

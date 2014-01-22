@@ -24,51 +24,52 @@ if (!process.versions.openssl) {
   process.exit(0);
 }
 
+// disable strict server certificate validation by the client
+process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
+
 var common = require('../common');
 var assert = require('assert');
-var fs = require('fs');
+var https = require('https');
 var tls = require('tls');
-var path = require('path');
+var fs = require('fs');
 
-var cert = fs.readFileSync(path.join(common.fixturesDir, 'test_cert.pem'));
-var key = fs.readFileSync(path.join(common.fixturesDir, 'test_key.pem'));
+var seen_req = false;
 
-var errorEmitted = false;
+var options = {
+  key: fs.readFileSync(common.fixturesDir + '/keys/agent1-key.pem'),
+  cert: fs.readFileSync(common.fixturesDir + '/keys/agent1-cert.pem')
+};
 
-var server = tls.createServer({
-  cert: cert,
-  key: key
-}, onConnect).listen(common.PORT, function() {
-  var conn = tls.connect({
-    cert: cert,
-    key: key,
-    rejectUnauthorized: false,
-    port: common.PORT
-  }, function() {
-    setTimeout(function() {
-      conn.destroy();
-    }, 20);
+// Force splitting incoming data
+tls.SLAB_BUFFER_SIZE = 1;
+
+var server = https.createServer(options);
+server.on('upgrade', function(req, socket, upgrade) {
+  socket.on('data', function(data) {
+    throw new Error('Unexpected data: ' + data);
   });
-
-  // SSL_write() call's return value, when called 0 bytes, should not be
-  // treated as error.
-  conn.end('');
-
-  conn.on('error', function(err) {
-    console.log(err);
-    errorEmitted = true;
-  });
+  socket.end('HTTP/1.1 200 Ok\r\n\r\n');
+  seen_req = true;
 });
 
-function onConnect(c) {
-  // Nop
-  setTimeout(function() {
-    c.destroy();
+server.listen(common.PORT, function() {
+  var req = https.request({
+    host: '127.0.0.1',
+    port: common.PORT,
+    agent: false,
+    headers: {
+      Connection: 'Upgrade',
+      Upgrade: 'Websocket'
+    }
+  }, function() {
+    req.socket.destroy();
     server.close();
-  }, 20);
-}
+  });
 
+  req.end();
+});
 
 process.on('exit', function() {
-  assert.ok(!errorEmitted);
+  assert(seen_req);
+  console.log('ok');
 });

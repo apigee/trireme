@@ -45,7 +45,7 @@ exports.EventEmitter = EventEmitter;
 // that to be increased. Set to zero for unlimited.
 var defaultMaxListeners = 10;
 EventEmitter.prototype.setMaxListeners = function(n) {
-  if (typeof n !== 'number' || n < 0)
+  if (typeof n !== 'number' || n < 0 || isNaN(n))
     throw TypeError('n must be a positive number');
   this._maxListeners = n;
 };
@@ -170,9 +170,15 @@ EventEmitter.prototype.once = function(type, listener) {
   if (typeof listener !== 'function')
     throw TypeError('listener must be a function');
 
+  var fired = false;
+
   function g() {
     this.removeListener(type, g);
-    listener.apply(this, arguments);
+
+    if (!fired) {
+      fired = true;
+      listener.apply(this, arguments);
+    }
   }
 
   g.listener = listener;
@@ -257,7 +263,7 @@ EventEmitter.prototype.removeAllListeners = function(type) {
 
   if (typeof listeners === 'function') {
     this.removeListener(type, listeners);
-  } else {
+  } else if (Array.isArray(listeners)) {
     // LIFO order
     while (listeners.length)
       this.removeListener(type, listeners[listeners.length - 1]);

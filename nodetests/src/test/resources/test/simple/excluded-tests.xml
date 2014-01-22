@@ -199,6 +199,10 @@
         <Description>Noderunner version supports only Java ciphers and other stuff for now.</Description>
     </Excluded>
     <Excluded>
+        <Name>test-crypto-stream.js</Name>
+        <Description>Noderunner version does not return exact same error messages.</Description>
+    </Excluded>
+    <Excluded>
         <Name>test-dh.*\.js</Name>
         <Description>No DH implemented in crypto yet.</Description>
     </Excluded>
@@ -333,6 +337,14 @@
         <Name>test-https-no-reader.js</Name>
         <Description>Relies on internal readableState</Description>
     </Excluded>
+    <Excluded>
+        <Name>test-tls-close-notify.js</Name>
+        <Description>Assumes that "pair.ssl" is implemented, which it isn't.</Description>
+    </Excluded>
+    <Excluded>
+        <Name>test-https-req-split.js</Name>
+        <Description>Assumes that we can set SLAB_BUFFER_SIZE.</Description>
+    </Excluded>
 
     <!-- MISCELLANEOUS
          Tests that just don't work in Noderunner for other good reasons
@@ -457,6 +469,10 @@
     <Excluded>
         <Name>test-crypto-verify-failure.js</Name>
         <Description>Possibly a domain problem, not working</Description>
+    </Excluded>
+    <Excluded>
+        <Name>test-tls-interleave.js</Name>
+        <Description>Assumes that data will arrive in the same chunks sent by the server.</Description>
     </Excluded>
 
     <!-- NETTY ADAPTER

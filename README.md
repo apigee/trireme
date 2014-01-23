@@ -44,7 +44,7 @@ although it may not necessarily pass all the node.js tests.
   <tr><td>fs</td><td>Complete</td><td>node.js + Trireme</td></tr>
   <tr><td>globals</td><td>Complete</td><td>node.js + Trireme</td></tr>
   <tr><td>http</td><td>Complete</td><td>node.js + Trireme</td></tr>
-  <tr><td>https</td><td>Mostly Complete - See Notes</td><td>Trireme</td></tr>
+  <tr><td>https</td><td>Complete but See Notes</td><td>Trireme</td></tr>
   <tr><td>module</td><td>Complete</td><td>node.js</td></tr>
   <tr><td>net</td><td>Complete</td><td>node.js + Trireme</td></tr>
   <tr><td>os</td><td>Partial</td><td>Trireme</td></tr>
@@ -52,12 +52,12 @@ although it may not necessarily pass all the node.js tests.
   <tr><td>process</td><td>Complete</td><td>Trireme</td></tr>
   <tr><td>punycode</td><td>Complete</td><td>node.js</td></tr>
   <tr><td>querystring</td><td>Complete</td><td>node.js</td></tr>
-  <tr><td>readline</td><td>Partial</td><td>node.js + Trireme</td></tr>
-  <tr><td>repl</td><td>Not Implemented</td><td>node.js + Trireme</td></tr>
+  <tr><td>readline</td><td>Partial</td><td>node.js</td></tr>
+  <tr><td>repl</td><td>Not Implemented</td><td>node.js</td></tr>
   <tr><td>stream</td><td>Complete</td><td>node.js</td></tr>
-  <tr><td>string_decoder</td><td>Complete</td><td>node.js</td></tr>
+  <tr><td>string_decoder</td><td>Complete</td><td>Trireme</td></tr>
   <tr><td>timers</td><td>Complete</td><td>node.js + Trireme</td></tr>
-  <tr><td>tls</td><td>Mostly Complete - See Notes</td><td>Trireme</td></tr>
+  <tr><td>tls</td><td>Complete but See Notes</td><td>Trireme</td></tr>
   <tr><td>tty</td><td>Not Implemented</td><td>NA</td></tr>
   <tr><td>url</td><td>Complete</td><td>node.js</td></tr>
   <tr><td>util</td><td>Complete</td><td>node.js</td></tr>
@@ -77,7 +77,7 @@ in later versions of JavaScript, such as the "trimLeft" method of the "String" o
 
 Also, newer features of V8, particularly the primitive array types, are not supported in Rhino.
 
-Most of the time the differences between V8 and Rhino do not affect Node.js code, but occassionally
+Most of the time the differences between V8 and Rhino do not affect Node.js code, but occasionally
 there is a problem. We would love some help from the Rhino community to start to address these differences.
 
 ### TLS/SSL and HTTPS
@@ -86,7 +86,7 @@ Trireme uses Java's standard "SSLEngine" for TLS/SSL and HTTPS support, whereas 
 OpenSSL. The TLS implementation in Node.js is a fairly thin layer on top of OpenSSL and we chose not to try
 and replicate this in Java.
 
-SSLEngine and OpenSSl are not exactly the same. There are a few differences:
+SSLEngine and OpenSSL are not exactly the same. There are a few differences:
 
 1) Most notably, especially with Java 7, SSLEngine supports
 a different set of cipher suites, particularly the various elliptical curve ciphers. There are ciphers in common
@@ -113,11 +113,11 @@ as described below.
 5) "securepair" isn't implemented yet -- the vast majority of TLS code we have seen just uses the regular
 "cleartext stream." If you really want to see "securepair," it's probably not too difficult.
 
-In order to support TLS and HTTPS using PEM files, the "trireme-crypto" module and its depdendencies
+In order to support TLS and HTTPS using PEM files, the "trireme-crypto" module and its dependencies
 (Bouncy Castle) must be in the class path. If they are not present, then TLS is still available, but it will
 only work with Java keystore files (see below) or without using any keys at all. Trireme checks for this
 dependency at runtime, so it is simply a matter of including it on the class path, since it will fail
-at runtime if the dependency is neded, and work otherwise.
+at runtime if the dependency is needed, and work otherwise.
 
 (For instance, Trireme can still execute a Node program that acts as an HTTPS client using only default
 certificates without requiring trireme-crypto. But if it needs to validate a particular CA certificate
@@ -130,7 +130,7 @@ There are three parameters that are relevant here:
 * truststore: The file name of a Java ".jks" keystore file containing trusted CA certificates
 * passphrase: The passphrase for the keystore and truststore
 
-But the corresponding Trireme script must be written like this, as it would be in any Node.js program. Howewver,
+The corresponding Trireme script may be written like this, as it would be in any Node.js program. However,
 if the "trireme-crypto" module is not present in the classpath, then this will raise an exception:
 
     var options = {
@@ -155,7 +155,7 @@ In addition, the following is also valid, and "trireme-crypto" will not be neede
 
 ### Crypto
 
-With the combination of the built-in crypto support in Java, plus Bouncy Castle, crypto support can be fairly
+With the combination of the built-in crypto support in Java, plus Bouncy Castle, crypto support is fairly
 complete.
 
 Like TLS, certain features (Sign/Verify in particular) only work if the "trireme-crypto" module and its
@@ -167,26 +167,21 @@ work the same way in Trireme as they do in standard Node.js:
 * Random bytes
 * Hash
 * Hmac
-* Sign / Verify (requires the "cryto" module because it handles PEM files)
+* Sign / Verify (requires the "crypto" module because it handles PEM files)
+* Cipher / Decipher (DES, Triple DES, and AES support)
 * PBKDF2 (however Java and OpenSSL appear to implement different algorithms, so some more work is required)
 
 The following features have not yet been implemented (although the underlying platform has all the support required
 to make it happen):
 
-* Cipher / Decipher
 * Diffie-Hellman
-
-In the particular case of "Cipher," Node.js uses a particular algorithm for "createCipher" based on a password
-with no salt that follows no known standard, and without the use of salt it is not terribly secure. Should
-we even implement this in Trireme, or strongly discourage its use? (There is also a variant that can take
-a key generated by PBKDF2 which would be a lot more secure.)
 
 Finally, the "Context" feature of the Crypto module is not implemented. This module is really used inside Node.js
 to implement TLS, and Trireme does TLS a different way, as explained above.
 
 ### Child Process
 
-Child processes are supported. Arbitary commands may be executed, just like in standard Node.js.
+Child processes are supported. Arbitrary commands may be executed, just like in standard Node.js.
 
 When a Trireme script uses "fork" to spawn a new instance of itself, the script runs as a separate
 thread inside the same JVM, rather than as a separate OS process as it works in regular Node.js.
@@ -194,6 +189,9 @@ thread inside the same JVM, rather than as a separate OS process as it works in 
 Some Node.js scripts rely on the ability to spawn a process called "./node" in order to fork itself. Trireme
 looks for this and tries to use it to spawn a new thread but it does not work in all cases. It does seem to
 be mostly the Node.js test suite itself that does this.
+
+Child process functionality to "pipe" commands back and forth between parent and child has not yet been
+implemented.
 
 ### Cluster
 
@@ -244,8 +242,9 @@ This is the de facto standard logging API for Java.
 
 ### Java SE 6
 
-Java is a great platform with a lot of support for a lot of nice things. We're going to try and do everything
-we can without any additional stuff.
+Trireme runs on Java 6 and up. If Java 7 is available, it will use the new filesystem APIs, which allow a much wider
+range of filesystem features, like links and permissions that work the same way as regular Node. It also uses
+the asynchronous I/O interfaces for file I/O which are theoretically faster.
 
 ## Design
 
@@ -294,7 +293,7 @@ http is delegated to the adapter. (The client side of http continues to work the
 The sandbox is an interface that a server may implement that allows control over what scripts are
 allowed to do. It allows a script to accept or reject requests to access the filesystem, access
 the network, and execute programs. Using the sandbox, it is possible to run Node.js scripts in a
-totally isolated environment in a muti-tenant server.
+totally isolated environment in a multi-tenant server.
 
 ## Running Trireme
 

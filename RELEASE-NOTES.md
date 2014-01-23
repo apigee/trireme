@@ -1,4 +1,4 @@
-# 0.6.9 11-Jan-2013:
+# 0.6.9 22-Jan-2013:
 
 * [Issue 35](https://github.com/apigee/trireme/issues/35) Add socket.localAddress, socket.remoteAddress, and socket.address() to HTTP requests
 * [Issue 33](https://github.com/apigee/trireme/issues/33) Add "attachment" object to HTTP requests passed through HTTP adapter that is attached to the "request" object in JS.

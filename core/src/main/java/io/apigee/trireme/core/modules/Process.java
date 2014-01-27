@@ -503,18 +503,21 @@ public class Process
         public static void nextTick(Context cx, Scriptable thisObj, Object[] args, Function func)
         {
             Function f = functionArg(args, 0, true);
-            ProcessImpl proc = (ProcessImpl)thisObj;
+
+            // We can't assume that "this" is set here -- not everyone sets it.
+            ScriptRunner runner = (ScriptRunner)cx.getThreadLocal(ScriptRunner.RUNNER);
+
             Scriptable domain = null;
-            if (proc.usingDomains) {
-                domain = ensureValid(proc.domain);
+            if (runner.getProcess().usingDomains) {
+                domain = ensureValid(runner.getProcess().domain);
             }
 
-            int depth = proc.runner.getCurrentTickDepth() + 1;
-            if (depth >= proc.maxTickDepth) {
-                proc.maxTickWarn(cx);
+            int depth = runner.getCurrentTickDepth() + 1;
+            if (depth >= runner.getProcess().maxTickDepth) {
+                runner.getProcess().maxTickWarn(cx);
             }
 
-            proc.runner.enqueueCallback(f, f, thisObj, domain, new Object[0], depth);
+            runner.enqueueCallback(f, f, thisObj, domain, new Object[0], depth);
         }
 
         private void maxTickWarn(Context cx)

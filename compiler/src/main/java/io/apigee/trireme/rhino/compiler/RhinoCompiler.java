@@ -60,6 +60,12 @@ public class RhinoCompiler
     @Parameter(defaultValue = "${project.build.outputDirectory}")
     private String targetPath = "${project.build.outputDirectory}";
 
+    /**
+     * The pattern that matches files underneath the target (which is normally src/main/javascript).
+     */
+    @Parameter(defaultValue = "**/*.js")
+    private String pattern = "**/*.js";
+
     @Parameter
     private String codePrefix;
 
@@ -106,7 +112,7 @@ public class RhinoCompiler
 
             DirectoryScanner scanner = new DirectoryScanner();
             scanner.setBasedir(baseDir);
-            scanner.setIncludes(new String[]{"**/*.js"});
+            scanner.setIncludes(new String[]{pattern});
             scanner.scan();
 
             for (String fn : scanner.getIncludedFiles()) {

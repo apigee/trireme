@@ -90,7 +90,7 @@ public class Process
     }
 
     public static class ProcessImpl
-        extends EventEmitter.EventEmitterImpl
+        extends ScriptableObject
     {
         protected static final String CLASS_NAME = "_processClass";
 
@@ -105,8 +105,13 @@ public class Process
         private long startTime;
         private ScriptRunner runner;
         private Object mainModule;
+        private Function submitTick;
+        private boolean needTickCallback;
+        private Function tickSpinnerCallback;
+        private Function tickCallback;
         private boolean needImmediateCallback;
         private Function immediateCallback;
+        private Function fatalException;
         private Object domain;
         private boolean usingDomains;
         private boolean exiting;
@@ -115,6 +120,8 @@ public class Process
         private boolean throwDeprecation;
         private boolean traceDeprecation;
         private int maxTickDepth = DEFAULT_TICK_DEPTH;
+        private String eval;
+        private Scriptable tickInfoBox;
 
         @JSConstructor
         @SuppressWarnings("unused")
@@ -122,6 +129,7 @@ public class Process
         {
             ProcessImpl ret = new ProcessImpl();
             ret.startTime = System.currentTimeMillis();
+            ret.tickInfoBox = cx.newArray(ret, 3);
             return ret;
         }
 
@@ -137,6 +145,24 @@ public class Process
 
             Scriptable eventModule = (Scriptable)runner.require("events", cx);
             this.eventEmitter = ScriptableObject.getProperty(eventModule, "EventEmitter");
+        }
+
+        @JSGetter("_eval")
+        @SuppressWarnings("unused")
+        public String getEval() {
+            return eval;
+        }
+
+        @JSSetter("_eval")
+        @SuppressWarnings("unused")
+        public void setEval(String eval) {
+            this.eval = eval;
+        }
+
+        @JSGetter("_tickInfoBox")
+        @SuppressWarnings("unused")
+        public Object getTickInfoBox() {
+            return tickInfoBox;
         }
 
         @JSGetter("mainModule")
@@ -175,8 +201,8 @@ public class Process
                         log.trace("Creating new instance {} of internal module {}",
                                   System.identityHashCode(mod), name);
                     }
-                    // Special handling of "buffer" which is available in more than one context
-                    if ((mod == null) && Buffer.MODULE_NAME.equals(name)) {
+                    // Special handling of "buffer" and "native_module" which is available in more than one context
+                    if ((mod == null) && (Buffer.MODULE_NAME.equals(name) || NativeModule.MODULE_NAME.equals(name))) {
                         return runner.require(name, cx);
                     }
 
@@ -199,7 +225,7 @@ public class Process
             return mod;
         }
 
-        @JSGetter("stdout")
+        @JSGetter("_stdoutStream")
         @SuppressWarnings("unused")
         public Object getStdout()
         {
@@ -210,9 +236,6 @@ public class Process
                     NativeOutputStreamAdapter.createNativeStream(cx,
                                                                  runner.getScriptScope(), runner,
                                                                  runner.getStdout(), true);
-
-                // node "legacy API" -- use POSIX file descriptor number
-                stdout.put("fd", stdout, 1);
             }
             return stdout;
         }
@@ -222,7 +245,7 @@ public class Process
             this.stdout = s;
         }
 
-        @JSGetter("stderr")
+        @JSGetter("_stderrStream")
         @SuppressWarnings("unused")
         public Object getStderr()
         {
@@ -233,9 +256,6 @@ public class Process
                     NativeOutputStreamAdapter.createNativeStream(cx,
                                                                  runner.getScriptScope(), runner,
                                                                  runner.getStderr(), true);
-
-                // node "legacy API" -- use POSIX file descriptor number
-                stderr.put("fd", stderr, 2);
             }
             return stderr;
         }
@@ -245,7 +265,7 @@ public class Process
             this.stderr = s;
         }
 
-        @JSGetter("stdin")
+        @JSGetter("_stdinStream")
         @SuppressWarnings("unused")
         public Object getStdin()
         {
@@ -256,9 +276,6 @@ public class Process
                     NativeInputStreamAdapter.createNativeStream(cx,
                                                                 runner.getScriptScope(), runner,
                                                                 runner.getStdin(), true);
-
-                // node "legacy API" -- use POSIX file descriptor number
-                stdin.put("fd", stdin, 0);
             }
             return stdin;
         }
@@ -340,7 +357,7 @@ public class Process
 
         @JSFunction
         @SuppressWarnings("unused")
-        public static void exit(Context cx, Scriptable thisObj, Object[] args, Function func)
+        public static void reallyExit(Context cx, Scriptable thisObj, Object[] args, Function func)
             throws NodeExitException
         {
             ProcessImpl self = (ProcessImpl)thisObj;
@@ -351,15 +368,6 @@ public class Process
                 self.exitStatus = new NodeExitException(NodeExitException.Reason.NORMAL, 0);
             }
             throw self.exitStatus;
-        }
-
-        @JSFunction
-        @SuppressWarnings("unused")
-        public static void reallyExit(Context cx, Scriptable thisObj, Object[] args, Function func)
-            throws NodeExitException
-        {
-            // In regular node this calls the "exit" system call but we are run inside a bigger context so no.
-            exit(cx, thisObj, args, func);
         }
 
         // TODO getgid
@@ -428,7 +436,7 @@ public class Process
 
         @JSFunction
         @SuppressWarnings("unused")
-        public static void kill(Context cx, Scriptable thisObj, Object[] args, Function func)
+        public static void _kill(Context cx, Scriptable thisObj, Object[] args, Function func)
         {
             int pid = intArg(args, 0);
             String signal = stringArg(args, 1, "TERM");
@@ -489,15 +497,7 @@ public class Process
             return mem;
         }
 
-        @JSFunction
-        @SuppressWarnings("unused")
-        public static void _usingDomains(Context cx, Scriptable thisObj, Object[] args, Function func)
-        {
-            ProcessImpl self = (ProcessImpl)thisObj;
-            self.runner.usingDomains(cx);
-            self.usingDomains = true;
-        }
-
+        /*
         @JSFunction
         @SuppressWarnings("unused")
         public static void nextTick(Context cx, Scriptable thisObj, Object[] args, Function func)
@@ -519,6 +519,7 @@ public class Process
 
             runner.enqueueCallback(f, f, thisObj, domain, new Object[0], depth);
         }
+        */
 
         private void maxTickWarn(Context cx)
         {
@@ -536,6 +537,68 @@ public class Process
             }
         }
 
+        @JSSetter("_submitTick")
+        @SuppressWarnings("unused")
+        public void setSubmitTick(Function submit) {
+            this.submitTick = submit;
+        }
+
+        @JSGetter("_submitTick")
+        public Function getSubmitTick() {
+            return submitTick;
+        }
+
+        /**
+         * trireme.js (aka node.js) calls this whenever nextTick is called and it thinks that we
+         * don't know that it needs us to do stuff.
+         */
+        @JSFunction
+        @SuppressWarnings("unused")
+        public static void _needTickCallback(Context cx, Scriptable thisObj, Object[] args, Function func)
+        {
+            ProcessImpl self = (ProcessImpl)thisObj;
+            self.needTickCallback = true;
+        }
+
+        /**
+         * We call this from the main loop if we know that _needTickCallback was called.
+         */
+        public void callTickFromSpinner(Context cx)
+        {
+            // Reset this first because it's possible that we'll queue ticks while queuing ticks.
+            needTickCallback = false;
+            tickSpinnerCallback.call(cx, tickSpinnerCallback, this, null);
+        }
+
+        public boolean isNeedTickCallback() {
+            return needTickCallback;
+        }
+
+        @JSSetter("_tickCallback")
+        @SuppressWarnings("unused")
+        public void setTickCallback(Function f) {
+            this.tickCallback = f;
+        }
+
+        @JSGetter("_tickCallback")
+        @SuppressWarnings("unused")
+        public Function getTickCallback() {
+            return tickCallback;
+        }
+
+        @JSSetter("_tickFromSpinner")
+        @SuppressWarnings("unused")
+        public void setTickSpinnerCallback(Function f) {
+            this.tickSpinnerCallback = f;
+        }
+
+        @JSGetter("_tickFromSpinner")
+        @SuppressWarnings("unused")
+        public Function getTickSpinnerCallback() {
+            return tickSpinnerCallback;
+        }
+
+        /*
         @JSFunction
         @SuppressWarnings("unused")
         public static void _tickCallback(Context cx, Scriptable thisObj, Object[] args, Function func)
@@ -543,7 +606,9 @@ public class Process
             ProcessImpl proc = (ProcessImpl)thisObj;
             proc.runner.executeTicks(cx);
         }
+        */
 
+        /*
         @JSGetter("maxTickDepth")
         @SuppressWarnings("unused")
         public int getMaxTickDepth()
@@ -561,6 +626,7 @@ public class Process
                 maxTickDepth = (int)depth;
             }
         }
+        */
 
         @JSSetter("_needImmediateCallback")
         @SuppressWarnings("unused")
@@ -590,6 +656,10 @@ public class Process
             return immediateCallback;
         }
 
+        public boolean isCallbacksRequired() {
+            return needImmediateCallback || needTickCallback;
+        }
+
         public void callImmediateTasks(Context cx)
         {
             if (log.isTraceEnabled()) {
@@ -599,6 +669,18 @@ public class Process
             if (log.isTraceEnabled()) {
                 log.trace("Immediate tasks done. needImmediateCallback = {}", needImmediateCallback);
             }
+        }
+
+        @JSGetter("_fatalException")
+        @SuppressWarnings("unused")
+        public Function getFatalException() {
+            return fatalException;
+        }
+
+        @JSSetter("_fatalException")
+        @SuppressWarnings("unused")
+        public void setFatalException(Function f) {
+            this.fatalException = f;
         }
 
         @JSFunction

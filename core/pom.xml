@@ -46,18 +46,47 @@
         <groupId>io.apigee.trireme</groupId>
         <artifactId>rhino-compiler</artifactId>
         <version>${project.version}</version>
-        <configuration>
-          <!-- When precompiling, wrap native module code in a function as the Node code expects. -->
-          <codePrefix>(function (exports, require, module, __filename, __dirname) { </codePrefix>
-          <codePostfix>});</codePostfix>
-          <generateSource>false</generateSource>
-          <optimizationLevel>9</optimizationLevel>
-          <debugInfo>true</debugInfo>
-          <generateObserverCount>false</generateObserverCount>
-        </configuration>
         <executions>
           <execution>
+            <!-- Scripts that we copied straight from node.js. Loaded as modules so we must wrap them as a function -->
+            <id>compile-fromnode</id>
+            <configuration>
+              <optimizationLevel>9</optimizationLevel>
+              <debugInfo>true</debugInfo>
+              <pattern>io/apigee/trireme/fromnode/*.js</pattern>
+              <codePrefix>(function (exports, require, module, __filename, __dirname) { </codePrefix>
+              <codePostfix>});</codePostfix>
+            </configuration>
             <phase>compile</phase>
+            <goals>
+              <goal>compile</goal>
+            </goals>
+          </execution>
+          <execution>
+            <!-- Scripts that we adapted from node.js. Must also be wrapped as a function. -->
+            <id>compile-fromtrireme</id>
+            <configuration>
+              <optimizationLevel>9</optimizationLevel>
+              <debugInfo>true</debugInfo>
+              <pattern>io/apigee/trireme/scripts/*.js</pattern>
+              <!-- When precompiling, wrap native module code in a function as the Node code expects. -->
+              <codePrefix>(function (exports, require, module, __filename, __dirname) { </codePrefix>
+              <codePostfix>});</codePostfix>
+            </configuration>
+            <phase>compile</phase>
+            <goals>
+              <goal>compile</goal>
+            </goals>
+          </execution>
+          <execution>
+            <!-- The main script, adapted from "node.js". Called directly. -->
+            <id>compile-main</id>
+            <configuration>
+              <optimizationLevel>9</optimizationLevel>
+              <debugInfo>true</debugInfo>
+              <pattern>io/apigee/trireme/mainscripts/*.js</pattern>
+            </configuration>
+            <phase>generate-sources</phase>
             <goals>
               <goal>compile</goal>
             </goals>

@@ -44,6 +44,7 @@ import org.mozilla.javascript.EvaluatorException;
 import org.mozilla.javascript.Function;
 import org.mozilla.javascript.JavaScriptException;
 import org.mozilla.javascript.RhinoException;
+import org.mozilla.javascript.Script;
 import org.mozilla.javascript.Scriptable;
 import org.mozilla.javascript.ScriptableObject;
 import org.slf4j.Logger;
@@ -411,16 +412,6 @@ public class ScriptRunner
     }
 
     /**
-     * Switch up the methods in our "support" module to indicate that domains are being used.
-     */
-    public void usingDomains(Context cx)
-    {
-        log.debug("Switching to using domains");
-        Function usingFunc = getSupportFunction("usingDomains");
-        usingFunc.call(cx, usingFunc, process, null);
-    }
-
-    /**
      * This method puts the task directly on the timer queue, which is unsynchronized. If it is ever used
      * outside the context of the "TimerWrap" module then we need to check for synchronization, add an
      * assertion check, or synchronize the timer queue.
@@ -563,6 +554,30 @@ public class ScriptRunner
             }
 
             if (scriptFile == null) {
+                // If the script was passed as a string, pretend that "-e" was used to "eval" it.
+                process.setEval(script);
+                setArgv(null);
+            } else {
+                // Otherwise, assume that the script was the second argument to "argv".
+                setArgv(scriptFileName);
+            }
+
+            // Run "trireme.js," which is our equivalent of "node.js". It returns a function that takes
+            // "process". When done, we may have ticks to execute.
+            Script mainScript = new io.apigee.trireme.mainscripts.trireme();
+            Function main = (Function)mainScript.exec(cx, scope);
+
+            boolean timing = startTiming(cx);
+            try {
+                main.call(cx, scope, scope, new Object[] { process });
+            } finally {
+                if (timing) {
+                    endTiming(cx);
+                }
+            }
+
+            /*
+            if (scriptFile == null) {
                 Scriptable bootstrap = (Scriptable)require("bootstrap", cx);
                 Function eval = (Function)bootstrap.get("evalScript", bootstrap);
                 enqueueCallback(eval, mainModule, mainModule,
@@ -570,12 +585,10 @@ public class ScriptRunner
 
             } else {
                 // Again like the real node, delegate running the actual script to the module module.
-                /*
-                if (!scriptFile.isAbsolute() && !scriptPath.startsWith("./")) {
+                //if (!scriptFile.isAbsolute() && !scriptPath.startsWith("./")) {
                     // Add ./ before script path to un-confuse the module module if it's a local path
-                    scriptPath = new File("./", scriptPath).getPath();
-                }
-                */
+                //    scriptPath = new File("./", scriptPath).getPath();
+               // }
 
                 if (log.isDebugEnabled()) {
                     log.debug("Launching module.runMain({})", scriptFileName);
@@ -584,9 +597,13 @@ public class ScriptRunner
                 Function load = (Function)mainModule.get("runMain", mainModule);
                 enqueueCallback(load, mainModule, mainModule, null);
             }
+            */
 
             status = mainLoop(cx);
 
+        } catch (NodeExitException ne) {
+            // This exception is thrown by process.exit()
+            status = ne.getStatus();
         } catch (IOException ioe) {
             log.debug("I/O exception processing script: {}", ioe);
             status = new ScriptStatus(ioe);
@@ -596,6 +613,7 @@ public class ScriptRunner
         }
 
         log.debug("Script exiting with exit code {}", status.getExitCode());
+        /*
         if (!status.hasCause() && !process.isExiting()) {
             // Fire the exit callback, but only if we aren't exiting due to an unhandled exception.
             try {
@@ -610,6 +628,7 @@ public class ScriptRunner
                 status = new ScriptStatus(re);
             }
         }
+        */
 
         closeCloseables(cx);
 
@@ -618,11 +637,20 @@ public class ScriptRunner
 
     private void setArgv(String scriptName)
     {
-        String[] argv = new String[args == null ? 2 : args.length + 2];
-        argv[0] = Process.EXECUTABLE_NAME;
-        argv[1] = scriptName;
+        String[] argv;
+        if (scriptName == null) {
+            argv = new String[args == null ? 1 : args.length + 1];
+        } else {
+            argv = new String[args == null ? 2 : args.length + 2];
+        }
+
+        int p = 0;
+        argv[p++] = Process.EXECUTABLE_NAME;
+        if (scriptName != null) {
+            argv[p++] = scriptName;
+        }
         if (args != null) {
-            System.arraycopy(args, 0, argv, 2, args.length);
+            System.arraycopy(args, 0, argv, p, args.length);
         }
         process.setArgv(argv);
     }
@@ -632,14 +660,17 @@ public class ScriptRunner
     {
         // Exit if there's no work do to but only if we're not pinned by a module.
         // We might exit if there are events on the timer queue if they are not also pinned.
-        while (!tickFunctions.isEmpty() || (pinCount.get() > 0) || process.isNeedImmediateCallback()) {
+        while (!tickFunctions.isEmpty() || (pinCount.get() > 0) || process.isCallbacksRequired()) {
             try {
                 if ((future != null) && future.isCancelled()) {
                     return ScriptStatus.CANCELLED;
                 }
 
-                // Call tick functions scheduled by process.nextTick and also by Java code. Node.js docs for
-                // process.nextTick say that these things run before anything else in the event loop.
+                // Call tick functions scheduled by process.nextTick. Node.js docs for
+                // process.nextTick say that these things run before anything else in the event loop
+                executeNextTicks(cx);
+
+                // Call tick functions scheduled by Java code.
                 executeTicks(cx);
 
                 // If necessary, call into the timer module to fire all the tasks set up with "setImmediate."
@@ -650,7 +681,7 @@ public class ScriptRunner
                 // what is on the timer queue and if there are pending ticks or immediate tasks.
                 long now = System.currentTimeMillis();
                 long pollTimeout;
-                if (!tickFunctions.isEmpty() || process.isNeedImmediateCallback() || (pinCount.get() == 0)) {
+                if (!tickFunctions.isEmpty() || process.isCallbacksRequired() || (pinCount.get() == 0)) {
                     // Immediate work -- need to keep spinning
                     // Also keep spinning if we have no reason to keep the loop open
                     pollTimeout = 0L;
@@ -662,9 +693,11 @@ public class ScriptRunner
                 }
 
                 if (log.isTraceEnabled()) {
-                    log.trace("PollDelay = {}. tickFunctions = {} needImmediate = {} timerQueue = {} pinCount = {}",
+                    Scriptable ib = (Scriptable)process.getTickInfoBox();
+                    log.trace("PollDelay = {}. tickFunctions = {} needImmediate = {} needTick = {} timerQueue = {} pinCount = {} tick = {}, {}, {}",
                               pollTimeout, tickFunctions.size(), process.isNeedImmediateCallback(),
-                              timerQueue.size(), pinCount.get());
+                              process.isNeedTickCallback(), timerQueue.size(), pinCount.get(),
+                              ib.get(0, ib), ib.get(1, ib), ib.get(2, ib));
                 }
 
                 // Check for network I/O and also sleep if necessary.
@@ -721,7 +754,10 @@ public class ScriptRunner
         // Stop script timing before we run this, so that we don't end up timing out the script twice!
         endTiming(cx);
 
-        Function handleFatal = getSupportFunction("handleFatal");
+        Function handleFatal = process.getFatalException();
+        if (handleFatal == null) {
+            return false;
+        }
 
         if (log.isDebugEnabled()) {
             log.debug("Handling fatal exception {} domain = {}\n{}",
@@ -731,7 +767,7 @@ public class ScriptRunner
 
         Scriptable error = makeError(cx, re);
         boolean handled =
-            Context.toBoolean(handleFatal.call(cx, scope, null, new Object[] { error }));
+            Context.toBoolean(handleFatal.call(cx, scope, scope, new Object[] { error }));
         if (log.isDebugEnabled()) {
             log.debug("Handled = {}", handled);
         }
@@ -775,12 +811,41 @@ public class ScriptRunner
     }
 
     /**
+     * Execute everything set up by nextTick()
+     */
+    private void executeNextTicks(Context cx)
+        throws RhinoException
+    {
+        if (process.isNeedTickCallback()) {
+            if (log.isTraceEnabled()) {
+                log.trace("Executing ticks");
+            }
+            boolean timed = startTiming(cx);
+            try {
+                process.callTickFromSpinner(cx);
+            } catch (RhinoException re) {
+                boolean handled = handleScriptException(cx, re);
+                if (!handled) {
+                    throw re;
+                }
+            } finally {
+                if (timed) {
+                    endTiming(cx);
+                }
+            }
+        }
+    }
+
+    /**
      * Execute everything set up by setImmediate().
      */
     private void executeImmediateCallbacks(Context cx)
         throws RhinoException
     {
         if (process.isNeedImmediateCallback()) {
+            if (log.isTraceEnabled()) {
+                log.trace("Executing immediate tasks");
+            }
             boolean timed = startTiming(cx);
             try {
                 process.callImmediateTasks(cx);
@@ -875,6 +940,9 @@ public class ScriptRunner
             nativeModMod.setExports(nativeMod);
             cacheModule(NativeModule.MODULE_NAME, nativeModMod);
 
+            // The buffer module needs special handling because of the "charsWritten" variable
+            buffer = (Buffer.BufferModuleImpl)require("buffer", cx);
+
             // Next we need "process" which takes a bit more care
             process = (Process.ProcessImpl)require(Process.MODULE_NAME, cx);
             process.setMainModule(nativeMod);
@@ -888,6 +956,7 @@ public class ScriptRunner
                 process.setStderr(sandbox.getStderrStream());
             }
 
+            /*
             // Set up the global modules that are set up for all script evaluations
             scope.put("global", scope, scope);
             scope.put("GLOBAL", scope, scope);
@@ -906,9 +975,10 @@ public class ScriptRunner
             copyProp(timers, scope, "clearInterval");
             copyProp(timers, scope, "setImmediate");
             copyProp(timers, scope, "clearImmediate");
+            */
 
             // Set up metrics -- defining these lets us run internal Node projects
-            Scriptable metrics = (Scriptable)nativeMod.internalRequire("trireme_metrics", cx);
+            Scriptable metrics = nativeMod.internalRequire("trireme_metrics", cx);
             copyProp(metrics, scope, "DTRACE_NET_SERVER_CONNECTION");
             copyProp(metrics, scope, "DTRACE_NET_STREAM_END");
             copyProp(metrics, scope, "COUNTER_NET_SERVER_CONNECTION");
@@ -922,6 +992,7 @@ public class ScriptRunner
             copyProp(metrics, scope, "COUNTER_HTTP_SERVER_REQUEST");
             copyProp(metrics, scope, "COUNTER_HTTP_SERVER_RESPONSE");
 
+            /*
             // Set up globals that are set up when running a script from the command line (set in "evalScript"
             // in node.js.)
             scope.put("__filename", scope, scriptFileName);
@@ -937,6 +1008,7 @@ public class ScriptRunner
 
             // We will need this later for exception handling
             supportModule = (Scriptable)require("trireme_loop_support", cx);
+            */
 
         } catch (InvocationTargetException e) {
             throw new NodeException(e);
@@ -1061,11 +1133,6 @@ public class ScriptRunner
         cx.removeThreadLocal(TIMEOUT_TIMESTAMP_KEY);
     }
 
-    protected Function getSupportFunction(String name)
-    {
-        return (Function)ScriptableObject.getProperty(supportModule, name);
-    }
-
     public abstract class Activity
         implements Comparable<Activity>
     {
@@ -1172,7 +1239,7 @@ public class ScriptRunner
         @Override
         void execute(Context cx)
         {
-            Function submitTick = getSupportFunction("submitTick");
+            Function submitTick = process.getSubmitTick();
             Object[] callArgs =
                 new Object[(args == null ? 0 : args.length) + 3];
             callArgs[0] = function;

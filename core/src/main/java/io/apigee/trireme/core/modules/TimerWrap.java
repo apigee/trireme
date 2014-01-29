@@ -147,6 +147,7 @@ public class TimerWrap
             if (activity != null) {
                 activity.setCancelled(true);
             }
+            unref();
         }
 
         @Override

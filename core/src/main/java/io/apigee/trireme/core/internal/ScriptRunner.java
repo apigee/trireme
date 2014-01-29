@@ -570,6 +570,11 @@ public class ScriptRunner
             boolean timing = startTiming(cx);
             try {
                 main.call(cx, scope, scope, new Object[] { process });
+            } catch (RhinoException re) {
+                boolean handled = handleScriptException(cx, re);
+                if (!handled) {
+                    throw re;
+                }
             } finally {
                 if (timing) {
                     endTiming(cx);
@@ -613,12 +618,13 @@ public class ScriptRunner
         }
 
         log.debug("Script exiting with exit code {}", status.getExitCode());
-        /*
+
         if (!status.hasCause() && !process.isExiting()) {
-            // Fire the exit callback, but only if we aren't exiting due to an unhandled exception.
+            // Fire the exit callback, but only if we aren't exiting due to an unhandled exception, and "exit"
+            // wasn't already fired because we called "exit"
             try {
                 process.setExiting(true);
-                process.fireEvent("exit", status.getExitCode());
+                process.fireExit(cx, status.getExitCode());
             } catch (NodeExitException ee) {
                 // Exit called exit -- allow it to replace the exit code
                 log.debug("Script replacing exit code with {}", ee.getCode());
@@ -628,7 +634,6 @@ public class ScriptRunner
                 status = new ScriptStatus(re);
             }
         }
-        */
 
         closeCloseables(cx);
 

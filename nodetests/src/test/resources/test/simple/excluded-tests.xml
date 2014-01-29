@@ -474,6 +474,10 @@
         <Name>test-tls-interleave.js</Name>
         <Description>Assumes that data will arrive in the same chunks sent by the server.</Description>
     </Excluded>
+    <Excluded>
+        <Name>test-stream-pipe-multi.js</Name>
+        <Description>Recursive nextTick -- doesn't work in node either.</Description>
+    </Excluded>
 
     <!-- NETTY ADAPTER
          These tests don't work with the Netty adapter

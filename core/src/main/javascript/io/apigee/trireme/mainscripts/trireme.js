@@ -76,7 +76,8 @@
 
     startup.processChannel();
 
-    startup.resolveArgv0();
+    // Don't do this -- we rely on "node" being the process name in some cases.
+    //startup.resolveArgv0();
 
     // There are various modes that Node can run in. The most common two
     // are running from a script and running the REPL - but there are a few

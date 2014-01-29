@@ -113,9 +113,12 @@ function listOnTimeout() {
         threw = false;
       } finally {
         if (threw) {
-          process.nextTick(function() {
-            list.ontimeout();
-          });
+          // Node.js calls "ontimeout" inside "nextTick". The problem is, if the exception was thrown with
+          // process.domain set, then we will end up calling "nextTick" inside that domain, which means that
+          // we use the wrong domain and possibly don't process at all, leaving the list hanging.
+          // The test "test-domain-exit-dispose"
+          // exhibits this behavior. Instead, call it recursively here.
+          list.ontimeout();
         }
       }
     }

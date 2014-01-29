@@ -497,6 +497,15 @@ public class Process
             return mem;
         }
 
+        public void fireExit(Context cx, int code)
+        {
+            Function emit = (Function)ScriptableObject.getProperty(this, "emit");
+            if (emit == null) {
+                throw new AssertionError("process.emit not defined");
+            }
+            emit.call(cx, emit, this, new Object[] { "exit", code });
+        }
+
         /*
         @JSFunction
         @SuppressWarnings("unused")

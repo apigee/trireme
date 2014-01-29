@@ -70,9 +70,6 @@ public class Process
     public Scriptable registerExports(Context cx, Scriptable scope, NodeRuntime runner)
         throws InvocationTargetException, IllegalAccessException, InstantiationException
     {
-        ScriptableObject.defineClass(scope, EventEmitter.EventEmitterImpl.class, false, true);
-
-
         ScriptableObject.defineClass(scope, ProcessImpl.class, false, true);
         ScriptableObject.defineClass(scope, EnvImpl.class, false, true);
 
@@ -94,17 +91,13 @@ public class Process
     {
         protected static final String CLASS_NAME = "_processClass";
 
-        private static final int DEFAULT_TICK_DEPTH = 1000;
-
         private Scriptable stdout;
         private Scriptable stderr;
         private Scriptable stdin;
         private Scriptable argv;
         private Scriptable env;
-        private Object eventEmitter;
         private long startTime;
         private ScriptRunner runner;
-        private Object mainModule;
         private Function submitTick;
         private boolean needTickCallback;
         private Function tickSpinnerCallback;
@@ -113,13 +106,10 @@ public class Process
         private Function immediateCallback;
         private Function fatalException;
         private Object domain;
-        private boolean usingDomains;
         private boolean exiting;
-        private NodeExitException exitStatus;
         private int umask = DEFAULT_UMASK;
         private boolean throwDeprecation;
         private boolean traceDeprecation;
-        private int maxTickDepth = DEFAULT_TICK_DEPTH;
         private String eval;
         private Scriptable tickInfoBox;
 
@@ -142,9 +132,6 @@ public class Process
         {
             // This is a low-level module and it's OK to access low-level stuff
             this.runner = (ScriptRunner)runner;
-
-            Scriptable eventModule = (Scriptable)runner.require("events", cx);
-            this.eventEmitter = ScriptableObject.getProperty(eventModule, "EventEmitter");
         }
 
         @JSGetter("_eval")
@@ -165,21 +152,9 @@ public class Process
             return tickInfoBox;
         }
 
-        @JSGetter("mainModule")
-        @SuppressWarnings("unused")
-        public Object getMainModule() {
-            return mainModule;
-        }
-
-        @JSSetter("mainModule")
-        @SuppressWarnings("unused")
-        public void setMainModule(Object m) {
-            this.mainModule = m;
-        }
-
         /**
          * Implement process.binding. This works like the rest of the module loading but uses a different
-         * namespace and a different cache. These types of modules must be implemented in Java.
+         * namespace and a different cache.
          */
         @JSFunction
         @SuppressWarnings("unused")
@@ -225,6 +200,11 @@ public class Process
             return mod;
         }
 
+        /*
+         * Special getters and setters for the underlying stdin/out/err streams. "trireme.js" will wrap them with
+         * the actual stream objects when needed. These streams are set up based on the underlying input
+         * and output streams.
+         */
         @JSGetter("_stdoutStream")
         @SuppressWarnings("unused")
         public Object getStdout()
@@ -324,8 +304,7 @@ public class Process
         public void abort()
             throws NodeExitException
         {
-            exitStatus = new NodeExitException(NodeExitException.Reason.FATAL);
-            throw exitStatus;
+            throw new NodeExitException(NodeExitException.Reason.FATAL);
         }
 
         @JSFunction
@@ -363,11 +342,10 @@ public class Process
             ProcessImpl self = (ProcessImpl)thisObj;
             if (args.length >= 1) {
                 int code = (Integer)Context.jsToJava(args[0], Integer.class);
-                self.exitStatus = new NodeExitException(NodeExitException.Reason.NORMAL, code);
+                throw new NodeExitException(NodeExitException.Reason.NORMAL, code);
             } else {
-                self.exitStatus = new NodeExitException(NodeExitException.Reason.NORMAL, 0);
+                throw new NodeExitException(NodeExitException.Reason.NORMAL, 0);
             }
-            throw self.exitStatus;
         }
 
         // TODO getgid
@@ -506,46 +484,10 @@ public class Process
             emit.call(cx, emit, this, new Object[] { "exit", code });
         }
 
-        /*
-        @JSFunction
-        @SuppressWarnings("unused")
-        public static void nextTick(Context cx, Scriptable thisObj, Object[] args, Function func)
-        {
-            Function f = functionArg(args, 0, true);
-
-            // We can't assume that "this" is set here -- not everyone sets it.
-            ScriptRunner runner = (ScriptRunner)cx.getThreadLocal(ScriptRunner.RUNNER);
-
-            Scriptable domain = null;
-            if (runner.getProcess().usingDomains) {
-                domain = ensureValid(runner.getProcess().domain);
-            }
-
-            int depth = runner.getCurrentTickDepth() + 1;
-            if (depth >= runner.getProcess().maxTickDepth) {
-                runner.getProcess().maxTickWarn(cx);
-            }
-
-            runner.enqueueCallback(f, f, thisObj, domain, new Object[0], depth);
-        }
-        */
-
-        private void maxTickWarn(Context cx)
-        {
-            String msg = "(node) warning: Recursive process.nextTick detected. " +
-                         "This will break in the next version of node. " +
-                         "Please use setImmediate for recursive deferral.";
-            if (throwDeprecation) {
-                throw Utils.makeError(cx, this, msg);
-            } else if (traceDeprecation) {
-                if (log.isDebugEnabled()) {
-                    log.debug(msg);
-                }
-            } else {
-                log.warn(msg);
-            }
-        }
-
+        /**
+         * This is a function in trireme.js that we will call when needing to execute a JavaScript
+         * function directly. This lets us work around issues Rhino has with certain types of callbacks.
+         */
         @JSSetter("_submitTick")
         @SuppressWarnings("unused")
         public void setSubmitTick(Function submit) {
@@ -606,36 +548,6 @@ public class Process
         public Function getTickSpinnerCallback() {
             return tickSpinnerCallback;
         }
-
-        /*
-        @JSFunction
-        @SuppressWarnings("unused")
-        public static void _tickCallback(Context cx, Scriptable thisObj, Object[] args, Function func)
-        {
-            ProcessImpl proc = (ProcessImpl)thisObj;
-            proc.runner.executeTicks(cx);
-        }
-        */
-
-        /*
-        @JSGetter("maxTickDepth")
-        @SuppressWarnings("unused")
-        public int getMaxTickDepth()
-        {
-            return maxTickDepth;
-        }
-
-        @JSSetter("maxTickDepth")
-        @SuppressWarnings("unused")
-        public void setMaxTickDepth(double depth)
-        {
-            if (Double.isInfinite(depth)) {
-                maxTickDepth = Integer.MAX_VALUE;
-            } else {
-                maxTickDepth = (int)depth;
-            }
-        }
-        */
 
         @JSSetter("_needImmediateCallback")
         @SuppressWarnings("unused")
@@ -803,23 +715,6 @@ public class Process
         @SuppressWarnings("unused")
         public boolean isTraceDeprecation() {
             return traceDeprecation;
-        }
-
-        public NodeExitException getExitStatus()
-        {
-            return exitStatus;
-        }
-
-        public void setExitStatus(NodeExitException ne)
-        {
-            this.exitStatus = ne;
-        }
-
-        @JSGetter("EventEmitter")
-        @SuppressWarnings("unused")
-        public Object getEventEmitter()
-        {
-            return this.eventEmitter;
         }
     }
 

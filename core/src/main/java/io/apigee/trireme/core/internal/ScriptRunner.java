@@ -88,7 +88,6 @@ public class ScriptRunner
     private        String          script;
     private final  NodeScript      scriptObject;
     private final  String[]        args;
-    private final  String          scriptName;
     private final  HashMap<String, NativeModule.ModuleImpl> moduleCache = new HashMap<String, NativeModule.ModuleImpl>();
     private final  HashMap<String, Object> internalModuleCache = new HashMap<String, Object>();
     private        ScriptFuture    future;
@@ -104,18 +103,13 @@ public class ScriptRunner
     private final  Selector                      selector;
     private        int                           timerSequence;
     private final  AtomicInteger                 pinCount      = new AtomicInteger(0);
-    private        int                           currentTickDepth;
 
     // Globals that are set up for the process
     private NativeModule.NativeImpl nativeModule;
     protected Process.ProcessImpl process;
     private Buffer.BufferModuleImpl buffer;
-    private Scriptable          mainModule;
-    private Object              console;
-    private Scriptable          supportModule;
     private String              workingDirectory;
     private String              scriptFileName;
-    private String              scriptDirName;
     private Scriptable          parentProcess;
 
     private ScriptableObject    scope;
@@ -131,10 +125,8 @@ public class ScriptRunner
             File scriptPath = new File(pathTranslator.reverseTranslate(scriptFile.getAbsolutePath()));
             if (scriptPath == null) {
                 this.scriptFileName = "";
-                this.scriptDirName = ".";
             } else {
                 this.scriptFileName = scriptPath.getPath();
-                this.scriptDirName = scriptPath.getParent();
             }
         } catch (IOException ioe) {
             throw new AssertionError("Error translating file path: " + ioe);
@@ -148,7 +140,6 @@ public class ScriptRunner
         this(so, env, sandbox, scriptName, args);
         this.script = script;
         this.scriptFileName = scriptName;
-        this.scriptDirName = ".";
     }
 
     private ScriptRunner(NodeScript so, NodeEnvironment env, Sandbox sandbox, String scriptName,
@@ -156,7 +147,6 @@ public class ScriptRunner
     {
         this.env = env;
         this.scriptObject = so;
-        this.scriptName = scriptName;
 
         this.args = args;
         this.sandbox = sandbox;
@@ -260,10 +250,6 @@ public class ScriptRunner
 
     public Selector getSelector() {
         return selector;
-    }
-
-    public int getCurrentTickDepth() {
-        return currentTickDepth;
     }
 
     @Override
@@ -389,20 +375,6 @@ public class ScriptRunner
         Task t = new Task(task, scope);
         t.setDomain(domain);
         tickFunctions.offer(t);
-        selector.wakeup();
-    }
-
-    /**
-     * This method is used specifically by process.nextTick, and stuff submitted here is subject to
-     * process.maxTickCount.
-     */
-    public void enqueueCallback(Function f, Scriptable scope, Scriptable thisObj,
-                                Scriptable domain, Object[] args, int depth)
-    {
-        Callback cb = new Callback(f, scope, thisObj, args);
-        cb.setDomain(domain);
-        cb.setTickDepth(depth);
-        tickFunctions.offer(cb);
         selector.wakeup();
     }
 
@@ -726,10 +698,6 @@ public class ScriptRunner
                 // This exception is thrown by process.exit()
                 return ne.getStatus();
             } catch (RhinoException re) {
-                // Sometimes exceptions get wrapped
-                if (process.getExitStatus() != null) {
-                    return process.getExitStatus().getStatus();
-                }
                 // All domain and process-wide error handling happened before we got here, so
                 // if we get a RhinoException here, then we know that it is fatal.
                 return new ScriptStatus(re);
@@ -792,9 +760,7 @@ public class ScriptRunner
             nextCall = tickFunctions.poll();
             if (nextCall != null) {
                 boolean timing = startTiming(cx);
-                currentTickDepth = nextCall.getTickDepth();
                 try {
-
                     nextCall.execute(cx);
                 } catch (RhinoException re) {
                     boolean handled = handleScriptException(cx, re);
@@ -809,7 +775,6 @@ public class ScriptRunner
                     if (timing) {
                         endTiming(cx);
                     }
-                    currentTickDepth = 0;
                 }
             }
         } while (nextCall != null);
@@ -950,7 +915,6 @@ public class ScriptRunner
 
             // Next we need "process" which takes a bit more care
             process = (Process.ProcessImpl)require(Process.MODULE_NAME, cx);
-            process.setMainModule(nativeMod);
             if ((sandbox != null) && (sandbox.getStdinStream() != null)) {
                 process.setStdin(sandbox.getStdinStream());
             }
@@ -961,28 +925,8 @@ public class ScriptRunner
                 process.setStderr(sandbox.getStderrStream());
             }
 
-            /*
-            // Set up the global modules that are set up for all script evaluations
-            scope.put("global", scope, scope);
-            scope.put("GLOBAL", scope, scope);
-            scope.put("root", scope, scope);
-            buffer = (Buffer.BufferModuleImpl)require("buffer", cx);
-            scope.put("Buffer", scope, buffer.get("Buffer", buffer));
-            Scriptable timers = (Scriptable)require("timers", cx);
-            scope.put("timers", scope, timers);
-            scope.put("domain", scope, null);
-            clearErrno();
-
-            // Set up the global timer functions
-            copyProp(timers, scope, "setTimeout");
-            copyProp(timers, scope, "setInterval");
-            copyProp(timers, scope, "clearTimeout");
-            copyProp(timers, scope, "clearInterval");
-            copyProp(timers, scope, "setImmediate");
-            copyProp(timers, scope, "clearImmediate");
-            */
-
-            // Set up metrics -- defining these lets us run internal Node projects
+            // Set up metrics -- defining these lets us run internal Node projects.
+            // Presumably in "real" node these are set up by some sort of preprocessor...
             Scriptable metrics = nativeMod.internalRequire("trireme_metrics", cx);
             copyProp(metrics, scope, "DTRACE_NET_SERVER_CONNECTION");
             copyProp(metrics, scope, "DTRACE_NET_STREAM_END");
@@ -997,24 +941,6 @@ public class ScriptRunner
             copyProp(metrics, scope, "COUNTER_HTTP_SERVER_REQUEST");
             copyProp(metrics, scope, "COUNTER_HTTP_SERVER_RESPONSE");
 
-            /*
-            // Set up globals that are set up when running a script from the command line (set in "evalScript"
-            // in node.js.)
-            scope.put("__filename", scope, scriptFileName);
-            scope.put("__dirname", scope, scriptDirName);
-
-            // Set up the main native module
-            mainModule = (Scriptable)require("module", cx);
-
-            // And finally the console needs to have all that other stuff available. Make this one lazy.
-            scope.defineProperty("console", this,
-                                 Utils.findMethod(ScriptRunner.class, "getConsole"),
-                                 null, 0);
-
-            // We will need this later for exception handling
-            supportModule = (Scriptable)require("trireme_loop_support", cx);
-            */
-
         } catch (InvocationTargetException e) {
             throw new NodeException(e);
         } catch (IllegalAccessException e) {
@@ -1022,14 +948,6 @@ public class ScriptRunner
         } catch (InstantiationException e) {
             throw new NodeException(e);
         }
-    }
-
-    public Object getConsole(Scriptable s)
-    {
-        if (console == null) {
-            console = require("console", Context.getCurrentContext());
-        }
-        return console;
     }
 
     private static void copyProp(Scriptable src, Scriptable dest, String name)
@@ -1147,7 +1065,6 @@ public class ScriptRunner
         protected boolean repeating;
         protected boolean cancelled;
         protected Scriptable domain;
-        protected int tickDepth;
 
         abstract void execute(Context cx);
 
@@ -1197,14 +1114,6 @@ public class ScriptRunner
 
         public void setDomain(Scriptable domain) {
             this.domain = domain;
-        }
-
-        public int getTickDepth() {
-            return tickDepth;
-        }
-
-        public void setTickDepth(int tickDepth) {
-            this.tickDepth = tickDepth;
         }
 
         @Override

@@ -40,9 +40,10 @@
     <module>crypto</module>
     <module>jar</module>
     <module>net</module>
-    <module>nodetests</module>
+    <module>node10</module>
     <module>samples</module>
     <module>shell</module>
+    <module>spi</module>
     <module>util</module>
   </modules>
    

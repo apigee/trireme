@@ -536,7 +536,7 @@ public class ScriptRunner
 
             // Run "trireme.js," which is our equivalent of "node.js". It returns a function that takes
             // "process". When done, we may have ticks to execute.
-            Script mainScript = new io.apigee.trireme.mainscripts.trireme();
+            Script mainScript = env.getRegistry().getMainScript();
             Function main = (Function)mainScript.exec(cx, scope);
 
             boolean timing = startTiming(cx);

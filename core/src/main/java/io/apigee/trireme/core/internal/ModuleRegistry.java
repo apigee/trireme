@@ -25,6 +25,7 @@ import io.apigee.trireme.core.InternalNodeModule;
 import io.apigee.trireme.core.NodeModule;
 import io.apigee.trireme.core.NodeScriptModule;
 import io.apigee.trireme.core.Utils;
+import io.apigee.trireme.spi.NodeImplementation;
 import org.mozilla.javascript.Context;
 import org.mozilla.javascript.Script;
 import org.slf4j.Logger;
@@ -73,6 +74,8 @@ public class ModuleRegistry
     private final HashMap<String, InternalNodeModule> internalModules = new HashMap<String, InternalNodeModule>();
     private final HashMap<String, Script>             compiledModules = new HashMap<String, Script>();
 
+    private Script mainScript;
+
     public void load(Context cx)
     {
         // Load all native Java modules implemented using the "NodeModule" interface
@@ -89,7 +92,7 @@ public class ModuleRegistry
             loadModuleByName("io.apigee.trireme.core.modules.Filesystem");
         }
 
-        // Load all JavaScript moduiles implemented using "NodeScriptModule"
+        // Load all JavaScript modules implemented using "NodeScriptModule"
         ServiceLoader<NodeScriptModule> scriptLoader = ServiceLoader.load(NodeScriptModule.class);
         for (NodeScriptModule mod: scriptLoader) {
             for (String[] src : mod.getScriptSources()) {
@@ -101,56 +104,15 @@ public class ModuleRegistry
             }
         }
 
-        // Load the default Node modules, built-in to the runtime.
-        // These classes are compiled using the "Rhino Compiler" module, which is a Maven plug-in that's part
-        // of noderunner.
-        // These modules are all taken directly from Node.js source code
-        addCompiledModule("_debugger", "io.apigee.trireme.fromnode._debugger");
-        addCompiledModule("_linklist", "io.apigee.trireme.fromnode._linklist");
-        addCompiledModule("_stream_duplex", "io.apigee.trireme.fromnode._stream_duplex");
-        addCompiledModule("_stream_passthrough", "io.apigee.trireme.fromnode._stream_passthrough");
-        addCompiledModule("_stream_readable", "io.apigee.trireme.fromnode._stream_readable");
-        addCompiledModule("_stream_transform", "io.apigee.trireme.fromnode._stream_transform");
-        addCompiledModule("_stream_writable", "io.apigee.trireme.fromnode._stream_writable");
-        addCompiledModule("assert", "io.apigee.trireme.fromnode.assert");
-        addCompiledModule("cluster", "io.apigee.trireme.fromnode.cluster");
-        addCompiledModule("console", "io.apigee.trireme.fromnode.console");
-        addCompiledModule("constants", "io.apigee.trireme.fromnode.constants");
-        addCompiledModule("crypto", "io.apigee.trireme.fromnode.crypto");
-        addCompiledModule("dgram", "io.apigee.trireme.fromnode.dgram");
-        addCompiledModule("domain", "io.apigee.trireme.fromnode.domain");
-        addCompiledModule("events", "io.apigee.trireme.fromnode.events");
-        addCompiledModule("freelist", "io.apigee.trireme.fromnode.freelist");
-        addCompiledModule("fs", "io.apigee.trireme.fromnode.fs");
-        addCompiledModule("node_http", "io.apigee.trireme.fromnode.http");
-        addCompiledModule("node_https", "io.apigee.trireme.fromnode.https");
-        addCompiledModule("module", "io.apigee.trireme.fromnode.module");
-        addCompiledModule("net", "io.apigee.trireme.fromnode.net");
-        addCompiledModule("os", "io.apigee.trireme.fromnode.os");
-        addCompiledModule("path", "io.apigee.trireme.fromnode.path");
-        addCompiledModule("punycode", "io.apigee.trireme.fromnode.punycode");
-        addCompiledModule("querystring", "io.apigee.trireme.fromnode.querystring");
-        addCompiledModule("readline", "io.apigee.trireme.fromnode.readline");
-        addCompiledModule("stream", "io.apigee.trireme.fromnode.stream");
-        addCompiledModule("sys", "io.apigee.trireme.fromnode.sys");
-        addCompiledModule("timers", "io.apigee.trireme.fromnode.timers");
-        addCompiledModule("url", "io.apigee.trireme.fromnode.url");
-        addCompiledModule("util", "io.apigee.trireme.fromnode.util");
+        // Load the Node implementations.
+        // TODO for testing we will just load the first one!
+        ServiceLoader<NodeImplementation> implementations = ServiceLoader.load(NodeImplementation.class);
+        NodeImplementation impl = implementations.iterator().next();
 
-        // These modules are Noderunner-specific built-in modules that either replace regular Node
-        // functionality or add to it.
-        addCompiledModule("http", "io.apigee.trireme.scripts.adaptorhttp");
-        addCompiledModule("https", "io.apigee.trireme.scripts.adaptorhttps");
-        addCompiledModule("child_process", "io.apigee.trireme.scripts.child_process");
-        addCompiledModule("native_stream_readable", "io.apigee.trireme.scripts.native_stream_readable");
-        addCompiledModule("native_stream_writable", "io.apigee.trireme.scripts.native_stream_writable");
-        addCompiledModule("trireme_metrics", "io.apigee.trireme.scripts.trireme_metrics");
-        addCompiledModule("string_decoder", "io.apigee.trireme.scripts.trireme_string_decoder");
-        addCompiledModule("trireme_uncloseable_transform", "io.apigee.trireme.scripts.trireme_uncloseable_transform");
-        addCompiledModule("tls", "io.apigee.trireme.scripts.tls");
-        addCompiledModule("tls_checkidentity", "io.apigee.trireme.scripts.tls_checkidentity");
-        addCompiledModule("vm", "io.apigee.trireme.scripts.vm");
-        addCompiledModule("zlib", "io.apigee.trireme.scripts.zlib");
+        loadMainScript(impl.getMainScriptClass());
+        for (String[] builtin : impl.getBuiltInModules()) {
+            addCompiledModule(builtin[0], builtin[1]);
+        }
     }
 
     private void compileAndAdd(Context cx, Object impl, String name, String path)
@@ -182,6 +144,20 @@ public class ModuleRegistry
             internalModules.put(mod.getModuleName(), (InternalNodeModule) mod);
         } else {
             modules.put(mod.getModuleName(), mod);
+        }
+    }
+
+    private void loadMainScript(String className)
+    {
+        try {
+            Class<Script> klass = (Class<Script>)Class.forName(className);
+            mainScript = klass.newInstance();
+        } catch (ClassNotFoundException e) {
+            throw new AssertionError(e);
+        } catch (InstantiationException e) {
+            throw new AssertionError(e);
+        } catch (IllegalAccessException e) {
+            throw new AssertionError(e);
         }
     }
 
@@ -228,5 +204,10 @@ public class ModuleRegistry
     public Script getCompiledModule(String name)
     {
         return compiledModules.get(name);
+    }
+
+    public Script getMainScript()
+    {
+        return mainScript;
     }
 }

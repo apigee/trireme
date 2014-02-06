@@ -41,6 +41,7 @@
     <module>jar</module>
     <module>net</module>
     <module>node10</module>
+    <module>nodetests</module>
     <module>samples</module>
     <module>shell</module>
     <module>spi</module>

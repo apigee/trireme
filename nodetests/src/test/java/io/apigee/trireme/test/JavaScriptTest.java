@@ -36,7 +36,8 @@ public class JavaScriptTest
                        "../node10/node10tests/noderunner",
                        "../node10/node10tests/pummel",
                        "../node10/node10tests/iconv" };
-    public static final String TEMP_DIR = "target/test-classes/test/tmp";
+    public static final String[] TEMP_DIRS = { "target/test-classes/test/tmp",
+                                               "../node10/node10tests/tmp" };
     public static final String RESULT_FILE = "target/results.out";
     public static final String TEST_FILE_NAME_PROP = "TestFile";
     public static final String TEST_ADAPTER_PROP = "TestAdapter";
@@ -53,11 +54,12 @@ public class JavaScriptTest
     public static void setup()
         throws IOException
     {
-        File tmpDir = new File(TEMP_DIR);
-        if (!tmpDir.exists()) {
-            // The parent dir should already have been created by Maven
-            tmpDir.mkdir();
-        }
+        for (String td : TEMP_DIRS) {
+            File tmpDir = new File(td);
+            if (!tmpDir.exists()) {
+                tmpDir.mkdirs();
+            }
+        }   
 
         resultWriter = new PrintWriter(new FileOutputStream(RESULT_FILE));
     }

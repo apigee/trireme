@@ -496,6 +496,22 @@ public class BasicTest
         runTest("cryptotests.js");
     }
 
+    @Test
+    public void testHiddenOs()
+        throws InterruptedException, ExecutionException, NodeException
+    {
+        NodeEnvironment testEnv = new NodeEnvironment();
+        Sandbox sb = new Sandbox().setHideOSDetails(true);
+        testEnv.setSandbox(sb);
+        NodeScript script = testEnv.createScript("hideenostest.js",
+                                             new File("./target/test-classes/tests/hiddenostest.js"),
+                                             null);
+        ScriptStatus status = script.execute().get();
+        assertEquals(0, status.getExitCode());
+        script.close();
+        testEnv.close();
+    }
+
     private void runTest(String name)
         throws InterruptedException, ExecutionException, NodeException
     {

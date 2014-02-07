@@ -24,6 +24,7 @@ package io.apigee.trireme.core.modules;
 import io.apigee.trireme.core.NodeRuntime;
 import io.apigee.trireme.core.InternalNodeModule;
 import io.apigee.trireme.core.Utils;
+import io.apigee.trireme.core.internal.ScriptRunner;
 import org.mozilla.javascript.Context;
 import org.mozilla.javascript.Function;
 import org.mozilla.javascript.Scriptable;
@@ -31,7 +32,6 @@ import org.mozilla.javascript.ScriptableObject;
 import org.mozilla.javascript.annotations.JSFunction;
 
 import java.lang.management.ManagementFactory;
-import java.lang.management.RuntimeMXBean;
 import java.lang.reflect.InvocationTargetException;
 import java.net.Inet4Address;
 import java.net.Inet6Address;
@@ -58,8 +58,7 @@ public class OS
         throws InvocationTargetException, IllegalAccessException, InstantiationException
     {
         ScriptableObject.defineClass(scope, OSImpl.class);
-        Scriptable exports = cx.newObject(scope, OSImpl.CLASS_NAME);
-
+        OSImpl exports = (OSImpl)cx.newObject(scope, OSImpl.CLASS_NAME);
         return exports;
     }
 
@@ -68,10 +67,8 @@ public class OS
     {
         public static final String CLASS_NAME = "_osClass";
 
-        private final long startTime = System.currentTimeMillis();
-
-        private RuntimeMXBean runtimeMXBean = ManagementFactory.getRuntimeMXBean();
-        private Runtime runtime = Runtime.getRuntime();
+        public static final String HIDDEN_OS_NAME = "Trireme";
+        public static final String HIDDEN_OS_RELEASE = "Trireme";
 
         @Override
         public String getClassName()
@@ -79,7 +76,13 @@ public class OS
             return CLASS_NAME;
         }
 
+        protected static ScriptRunner getRunner(Context cx)
+        {
+            return (ScriptRunner)cx.getThreadLocal(ScriptRunner.RUNNER);
+        }
+
         @JSFunction
+        @SuppressWarnings("unused")
         public static Object getHostname(Context cx, Scriptable thisObj, Object[] args, Function func)
         {
             try {
@@ -90,6 +93,7 @@ public class OS
         }
 
         @JSFunction
+        @SuppressWarnings("unused")
         public static Object getLoadAvg(Context cx, Scriptable thisObj, Object[] args, Function func)
         {
             // System load average for the last minute
@@ -97,12 +101,13 @@ public class OS
 
             Scriptable loadAvgArray = cx.newArray(thisObj, 3);
             loadAvgArray.put(0, loadAvgArray, loadAvg); // 1 minute
-            loadAvgArray.put(1, loadAvgArray, -1);      // 5 minutes
-            loadAvgArray.put(2, loadAvgArray, -1);      // 15 minutes
+            loadAvgArray.put(1, loadAvgArray, 0);      // 5 minutes
+            loadAvgArray.put(2, loadAvgArray, 0);      // 15 minutes
             return loadAvgArray;
         }
 
         @JSFunction
+        @SuppressWarnings("unused")
         public static Object getUptime(Context cx, Scriptable thisObj, Object[] args, Function func)
         {
             // This is the JRE uptime, not system uptime
@@ -110,21 +115,30 @@ public class OS
         }
 
         @JSFunction
+        @SuppressWarnings("unused")
         public static Object getFreeMem(Context cx, Scriptable thisObj, Object[] args, Function func)
         {
             return Runtime.getRuntime().freeMemory() / (1024 * 1024);
         }
 
         @JSFunction
+        @SuppressWarnings("unused")
         public static Object getTotalMem(Context cx, Scriptable thisObj, Object[] args, Function func)
         {
             return Runtime.getRuntime().totalMemory() / (1024 * 1024);
         }
 
         @JSFunction
+        @SuppressWarnings("unused")
         public static Object getCPUs(Context cx, Scriptable thisObj, Object[] args, Function func)
         {
             int numProcessors = ManagementFactory.getOperatingSystemMXBean().getAvailableProcessors();
+            ScriptRunner runner = getRunner(cx);
+            if ((runner.getSandbox() != null) &&
+                runner.getSandbox().isHideOSDetails()) {
+                // Obscure processor count if OS details are hidden on purpose
+                numProcessors = 1;
+            }
             Object[] cpuObjects = new Object[numProcessors];
 
             for (int i = 0; i < numProcessors; i++) {
@@ -147,8 +161,15 @@ public class OS
         }
 
         @JSFunction
+        @SuppressWarnings("unused")
         public static Object getOSType(Context cx, Scriptable thisObj, Object[] args, Function func)
         {
+            ScriptRunner runner = getRunner(cx);
+            if ((runner.getSandbox() != null) &&
+                runner.getSandbox().isHideOSDetails()) {
+                return HIDDEN_OS_NAME;
+            }
+
             String name = System.getProperty("os.name");
 
             if (name.equals("Mac OS X")) {
@@ -161,53 +182,67 @@ public class OS
         }
 
         @JSFunction
+        @SuppressWarnings("unused")
         public static Object getOSRelease(Context cx, Scriptable thisObj, Object[] args, Function func)
         {
+            ScriptRunner runner = getRunner(cx);
+            if ((runner.getSandbox() != null) &&
+                runner.getSandbox().isHideOSDetails()) {
+                return HIDDEN_OS_RELEASE;
+            }
             return System.getProperty("os.version");
         }
 
         @JSFunction
+        @SuppressWarnings("unused")
         public static Object getInterfaceAddresses(Context cx, Scriptable thisObj, Object[] args, Function func)
                 throws SocketException
         {
             Scriptable obj = cx.newObject(thisObj);
+            ScriptRunner runner = getRunner(cx);
 
             Enumeration<NetworkInterface> nets = NetworkInterface.getNetworkInterfaces();
+            // Only include non-loopback interfaces if we are not "hiding" the OS details.
             for (NetworkInterface netIf : Collections.list(nets)) {
-                List<InterfaceAddress> ifAddresses = netIf.getInterfaceAddresses();
-                Scriptable ifAddressesArray = cx.newArray(thisObj, ifAddresses.size());
+                if ((runner.getSandbox() == null) ||
+                    !runner.getSandbox().isHideOSDetails() ||
+                    netIf.isLoopback()) {
 
-                int i = 0;
-                for (InterfaceAddress ifAddress : ifAddresses) {
-                    InetAddress inetAddress = ifAddress.getAddress();
+                    List<InterfaceAddress> ifAddresses = netIf.getInterfaceAddresses();
+                    Scriptable ifAddressesArray = cx.newArray(thisObj, ifAddresses.size());
 
-                    String family;
-                    if (inetAddress instanceof Inet4Address) {
-                        family = "IPv4";
-                    } else if (inetAddress instanceof Inet6Address) {
-                        family = "IPv6";
-                    } else {
-                        family = "<unknown>";
+                    int i = 0;
+                    for (InterfaceAddress ifAddress : ifAddresses) {
+                        InetAddress inetAddress = ifAddress.getAddress();
+
+                        String family;
+                        if (inetAddress instanceof Inet4Address) {
+                            family = "IPv4";
+                        } else if (inetAddress instanceof Inet6Address) {
+                            family = "IPv6";
+                        } else {
+                            family = "<unknown>";
+                        }
+
+                        Scriptable ifAddressObject = cx.newObject(thisObj);
+                        ifAddressObject.put("address", ifAddressObject, inetAddress.getHostAddress());
+                        ifAddressObject.put("family", ifAddressObject, family);
+                        ifAddressObject.put("internal", ifAddressObject,
+                                            netIf.isLoopback() || inetAddress.isLoopbackAddress());
+
+                        ifAddressesArray.put(i, ifAddressesArray, ifAddressObject);
+
+                        i++;
                     }
-
-                    Scriptable ifAddressObject = cx.newObject(thisObj);
-                    ifAddressObject.put("address", ifAddressObject, inetAddress.getHostAddress());
-                    ifAddressObject.put("family", ifAddressObject, family);
-                    ifAddressObject.put("internal", ifAddressObject,
-                            netIf.isLoopback() || inetAddress.isLoopbackAddress());
-
-                    ifAddressesArray.put(i, ifAddressesArray, ifAddressObject);
-
-                    i++;
+                    obj.put(netIf.getName(), obj, ifAddressesArray);
                 }
-
-                obj.put(netIf.getName(), obj, ifAddressesArray);
             }
 
             return obj;
         }
 
         @JSFunction
+        @SuppressWarnings("unused")
         public static Object getEndianness(Context cx, Scriptable thisObj, Object[] args, Function func)
         {
             return "BE";

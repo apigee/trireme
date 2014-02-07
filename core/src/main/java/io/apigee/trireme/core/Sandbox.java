@@ -50,6 +50,7 @@ public class Sandbox
     private NetworkPolicy   networkPolicy;
     private SubprocessPolicy processPolicy;
     private List<Map.Entry<String, String>> mounts;
+    private boolean         hideOsDetails;
 
     /**
      * Create a new sandbox that will not affect anything in any way.
@@ -76,6 +77,7 @@ public class Sandbox
             this.asyncPool = parent.asyncPool;
             this.networkPolicy = parent.networkPolicy;
             this.processPolicy = parent.processPolicy;
+            this.hideOsDetails = parent.hideOsDetails;
             if (parent.mounts != null) {
                 this.mounts = new ArrayList<Map.Entry<String, String>>(parent.mounts);
             }
@@ -257,5 +259,23 @@ public class Sandbox
 
     public SubprocessPolicy getSubprocessPolicy() {
         return processPolicy;
+    }
+
+    /**
+     * If set to true, hide the internal details returned by the "OS" package. Default is false. If set
+     * to true:
+     * <ul>
+     * <li>os.cpus returns an array of a single "cpu" rather than the actual number.</li>
+     * <li>os.networkinterfaces returns only the loopback interface.
+     * <li>os.type, platform, arch, and release all return constants rather than the real information.</li>
+     * </ul>
+     */
+    public Sandbox setHideOSDetails(boolean obscure) {
+        this.hideOsDetails = obscure;
+        return this;
+    }
+
+    public boolean isHideOSDetails() {
+        return hideOsDetails;
     }
 }

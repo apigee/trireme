@@ -215,7 +215,7 @@ public class Process
                 stdout =
                     NativeOutputStreamAdapter.createNativeStream(cx,
                                                                  runner.getScriptScope(), runner,
-                                                                 runner.getStdout(), true);
+                                                                 runner.getStdout(), true, true);
             }
             return stdout;
         }
@@ -235,7 +235,7 @@ public class Process
                 stderr =
                     NativeOutputStreamAdapter.createNativeStream(cx,
                                                                  runner.getScriptScope(), runner,
-                                                                 runner.getStderr(), true);
+                                                                 runner.getStderr(), true, false);
             }
             return stderr;
         }
@@ -255,7 +255,7 @@ public class Process
                 stdin =
                     NativeInputStreamAdapter.createNativeStream(cx,
                                                                 runner.getScriptScope(), runner,
-                                                                runner.getStdin(), true);
+                                                                runner.getStdin(), true, true);
             }
             return stdin;
         }

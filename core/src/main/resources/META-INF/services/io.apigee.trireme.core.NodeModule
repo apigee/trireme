@@ -17,6 +17,5 @@ io.apigee.trireme.core.modules.ProcessWrap
 io.apigee.trireme.core.modules.SSLWrap
 io.apigee.trireme.core.modules.TCPWrap
 io.apigee.trireme.core.modules.TimerWrap
-io.apigee.trireme.core.modules.Tty
 io.apigee.trireme.core.modules.UDPWrap
 io.apigee.trireme.core.modules.ZLib

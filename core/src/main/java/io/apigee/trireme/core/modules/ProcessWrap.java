@@ -384,7 +384,7 @@ public class ProcessWrap
                 }
                 Scriptable os =
                     NativeOutputStreamAdapter.createNativeStream(cx, parent, parent.runner,
-                                                                 out, false);
+                                                                 out, false, false);
                 opts.put("socket", opts, os);
             } else if (STDIO_IGNORE.equals(type)) {
                 if (log.isDebugEnabled()) {
@@ -423,7 +423,7 @@ public class ProcessWrap
                 }
                 Scriptable is =
                     NativeInputStreamAdapter.createNativeStream(cx, parent, parent.runner,
-                                                                in, false);
+                                                                in, false, false);
                 opts.put("socket", opts, is);
             } else if (STDIO_IGNORE.equals(type)) {
                 if (log.isDebugEnabled()) {
@@ -580,7 +580,7 @@ public class ProcessWrap
 
             } else if (STDIO_IGNORE.equals(type)) {
                 return NativeOutputStreamAdapter.createNativeStream(cx, parent, parent.runner,
-                                                                    new BitBucketOutputStream(), false);
+                                                                    new BitBucketOutputStream(), false, false);
 
             } else if (STDIO_IPC.equals(type)) {
                 ipcEnabled = true;
@@ -623,7 +623,7 @@ public class ProcessWrap
 
             } else if (STDIO_IGNORE.equals(type)) {
                 return NativeInputStreamAdapter.createNativeStream(cx, parent, parent.runner,
-                                                                   new BitBucketInputStream(), false);
+                                                                   new BitBucketInputStream(), false, false);
 
             } else if (STDIO_IPC.equals(type)) {
                 ipcEnabled = true;

@@ -19,46 +19,24 @@
  * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
  * SOFTWARE.
  */
-/*
- * This class is a subclass of a readable stream that reads from a native source. We use it to read standard
- * input.
- */
 
 var util = require('util');
-var Readable = require('stream').Readable;
 
-function NativeReadableStream(options, handle) {
-  if (!(this instanceof NativeReadableStream)) {
-    return new NativeReadableStream(options, handle);
-  }
-
-  Readable.call(this, options);
-  this.handle = handle;
-  this.isRaw = false;
-  this.isTTY = handle.isTTY;
-}
-util.inherits(NativeReadableStream, Readable);
-module.exports = NativeReadableStream;
-
-NativeReadableStream.prototype._read = function(n) {
-  var self = this;
-  self.handle.read(n, function(err, chunk) {
-    if (err) {
-      self.emit('error', err);
+exports.isatty = function(fd) {
+  switch (fd) {
+    case 0:
+      return process.stdin.isTTY;
+    case 1:
+      return process.stdout.isTTY;
+    default:
       return false;
-    } else {
-      return self.push(chunk);
-    }
-  });
+  }
 };
 
-NativeReadableStream.prototype.destroy = function() {
-  this.handle.close();
-  this.emit('closed');
-};
-
-NativeReadableStream.prototype.setRawMode = function(flag) {
-  flag = !!flag;
-  // We don't actually do anything with this yet
-  this.isRaw = flag;
-};
+// backwards-compat
+exports.setRawMode = util.deprecate(function(flag) {
+  if (!process.stdin.isTTY) {
+    throw new Error('can\'t set raw mode on non-tty');
+  }
+  process.stdin.setRawMode(flag);
+}, 'tty.setRawMode: Use `process.stdin.setRawMode()` instead.');

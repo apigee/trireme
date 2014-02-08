@@ -43,6 +43,10 @@ function NativeWritableStream(options, handle) {
   Writable.call(this, superOpts);
 
   this.handle = handle;
+  this.isTTY = handle.isTTY;
+  if (handle.isTTY) {
+    this._refreshSize();
+  }
 }
 util.inherits(NativeWritableStream, Writable);
 module.exports = NativeWritableStream;
@@ -73,4 +77,37 @@ function doClose(self) {
   }
 }
 
+NativeWritableStream.prototype._refreshSize = function() {
+  var oldCols = this.columns;
+  var oldRows = this.rows;
+  var winSize = [];
+  var err = this.handle.getWindowSize(winSize);
+  if (err) {
+    this.emit('error', errnoException(err, 'getWindowSize'));
+    return;
+  }
+  var newCols = winSize[0];
+  var newRows = winSize[1];
+  if (oldCols !== newCols || oldRows !== newRows) {
+    this.columns = newCols;
+    this.rows = newRows;
+    this.emit('resize');
+  }
+};
 
+// backwards-compat
+NativeWritableStream.prototype.cursorTo = function(x, y) {
+  require('readline').cursorTo(this, x, y);
+};
+NativeWritableStream.prototype.moveCursor = function(dx, dy) {
+  require('readline').moveCursor(this, dx, dy);
+};
+NativeWritableStream.prototype.clearLine = function(dir) {
+  require('readline').clearLine(this, dir);
+};
+NativeWritableStream.prototype.clearScreenDown = function() {
+  require('readline').clearScreenDown(this);
+};
+NativeWritableStream.prototype.getWindowSize = function() {
+  return [this.columns, this.rows];
+};

@@ -30,6 +30,7 @@ import org.mozilla.javascript.Function;
 import org.mozilla.javascript.Scriptable;
 import org.mozilla.javascript.ScriptableObject;
 import org.mozilla.javascript.annotations.JSFunction;
+import org.mozilla.javascript.annotations.JSGetter;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -49,9 +50,13 @@ public class NativeOutputStreamAdapter
     public static final String MODULE_NAME = "native_output_stream";
     public static final String WRITABLE_MODULE_NAME = "native_stream_writable";
 
-    protected static final Logger log = LoggerFactory.getLogger(NativeOutputAdapterImpl.class);
+    /**
+     * We don't know the actual window size in Java, so guess:
+     */
+    public static final int DEFAULT_WINDOW_COLS = 80;
+    public static final int DEFAULT_WINDOW_ROWS = 24;
 
-    private Scriptable nativeStreamModule;
+    protected static final Logger log = LoggerFactory.getLogger(NativeOutputAdapterImpl.class);
 
     @Override
     public String getModuleName()
@@ -74,13 +79,13 @@ public class NativeOutputStreamAdapter
      * This object may be used directly to support process.stdout and elsewhere.
      */
     public static Scriptable createNativeStream(Context cx, Scriptable scope, NodeRuntime runner,
-                                                OutputStream out, boolean noClose)
+                                                OutputStream out, boolean noClose, boolean couldBeTty)
     {
         Function ctor = (Function)runner.require(WRITABLE_MODULE_NAME, cx);
 
         NativeOutputAdapterImpl adapter =
             (NativeOutputAdapterImpl)cx.newObject(scope, NativeOutputAdapterImpl.CLASS_NAME);
-        adapter.initialize(runner, out, noClose);
+        adapter.initialize(out, noClose, couldBeTty);
 
         Scriptable stream =
             (Scriptable)ctor.call(cx, scope, null,
@@ -94,8 +99,8 @@ public class NativeOutputStreamAdapter
         public static final String CLASS_NAME = "_nativeOutputStreamAdapter";
 
         private OutputStream out;
-        private NodeRuntime runner;
         private boolean noClose;
+        private boolean isTty;
 
         @Override
         public String getClassName()
@@ -103,14 +108,21 @@ public class NativeOutputStreamAdapter
             return CLASS_NAME;
         }
 
-        public void initialize(NodeRuntime runner, OutputStream out, boolean noClose)
+        public void initialize(OutputStream out, boolean noClose, boolean couldBeTty)
         {
-            this.runner = runner;
             this.out = out;
             this.noClose = noClose;
+            this.isTty = (couldBeTty && (System.console() != null));
+        }
+
+        @JSGetter("isTTY")
+        @SuppressWarnings("unused")
+        public boolean isTty() {
+            return isTty;
         }
 
         @JSFunction
+        @SuppressWarnings("unused")
         public static void write(Context cx, Scriptable thisObj, Object[] args, Function func)
         {
             NativeOutputAdapterImpl self = (NativeOutputAdapterImpl)thisObj;
@@ -151,6 +163,7 @@ public class NativeOutputStreamAdapter
         }
 
         @JSFunction
+        @SuppressWarnings("unused")
         public static void close(Context cx, Scriptable thisObj, Object[] args, Function func)
         {
             NativeOutputAdapterImpl self = (NativeOutputAdapterImpl)thisObj;
@@ -162,6 +175,33 @@ public class NativeOutputStreamAdapter
                     log.debug("Error closing output: {}", ioe);
                 }
             }
+        }
+
+        @JSFunction
+        @SuppressWarnings("unused")
+        public static void getWindowSize(Context cx, Scriptable thisObj, Object[] args, Function func)
+        {
+            Scriptable s = objArg(args, 0, Scriptable.class, true);
+
+            int columns = DEFAULT_WINDOW_COLS;
+            String cols = System.getenv("COLUMNS");
+            if (cols != null) {
+                try {
+                    columns = Integer.parseInt(cols);
+                } catch (NumberFormatException ignore) {
+                }
+            }
+            s.put(0, s, columns);
+
+            int rows = DEFAULT_WINDOW_ROWS;
+            String rowStr = System.getenv("LINES");
+            if (rowStr != null) {
+                try {
+                    rows = Integer.parseInt(rowStr);
+                } catch (NumberFormatException ignore) {
+                }
+            }
+            s.put(0, s, rows);
         }
     }
 }

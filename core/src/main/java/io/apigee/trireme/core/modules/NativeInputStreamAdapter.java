@@ -31,6 +31,7 @@ import org.mozilla.javascript.Function;
 import org.mozilla.javascript.Scriptable;
 import org.mozilla.javascript.ScriptableObject;
 import org.mozilla.javascript.annotations.JSFunction;
+import org.mozilla.javascript.annotations.JSGetter;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -72,13 +73,13 @@ public class NativeInputStreamAdapter
     }
 
     public static Scriptable  createNativeStream(Context cx, Scriptable scope, NodeRuntime runner,
-                                                 InputStream in, boolean noClose)
+                                                 InputStream in, boolean noClose, boolean couldBeTty)
     {
         Function ctor = (Function)runner.require(READABLE_MODULE_NAME, cx);
 
         NativeInputAdapterImpl adapter =
             (NativeInputAdapterImpl)cx.newObject(scope, NativeInputAdapterImpl.CLASS_NAME);
-        adapter.initialize(runner, in, noClose);
+        adapter.initialize(runner, in, noClose, couldBeTty);
 
         Scriptable stream =
             (Scriptable)ctor.call(cx, scope, null,
@@ -94,6 +95,7 @@ public class NativeInputStreamAdapter
         private NodeRuntime runner;
         private InputStream in;
         private boolean noClose;
+        private boolean isTty;
 
         @Override
         public String getClassName()
@@ -101,14 +103,22 @@ public class NativeInputStreamAdapter
             return CLASS_NAME;
         }
 
-        void initialize(NodeRuntime runner, InputStream in, boolean noClose)
+        void initialize(NodeRuntime runner, InputStream in, boolean noClose, boolean couldBeTty)
         {
             this.runner = runner;
             this.in = in;
             this.noClose = noClose;
+            this.isTty = (couldBeTty && (System.console() != null));
+        }
+
+        @JSGetter("isTTY")
+        @SuppressWarnings("unused")
+        public boolean isTty() {
+            return isTty;
         }
 
         @JSFunction
+        @SuppressWarnings("unused")
         public static void read(Context cx, Scriptable thisObj, Object[] args, Function func)
         {
             int maxLen = intArg(args, 0);
@@ -200,6 +210,7 @@ public class NativeInputStreamAdapter
         }
 
         @JSFunction
+        @SuppressWarnings("unused")
         public static void close(Context cx, Scriptable thisObj, Object[] args, Function func)
         {
             NativeInputAdapterImpl self = (NativeInputAdapterImpl)thisObj;

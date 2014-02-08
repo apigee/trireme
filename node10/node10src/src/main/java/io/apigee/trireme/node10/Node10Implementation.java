@@ -64,6 +64,7 @@ public class Node10Implementation
             { "trireme_uncloseable_transform", P + "trireme.trireme_uncloseable_transform" },
             { "tls",                    P + "trireme.tls" },
             { "tls_checkidentity",      P + "trireme.tls_checkidentity" },
+            { "tty",                    P + "trireme.tty" },
             { "vm",                     P + "trireme.vm" },
             { "zlib",                   P + "trireme.zlib" }
         };

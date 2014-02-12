@@ -20,6 +20,7 @@
  * SOFTWARE.
  */
 
+var net = require('net');
 var util = require('util');
 
 exports.isatty = function(fd) {
@@ -40,3 +41,83 @@ exports.setRawMode = util.deprecate(function(flag) {
   }
   process.stdin.setRawMode(flag);
 }, 'tty.setRawMode: Use `process.stdin.setRawMode()` instead.');
+
+function ReadStream(handle) {
+  if (!(this instanceof ReadStream))
+    return new ReadStream(handle);
+
+  net.Socket.call(this, {
+    highWaterMark: 0,
+    readable: true,
+    writable: false,
+    handle: handle
+  });
+
+  this.isTTY = true;
+}
+util.inherits(ReadStream, net.Socket);
+
+exports.ReadStream = ReadStream;
+
+ReadStream.prototype.setRawMode = function(flag) {
+  flag = !!flag;
+  this._handle.setRawMode(flag);
+};
+
+function WriteStream(handle) {
+  if (!(this instanceof WriteStream))
+    return new WriteStream(handle);
+  net.Socket.call(this, {
+    handle: handle,
+    readable: false,
+    writable: true
+  });
+
+  var winSize = [];
+  var err = this._handle.getWindowSize(winSize);
+  if (!err) {
+    this.columns = winSize[0];
+    this.rows = winSize[1];
+  }
+}
+util.inherits(WriteStream, net.Socket);
+exports.WriteStream = WriteStream;
+
+
+WriteStream.prototype.isTTY = true;
+
+WriteStream.prototype._refreshSize = function() {
+  var oldCols = this.columns;
+  var oldRows = this.rows;
+  var winSize = [];
+  var err = this._handle.getWindowSize(winSize);
+  if (err) {
+    this.emit('error', errnoException(err, 'getWindowSize'));
+    return;
+  }
+  var newCols = winSize[0];
+  var newRows = winSize[1];
+  if (oldCols !== newCols || oldRows !== newRows) {
+    this.columns = newCols;
+    this.rows = newRows;
+    this.emit('resize');
+  }
+};
+
+
+// backwards-compat
+WriteStream.prototype.cursorTo = function(x, y) {
+  require('readline').cursorTo(this, x, y);
+};
+WriteStream.prototype.moveCursor = function(dx, dy) {
+  require('readline').moveCursor(this, dx, dy);
+};
+WriteStream.prototype.clearLine = function(dir) {
+  require('readline').clearLine(this, dir);
+};
+WriteStream.prototype.clearScreenDown = function() {
+  require('readline').clearScreenDown(this);
+};
+WriteStream.prototype.getWindowSize = function() {
+  return [this.columns, this.rows];
+};

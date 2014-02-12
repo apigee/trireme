@@ -25,15 +25,10 @@ import io.apigee.trireme.core.NodeEnvironment;
 import io.apigee.trireme.core.NodeException;
 import io.apigee.trireme.core.NodeScript;
 import io.apigee.trireme.core.ScriptStatus;
-import io.apigee.trireme.core.Utils;
 import org.mozilla.javascript.Context;
 import org.mozilla.javascript.JavaScriptException;
 import org.mozilla.javascript.RhinoException;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
-import java.io.File;
-import java.io.IOException;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Future;
 
@@ -42,33 +37,26 @@ import java.util.concurrent.Future;
  */
 public class Main
 {
-    private static final Logger log = LoggerFactory.getLogger(Main.class);
-
-    private static final String RUN_REPL =
-        "var repl = require('repl');\n" +
-        "var opts = {};\n" +
-        "var sr = repl.start(opts);\n" +
-        "sr.on('exit', function() {\n" +
-        "process.exit();\n" +
-        "});";
-
-    public static final String ADAPTER_PROP = "HttpAdapter";
-    public static final String OPT_PROP = "OptLevel";
-    public static final String SEAL_PROP = "SealRoot";
-
     private String scriptSource;
-    private String scriptFile;
     private boolean runRepl;
+    private boolean printEval;
     private String[] scriptArgs;
-    private String scriptName;
 
     private static void printUsage()
     {
         System.err.println("Usage: " + Main.class.getName() + " [options] [ -e script | script.js ] [arguments]");
         System.err.println();
         System.err.println("Options:");
+        System.err.println("  -v, --version        Print Version");
         System.err.println("  -e, --eval script    Evaluate script");
+        System.err.println("  -p, --print          Evaluate script and print result");
         System.err.println("  -i, --interactive    Enter the REPL even if stdin doesn't appear to be a terminal");
+        // TODO --no-deprecation, --trace-deprecation
+    }
+
+    private static void printVersion()
+    {
+        System.err.println("Trireme");
     }
 
     public static void main(String[] args)
@@ -82,30 +70,29 @@ public class Main
         }
     }
 
-    private boolean argsComplete()
-    {
-        return (runRepl || (scriptSource != null) || (scriptFile != null));
-    }
-
     private boolean parseArgs(String[] args)
     {
         int i = 0;
         boolean wasEval = false;
-        while ((i < args.length) && !argsComplete()) {
+        while (i < args.length) {
             if ("-h".equals(args[i]) || "--help".equals(args[i])) {
                 printUsage();
+                return false;
+            } else if ("-v".equals(args[i])) {
+                printVersion();
                 return false;
             } else if (wasEval) {
                 wasEval = false;
                 scriptSource = args[i];
-                scriptName = "[eval]";
             } else if ("-i".equals(args[i]) || "--interactive".equals(args[i])) {
                 runRepl = true;
-                scriptName = "[repl]";
             } else if ("-e".equals(args[i]) || "--eval".equals(args[i])) {
                 wasEval = true;
+            } else if ("-p".equals(args[i]) || "--print".equals(args[i])) {
+                wasEval = true;
+                printEval = true;
             } else {
-                scriptFile = args[i];
+                break;
             }
             i++;
         }
@@ -120,30 +107,15 @@ public class Main
     private int run()
     {
         NodeEnvironment env = new NodeEnvironment();
-        String opt = System.getProperty(SEAL_PROP);
-        if (opt != null) {
-            env.setSealRoot(Boolean.valueOf(opt));
-        }
-        opt = System.getProperty(OPT_PROP);
-        if (opt != null) {
-            env.setOptLevel(Integer.parseInt(opt));
-        }
 
         try {
             NodeScript ns;
-            if (scriptFile != null) {
-                File sf = new File(scriptFile);
-                scriptName = sf.getName();
-                ns = env.createScript(scriptName, sf, scriptArgs);
-            } else if (scriptSource != null) {
-                ns = env.createScript(scriptName, scriptSource, scriptArgs);
-            } else if (runRepl || (System.console() != null)) {
-                ns = env.createScript("[repl]", RUN_REPL, null);
-                ns.setPinned(true);
+            if (scriptSource != null) {
+                // Force an "eval"
+                ns = env.createScript("[eval]", scriptSource, scriptArgs);
+                ns.setPrintEval(printEval);
             } else {
-                scriptSource = Utils.readStream(System.in);
-                scriptName = "[stdin]";
-                ns = env.createScript(scriptName, scriptSource, null);
+                ns = env.createScript(scriptArgs, runRepl);
             }
 
             ScriptStatus status;
@@ -161,9 +133,6 @@ public class Main
             return status.getExitCode();
         } catch (NodeException ne) {
             ne.printStackTrace(System.err);
-            return 99;
-        } catch (IOException ioe) {
-            ioe.printStackTrace(System.err);
             return 99;
         } catch (InterruptedException ie) {
             return 99;

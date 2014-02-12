@@ -111,6 +111,7 @@ public class ScriptRunner
     private String              workingDirectory;
     private String              scriptFileName;
     private Scriptable          parentProcess;
+    private boolean             forceRepl;
 
     private ScriptableObject    scope;
 
@@ -118,7 +119,7 @@ public class ScriptRunner
                         String scriptName, File scriptFile,
                         String[] args)
     {
-        this(so, env, sandbox, scriptName, args);
+        this(so, env, sandbox, args);
         this.scriptFile = scriptFile;
 
         try {
@@ -137,12 +138,19 @@ public class ScriptRunner
                         String scriptName, String script,
                         String[] args)
     {
-        this(so, env, sandbox, scriptName, args);
+        this(so, env, sandbox, args);
         this.script = script;
         this.scriptFileName = scriptName;
     }
 
-    private ScriptRunner(NodeScript so, NodeEnvironment env, Sandbox sandbox, String scriptName,
+    public ScriptRunner(NodeScript so, NodeEnvironment env, Sandbox sandbox,
+                        String[] args, boolean forceRepl)
+    {
+        this(so, env, sandbox, args);
+        this.forceRepl = forceRepl;
+    }
+
+    private ScriptRunner(NodeScript so, NodeEnvironment env, Sandbox sandbox,
                          String[] args)
     {
         this.env = env;
@@ -525,9 +533,14 @@ public class ScriptRunner
                 initialized.countDown();
             }
 
-            if (scriptFile == null) {
+            if ((scriptFile == null) && (script == null)) {
+                // Just have trireme.js process "process.argv"
+                process.setForceRepl(forceRepl);
+                setArgv(null);
+            } else if (scriptFile == null) {
                 // If the script was passed as a string, pretend that "-e" was used to "eval" it.
                 process.setEval(script);
+                process.setPrintEval(scriptObject.isPrintEval());
                 setArgv(null);
             } else {
                 // Otherwise, assume that the script was the second argument to "argv".
@@ -552,29 +565,6 @@ public class ScriptRunner
                     endTiming(cx);
                 }
             }
-
-            /*
-            if (scriptFile == null) {
-                Scriptable bootstrap = (Scriptable)require("bootstrap", cx);
-                Function eval = (Function)bootstrap.get("evalScript", bootstrap);
-                enqueueCallback(eval, mainModule, mainModule,
-                                new Object[] { scriptName, script });
-
-            } else {
-                // Again like the real node, delegate running the actual script to the module module.
-                //if (!scriptFile.isAbsolute() && !scriptPath.startsWith("./")) {
-                    // Add ./ before script path to un-confuse the module module if it's a local path
-                //    scriptPath = new File("./", scriptPath).getPath();
-               // }
-
-                if (log.isDebugEnabled()) {
-                    log.debug("Launching module.runMain({})", scriptFileName);
-                }
-                setArgv(scriptFileName);
-                Function load = (Function)mainModule.get("runMain", mainModule);
-                enqueueCallback(load, mainModule, mainModule, null);
-            }
-            */
 
             status = mainLoop(cx);
 

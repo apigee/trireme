@@ -39,13 +39,15 @@ public class NodeScript
 
     private File scriptFile;
     private String script;
-    private final String scriptName;
+    private String scriptName;
     private final String[] args;
     private ScriptRunner runner;
     private Object attachment;
     private Sandbox sandbox;
     private Scriptable parentProcess;
     private boolean pin;
+    private boolean forceRepl;
+    private boolean printEval;
     private Map<String, String> environment;
 
     NodeScript(NodeEnvironment env, String scriptName, File script, String[] args)
@@ -66,6 +68,14 @@ public class NodeScript
         this.sandbox = env.getSandbox();
     }
 
+    NodeScript(NodeEnvironment env, String[] args, boolean forceRepl)
+    {
+        this.args = args;
+        this.env = env;
+        this.forceRepl = forceRepl;
+        this.sandbox = env.getSandbox();
+    }
+
     /**
      * Run the script and return a Future denoting its status. The script is treated exactly as any other
      * Node.js program -- that is, it runs in a separate thread, and the returned future may be used to
@@ -81,7 +91,9 @@ public class NodeScript
     public ScriptFuture execute()
         throws NodeException
     {
-        if (scriptFile == null) {
+        if ((scriptFile == null) && (script == null)) {
+            runner = new ScriptRunner(this, env, sandbox, args, forceRepl);
+        } else if (scriptFile == null) {
             runner = new ScriptRunner(this, env, sandbox, scriptName, script, args);
         } else {
             runner = new ScriptRunner(this, env, sandbox, scriptName, scriptFile, args);
@@ -192,6 +204,19 @@ public class NodeScript
     public boolean isPinned()
     {
         return pin;
+    }
+
+    /**
+     * If the script was passed as a string when the script was created, print the result at the end.
+     */
+    public void setPrintEval(boolean print)
+    {
+        this.printEval = print;
+    }
+
+    public boolean isPrintEval()
+    {
+        return printEval;
     }
 
     /**

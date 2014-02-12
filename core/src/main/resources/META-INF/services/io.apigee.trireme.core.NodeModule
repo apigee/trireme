@@ -1,12 +1,14 @@
 io.apigee.trireme.core.modules.Buffer
 io.apigee.trireme.core.modules.CaresWrap
 io.apigee.trireme.core.modules.Constants
+io.apigee.trireme.core.modules.ConsoleWrap
 io.apigee.trireme.core.modules.DecoderWrap
 io.apigee.trireme.core.modules.DNS
 io.apigee.trireme.core.modules.Evals
 io.apigee.trireme.core.modules.Crypto
 io.apigee.trireme.core.modules.HTTPParser
 io.apigee.trireme.core.modules.HTTPWrap
+io.apigee.trireme.core.modules.JavaStreamWrap
 io.apigee.trireme.core.modules.ModuleLoader
 io.apigee.trireme.core.modules.NativeModule
 io.apigee.trireme.core.modules.NativeInputStreamAdapter

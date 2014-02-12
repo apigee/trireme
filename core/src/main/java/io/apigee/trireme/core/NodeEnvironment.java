@@ -117,6 +117,18 @@ public class NodeEnvironment
     }
 
     /**
+     * Create an instance of the script that will process command-line arguments from argv like regular
+     * Node.js. This script will look at process.argv for a script file name, and if not found it will either
+     * run the "repl" (if "forceRepl" is true or stdin is not a TTY) or it will read from standard input.
+     */
+    public NodeScript createScript(String[] args, boolean forceRepl)
+        throws NodeException
+    {
+        initialize();
+        return new NodeScript(this, args, forceRepl);
+    }
+
+    /**
      * Replace the default HTTP implementation with a custom implementation. Must be set before
      * any calls to "createScript" in order to have any effect.
      */

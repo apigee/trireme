@@ -59,6 +59,5 @@ NativeReadableStream.prototype.destroy = function() {
 
 NativeReadableStream.prototype.setRawMode = function(flag) {
   flag = !!flag;
-  // We don't actually do anything with this yet
-  this.isRaw = flag;
+  this.handle.setRawMode(flag);
 };

@@ -24,6 +24,7 @@ package io.apigee.trireme.core.modules;
 import io.apigee.trireme.core.NodeRuntime;
 import io.apigee.trireme.core.ScriptTask;
 import io.apigee.trireme.core.InternalNodeModule;
+import io.apigee.trireme.core.internal.Charsets;
 import io.apigee.trireme.core.internal.NodeOSException;
 import io.apigee.trireme.core.Utils;
 import org.mozilla.javascript.Context;
@@ -96,6 +97,7 @@ public class NativeInputStreamAdapter
         private InputStream in;
         private boolean noClose;
         private boolean isTty;
+        private boolean isRaw;
 
         @Override
         public String getClassName()
@@ -135,35 +137,57 @@ public class NativeInputStreamAdapter
             }
 
             final Scriptable domain = runner.getDomain();
+            runner.pin();
             runner.getUnboundedPool().execute(new Runnable()
             {
                 @Override
                 public void run()
                 {
-                    byte[] buf = new byte[readLen];
+                    byte[] buf;
                     try {
                         if (log.isDebugEnabled()) {
-                            log.debug("Reading up to {} from {}", readLen, in);
+                            log.debug("Reading up to {} from {} rawMode = {}", readLen, in, isRaw);
                         }
-                        int bytesRead = in.read(buf);
+
+                        int bytesRead;
+                        if (isTty && !isRaw) {
+                            // When reading from the real console, try to use "cooked" mode
+                            String line = System.console().readLine();
+                            if (line == null) {
+                                bytesRead = -1;
+                                buf = null;
+                            } else {
+                                buf = line.getBytes(Charsets.UTF8);
+                                bytesRead = buf.length;
+                            }
+                        } else {
+                            // Just read from whatever the TTY is
+                            buf = new byte[readLen];
+                            bytesRead = in.read(buf);
+                        }
                         if (log.isDebugEnabled()) {
                             log.debug("Read {} from {}", bytesRead, in);
                         }
+
                         if (bytesRead > 0) {
                             fireData(callback, buf, bytesRead, maxLen, domain);
                         } else if (bytesRead < 0) {
                             fireData(callback, null, 0, maxLen, domain);
                         }
+
                     } catch (IOException ioe) {
                         if (log.isDebugEnabled()) {
                             log.debug("Error on read from {}: {}", in, ioe);
                         }
                         if ((ioe instanceof EOFException) ||
-                            "Stream closed".equals(ioe.getMessage())) {
+                            "Stream closed".equals(ioe.getMessage()))
+                        {
                             fireData(callback, null, 0, 0, domain);
                         } else {
                             fireError(callback, new NodeOSException(Constants.EIO, ioe), domain);
                         }
+                    } finally {
+                        runner.unPin();
                     }
                 }
             });
@@ -224,6 +248,15 @@ public class NativeInputStreamAdapter
                     log.debug("Error closing input stream {}: {}", self.in,  ioe);
                 }
             }
+        }
+
+        @JSFunction
+        @SuppressWarnings("unused")
+        public static void setRawMode(Context cx, Scriptable thisObj, Object[] args, Function func)
+        {
+            boolean raw = booleanArg(args, 0);
+            NativeInputAdapterImpl self = (NativeInputAdapterImpl)thisObj;
+            self.isRaw = raw;
         }
     }
 }

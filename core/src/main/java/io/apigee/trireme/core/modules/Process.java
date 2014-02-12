@@ -111,6 +111,8 @@ public class Process
         private boolean throwDeprecation;
         private boolean traceDeprecation;
         private String eval;
+        private boolean printEval;
+        private boolean forceRepl;
         private Scriptable tickInfoBox;
 
         @JSConstructor
@@ -144,6 +146,30 @@ public class Process
         @SuppressWarnings("unused")
         public void setEval(String eval) {
             this.eval = eval;
+        }
+
+        @JSGetter("_print_eval")
+        @SuppressWarnings("unused")
+        public boolean isPrintEval() {
+            return printEval;
+        }
+
+        @JSSetter("_print_eval")
+        @SuppressWarnings("unused")
+        public void setPrintEval(boolean eval) {
+            this.printEval = eval;
+        }
+
+        @JSGetter("_forceRepl")
+        @SuppressWarnings("unused")
+        public boolean isForceRepl() {
+            return forceRepl;
+        }
+
+        @JSSetter("_forceRepl")
+        @SuppressWarnings("unused")
+        public void setForceRepl(boolean force) {
+            this.forceRepl = force;
         }
 
         @JSGetter("_tickInfoBox")
@@ -209,14 +235,6 @@ public class Process
         @SuppressWarnings("unused")
         public Object getStdout()
         {
-            if (stdout == null) {
-                Context cx = Context.getCurrentContext();
-                runner.requireInternal(NativeOutputStreamAdapter.MODULE_NAME, cx);
-                stdout =
-                    NativeOutputStreamAdapter.createNativeStream(cx,
-                                                                 runner.getScriptScope(), runner,
-                                                                 runner.getStdout(), true, true);
-            }
             return stdout;
         }
 
@@ -225,18 +243,31 @@ public class Process
             this.stdout = s;
         }
 
+        @JSGetter("_stdoutHandle")
+        @SuppressWarnings("unused")
+        public Object getStdoutHandle()
+        {
+            Context cx = Context.getCurrentContext();
+
+            if ((runner.getStdout() == System.out) && ConsoleWrap.isConsoleSupported()) {
+                ConsoleWrap.ModuleImpl mod =
+                    (ConsoleWrap.ModuleImpl)runner.requireInternal(ConsoleWrap.MODULE_NAME, cx);
+                ConsoleWrap.ConsoleWrapImpl handle = mod.createHandle(cx, this);
+                return handle;
+
+            } else {
+                JavaStreamWrap.ModuleImpl mod =
+                    (JavaStreamWrap.ModuleImpl)runner.requireInternal(JavaStreamWrap.MODULE_NAME, cx);
+                JavaStreamWrap.StreamWrapImpl handle = mod.createHandle(cx, this);
+                handle.setOutput(runner.getStdout());
+                return handle;
+            }
+        }
+
         @JSGetter("_stderrStream")
         @SuppressWarnings("unused")
         public Object getStderr()
         {
-            if (stderr == null) {
-                Context cx = Context.getCurrentContext();
-                runner.requireInternal(NativeOutputStreamAdapter.MODULE_NAME, cx);
-                stderr =
-                    NativeOutputStreamAdapter.createNativeStream(cx,
-                                                                 runner.getScriptScope(), runner,
-                                                                 runner.getStderr(), true, false);
-            }
             return stderr;
         }
 
@@ -245,24 +276,57 @@ public class Process
             this.stderr = s;
         }
 
+        @JSGetter("_stderrHandle")
+        @SuppressWarnings("unused")
+        public Object getStderrHandle()
+        {
+            Context cx = Context.getCurrentContext();
+            JavaStreamWrap.ModuleImpl mod =
+                (JavaStreamWrap.ModuleImpl)runner.requireInternal(JavaStreamWrap.MODULE_NAME, cx);
+            JavaStreamWrap.StreamWrapImpl handle = mod.createHandle(cx, this);
+            handle.setOutput(runner.getStderr());
+            return handle;
+        }
+
+        /**
+         * trireme.js calls this to initialize stdin. Only return if we already set a JavaScript object there,
+         * which would happen if we were running as a child process.
+         */
         @JSGetter("_stdinStream")
         @SuppressWarnings("unused")
         public Object getStdin()
         {
-            if (stdin == null) {
-                Context cx = Context.getCurrentContext();
-                runner.requireInternal(NativeInputStreamAdapter.MODULE_NAME, cx);
-                stdin =
-                    NativeInputStreamAdapter.createNativeStream(cx,
-                                                                runner.getScriptScope(), runner,
-                                                                runner.getStdin(), true, true);
-            }
             return stdin;
         }
 
         public void setStdin(Scriptable s)
         {
             this.stdin = s;
+        }
+
+        /**
+         * If no stream was set up, use this handle instead. trireme.js will pass it to net.socket to create
+         * stdout.
+         */
+        @JSGetter("_stdinHandle")
+        @SuppressWarnings("unused")
+        public Object getStdinHandle()
+        {
+            Context cx = Context.getCurrentContext();
+
+            if ((runner.getStdin() == System.in) && ConsoleWrap.isConsoleSupported()) {
+                ConsoleWrap.ModuleImpl mod =
+                    (ConsoleWrap.ModuleImpl)runner.requireInternal(ConsoleWrap.MODULE_NAME, cx);
+                ConsoleWrap.ConsoleWrapImpl handle = mod.createHandle(cx, this);
+                return handle;
+
+            } else {
+                JavaStreamWrap.ModuleImpl mod =
+                    (JavaStreamWrap.ModuleImpl)runner.requireInternal(JavaStreamWrap.MODULE_NAME, cx);
+                JavaStreamWrap.StreamWrapImpl handle = mod.createHandle(cx, this);
+                handle.setInput(runner.getStdin());
+                return handle;
+            }
         }
 
         @JSGetter("argv")

@@ -570,6 +570,23 @@
     process.__defineGetter__('stdout', function() {
       if (stdout) return stdout;
       stdout = process._stdoutStream;
+
+      if (!stdout) {
+        // Create a handle that could be the TTY
+        var handle = process._stdoutHandle;
+        if (handle.isTTY) {
+          var tty = NativeModule.require('tty');
+          stdout = new tty.WriteStream(handle);
+        } else {
+          var net = NativeModule.require('net');
+          stdout = new net.Socket({
+            handle: handle,
+            readable: false,
+            writable: true
+          });
+        }
+      }
+
       stdout.fd = 1;
       stdout.destroy = stdout.destroySoon = function(er) {
         er = er || new Error('process.stdout cannot be closed.');
@@ -586,6 +603,16 @@
     process.__defineGetter__('stderr', function() {
       if (stderr) return stderr;
       stderr = process._stderrStream;
+
+      if (!stderr) {
+        var net = NativeModule.require('net');
+        stderr = new net.Socket({
+          handle: process._stderrHandle,
+          readable: false,
+          writable: true
+        });
+      }
+
       stderr.fd = 2;
       stderr.destroy = stderr.destroySoon = function(er) {
         er = er || new Error('process.stderr cannot be closed.');
@@ -598,11 +625,25 @@
       if (stdin) return stdin;
       stdin = process._stdinStream;
 
+      if (!stdin) {
+        // If we get here we have to create a new stdin. It could be a tty.
+        var handle = process._stdinHandle;
+        if (handle.isTTY) {
+          var tty = NativeModule.require('tty');
+          stdin = new tty.ReadStream(handle);
+        } else {
+          var net = NativeModule.require('net');
+          stdin = new net.Socket({
+            handle: handle,
+            readable: true,
+            writable: false
+          });
+        }
+      }
+
       // For supporting legacy API we put the FD here.
       stdin.fd = 0;
 
-
-      /* TODO we may need to optimize this stuff
       // stdin starts out life in a paused state, but node doesn't
       // know yet.  Explicitly to readStop() it to put it in the
       // not-reading state.
@@ -621,7 +662,6 @@
         stdin._handle.reading = false;
         stdin._handle.readStop();
       });
-      */
 
       return stdin;
     });

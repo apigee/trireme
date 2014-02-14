@@ -254,8 +254,9 @@ public class JavaStreamWrap
                 @Override
                 public void execute(Context cx, Scriptable scope)
                 {
-                    Function afterWrite = (Function)ScriptableObject.getProperty(req, "oncomplete");
-                    if (afterWrite != null) {
+                    Object onComplete = ScriptableObject.getProperty(req, "oncomplete");
+                    if ((onComplete != null) && Context.getUndefinedValue().equals(onComplete)) {
+                        Function afterWrite = (Function)ScriptableObject.getProperty(req, "oncomplete");
                         afterWrite.call(cx, scope, self,
                                         new Object[] { Context.getUndefinedValue(), self, req });
                     }

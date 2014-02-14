@@ -54,6 +54,7 @@ function readStop(socket) {
 // called to process trailing HTTP headers.
 function parserOnHeaders(headers, url) {
   // Once we exceeded headers limit - stop collecting them
+  debug('parserOnHeaders');
   if (this.maxHeaderPairs <= 0 ||
       this._headers.length < this.maxHeaderPairs) {
     this._headers = this._headers.concat(headers);
@@ -70,6 +71,8 @@ function parserOnHeadersComplete(info) {
   var parser = this;
   var headers = info.headers;
   var url = info.url;
+
+  debug('parseOnHeadersComplete: ' + info.statusCode);
 
   if (!headers) {
     headers = parser._headers;
@@ -130,6 +133,8 @@ function parserOnBody(b, start, len) {
   var parser = this;
   var stream = parser.incoming;
 
+  debug('parserOnBody (' + start + ', ' + len + ')');
+
   // if the stream has already been removed, then drop it.
   if (!stream)
     return;
@@ -148,6 +153,8 @@ function parserOnBody(b, start, len) {
 function parserOnMessageComplete() {
   var parser = this;
   var stream = parser.incoming;
+
+  debug('parseOnMessageComplete');
 
   if (stream) {
     stream.complete = true;

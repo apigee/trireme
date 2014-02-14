@@ -451,6 +451,7 @@ public class SSLWrap
             try {
                 if ((self.keyManagers == null) && (tms == null)) {
                     self.context = SSLContext.getDefault();
+                    self.trustStoreValidation = true;
                 } else {
                     self.context = SSLContext.getInstance("TLS");
                     self.context.init(self.keyManagers, tms, null);

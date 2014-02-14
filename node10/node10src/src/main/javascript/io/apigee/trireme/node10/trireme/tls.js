@@ -63,6 +63,9 @@ function toBuf(b) {
 function getClientContext(opts, rejectUnauthorized) {
   var ctx = wrap.createContext();
 
+  if (debugEnabled) {
+    debug('TLS client context rejectUnauthorized = ' + rejectUnauthorized);
+  }
   if (!rejectUnauthorized) {
     debug('Using SSL context that trusts everyone');
     ctx.setTrustEverybody();
@@ -705,6 +708,11 @@ CleartextStream.prototype.justHandshaked = function() {
     clearTimeout(this.handshakeTimeout);
   }
   this.readable = this.writable = true;
+
+  if (debugEnabled) {
+    debug('Handshake complete. authorized = ' +
+          this.engine.peerAuthorized + ' err = ' + this.engine.authorizationError);
+  }
 
   this.authorized = this.engine.peerAuthorized;
   this.authorizationError = this.engine.authorizationError;

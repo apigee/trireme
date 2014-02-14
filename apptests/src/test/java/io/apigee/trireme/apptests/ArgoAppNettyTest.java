@@ -8,35 +8,53 @@ import io.apigee.trireme.core.ScriptFuture;
 import org.junit.AfterClass;
 import org.junit.BeforeClass;
 import org.junit.Test;
+import org.junit.runner.RunWith;
+import org.junit.runners.Parameterized;
 
 import java.io.File;
 import java.io.IOException;
+import java.util.Arrays;
+import java.util.Collection;
 import java.util.concurrent.CancellationException;
 import java.util.concurrent.ExecutionException;
 
+@RunWith(Parameterized.class)
 public class ArgoAppNettyTest
 {
     private static final int PORT = 33334;
-    private static final String BASEURL = "http://localhost:" + PORT;
+    private static final String BASEURL = "http://localhost:";
 
-    private static ScriptFuture scriptFuture;
+    private boolean useNetty;
 
-    @BeforeClass
-    public static void start()
-        throws NodeException, IOException, InterruptedException
+    @Parameterized.Parameters
+    public static Collection<Object[]> getParameters()
     {
-        NodeEnvironment env = new NodeEnvironment();
-        env.setHttpContainer(new NettyHttpContainer());
-        NodeScript script = env.createScript("server.js", new File("./target/test-classes/argo/server.js"), null);
-        scriptFuture = script.execute();
-        Utils.awaitPortOpen(PORT);
+        return Arrays.asList(new Object[][]{{true}, {false}});
     }
 
-    @AfterClass
-    public static void stop()
-        throws ExecutionException, InterruptedException
+    public ArgoAppNettyTest(boolean useNetty)
     {
-        System.out.println("Cancelling the script");
+        this.useNetty = useNetty;
+    }
+
+    @Test
+    public void testGetWeather()
+        throws IOException, NodeException, InterruptedException, ExecutionException
+    {
+        NodeEnvironment env = new NodeEnvironment();
+        if (useNetty) {
+            env.setHttpContainer(new NettyHttpContainer());
+        }
+        // Use separate ports between netty and non-netty because netty might take a while to close them
+        int port = PORT + (useNetty ? 1 : 0);
+        NodeScript script = env.createScript("server.js", new File("./target/test-classes/argo/server.js"),
+                                             new String[] { String.valueOf(port) });
+        ScriptFuture scriptFuture = script.execute();
+        System.out.println("Waiting for the port to open. useNetty = " + useNetty);
+        Utils.awaitPortOpen(port);
+
+        System.out.println("Port " + port + " is open");
+        Utils.getString(BASEURL + port + "/forecastrss?p=08904", 200);
         scriptFuture.cancel(true);
 
         try {
@@ -44,13 +62,5 @@ public class ArgoAppNettyTest
         } catch (CancellationException ok) {
         }
         System.out.println("Server has stopped");
-    }
-
-    @Test
-    public void testGetWeather()
-        throws IOException
-    {
-        Utils.getString(BASEURL + "/forecastrss?p=08904", 200);
-        System.out.println("Got a weather forecast");
     }
 }

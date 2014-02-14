@@ -1,0 +1,15 @@
+{
+  "name": "apitest",
+  "version": "0.0.1",
+  "description": "A test package.json",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "argo": "0.4.x",
+    "usergrid": "0.10.x"
+  }
+}

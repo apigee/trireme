@@ -1196,6 +1196,8 @@ public class AsyncFilesystem
             UserPrincipalLookupService lookupService =
                 FileSystems.getDefault().getUserPrincipalLookupService();
 
+            // In Java, we can't actually get the unix UID, so we take a username here, rather
+            // than a UID. That may cause problems for NPM, which may try to use a UID.
             try {
                 UserPrincipal user = lookupService.lookupPrincipalByName(uid);
                 GroupPrincipal group = lookupService.lookupPrincipalByGroupName(gid);
@@ -1403,6 +1405,12 @@ public class AsyncFilesystem
             put("atime", this, makeDate(cx, attrs.lastAccessTime().toMillis()));
             put("mtime", this, makeDate(cx, attrs.lastModifiedTime().toMillis()));
             put("ctime", this, makeDate(cx, attrs.creationTime().toMillis()));
+
+            // This is a bit gross -- we can't actually get the real Unix UID of the user or group, but some
+            // code -- notably NPM -- expects that this is returned as a number. So, returned the hashed
+            // value, which is the best that we can do without native code.
+            put("uid", this, attrs.owner().hashCode());
+            put("gid", this, attrs.group().hashCode());
 
             int mode = 0;
 

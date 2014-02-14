@@ -57,8 +57,6 @@ public class Node10Implementation
             { "http",                   P + "trireme.adaptorhttp" },
             { "https",                  P + "trireme.adaptorhttps" },
             { "child_process",          P + "trireme.child_process" },
-            { "native_stream_readable", P + "trireme.native_stream_readable" },
-            { "native_stream_writable", P + "trireme.native_stream_writable" },
             { "trireme_metrics",        P + "trireme.trireme_metrics" },
             { "string_decoder",         P + "trireme.trireme_string_decoder" },
             { "trireme_uncloseable_transform", P + "trireme.trireme_uncloseable_transform" },

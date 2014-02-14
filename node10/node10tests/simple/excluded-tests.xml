@@ -12,10 +12,6 @@
         <Description>cluster module support planned but not implemented.</Description>
     </Excluded>
     <Excluded>
-        <Name>test-child-process.+\.js</Name>
-        <Description>Support for handles and sockets not done yet.</Description>
-    </Excluded>
-    <Excluded>
         <Name>test-process-env.js</Name>
         <Description>Support for environment variables in child process not done yet.</Description>
     </Excluded>
@@ -26,6 +22,61 @@
     <Excluded>
         <Name>test-http-server-stale-close.js</Name>
         <Description>Depends on us adding environment variable support to "fork".</Description>
+    </Excluded>
+    <Excluded>
+        <Name>test-child-process-cwd.js</Name>
+        <Description>No cwd for children yet</Description>
+    </Excluded>
+    <Excluded>
+        <Name>test-child-process-exec-cwd.js</Name>
+        <Description>No cwd for children yet</Description>
+    </Excluded>
+    <Excluded>
+        <Name>test-child-process-fork-dgram.js</Name>
+        <Description>No passing handles to children yet</Description>
+    </Excluded>
+    <Excluded>
+        <Name>test-child-process-fork-getconnections.js</Name>
+        <Description>No passing handles to children yet</Description>
+    </Excluded>
+    <Excluded>
+        <Name>test-child-process-fork-net.js</Name>
+        <Description>No passing handles to children yet</Description>
+    </Excluded>
+    <Excluded>
+        <Name>test-child-process-fork-net2.js</Name>
+        <Description>No passing handles to children yet</Description>
+    </Excluded>
+    <Excluded>
+        <Name>test-child-process-internal.js</Name>
+    </Excluded>
+    <Excluded>
+        <Name>test-child-process-ipc.js</Name>
+        <Description>No passing handles to children yet</Description>
+    </Excluded>
+    <Excluded>
+        <Name>test-child-process-recv-handle.js</Name>
+        <Description>No passing handles to children yet</Description>
+    </Excluded>
+    <Excluded>
+        <Name>test-child-process-disconnect.js</Name>
+        <Description>No passing handles to children yet</Description>
+    </Excluded>
+    <Excluded>
+        <Name>test-child-process-fork-ref.js</Name>
+        <Description>No passing handles to children yet</Description>
+    </Excluded>
+    <Excluded>
+        <Name>test-child-process-fork.js</Name>
+        <Description>No passing handles to children yet</Description>
+    </Excluded>
+    <Excluded>
+        <Name>test-child-process-silent.js</Name>
+        <Description>No passing handles to children yet</Description>
+    </Excluded>
+    <Excluded>
+        <Name>test-child-process-stdio-inherit.js</Name>
+        <Description>Don't have nested children worked out yet.</Description>
     </Excluded>
 
     <!-- NOT SUPPORTED
@@ -106,8 +157,8 @@
         <Description>No network IO on fds or pipes.</Description>
     </Excluded>
     <Excluded>
-        <Name>test-tty.*\.js</Name>
-        <Description>Requires some tty support.</Description>
+        <Name>test-tty-wrap.js</Name>
+        <Description>Internal code that we don't support.</Description>
     </Excluded>
     <Excluded>
         <Name>test-deprecation.*\.js</Name>
@@ -288,6 +339,10 @@
     <Excluded>
         <Name>test-http-client-parse-error.js</Name>
         <Description>We won't return an error until we get a CRLF -- shouldn't be a big deal but we should revisit.</Description>
+    </Excluded>
+    <Excluded>
+        <Name>test-child-process-kill.js</Name>
+        <Description>Different exit code in Java.</Description>
     </Excluded>
 
     <!-- INTERNAL TESTS

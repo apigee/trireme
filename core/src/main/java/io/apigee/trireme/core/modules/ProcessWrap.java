@@ -97,8 +97,6 @@ public class ProcessWrap
         throws InvocationTargetException, IllegalAccessException, InstantiationException
     {
         ScriptRunner internalRunner = (ScriptRunner)runner;
-        internalRunner.requireInternal(NativeInputStreamAdapter.MODULE_NAME, cx);
-        internalRunner.requireInternal(NativeOutputStreamAdapter.MODULE_NAME, cx);
         internalRunner.require("stream", cx);
 
         ScriptableObject.defineClass(scope, ProcessImpl.class, false, true);
@@ -186,6 +184,7 @@ public class ProcessWrap
         }
 
         @JSFunction
+        @SuppressWarnings("unused")
         public static Object spawn(Context cx, Scriptable thisObj, Object[] args, Function fn)
         {
             ensureArg(args, 0);
@@ -242,6 +241,7 @@ public class ProcessWrap
         }
 
         @JSFunction
+        @SuppressWarnings("unused")
         public Object kill(String signal)
         {
             if (spawned != null) {
@@ -250,30 +250,35 @@ public class ProcessWrap
                 }
                 spawned.terminate(signal);
             }
-            return null;
+            return 0;
         }
 
         @JSGetter("connected")
+        @SuppressWarnings("unused")
         public boolean isConnected() {
             return spawned == null ? false : spawned.isConnected();
         }
 
         @JSGetter("onexit")
+        @SuppressWarnings("unused")
         public Function getOnExit() {
             return onExit;
         }
 
         @JSSetter("onexit")
+        @SuppressWarnings("unused")
         public void setOnExit(Function onExit) {
             this.onExit = onExit;
         }
 
         @JSGetter("pid")
+        @SuppressWarnings("unused")
         public int getPid() {
             return pid;
         }
 
         @JSGetter("childProcess")
+        @SuppressWarnings("unused")
         public Object getChildProcess()
         {
             if (childProcessObject == null) {
@@ -283,11 +288,13 @@ public class ProcessWrap
         }
 
         @JSSetter("onMessage")
+        @SuppressWarnings("unused")
         public void setOnMessage(Function om) {
             this.onMessage = om;
         }
 
         @JSGetter("onMessage")
+        @SuppressWarnings("unused")
         public Function getOnMessage() {
             return onMessage;
         }
@@ -342,6 +349,13 @@ public class ProcessWrap
             }
             return (Integer)Context.jsToJava(s.get("fd", s), Integer.class);
         }
+
+        protected JavaStreamWrap.StreamWrapImpl createStreamHandle(Context cx)
+        {
+            JavaStreamWrap.ModuleImpl mod =
+                (JavaStreamWrap.ModuleImpl)parent.runner.requireInternal(JavaStreamWrap.MODULE_NAME, cx);
+            return mod.createHandle(cx, parent);
+        }
     }
 
     private static class SpawnedOSProcess
@@ -357,7 +371,9 @@ public class ProcessWrap
         @Override
         void terminate(String signal)
         {
-            proc.destroy();
+            if (proc != null) {
+                proc.destroy();
+            }
         }
 
         @Override
@@ -379,14 +395,16 @@ public class ProcessWrap
             Scriptable opts = getStdioObj(stdio, arg);
             String type = getStdioType(opts);
             if (STDIO_PIPE.equals(type)) {
+                // Create a new handle that writes to the output stream.
                 if (log.isDebugEnabled()) {
                     log.debug("Setting fd {} to output stream {}", arg, out);
                 }
-                Scriptable os =
-                    NativeOutputStreamAdapter.createNativeStream(cx, parent, parent.runner,
-                                                                 out, false, false);
-                opts.put("socket", opts, os);
+                JavaStreamWrap.StreamWrapImpl handle = createStreamHandle(cx);
+                handle.setOutput(out);
+                opts.put("handle", opts, handle);
+
             } else if (STDIO_IGNORE.equals(type)) {
+                // Close the stream and do nothing
                 if (log.isDebugEnabled()) {
                     log.debug("Setting fd {} to produce no input", arg);
                 }
@@ -395,16 +413,17 @@ public class ProcessWrap
                 } catch (IOException ioe) {
                     log.debug("Output.close() threw: {}", ioe);
                 }
-                opts.put("socket", opts, null);
+
             } else if (STDIO_FD.equals(type)) {
+                // Assuming fd is zero, read from stdin and set that up.
                 if (getStdioFD(opts) != 0) {
-                    throw new EvaluatorException("Only FDs 0, 1, and 2 supported");
+                    throw new AssertionError("Only FDs 0, 1, and 2 supported");
                 }
                 StreamPiper piper = new StreamPiper(parent.runner.getStdin(), out, false);
                 piper.start(parent.runner.getUnboundedPool());
-                opts.put("socket", opts, parent.runner.getStdinStream());
+
             } else {
-                throw new EvaluatorException("Trireme unsupported stdio type " + type);
+                throw Utils.makeError(cx, parent, "Trireme unsupported stdio type " + type);
             }
         }
 
@@ -421,35 +440,33 @@ public class ProcessWrap
                 if (log.isDebugEnabled()) {
                     log.debug("Setting fd {} to input stream {}", arg, in);
                 }
-                Scriptable is =
-                    NativeInputStreamAdapter.createNativeStream(cx, parent, parent.runner,
-                                                                in, false, false);
-                opts.put("socket", opts, is);
+                JavaStreamWrap.StreamWrapImpl handle = createStreamHandle(cx);
+                handle.setInput(in);
+                opts.put("handle", opts, handle);
+
             } else if (STDIO_IGNORE.equals(type)) {
                 if (log.isDebugEnabled()) {
                     log.debug("Setting fd {} to discard all output", arg);
                 }
                 StreamPiper piper = new StreamPiper(in, new BitBucketOutputStream(), false);
                 piper.start(parent.runner.getUnboundedPool());
-                opts.put("socket", opts, null);
+
             } else if (STDIO_FD.equals(type)) {
                 StreamPiper piper;
                 switch (getStdioFD(opts)) {
                 case 1:
                     piper = new StreamPiper(in, parent.runner.getStdout(), false);
                     piper.start(parent.runner.getUnboundedPool());
-                    opts.put("socket", opts, parent.runner.getStdoutStream());
                     break;
                 case 2:
                     piper = new StreamPiper(in, parent.runner.getStderr(), false);
                     piper.start(parent.runner.getUnboundedPool());
-                    opts.put("socket", opts, parent.runner.getStderrStream());
                     break;
                 default:
                     throw new EvaluatorException("Only FDs 0, 1, and 2 supported");
                 }
             } else {
-                throw new EvaluatorException("Trireme unsupported stdio type " + type);
+                throw Utils.makeError(cx, parent, "Trireme unsupported stdio type " + type);
             }
         }
 
@@ -473,7 +490,7 @@ public class ProcessWrap
                 if (log.isDebugEnabled()) {
                     log.debug("Error in execution: {}", ioe);
                 }
-                return Constants.EIO;
+                return Utils.makeErrorObject(cx, parent, ioe.toString(), Constants.ENOENT);
             }
             if (log.isDebugEnabled()) {
                 log.debug("Starting {}", proc);
@@ -482,7 +499,7 @@ public class ProcessWrap
             options.put("pid", options, System.identityHashCode(proc) % 65536);
 
             if (!options.has("stdio", options)) {
-                throw new EvaluatorException("Missing stdio in options");
+                throw Utils.makeError(cx, parent, "Missing stdio in options");
             }
             Scriptable stdio = (Scriptable)options.get("stdio", options);
             createOutputStream(cx, stdio, 0, proc.getOutputStream());
@@ -557,7 +574,7 @@ public class ProcessWrap
          * Create a readable stream, and set "socket" to be a writable stream that writes to it.
          * Used for standard input.
          */
-        private Scriptable createReadableStream(Context cx, Scriptable stdio, int arg)
+        private void createReadableStream(Context cx, Scriptable stdio, int arg, Sandbox sandbox)
         {
             Scriptable opts = getStdioObj(stdio, arg);
             String type = getStdioType(opts);
@@ -565,29 +582,29 @@ public class ProcessWrap
                 if (log.isDebugEnabled()) {
                     log.debug("Creating input stream pipe for stdio {}", arg);
                 }
-                // Create a "PassThrough" stream -- anything written to it can also be read
+                // Create a "PassThrough" stream -- anything written to it can also be read. We will use it
+                // for both directions of the new script
                 Scriptable stream = (Scriptable)getPassthroughStream(cx).call(cx, parent, null, new Object[] {});
                 opts.put("socket", opts, stream);
-                return stream;
+                sandbox.setStdinStream(stream);
 
             } else if (STDIO_FD.equals(type)) {
                 int fd = getStdioFD(opts);
                 if (fd != 0) {
-                    throw new EvaluatorException("stdin only supported on fd 0");
+                    throw new AssertionError("stdin only supported on fd 0");
                 }
                 log.debug("Using standard input for script input");
-                return parent.runner.getStdinStream();
+                sandbox.setStdin(parent.runner.getStdin());
 
             } else if (STDIO_IGNORE.equals(type)) {
-                return NativeOutputStreamAdapter.createNativeStream(cx, parent, parent.runner,
-                                                                    new BitBucketOutputStream(), false, false);
+                // Just create a dummy stream in case someone needs to read from it
+                sandbox.setStdin(new BitBucketInputStream());
 
             } else if (STDIO_IPC.equals(type)) {
                 ipcEnabled = true;
-                return null;
 
             } else {
-                throw new EvaluatorException("Trireme unsupported stdio type " + type);
+                throw Utils.makeError(cx, parent, "Trireme unsupported stdio type " + type);
             }
         }
 
@@ -595,10 +612,11 @@ public class ProcessWrap
          * Create a writable stream, and set "socket" to be a readable stream that reads from it.
          * Used for standard output and error.
          */
-        private Scriptable createWritableStream(Context cx, Scriptable stdio, int arg)
+        private void createWritableStream(Context cx, Scriptable stdio, int arg, Sandbox sandbox)
         {
             Scriptable opts = getStdioObj(stdio, arg);
             String type = getStdioType(opts);
+
             if (STDIO_PIPE.equals(type)) {
                 if (log.isDebugEnabled()) {
                     log.debug("Creating writable stream pipe for stdio {}", arg);
@@ -606,31 +624,61 @@ public class ProcessWrap
                 // Create a "PassThrough" stream -- anything written to it can also be read
                 Scriptable stream = (Scriptable)getPassthroughStream(cx).call(cx, parent, null, new Object[] {});
                 opts.put("socket", opts, stream);
-                return stream;
+                switch (arg) {
+                case 1:
+                    sandbox.setStdoutStream(stream);
+                    break;
+                case 2:
+                    sandbox.setStderrStream(stream);
+                    break;
+                default:
+                    throw new AssertionError("Child process only supported on fds 1 and 2");
+                }
 
             } else if (STDIO_FD.equals(type)) {
                 int fd = getStdioFD(opts);
+                OutputStream out;
                 switch (fd) {
                 case 1:
                     log.debug("Using standard output for script output");
-                    return parent.runner.getStdoutStream();
+                    out = parent.runner.getStdout();
+                    break;
                 case 2:
                     log.debug("Using standard error for script output");
-                    return parent.runner.getStderrStream();
+                    out = parent.runner.getStderr();
+                    break;
                 default:
-                    throw new EvaluatorException("Child process only supported on fds 1 and 2");
+                    throw new AssertionError("Child process only supported on fds 1 and 2");
+                }
+                switch (arg) {
+                case 1:
+                    sandbox.setStdout(out);
+                    break;
+                case 2:
+                    sandbox.setStderr(out);
+                    break;
+                default:
+                    throw new AssertionError("Child process only supported on fds 1 and 2");
                 }
 
             } else if (STDIO_IGNORE.equals(type)) {
-                return NativeInputStreamAdapter.createNativeStream(cx, parent, parent.runner,
-                                                                   new BitBucketInputStream(), false, false);
+                // Just swallow all the output
+                switch (arg) {
+                case 1:
+                    sandbox.setStdout(new BitBucketOutputStream());
+                    break;
+                case 2:
+                    sandbox.setStderr(new BitBucketOutputStream());
+                    break;
+                default:
+                    throw new AssertionError("Child process only supported on fds 1 and 2");
+                }
 
             } else if (STDIO_IPC.equals(type)) {
                 ipcEnabled = true;
-                return null;
 
             } else {
-                throw new EvaluatorException("Trireme unsupported stdio type " + type);
+                throw Utils.makeError(cx, parent, "Trireme unsupported stdio type " + type);
             }
         }
 
@@ -675,16 +723,15 @@ public class ProcessWrap
                 }
             }
 
-
             if (!options.has("stdio", options)) {
                 throw new EvaluatorException("Missing stdio in options");
             }
             Scriptable stdio = (Scriptable)options.get("stdio", options);
             Sandbox scriptSandbox = new Sandbox(parent.runner.getSandbox());
 
-            scriptSandbox.setStdinStream(createReadableStream(cx, stdio, 0));
-            scriptSandbox.setStdoutStream(createWritableStream(cx, stdio, 1));
-            scriptSandbox.setStderrStream(createWritableStream(cx, stdio, 2));
+            createReadableStream(cx, stdio, 0, scriptSandbox);
+            createWritableStream(cx, stdio, 1, scriptSandbox);
+            createWritableStream(cx, stdio, 2, scriptSandbox);
 
             for (int si = 3; ; si++) {
                 if (stdio.has(si, stdio)) {

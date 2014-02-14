@@ -163,7 +163,33 @@ public class JavaStreamWrap
         @SuppressWarnings("unused")
         public static void close(Context cx, Scriptable thisObj, Object[] args, Function func)
         {
-            ((StreamWrapImpl)thisObj).stopReading();
+            Function cb = functionArg(args, 0, false);
+            StreamWrapImpl self = (StreamWrapImpl)thisObj;
+
+            self.stopReading();
+
+            if (self.out != null) {
+                try {
+                    self.out.close();
+                } catch (IOException ioe) {
+                    if (log.isDebugEnabled()) {
+                        log.debug("Error closing output stream: {}", ioe);
+                    }
+                }
+            }
+            if (self.in != null) {
+                try {
+                    self.in.close();
+                } catch (IOException ioe) {
+                    if (log.isDebugEnabled()) {
+                        log.debug("Error closing input stream: {}", ioe);
+                    }
+                }
+            }
+
+            if (cb != null) {
+                cb.call(cx, cb, thisObj, null);
+            }
         }
 
         @JSFunction
@@ -205,7 +231,6 @@ public class JavaStreamWrap
                 throw Utils.makeError(cx, this, "Stream does not support write");
             }
 
-            runtime.clearErrno();
             try {
                 out.write(buf.array(), buf.arrayOffset() + buf.position(), buf.remaining());
             } catch (IOException ioe) {
@@ -258,8 +283,14 @@ public class JavaStreamWrap
                 {
                     while (true) {
                         try {
-                            final byte[] buf = new byte[READ_BUFFER_SIZE];
-                            final int count = self.in.read(buf);
+                            // Allocate a big buffer for the lifetime of the stream, and copy to smaller
+                            // ones when each read is complete for handoff to the JavaScript code
+                            byte[] readBuf = new byte[READ_BUFFER_SIZE];
+                            final int count = self.in.read(readBuf);
+                            final byte[] buf = (count > 0 ? new byte[count] : null);
+                            if (count > 0) {
+                                System.arraycopy(readBuf, 0, buf, 0, count);
+                            }
 
                             // We read some data, so go back to the script thread and deliver it
                             self.runtime.enqueueTask(new ScriptTask() {
@@ -269,6 +300,7 @@ public class JavaStreamWrap
                                     if (self.onRead != null) {
                                         if (count > 0) {
                                             Buffer.BufferImpl jbuf = Buffer.BufferImpl.newBuffer(cx, self, buf, 0, count);
+                                            self.runtime.clearErrno();
                                             self.onRead.call(cx, self.onRead, self,
                                                              new Object[] { jbuf, 0, count });
                                         } else if (count < 0) {
@@ -281,11 +313,15 @@ public class JavaStreamWrap
                                     }
                                 }
                             });
+                            if (count < 0) {
+                                return;
+                            }
                         } catch (InterruptedIOException ii) {
                             // Nothing to do -- we were legitimately stopped
                             if (log.isDebugEnabled()) {
                                 log.debug("Async read on {} was interrupted", self.in);
                             }
+                            return;
                         } catch (IOException ioe) {
                             if (log.isDebugEnabled()) {
                                 log.debug("Async read on {} got error: {}", self.in, ioe);
@@ -300,6 +336,7 @@ public class JavaStreamWrap
                                     }
                                 }
                             });
+                            return;
                         }
                     }
                 }

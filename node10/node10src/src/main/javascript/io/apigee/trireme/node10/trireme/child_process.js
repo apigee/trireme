@@ -159,8 +159,12 @@ exports.execFile = function(file /* args, options, callback */) {
 
   function errorhandler(e) {
     err = e;
-    child.stdout.destroy();
-    child.stderr.destroy();
+    if (child.stdout) {
+      child.stdout.destroy();
+    }
+    if (child.stderr) {
+      child.stderr.destroy();
+    }
     exithandler();
   }
 
@@ -184,24 +188,27 @@ exports.execFile = function(file /* args, options, callback */) {
     }, options.timeout);
   }
 
-  child.stdout.setEncoding(options.encoding);
-  child.stderr.setEncoding(options.encoding);
+  if (child.stdout) {
+    child.stdout.setEncoding(options.encoding);
+    child.stdout.addListener('data', function(chunk) {
+      stdout += chunk;
+      if (stdout.length > options.maxBuffer) {
+        err = new Error('maxBuffer exceeded.');
+        kill();
+      }
+    });
+  }
 
-  child.stdout.addListener('data', function(chunk) {
-    stdout += chunk;
-    if (stdout.length > options.maxBuffer) {
-      err = new Error('maxBuffer exceeded.');
-      kill();
-    }
-  });
-
-  child.stderr.addListener('data', function(chunk) {
-    stderr += chunk;
-    if (stderr.length > options.maxBuffer) {
-      err = new Error('maxBuffer exceeded.');
-      kill();
-    }
-  });
+  if (child.stderr) {
+    child.stderr.setEncoding(options.encoding);
+    child.stderr.addListener('data', function(chunk) {
+      stderr += chunk;
+      if (stderr.length > options.maxBuffer) {
+        err = new Error('maxBuffer exceeded.');
+        kill();
+      }
+    });
+  }
 
   child.addListener('close', exithandler);
   child.addListener('error', errorhandler);
@@ -227,7 +234,7 @@ var spawn = exports.spawn = function(file, args, options) {
     });
   }
 
-  child.spawn({
+  var spawnErr = child.spawn({
     file: file,
     args: args,
     cwd: options ? options.cwd : null,
@@ -238,6 +245,12 @@ var spawn = exports.spawn = function(file, args, options) {
     uid: options ? options.uid : null,
     gid: options ? options.gid : null
   });
+
+  if (spawnErr) {
+    setImmediate(function() {
+      child.emit('error', spawnErr)
+    });
+  }
 
   return child;
 };
@@ -312,6 +325,7 @@ function flushStdio(subprocess) {
 }
 
 function maybeClose(subprocess) {
+  debug('maybeClose got = ' + subprocess._closesGot + ' needed = ' + subprocess._closesNeeded);
   subprocess._closesGot++;
 
   if (subprocess._closesGot == subprocess._closesNeeded) {
@@ -417,7 +431,7 @@ ChildProcess.prototype.spawn = function(options) {
 
     this._handle.close();
     this._handle = null;
-    throw errnoException(errno, 'spawn');
+    return r;
   }
 
   this.pid = this._handle.pid;
@@ -430,8 +444,7 @@ ChildProcess.prototype.spawn = function(options) {
       return;
     }
 
-    /* Noderunner don't need this because we don't just use an FD as we do in node.js
-    if (stdio.handle) {
+    if (!stdio.socket && stdio.handle) {
       // when i === 0 - we're dealing with stdin
       // (which is the only one writable pipe)
       stdio.socket = createSocket(stdio.handle, i > 0);
@@ -443,7 +456,6 @@ ChildProcess.prototype.spawn = function(options) {
         });
       }
     }
-    */
   });
 
   this.stdin = stdio.length >= 1 && stdio[0].socket !== undefined ?
@@ -462,6 +474,14 @@ ChildProcess.prototype.spawn = function(options) {
 
   return r;
 };
+
+function createSocket(handle, isReadable) {
+  return new net.Socket({
+    handle: handle,
+    readable: isReadable,
+    writable: !isReadable
+  });
+}
 
 function setupChannel(target) {
   target.connected = true;

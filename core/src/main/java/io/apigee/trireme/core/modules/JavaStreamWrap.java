@@ -38,6 +38,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.Console;
+import java.io.EOFException;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.InterruptedIOException;
@@ -323,16 +324,34 @@ public class JavaStreamWrap
                                 log.debug("Async read on {} was interrupted", self.in);
                             }
                             return;
-                        } catch (IOException ioe) {
+                        } catch (EOFException eofe) {
                             if (log.isDebugEnabled()) {
-                                log.debug("Async read on {} got error: {}", self.in, ioe);
+                                log.debug("Async read on {} got EOF error: {}", self.in, eofe);
                             }
                             self.runtime.enqueueTask(new ScriptTask() {
                                 @Override
                                 public void execute(Context cx, Scriptable scope)
                                 {
                                     if (self.onRead != null) {
-                                        self.runtime.setErrno(Constants.EIO);
+                                        self.runtime.setErrno(Constants.EOF);
+                                        self.onRead.call(cx, self.onRead, self, new Object[] { null, 0, 0 });
+                                    }
+                                }
+                            });
+                            return;
+                        } catch (IOException ioe) {
+                            if (log.isDebugEnabled()) {
+                                log.debug("Async read on {} got error: {}", self.in, ioe);
+                            }
+                            // Not all streams will throw EOFException for us...
+                            final String err =
+                                ("Stream Closed".equalsIgnoreCase(ioe.getMessage()) ? Constants.EOF : Constants.EIO);
+                            self.runtime.enqueueTask(new ScriptTask() {
+                                @Override
+                                public void execute(Context cx, Scriptable scope)
+                                {
+                                    if (self.onRead != null) {
+                                        self.runtime.setErrno(err);
                                         self.onRead.call(cx, self.onRead, self, new Object[] { null, 0, 0 });
                                     }
                                 }

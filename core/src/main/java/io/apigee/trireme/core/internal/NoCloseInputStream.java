@@ -1,4 +1,4 @@
-/*
+/**
  * Copyright 2013 Apigee Corporation.
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
@@ -19,36 +19,26 @@
  * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
  * SOFTWARE.
  */
-/*
- * This is a script that inherts from TransformStream, but it just makes sure that you can't close it.
- * We use this when we spawn a script in the same process and it shares stdin and stdout with its parent,
- * to keep a child from closing a paren't stdin or stdout.
+package io.apigee.trireme.core.internal;
+
+import java.io.FilterInputStream;
+import java.io.InputStream;
+
+/**
+ * This is just an input stream that filters another, but ignores the close. We use it when spawning
+ * child processes that share input.
  */
 
-var PassThrough = require('stream').PassThrough;
-var util = require('util');
+public class NoCloseInputStream
+    extends FilterInputStream
+{
+    public NoCloseInputStream(InputStream in)
+    {
+        super(in);
+    }
 
-function UncloseableTransform(options) {
-  if (!(this instanceof UncloseableTransform)) {
-    return new UncloseableTransform(options);
-  }
-  PassThrough.call(this, options);
+    @Override
+    public void close()
+    {
+    }
 }
-util.inherits(UncloseableTransform, PassThrough);
-module.exports.UncloseableTransform = UncloseableTransform;
-
-UncloseableTransform.prototype.end = function(chunk, encoding, cb) {
-  if (chunk) {
-    this.write(chunk, encoding, function() {
-      if (cb) {
-        cb('This stream may not be closed');
-      }
-    });
-  } else if (cb) {
-    cb('This stream may not be closed');
-  }
-};
-
-UncloseableTransform.prototype.destroy = function() {
-  // We still need this stream to support destroy -- just don't pass it down to the other stream
-};

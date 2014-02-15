@@ -569,22 +569,19 @@
 
     process.__defineGetter__('stdout', function() {
       if (stdout) return stdout;
-      stdout = process._stdoutStream;
 
-      if (!stdout) {
-        // Create a handle that could be the TTY
-        var handle = process._stdoutHandle;
-        if (handle.isTTY) {
-          var tty = NativeModule.require('tty');
-          stdout = new tty.WriteStream(handle);
-        } else {
-          var net = NativeModule.require('net');
-          stdout = new net.Socket({
-            handle: handle,
-            readable: false,
-            writable: true
-          });
-        }
+      // Create a handle that could be the TTY
+      var handle = process._stdoutHandle;
+      if (handle.isTTY) {
+        var tty = NativeModule.require('tty');
+        stdout = new tty.WriteStream(handle);
+      } else {
+        var net = NativeModule.require('net');
+        stdout = new net.Socket({
+          handle: handle,
+          readable: false,
+          writable: true
+        });
       }
 
       stdout.fd = 1;
@@ -602,16 +599,13 @@
 
     process.__defineGetter__('stderr', function() {
       if (stderr) return stderr;
-      stderr = process._stderrStream;
 
-      if (!stderr) {
-        var net = NativeModule.require('net');
-        stderr = new net.Socket({
-          handle: process._stderrHandle,
-          readable: false,
-          writable: true
-        });
-      }
+      var net = NativeModule.require('net');
+      stderr = new net.Socket({
+        handle: process._stderrHandle,
+        readable: false,
+        writable: true
+      });
 
       stderr.fd = 2;
       stderr.destroy = stderr.destroySoon = function(er) {
@@ -625,20 +619,18 @@
       if (stdin) return stdin;
       stdin = process._stdinStream;
 
-      if (!stdin) {
-        // If we get here we have to create a new stdin. It could be a tty.
-        var handle = process._stdinHandle;
-        if (handle.isTTY) {
-          var tty = NativeModule.require('tty');
-          stdin = new tty.ReadStream(handle);
-        } else {
-          var net = NativeModule.require('net');
-          stdin = new net.Socket({
-            handle: handle,
-            readable: true,
-            writable: false
-          });
-        }
+      // If we get here we have to create a new stdin. It could be a tty.
+      var handle = process._stdinHandle;
+      if (handle.isTTY) {
+        var tty = NativeModule.require('tty');
+        stdin = new tty.ReadStream(handle);
+      } else {
+        var net = NativeModule.require('net');
+        stdin = new net.Socket({
+          handle: handle,
+          readable: true,
+          writable: false
+        });
       }
 
       // For supporting legacy API we put the FD here.

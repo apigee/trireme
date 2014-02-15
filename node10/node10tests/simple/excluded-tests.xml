@@ -12,10 +12,6 @@
         <Description>cluster module support planned but not implemented.</Description>
     </Excluded>
     <Excluded>
-        <Name>test-process-env.js</Name>
-        <Description>Support for environment variables in child process not done yet.</Description>
-    </Excluded>
-    <Excluded>
         <Name>test-dgram.*address.*\.js</Name>
         <Description>Can't support IPv6 addresses yet.</Description>
     </Excluded>
@@ -25,11 +21,7 @@
     </Excluded>
     <Excluded>
         <Name>test-child-process-cwd.js</Name>
-        <Description>No cwd for children yet</Description>
-    </Excluded>
-    <Excluded>
-        <Name>test-child-process-exec-cwd.js</Name>
-        <Description>No cwd for children yet</Description>
+        <Description>Need to work on error handling.</Description>
     </Excluded>
     <Excluded>
         <Name>test-child-process-fork-dgram.js</Name>
@@ -167,6 +159,15 @@
     <Excluded>
         <Name>test-child-process-fork-exec-path.js</Name>
         <Description>Relies on making a copy of a file called "node" and executing it.</Description>
+    </Excluded>
+    <Excluded>
+        <Name>test-child-process-fork-exec-argv.js</Name>
+        <Description>Relies on V8-specific command-line options.</Description>
+    </Excluded>
+    <Excluded>
+        <Name>test-child-process-stdio-big-write-end.js</Name>
+        <Description>Assumes that we can do non-blocking write between child processes and write will eventually
+                     return false. We use streams so that stdout will block instead.</Description>
     </Excluded>
     <Excluded>
         <Name>test-signal.*\.js</Name>

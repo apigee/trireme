@@ -25,6 +25,7 @@ import io.apigee.trireme.core.internal.ScriptRunner;
 import org.mozilla.javascript.Scriptable;
 
 import java.io.File;
+import java.io.IOException;
 import java.util.HashMap;
 import java.util.Map;
 
@@ -48,6 +49,7 @@ public class NodeScript
     private boolean pin;
     private boolean forceRepl;
     private boolean printEval;
+    private String workingDir;
     private Map<String, String> environment;
 
     NodeScript(NodeEnvironment env, String scriptName, File script, String[] args)
@@ -99,6 +101,13 @@ public class NodeScript
             runner = new ScriptRunner(this, env, sandbox, scriptName, scriptFile, args);
         }
         runner.setParentProcess(parentProcess);
+        if (workingDir != null) {
+            try {
+                runner.setWorkingDirectory(workingDir);
+            } catch (IOException ioe) {
+                throw new NodeException(ioe);
+            }
+        }
         ScriptFuture future = new ScriptFuture(runner);
         runner.setFuture(future);
         if (pin) {
@@ -130,6 +139,13 @@ public class NodeScript
         runner = new ScriptRunner(this, env, sandbox, scriptName,
                                   makeModuleScript(), args);
         runner.setParentProcess(parentProcess);
+        if (workingDir != null) {
+            try {
+                runner.setWorkingDirectory(workingDir);
+            } catch (IOException ioe) {
+                throw new NodeException(ioe);
+            }
+        }
         ScriptFuture future = new ScriptFuture(runner);
         runner.setFuture(future);
         runner.pin();
@@ -237,6 +253,19 @@ public class NodeScript
     public void setEnvironment(Map<String, String> env)
     {
         this.environment = env;
+    }
+
+    /**
+     * Specify the working directory for this script. It may be relative to the sandboxes root.
+     */
+    public void setWorkingDirectory(String wd)
+    {
+        this.workingDir = wd;
+    }
+
+    public String getWorkingDirectory()
+    {
+        return workingDir;
     }
 
     /**

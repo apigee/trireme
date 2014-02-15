@@ -59,7 +59,6 @@ public class Node10Implementation
             { "child_process",          P + "trireme.child_process" },
             { "trireme_metrics",        P + "trireme.trireme_metrics" },
             { "string_decoder",         P + "trireme.trireme_string_decoder" },
-            { "trireme_uncloseable_transform", P + "trireme.trireme_uncloseable_transform" },
             { "tls",                    P + "trireme.tls" },
             { "tls_checkidentity",      P + "trireme.tls_checkidentity" },
             { "tty",                    P + "trireme.tty" },

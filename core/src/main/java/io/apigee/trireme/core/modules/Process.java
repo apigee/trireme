@@ -91,9 +91,6 @@ public class Process
     {
         protected static final String CLASS_NAME = "_processClass";
 
-        private Scriptable stdout;
-        private Scriptable stderr;
-        private Scriptable stdin;
         private Scriptable argv;
         private Scriptable env;
         private long startTime;
@@ -231,18 +228,6 @@ public class Process
          * the actual stream objects when needed. These streams are set up based on the underlying input
          * and output streams.
          */
-        @JSGetter("_stdoutStream")
-        @SuppressWarnings("unused")
-        public Object getStdout()
-        {
-            return stdout;
-        }
-
-        public void setStdout(Scriptable s)
-        {
-            this.stdout = s;
-        }
-
         @JSGetter("_stdoutHandle")
         @SuppressWarnings("unused")
         public Object getStdoutHandle()
@@ -264,18 +249,6 @@ public class Process
             }
         }
 
-        @JSGetter("_stderrStream")
-        @SuppressWarnings("unused")
-        public Object getStderr()
-        {
-            return stderr;
-        }
-
-        public void setStderr(Scriptable s)
-        {
-            this.stderr = s;
-        }
-
         @JSGetter("_stderrHandle")
         @SuppressWarnings("unused")
         public Object getStderrHandle()
@@ -286,22 +259,6 @@ public class Process
             JavaStreamWrap.StreamWrapImpl handle = mod.createHandle(cx, this);
             handle.setOutput(runner.getStderr());
             return handle;
-        }
-
-        /**
-         * trireme.js calls this to initialize stdin. Only return if we already set a JavaScript object there,
-         * which would happen if we were running as a child process.
-         */
-        @JSGetter("_stdinStream")
-        @SuppressWarnings("unused")
-        public Object getStdin()
-        {
-            return stdin;
-        }
-
-        public void setStdin(Scriptable s)
-        {
-            this.stdin = s;
         }
 
         /**

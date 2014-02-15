@@ -33,6 +33,8 @@ import io.apigee.trireme.core.SubprocessPolicy;
 import io.apigee.trireme.core.internal.BitBucketInputStream;
 import io.apigee.trireme.core.internal.BitBucketOutputStream;
 import io.apigee.trireme.core.InternalNodeModule;
+import io.apigee.trireme.core.internal.NoCloseInputStream;
+import io.apigee.trireme.core.internal.NoCloseOutputStream;
 import io.apigee.trireme.core.internal.NodeOSException;
 import io.apigee.trireme.core.internal.ScriptRunner;
 import io.apigee.trireme.core.internal.StreamPiper;
@@ -54,8 +56,11 @@ import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
+import java.io.PipedInputStream;
+import java.io.PipedOutputStream;
 import java.lang.reflect.InvocationTargetException;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
@@ -350,11 +355,32 @@ public class ProcessWrap
             return (Integer)Context.jsToJava(s.get("fd", s), Integer.class);
         }
 
+        protected String getCwdOption(Scriptable s)
+        {
+            if (s.has("cwd", s)) {
+                Object val = ScriptableObject.getProperty(s, "cwd");
+                if ((val != null) && !Context.getUndefinedValue().equals(val)) {
+                    return Context.toString(val);
+                }
+            }
+            return null;
+        }
+
         protected JavaStreamWrap.StreamWrapImpl createStreamHandle(Context cx)
         {
             JavaStreamWrap.ModuleImpl mod =
                 (JavaStreamWrap.ModuleImpl)parent.runner.requireInternal(JavaStreamWrap.MODULE_NAME, cx);
             return mod.createHandle(cx, parent);
+        }
+
+        protected void setEnvironment(List<String> pairs,
+                                    Map<String, String> env)
+        {
+            env.clear();
+            for (String pair : pairs) {
+                String[] kv = EQUALS.split(pair, 2);
+                env.put(kv[0], kv[1]);
+            }
         }
     }
 
@@ -463,7 +489,7 @@ public class ProcessWrap
                     piper.start(parent.runner.getUnboundedPool());
                     break;
                 default:
-                    throw new EvaluatorException("Only FDs 0, 1, and 2 supported");
+                    throw new AssertionError("Only FDs 0, 1, and 2 supported");
                 }
             } else {
                 throw Utils.makeError(cx, parent, "Trireme unsupported stdio type " + type);
@@ -477,7 +503,17 @@ public class ProcessWrap
                 log.debug("About to exec " + execArgs);
             }
             ProcessBuilder builder = new ProcessBuilder(execArgs);
-            // TODO cwd
+            String cwd = getCwdOption(options);
+            if (cwd != null) {
+                File cwdFile = parent.runner.translatePath(cwd);
+                if (!cwdFile.exists()) {
+                    return Utils.makeErrorObject(cx, parent, Constants.ENOENT, Constants.ENOENT);
+                } else if (!cwdFile.isDirectory()) {
+                    return Utils.makeErrorObject(cx, parent, Constants.ENOTDIR, Constants.ENOTDIR);
+                }
+
+                builder.directory(cwdFile);
+            }
 
             if (options.has("envPairs", options)) {
                 setEnvironment(Utils.toStringList((Scriptable) options.get("envPairs", options)),
@@ -526,21 +562,14 @@ public class ProcessWrap
 
             return Context.getUndefinedValue();
         }
-
-        private void setEnvironment(List<String> pairs,
-                                    Map<String, String> env)
-        {
-            env.clear();
-            for (String pair : pairs) {
-                String[] kv = EQUALS.split(pair, 2);
-                env.put(kv[0], kv[1]);
-            }
-        }
     }
 
     private static class SpawnedTriremeProcess
         extends SpawnedProcess
     {
+        // How much space to set aside for a pipe between processes
+        public static final int PROCESS_PIPE_SIZE = 64 * 1024;
+
         private ScriptFuture future;
         private NodeScript script;
         private boolean ipcEnabled;
@@ -564,37 +593,37 @@ public class ProcessWrap
             }
         }
 
-        private Function getPassthroughStream(Context cx)
-        {
-            Scriptable stream = (Scriptable)parent.runner.require("trireme_uncloseable_transform", cx);
-            return (Function)stream.get("UncloseableTransform", stream);
-        }
-
         /**
          * Create a readable stream, and set "socket" to be a writable stream that writes to it.
          * Used for standard input.
          */
         private void createReadableStream(Context cx, Scriptable stdio, int arg, Sandbox sandbox)
+            throws IOException
         {
             Scriptable opts = getStdioObj(stdio, arg);
             String type = getStdioType(opts);
             if (STDIO_PIPE.equals(type)) {
+                // Create a pipe between stdin of this new process and an output stream handle.
+                // Use piped streams here for consistency so that we do everything using standard streams.
                 if (log.isDebugEnabled()) {
                     log.debug("Creating input stream pipe for stdio {}", arg);
                 }
-                // Create a "PassThrough" stream -- anything written to it can also be read. We will use it
-                // for both directions of the new script
-                Scriptable stream = (Scriptable)getPassthroughStream(cx).call(cx, parent, null, new Object[] {});
-                opts.put("socket", opts, stream);
-                sandbox.setStdinStream(stream);
+                PipedInputStream pipeIn = new PipedInputStream(PROCESS_PIPE_SIZE);
+                PipedOutputStream pipeOut = new PipedOutputStream(pipeIn);
+
+                sandbox.setStdin(pipeIn);
+                JavaStreamWrap.StreamWrapImpl handle = createStreamHandle(cx);
+                handle.setOutput(pipeOut);
+                opts.put("handle", opts, handle);
 
             } else if (STDIO_FD.equals(type)) {
+                // Child will read directly from the stdin for this process.
                 int fd = getStdioFD(opts);
                 if (fd != 0) {
                     throw new AssertionError("stdin only supported on fd 0");
                 }
                 log.debug("Using standard input for script input");
-                sandbox.setStdin(parent.runner.getStdin());
+                sandbox.setStdin(new NoCloseInputStream(parent.runner.getStdin()));
 
             } else if (STDIO_IGNORE.equals(type)) {
                 // Just create a dummy stream in case someone needs to read from it
@@ -613,39 +642,46 @@ public class ProcessWrap
          * Used for standard output and error.
          */
         private void createWritableStream(Context cx, Scriptable stdio, int arg, Sandbox sandbox)
+            throws IOException
         {
             Scriptable opts = getStdioObj(stdio, arg);
             String type = getStdioType(opts);
 
             if (STDIO_PIPE.equals(type)) {
+                // Pipe between us using a pipe that has a maximum size and can block
                 if (log.isDebugEnabled()) {
                     log.debug("Creating writable stream pipe for stdio {}", arg);
                 }
-                // Create a "PassThrough" stream -- anything written to it can also be read
-                Scriptable stream = (Scriptable)getPassthroughStream(cx).call(cx, parent, null, new Object[] {});
-                opts.put("socket", opts, stream);
+                PipedInputStream pipeIn = new PipedInputStream(PROCESS_PIPE_SIZE);
+                PipedOutputStream pipeOut = new PipedOutputStream(pipeIn);
+
+                JavaStreamWrap.StreamWrapImpl handle = createStreamHandle(cx);
+                handle.setInput(pipeIn);
+                opts.put("handle", opts, handle);
+
                 switch (arg) {
                 case 1:
-                    sandbox.setStdoutStream(stream);
+                    sandbox.setStdout(pipeOut);
                     break;
                 case 2:
-                    sandbox.setStderrStream(stream);
+                    sandbox.setStderr(pipeOut);
                     break;
                 default:
                     throw new AssertionError("Child process only supported on fds 1 and 2");
                 }
 
             } else if (STDIO_FD.equals(type)) {
+                // Child will write directly to either stdout or stderr of this process.
                 int fd = getStdioFD(opts);
                 OutputStream out;
                 switch (fd) {
                 case 1:
                     log.debug("Using standard output for script output");
-                    out = parent.runner.getStdout();
+                    out = new NoCloseOutputStream(parent.runner.getStdout());
                     break;
                 case 2:
                     log.debug("Using standard error for script output");
-                    out = parent.runner.getStderr();
+                    out = new NoCloseOutputStream(parent.runner.getStderr());
                     break;
                 default:
                     throw new AssertionError("Child process only supported on fds 1 and 2");
@@ -697,9 +733,6 @@ public class ProcessWrap
                 log.debug("About to launch another ScriptRunner thread");
             }
 
-            // TODO cwd
-            // TODO env
-
             String scriptPath = null;
             int i;
             // Look at the args but slip the first one
@@ -729,9 +762,13 @@ public class ProcessWrap
             Scriptable stdio = (Scriptable)options.get("stdio", options);
             Sandbox scriptSandbox = new Sandbox(parent.runner.getSandbox());
 
-            createReadableStream(cx, stdio, 0, scriptSandbox);
-            createWritableStream(cx, stdio, 1, scriptSandbox);
-            createWritableStream(cx, stdio, 2, scriptSandbox);
+            try {
+                createReadableStream(cx, stdio, 0, scriptSandbox);
+                createWritableStream(cx, stdio, 1, scriptSandbox);
+                createWritableStream(cx, stdio, 2, scriptSandbox);
+            } catch (IOException ioe) {
+                throw Utils.makeError(cx, parent, ioe.toString());
+            }
 
             for (int si = 3; ; si++) {
                 if (stdio.has(si, stdio)) {
@@ -747,11 +784,32 @@ public class ProcessWrap
                 }
             }
 
+            String cwd = getCwdOption(options);
+            if (cwd != null) {
+                File cwdFile = parent.runner.translatePath(cwd);
+                if (!cwdFile.exists()) {
+                    return Utils.makeErrorObject(cx, parent, Constants.ENOENT, Constants.ENOENT);
+                } else if (!cwdFile.isDirectory()) {
+                    return Utils.makeErrorObject(cx, parent, Constants.ENOTDIR, Constants.ENOTDIR);
+                }
+            }
+
+            HashMap<String, String> env = null;
+            if (options.has("envPairs", options)) {
+                env = new HashMap<String, String>();
+                setEnvironment(Utils.toStringList((Scriptable) options.get("envPairs", options)),
+                               env);
+            }
+
             try {
                 script =
                     parent.runner.getEnvironment().createScript(scriptPath, new File(scriptPath),
                                                                 args.toArray(new String[args.size()]));
                 script.setSandbox(scriptSandbox);
+                script.setWorkingDirectory(cwd);
+                if (env != null) {
+                    script.setEnvironment(env);
+                }
 
                 if (ipcEnabled) {
                     script._setParentProcess(parent);

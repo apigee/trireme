@@ -180,45 +180,6 @@ public class Sandbox
     }
 
     /**
-     * Replace stdout with a Javascript object that implements the stream.Writable interface. This will take
-     * precedence over setStdout.
-     */
-    public Sandbox setStdoutStream(Scriptable s) {
-        this.stdoutStream = s;
-        return this;
-    }
-
-    public Scriptable getStdoutStream() {
-        return stdoutStream;
-    }
-
-    /**
-     * Replace stdin with a Javascript object that implements the stream.Readable interface. This will take
-     * precedence over setStdin.
-     */
-    public Sandbox setStdinStream(Scriptable s) {
-        this.stdinStream = s;
-        return this;
-    }
-
-    public Scriptable getStdinStream() {
-        return stdinStream;
-    }
-
-    /**
-     * Replace stderr with a Javascript object that implements the stream.Writable interface. This will take
-     * precedence over setStderr.
-     */
-    public Sandbox setStderrStream(Scriptable s) {
-        this.stderrStream = s;
-        return this;
-    }
-
-    public Scriptable getStderrStream() {
-        return stderrStream;
-    }
-
-    /**
      * Set the Executor where any jobs can be run that require a separate thread pool. At the moment, this includes
      * DNS lookups and asynchronous filesystem calls. If this is unset or set to null then a new thread pool
      * will be created.

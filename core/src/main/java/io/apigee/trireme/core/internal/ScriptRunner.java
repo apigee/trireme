@@ -282,18 +282,6 @@ public class ScriptRunner
         return ((sandbox != null) && (sandbox.getStderr() != null)) ? sandbox.getStderr() : System.err;
     }
 
-    public Scriptable getStdinStream() {
-        return (Scriptable)process.getStdin();
-    }
-
-    public Scriptable getStdoutStream() {
-        return (Scriptable)process.getStdout();
-    }
-
-    public Scriptable getStderrStream() {
-        return (Scriptable)process.getStderr();
-    }
-
     public Scriptable getParentProcess() {
         return parentProcess;
     }
@@ -598,6 +586,17 @@ public class ScriptRunner
         }
 
         closeCloseables(cx);
+        try {
+            OutputStream stdout = getStdout();
+            if (stdout != System.out) {
+                stdout.close();
+            }
+            OutputStream stderr = getStderr();
+            if (stderr != System.err) {
+                stderr.close();
+            }
+        } catch (IOException ignore) {
+        }
 
         return status;
     }
@@ -900,20 +899,11 @@ public class ScriptRunner
             nativeModMod.setExports(nativeMod);
             cacheModule(NativeModule.MODULE_NAME, nativeModMod);
 
-            // The buffer module needs special handling because of the "charsWritten" variable
-            buffer = (Buffer.BufferModuleImpl)require("buffer", cx);
-
             // Next we need "process" which takes a bit more care
             process = (Process.ProcessImpl)require(Process.MODULE_NAME, cx);
-            if ((sandbox != null) && (sandbox.getStdinStream() != null)) {
-                process.setStdin(sandbox.getStdinStream());
-            }
-            if ((sandbox != null) && (sandbox.getStdoutStream() != null)) {
-                process.setStdout(sandbox.getStdoutStream());
-            }
-            if ((sandbox != null) && (sandbox.getStderrStream() != null)) {
-                process.setStderr(sandbox.getStderrStream());
-            }
+
+            // The buffer module needs special handling because of the "charsWritten" variable
+            buffer = (Buffer.BufferModuleImpl)require("buffer", cx);
 
             // Set up metrics -- defining these lets us run internal Node projects.
             // Presumably in "real" node these are set up by some sort of preprocessor...

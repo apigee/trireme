@@ -37,7 +37,7 @@ public class NpmTest
     {
         File npmTests = new File("./target/test-classes/npm");
         String cacheDir = new File(npmTests, "cache").getAbsolutePath();
-        String npmTestsDir = npmTests.getAbsolutePath();
+        String npmTestsDir = new File("./target/test-classes/argo").getAbsolutePath();
         NodeScript script = env.createScript("npmoutdated.js",
                                              new File(npmTests, "npmoutdated.js"),
                                              new String[] { npmTestsDir, cacheDir });

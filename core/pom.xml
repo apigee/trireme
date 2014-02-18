@@ -4,12 +4,12 @@
   <parent>
     <groupId>io.apigee.trireme</groupId>
     <artifactId>trireme</artifactId>
-    <version>0.7.0</version>
+    <version>0.7.1-SNAPSHOT</version>
   </parent>
 
   <name>trireme-core</name>
   <artifactId>trireme-core</artifactId>
-  <version>0.7.0</version>
+  <version>0.7.1-SNAPSHOT</version>
 
   <dependencies>
     <!-- The code here doesn't really depend on this, but we need to make the tests work
@@ -18,13 +18,13 @@
     <dependency>
       <groupId>io.apigee.trireme</groupId>
       <artifactId>trireme-node10src</artifactId>
-      <version>0.7.0</version>
+      <version>0.7.1-SNAPSHOT</version>
     </dependency>
 
     <dependency>
       <groupId>io.apigee.trireme</groupId>
       <artifactId>trireme-spi</artifactId>
-      <version>0.7.0</version>
+      <version>0.7.1-SNAPSHOT</version>
     </dependency>
     <dependency>
       <groupId>org.slf4j</groupId>

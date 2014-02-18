@@ -31,7 +31,7 @@ public class StartupTest
         ScriptFuture scriptFuture = script.execute();
         Utils.awaitPortOpen(PORT);
         long after = getMemoryUsed();
-        System.out.println("Added " + (after - before) + " bytes");
+        System.out.println("Added " + (after - before) + " bytes after starting one script");
         scriptFuture.cancel(true);
     }
 
@@ -53,7 +53,7 @@ public class StartupTest
         }
 
         long after = getMemoryUsed();
-        System.out.println("Added " + (after - before) + " bytes");
+        System.out.println("Added " + (after - before) + " bytes after starting " + NUMSCRIPTS + " scripts");
 
         for (ScriptFuture f : futures) {
             f.cancel(true);

@@ -32,7 +32,7 @@ public class BenchmarkTest
         "buffers/buffer-read.js",
         "buffers/buffer-write.js",
         // When implemented, need DH to be done.
-        // "crypto/cipher-stream.js",
+        "crypto/cipher-stream.js",
         "crypto/hash-stream-creation.js",
         "crypto/hash-stream-throughput.js",
         "fs/read-stream-throughput.js",

@@ -35,8 +35,8 @@ although it may not necessarily pass all the node.js tests.
   <tr><td>child_process</td><td>Partial</td><td>Trireme</td></tr>
   <tr><td>cluster</td><td>Not Implemented Yet</td><td>node.js</td></tr>
   <tr><td>console</td><td>Complete</td><td>node.js</td></tr>
-  <tr><td>crypto</td><td>Partial</td><td>node.js + Trireme</td></tr>
-  <tr><td>debugger</td><td>Not Implemented</td><td><NA/td></tr>
+  <tr><td>crypto</td><td>Almost Complete</td><td>node.js + Trireme</td></tr>
+  <tr><td>debugger</td><td>Not Supported</td><td><NA/td></tr>
   <tr><td>dgram</td><td>Partial</td><td>node.js + Trireme</td></tr>
   <tr><td>dns</td><td>Partial</td><td>Trireme</td></tr>
   <tr><td>domain</td><td>Complete</td><td>node.js + Trireme</td></tr>
@@ -53,12 +53,12 @@ although it may not necessarily pass all the node.js tests.
   <tr><td>punycode</td><td>Complete</td><td>node.js</td></tr>
   <tr><td>querystring</td><td>Complete</td><td>node.js</td></tr>
   <tr><td>readline</td><td>Partial</td><td>node.js</td></tr>
-  <tr><td>repl</td><td>Not Implemented</td><td>node.js</td></tr>
+  <tr><td>repl</td><td>Not Supported</td><td>node.js</td></tr>
   <tr><td>stream</td><td>Complete</td><td>node.js</td></tr>
   <tr><td>string_decoder</td><td>Complete</td><td>Trireme</td></tr>
   <tr><td>timers</td><td>Complete</td><td>node.js + Trireme</td></tr>
   <tr><td>tls</td><td>Complete but See Notes</td><td>Trireme</td></tr>
-  <tr><td>tty</td><td>Not Implemented</td><td>NA</td></tr>
+  <tr><td>tty</td><td>Complete</td><td>Trireme</td></tr>
   <tr><td>url</td><td>Complete</td><td>node.js</td></tr>
   <tr><td>util</td><td>Complete</td><td>node.js</td></tr>
   <tr><td>vm</td><td>Complete</td><td>Trireme</td></tr>
@@ -155,7 +155,7 @@ In addition, the following is also valid, and "trireme-crypto" will not be neede
 
 ### Crypto
 
-With the combination of the built-in crypto support in Java, plus Bouncy Castle, crypto support is fairly
+With the combination of the built-in crypto support in Java, plus Bouncy Castle, crypto support is mostly
 complete.
 
 Like TLS, certain features (Sign/Verify in particular) only work if the "trireme-crypto" module and its
@@ -169,19 +169,21 @@ work the same way in Trireme as they do in standard Node.js:
 * Hmac
 * Sign / Verify (requires the "crypto" module because it handles PEM files)
 * Cipher / Decipher (DES, Triple DES, and AES support)
+* Diffie-Hellman
 * PBKDF2 (however Java and OpenSSL appear to implement different algorithms, so some more work is required)
 
 The following features have not yet been implemented (although the underlying platform has all the support required
 to make it happen):
 
-* Diffie-Hellman
+* DSA Signatures
 
 Finally, the "Context" feature of the Crypto module is not implemented. This module is really used inside Node.js
 to implement TLS, and Trireme does TLS a different way, as explained above.
 
 ### Child Process
 
-Child processes are supported. Arbitrary commands may be executed, just like in standard Node.js.
+Child processes are supported. Arbitrary commands may be executed, just like in standard Node.js. The Sandbox
+may be used to restrict whether particular commands may be executed, or if none should be executed at all.
 
 When a Trireme script uses "fork" to spawn a new instance of itself, the script runs as a separate
 thread inside the same JVM, rather than as a separate OS process as it works in regular Node.js.
@@ -207,6 +209,9 @@ On Java 6, the filesystem implementation falls back to using only the APIs suppo
 which means that many things like symbolic links are not supported, and support for "chmod" and the like is
 not exactly the same as in standard Node.js. On Java 7, Trireme is able to use additional features and
 the filesystem support is much more complete.
+
+Programs that make extensive use of the filesystem, such as NPM, work on Java 7 but we cannot guarantee
+that they will work on Java 6.
 
 ### OS
 
@@ -325,3 +330,43 @@ Here are the basics:
 
     // Check the exit code
     System.exit(status.getExitCode());
+
+## Package Map
+
+Trireme today consists of several modules. A typical application will wish to include the following in
+CLASSPATH:
+
+* trireme-core
+* trireme-spi
+* trireme-node10src
+* trireme-crypto
+* trireme-util
+
+The last two packages are optional for environments that are constrained by space or strong aversion to third-
+party dependencies.
+
+This table will help keep them straight:
+
+<table>
+<tr><td><b>module</b></td><td><b>Required?</b></td><td><b>Recommended?</b></td><td><b>Description</b></td></tr>
+<tr><td>trireme-core</td><td>X</td><td>X</td><td>The core module containing the guts of Trireme</td></tr>
+<tr><td>trireme-spi</td><td>X</td><td>X</td><td>Glue API that holds the implementations of the JavaScript to trireme-core</td></tr>
+<tr><td>trireme-node10src</td><td>X</td><td>X</td><td>JavaScript code that makes Trireme implement Node.js 10.x</td></tr>
+<tr><td>trireme-crypto</td><td/><td>X</td>
+  <td>Support code for reading PEM files and some other crypto operations. Uses Bouncy Castle. If not in the classpath,
+  certain crypto operations (notably PEM file support for TLS and HTTPS) will not work. Nonetheless, this is a separate
+  package in case some implementations are wary of distributing Bouncy Castle.</td></tr>
+<tr><td>trireme-util</td><td/><td>X</td>
+  <td>Native Trireme / Java implementations of a few Node.js modules, notably "iconv" and "iconv-lite". These are
+  faster and more complete than the usual packages from NPM. If in the classpath, these modules will be used instead
+  of searching the module path for a regular module.</td></tr>
+<tr><td>trireme-net</td><td/><td/><td>An HttpAdaptor implementation that uses Netty. Mainly useful as an example
+  to show how to write an HTTP adaptor for embedding into another container.</td></tr>
+<tr><td>trireme-shell</td><td/><td/><td>A command-line shell for Trireme that mimics "node"</td></tr>
+<tr><td>trireme-jar</td><td/><td/><td>A package that builds an all-in-one jar that contains all of the above.</td></tr>
+<tr><td>rhino-compiler</td><td/><td/><td>A Maven plugin that compiles JavaScript into .class files for use in Rhino.
+Used in the build process or "node10src" and others.</td></tr>
+</table>
+
+Additional modules in this directory are used only for testing.
+

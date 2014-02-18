@@ -24,6 +24,7 @@ package io.apigee.trireme.crypto;
 import io.apigee.trireme.core.internal.CryptoException;
 import io.apigee.trireme.core.internal.CryptoService;
 import org.bouncycastle.asn1.x509.SubjectPublicKeyInfo;
+import org.bouncycastle.jce.provider.BouncyCastleProvider;
 import org.bouncycastle.openssl.PEMDecryptorProvider;
 import org.bouncycastle.openssl.PEMEncryptedKeyPair;
 import org.bouncycastle.openssl.PEMKeyPair;
@@ -41,7 +42,9 @@ import java.security.KeyPair;
 import java.security.KeyStore;
 import java.security.KeyStoreException;
 import java.security.NoSuchProviderException;
+import java.security.Provider;
 import java.security.PublicKey;
+import java.security.Security;
 import java.security.cert.CertificateFactory;
 import java.security.cert.X509Certificate;
 
@@ -53,6 +56,20 @@ public class CryptoServiceImpl
     public static final Charset ASCII = Charset.forName("ASCII");
     public static final String RSA = "RSA";
     public static final String DSA = "DSA";
+
+    static {
+        // Install Bouncy Castle. It will be at the end of the list, and it will not be selected
+        // unless we explicitly ask for it.
+        if (Security.getProvider("BC") == null) {
+            Security.addProvider(new BouncyCastleProvider());
+        }
+    }
+
+    @Override
+    public Provider getProvider()
+    {
+        return new BouncyCastleProvider();
+    }
 
     @Override
     public KeyPair readKeyPair(String algorithm, InputStream is, char[] passphrase)

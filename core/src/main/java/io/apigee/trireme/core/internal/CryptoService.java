@@ -25,6 +25,7 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.security.KeyPair;
 import java.security.KeyStore;
+import java.security.Provider;
 import java.security.PublicKey;
 import java.security.cert.X509Certificate;
 
@@ -46,4 +47,9 @@ public interface CryptoService
         throws IOException, CryptoException;
 
     KeyStore createPemKeyStore();
+
+    /**
+     * Return a standard security provider -- we may use this to explicitly pick certain algorithms.
+     */
+    Provider getProvider();
 }

@@ -259,6 +259,10 @@
         <Description>No DH implemented in crypto yet.</Description>
     </Excluded>
     <Excluded>
+        <Name>test-crypto-binary-default.js</Name>
+        <Description>Trireme version has some different tests and is not quite the same.</Description>
+    </Excluded>
+    <Excluded>
         <Name>test-buffer.js</Name>
         <Description>Relies on internal details of Node buffer implementation, like negative "sourceStart"
                      in copy. Copy in noderunner test dir.</Description>

@@ -2,7 +2,8 @@ var common = require('../common.js');
 
 var bench = common.createBenchmark(main, {
   writes: [500],
-  cipher: [ 'AES192', 'AES256' ],
+  //cipher: [ 'AES192', 'AES256' ],
+  cipher: [ 'AES128' ],
   type: ['asc', 'utf', 'buf'],
   len: [2, 1024, 102400, 1024 * 1024],
   api: ['legacy', 'stream']

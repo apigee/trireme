@@ -14,6 +14,7 @@ public abstract class TestBase
     protected final File fileName;
     protected final String adapter;
     protected final String javaVersion;
+    protected final String nodeVersion;
 
     private static String java6Command;
     private static String java7Command;
@@ -58,11 +59,12 @@ public abstract class TestBase
         return null;
     }
 
-    protected TestBase(File fileName, String adapter, String javaVersion)
+    protected TestBase(File fileName, String adapter, String javaVersion, String nodeVersion)
     {
         this.fileName = fileName;
         this.adapter = adapter;
         this.javaVersion = javaVersion;
+        this.nodeVersion = nodeVersion;
     }
 
     protected int launchTest(int timeout, OutputStream o, boolean coverage)
@@ -90,6 +92,7 @@ public abstract class TestBase
         args.add(fileName.getName());
         args.add(adapter);
         args.add(String.valueOf(timeout));
+        args.add(nodeVersion);
 
         ProcessBuilder pb = new ProcessBuilder(args);
         pb.directory(fileName.getParentFile());

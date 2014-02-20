@@ -28,8 +28,6 @@ import io.apigee.trireme.core.Utils;
 import io.apigee.trireme.spi.NodeImplementation;
 import org.mozilla.javascript.Context;
 import org.mozilla.javascript.Script;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
 import java.io.InputStream;
@@ -56,11 +54,13 @@ import java.util.ServiceLoader;
  *     The constructor for this class manually defines all compiled script modules. All the rest
  *     are loaded using the ServiceLoader, which means that new modules can add new scripts.
  * </p>
+ * <p>
+ *     This registry is loaded based on a NodeImplementation, which means that there can be many if there
+ *     are a lot of versions of Node available.
+ * </p>
  */
 public class ModuleRegistry
 {
-    private static final Logger log = LoggerFactory.getLogger(ModuleRegistry.class);
-
     /**
      * Add this prefix to internal module code before compiling -- it makes them behave as they expect and as
      * internal modules from "normal" Node behave. This same code must also be included by the Rhino
@@ -73,11 +73,25 @@ public class ModuleRegistry
     private final HashMap<String, NodeModule>         modules         = new HashMap<String, NodeModule>();
     private final HashMap<String, InternalNodeModule> internalModules = new HashMap<String, InternalNodeModule>();
     private final HashMap<String, Script>             compiledModules = new HashMap<String, Script>();
+    private final NodeImplementation                  implementation;
 
     private Script mainScript;
+    private boolean loaded;
 
-    public void load(Context cx)
+    public ModuleRegistry(NodeImplementation impl)
     {
+        this.implementation = impl;
+    }
+
+    public NodeImplementation getImplementation() {
+        return implementation;
+    }
+
+    public synchronized void load(Context cx)
+    {
+        if (loaded) {
+            return;
+        }
         // Load all native Java modules implemented using the "NodeModule" interface
         ServiceLoader<NodeModule> loader = ServiceLoader.load(NodeModule.class);
         for (NodeModule mod : loader) {
@@ -104,15 +118,12 @@ public class ModuleRegistry
             }
         }
 
-        // Load the Node implementations.
-        // TODO for testing we will just load the first one!
-        ServiceLoader<NodeImplementation> implementations = ServiceLoader.load(NodeImplementation.class);
-        NodeImplementation impl = implementations.iterator().next();
-
-        loadMainScript(impl.getMainScriptClass());
-        for (String[] builtin : impl.getBuiltInModules()) {
+        loadMainScript(implementation.getMainScriptClass());
+        for (String[] builtin : implementation.getBuiltInModules()) {
             addCompiledModule(builtin[0], builtin[1]);
         }
+
+        loaded = true;
     }
 
     private void compileAndAdd(Context cx, Object impl, String name, String path)

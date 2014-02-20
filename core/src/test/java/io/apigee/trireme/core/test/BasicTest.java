@@ -512,6 +512,41 @@ public class BasicTest
         testEnv.close();
     }
 
+    @Test
+    public void testDefaultVersion()
+    {
+        String defaultVer = env.getDefaultNodeVersion();
+        assertNotNull(defaultVer);
+        assertNotEquals("", defaultVer);
+        assertFalse(env.getNodeVersions().isEmpty());
+    }
+
+    @Test
+    public void testInvalidNodeVersion()
+        throws InterruptedException, ExecutionException, NodeException
+    {
+        NodeScript script = env.createScript("test.js",
+                                             "console.log(\'Hello, World!\');process.exit(0);  ",
+                                             null);
+        script.setNodeVersion("0.0.0");
+        try {
+            script.execute().get();
+            assertFalse(true);
+        } catch (NodeException ok) {
+        }
+    }
+
+    @Test
+    public void testWildcardNodeVersion()
+        throws InterruptedException, ExecutionException, NodeException
+    {
+        NodeScript script = env.createScript("test.js",
+                                             "console.log(\'Hello, World!\');process.exit(0);  ",
+                                             null);
+        script.setNodeVersion("x");
+        script.execute().get();
+    }
+
     private void runTest(String name)
         throws InterruptedException, ExecutionException, NodeException
     {

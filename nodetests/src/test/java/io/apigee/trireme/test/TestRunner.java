@@ -21,7 +21,7 @@ public class TestRunner
 
     public static void main(String[] args)
     {
-        if ((args.length < 1) || (args.length > 3)) {
+        if ((args.length < 1) || (args.length > 4)) {
             System.exit(10);
         }
 
@@ -29,6 +29,7 @@ public class TestRunner
         NodeEnvironment env = new NodeEnvironment();
         int exitCode = 101;
         int timeout = TEST_TIMEOUT_SECS;
+        String version = NodeEnvironment.DEFAULT_NODE_VERSION;
 
         if ((args.length >= 2) && args[1].equals("netty")) {
             env.setHttpContainer(new NettyHttpContainer());
@@ -36,9 +37,13 @@ public class TestRunner
         if (args.length >= 3) {
             timeout = Integer.parseInt(args[2]);
         }
+        if (args.length >= 4) {
+            version = args[3];
+        }
 
         try {
             NodeScript script = env.createScript(fileName.getName(), fileName, null);
+            script.setNodeVersion(version);
 
             Future<ScriptStatus> exec;
             try {

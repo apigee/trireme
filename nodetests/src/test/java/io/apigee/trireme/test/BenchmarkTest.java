@@ -88,7 +88,7 @@ public class BenchmarkTest
 
     public BenchmarkTest(File f, String adapter, String version)
     {
-        super(f, adapter, version);
+        super(f, adapter, version, JavaScriptTest.NODE_VERSION_10);
     }
 
     @Test

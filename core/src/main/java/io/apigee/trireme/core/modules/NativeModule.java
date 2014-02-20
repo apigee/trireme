@@ -180,7 +180,7 @@ public class NativeModule
                 return mod.getExports();
             }
 
-            Script compiled = runner.getEnvironment().getRegistry().getCompiledModule(name);
+            Script compiled = runner.getRegistry().getCompiledModule(name);
             if (compiled != null) {
                 // We found a compiled script -- run it and register.
                 // Notice that to prevent cyclical dependencies we cache the "exports" first.
@@ -227,9 +227,7 @@ public class NativeModule
         {
             String name = stringArg(args, 0);
             NativeImpl self = (NativeImpl)thisObj;
-            return self.runner.isNativeModule(name) ||
-                   (NativeImpl.class.getResource(NODE_SCRIPT_BASE + name + SCRIPT_SUFFIX) != null) ||
-                   (NativeImpl.class.getResource(NR_SCRIPT_BASE + name + SCRIPT_SUFFIX) != null);
+            return self.runner.isNativeModule(name);
         }
 
         @JSFunction

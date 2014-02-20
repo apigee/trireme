@@ -1,0 +1,725 @@
+<ExcludedTests>
+    <!-- This file contains a list of tests that, although they exist in the Node test suite, we have excluded
+         them. This lets us simply copy the Node test suite to ours rather than try to maintain a file synchronization,
+         but we can exclude them here. -->
+
+    <!-- NOT IMPLEMENTED YET
+         These are modules that we plan to implement but have not worked on yet other than
+         the very basics.
+    -->
+    <Excluded>
+        <Name>test-cluster.+\.js</Name>
+        <Description>cluster module support planned but not implemented.</Description>
+    </Excluded>
+    <Excluded>
+        <Name>test-dgram.*address.*\.js</Name>
+        <Description>Can't support IPv6 addresses yet.</Description>
+    </Excluded>
+    <Excluded>
+        <Name>test-http-server-stale-close.js</Name>
+        <Description>Depends on us adding environment variable support to "fork".</Description>
+    </Excluded>
+    <Excluded>
+        <Name>test-child-process-cwd.js</Name>
+        <Description>Need to work on error handling.</Description>
+    </Excluded>
+    <Excluded>
+        <Name>test-child-process-fork-dgram.js</Name>
+        <Description>No passing handles to children yet</Description>
+    </Excluded>
+    <Excluded>
+        <Name>test-child-process-fork-getconnections.js</Name>
+        <Description>No passing handles to children yet</Description>
+    </Excluded>
+    <Excluded>
+        <Name>test-child-process-fork-net.js</Name>
+        <Description>No passing handles to children yet</Description>
+    </Excluded>
+    <Excluded>
+        <Name>test-child-process-fork-net2.js</Name>
+        <Description>No passing handles to children yet</Description>
+    </Excluded>
+    <Excluded>
+        <Name>test-child-process-internal.js</Name>
+    </Excluded>
+    <Excluded>
+        <Name>test-child-process-ipc.js</Name>
+        <Description>No passing handles to children yet</Description>
+    </Excluded>
+    <Excluded>
+        <Name>test-child-process-recv-handle.js</Name>
+        <Description>No passing handles to children yet</Description>
+    </Excluded>
+    <Excluded>
+        <Name>test-child-process-disconnect.js</Name>
+        <Description>No passing handles to children yet</Description>
+    </Excluded>
+    <Excluded>
+        <Name>test-child-process-fork-ref.js</Name>
+        <Description>No passing handles to children yet</Description>
+    </Excluded>
+    <Excluded>
+        <Name>test-child-process-fork.js</Name>
+        <Description>No passing handles to children yet</Description>
+    </Excluded>
+    <Excluded>
+        <Name>test-child-process-silent.js</Name>
+        <Description>No passing handles to children yet</Description>
+    </Excluded>
+    <Excluded>
+        <Name>test-child-process-stdio-inherit.js</Name>
+        <Description>Don't have nested children worked out yet.</Description>
+    </Excluded>
+
+    <!-- NOT SUPPORTED
+         These are modules and tests that we don't plan to implement in Noderunner
+    -->
+    <Excluded>
+        <Name>test-debug.+\.js</Name>
+        <Description>Debug module support requires V8 and won't be implemented.</Description>
+    </Excluded>
+    <Excluded>
+        <Name>test-c-ares.js</Name>
+        <Description>This is a wrapper around some native code.</Description>
+    </Excluded>
+    <Excluded>
+        <Name>test-.*repl.*\.js</Name>
+        <Description>repl is only partially implemented</Description>
+    </Excluded>
+
+    <Excluded>
+        <Name>test-dgram-multicast-multi-process.js</Name>
+        <Description>Haven't tested or done infrastructure for multicast</Description>
+    </Excluded>
+    <Excluded>
+        <Name>test-dgram-multicast-setTTL.js</Name>
+        <Description>Haven't tested or done infrastructure for multicast</Description>
+    </Excluded>
+    <Excluded>
+        <Name>test-dgram-broadcast-multi-process.js</Name>
+        <Description>Can't test broadcast yet.</Description>
+    </Excluded>
+
+    <Excluded>
+        <Name>test-http-unix-socket.js</Name>
+        <Reason>UNIX sockets are not supported in Noderunner or in Java.</Reason>
+    </Excluded>
+    <Excluded>
+        <Name>test-http-client-pipe-end.js</Name>
+        <Description>Pipes are not supported in Noderunner or in Java.</Description>
+    </Excluded>
+    <Excluded>
+        <Name>test-http-client-response-domain.js</Name>
+        <Description>Pipes are not supported in Noderunner or in Java.</Description>
+    </Excluded>
+    <Excluded>
+        <Name>test-fs-watch.+</Name>
+        <Description>Depends on native stuff.</Description>
+    </Excluded>
+    <Excluded>
+        <Name>test-watch.*\.js</Name>
+        <Description>File watching isn't implemented yet.</Description>
+    </Excluded>
+    <Excluded>
+        <Name>test-net-listen-fd0.js</Name>
+        <Description>Listening on a file descriptor is not supported in Noderunner or Java.</Description>
+    </Excluded>
+    <Excluded>
+        <Name>test-net-pingpong.js</Name>
+        <Description>Listening on a file descriptor is not supported in Noderunner or Java.</Description>
+    </Excluded>
+    <Excluded>
+        <Name>test-net-pipe-connect-errors.js</Name>
+        <Description>No pipes in NR or Java.</Description>
+    </Excluded>
+    <Excluded>
+        <Name>test-process-config.js</Name>
+        <Description>Not implemented. Supposed to return the compilation params.</Description>
+    </Excluded>
+    <Excluded>
+        <Name>test-typed-arrays.js</Name>
+        <Description>Not supported in Rhino.</Description>
+    </Excluded>
+    <Excluded>
+        <Name>test-arraybuffer.*\.js</Name>
+        <Description>Not supported in Rhino.</Description>
+    </Excluded>
+    <Excluded>
+        <Name>test-listen-fd.*\.js</Name>
+        <Description>No network IO on fds or pipes.</Description>
+    </Excluded>
+    <Excluded>
+        <Name>test-tty-wrap.js</Name>
+        <Description>Internal code that we don't support.</Description>
+    </Excluded>
+    <Excluded>
+        <Name>test-deprecation.*\.js</Name>
+        <Description>Rely on node process arguments.</Description>
+    </Excluded>
+    <Excluded>
+        <Name>test-child-process-fork-exec-path.js</Name>
+        <Description>Relies on making a copy of a file called "node" and executing it.</Description>
+    </Excluded>
+    <Excluded>
+        <Name>test-child-process-fork-exec-argv.js</Name>
+        <Description>Relies on V8-specific command-line options.</Description>
+    </Excluded>
+    <Excluded>
+        <Name>test-child-process-stdio-big-write-end.js</Name>
+        <Description>Assumes that we can do non-blocking write between child processes and write will eventually
+                     return false. We use streams so that stdout will block instead.</Description>
+    </Excluded>
+    <Excluded>
+        <Name>test-signal.*\.js</Name>
+        <Description>No signal handling.</Description>
+    </Excluded>
+     <Excluded>
+        <Name>test-sigint.*\.js</Name>
+        <Description>No signal handling.</Description>
+    </Excluded>
+    <Excluded>
+        <Name>test-tls-connect-pipe.js</Name>
+        <Description>No pipes in TLS</Description>
+    </Excluded>
+    <Excluded>
+        <Name>test-tls-handshake-nohang.js</Name>
+        <Description>requires SecurePair</Description>
+    </Excluded>
+    <Excluded>
+        <Name>test-tls-securepair.*\.js</Name>
+        <Description>No SecurePair</Description>
+    </Excluded>
+    <Excluded>
+        <Name>test-tls-session-cache.js</Name>
+        <Description>No access to the TLS session in NodeRunner / SSLEngine</Description>
+    </Excluded>
+    <Excluded>
+        <Name>test-tls-client-resume.js</Name>
+        <Description>No access to the TLS session in NodeRunner / SSLEngine</Description>
+    </Excluded>
+     <Excluded>
+        <Name>test-https-client-resume.js</Name>
+        <Description>No access to the TLS session in NodeRunner / SSLEngine</Description>
+    </Excluded>
+    <Excluded>
+        <Name>test-tls-honorcipherorder.js</Name>
+        <Description>Cipher ordering is not controled in SSLEngine the same way it is in OpenSSL.</Description>
+    </Excluded>
+    <Excluded>
+        <Name>test-stdout-close-unref.js</Name>
+        <Description>Depends on undocumented _handle on stdout</Description>
+    </Excluded>
+    <Excluded>
+        <Name>test-stdout-close-catch.js</Name>
+        <Description>./node dependency</Description>
+    </Excluded>
+    <Excluded>
+        <Name>test-process-kill-null.js</Name>
+        <Description>Fails, could be not getting output or something</Description>
+    </Excluded>
+    <Excluded>
+        <Name>test-pipe-head.js</Name>
+        <Description>./node again</Description>
+    </Excluded>
+    <Excluded>
+        <Name>test-init.js</Name>
+        <Description>Testing specific loading of modules in an internal way</Description>
+    </Excluded>
+    <Excluded>
+        <Name>test-https-foafssl.js</Name>
+        <Description>Not entirely sure what this is but we haven't figured it out yet.</Description>
+    </Excluded>
+    <Excluded>
+        <Name>test-event-emitter-memory-leak.js</Name>
+        <Description>Requires --expose-gc</Description>
+    </Excluded>
+    <Excluded>
+        <Name>test-crypto-padding-aes256.js</Name>
+        <Description>Default Java installations do not support 256-bit AES</Description>
+    </Excluded>
+    <Excluded>
+        <Name>test-crypto-ecb.js</Name>
+        <Description>Depends on Blowfish support for an odd key size - not supported in Java</Description>
+    </Excluded>
+
+    <!-- DIFFERENT TESTS
+         We have different versions of these tests in the "noderunner" directory because they must
+         be different.
+    -->
+    <Excluded>
+        <Name>test-crypto.js</Name>
+        <Description>Noderunner version supports only Java ciphers and other stuff for now.</Description>
+    </Excluded>
+    <Excluded>
+        <Name>test-crypto-stream.js</Name>
+        <Description>Noderunner version does not return exact same error messages.</Description>
+    </Excluded>
+    <Excluded>
+        <Name>test-dh.*\.js</Name>
+        <Description>No DH implemented in crypto yet.</Description>
+    </Excluded>
+    <Excluded>
+        <Name>test-crypto-binary-default.js</Name>
+        <Description>Trireme version has some different tests and is not quite the same.</Description>
+    </Excluded>
+    <Excluded>
+        <Name>test-buffer.js</Name>
+        <Description>Relies on internal details of Node buffer implementation, like negative "sourceStart"
+                     in copy. Copy in noderunner test dir.</Description>
+    </Excluded>
+    <Excluded>
+        <Name>test-buffer-ascii.js</Name>
+        <Description>Relies on Node's way of converting non-8-bit ASCII by stripping the high
+                     bits. Java does it differently unless we custom code it.</Description>
+    </Excluded>
+    <Excluded>
+        <Name>test-pipe-address.js</Name>
+        <Reason>UNIX sockets are not supported in Noderunner or in Java.</Reason>
+    </Excluded>
+    <Excluded>
+        <Name>test-pipe-stream.js</Name>
+        <Reason>UNIX sockets are not supported in Noderunner or in Java.</Reason>
+    </Excluded>
+    <Excluded>
+        <Name>test-pipe-unref.js</Name>
+        <Reason>UNIX sockets are not supported in Noderunner or in Java.</Reason>
+    </Excluded>
+    <Excluded>
+        <Name>test-http-client-timeout-event.js</Name>
+        <Description>Timeouts are too short -- assumes connection is opened in 1 ms. Change second timeout
+        to 100 ms and it works fine.</Description>
+    </Excluded>
+    <Excluded>
+        <Name>test-domain.js</Name>
+        <Description>Needs slightly different error messages to be tested, look in "noderunner".</Description>
+    </Excluded>
+    <Excluded>
+        <Name>test-util-inspect.js</Name>
+        <Description>Checks for specific error messages that are differnet in Rhino.</Description>
+    </Excluded>
+    <Excluded>
+        <Name>test-http-upgrade-.+\.js</Name>
+        <Description>Assumes that all data on the socket after the upgrade comes in in one chunk.</Description>
+    </Excluded>
+    <Excluded>
+        <Name>test-tls-client-reject.js</Name>
+        <Description>In Java, when "rejectUnauthorized" is true, the server never sees the client.</Description>
+    </Excluded>
+    <Excluded>
+        <Name>test-tls-getcipher.js</Name>
+        <Description>Java 7 has a different set of cipher suites than the OpenSSL ones in the test suite.</Description>
+    </Excluded>
+    <Excluded>
+        <Name>test-tls-set-ciphers.js</Name>
+        <Description>Java 7 has a different set of cipher suites than the OpenSSL ones in the test suite.</Description>
+    </Excluded>
+    <Excluded>
+        <Name>test-tls-honorcipherorder.js</Name>
+        <Description>Java 7 has a different set of cipher suites than the OpenSSL ones in the test suite.</Description>
+    </Excluded>
+    <Excluded>
+        <Name>test-assert.js</Name>
+        <Description>On a stack overflow, Rhino and V8 behave differently, and this test tests that.</Description>
+    </Excluded>
+    <Excluded>
+        <Name>test-fs-utimes.js</Name>
+        <Description>Rhino can't handle all the necessary Date formats.</Description>
+    </Excluded>
+    <Excluded>
+        <Name>test-https-pfx.js</Name>
+        <Description>Different SSL error messages</Description>
+    </Excluded>
+    <Excluded>
+        <Name>test-vm-create-context-circular-reference.js</Name>
+        <Description>Not sure</Description>
+    </Excluded>
+    <Excluded>
+        <Name>test-stream2-stderr-sync.js</Name>
+        <Description>Depends on undocumented parts of the TTY module</Description>
+    </Excluded>
+    <Excluded>
+        <Name>test-next-tick-starvation.js</Name>
+        <Description>Recursive next tick -- doesn't work on node either.</Description>
+    </Excluded>
+    <Excluded>
+        <Name>test-http-client-parse-error.js</Name>
+        <Description>We won't return an error until we get a CRLF -- shouldn't be a big deal but we should revisit.</Description>
+    </Excluded>
+    <Excluded>
+        <Name>test-child-process-kill.js</Name>
+        <Description>Different exit code in Java.</Description>
+    </Excluded>
+
+    <!-- INTERNAL TESTS
+         Tests that exercise internal, undocumented APIs in the original Node implementation.
+    -->
+    <Excluded>
+        <Name>test-tcp-wrap.+</Name>
+        <Description>Internal Node module.</Description>
+    </Excluded>
+    <Excluded>
+        <Name>test-process-wrap.js</Name>
+        <Description>Internal Node module.</Description>
+    </Excluded>
+    <Excluded>
+        <Name>test-net-buffersize.js</Name>
+        <Description>We don't track buffers the same way</Description>
+    </Excluded>
+    <Excluded>
+        <Name>test-process-active-wraps.js</Name>
+        <Description>Tests internal attributes of "process"</Description>
+    </Excluded>
+    <Excluded>
+        <Name>test-process-exec-argv.js</Name>
+        <Description>Tests some node command-line properties.</Description>
+    </Excluded>
+    <Excluded>
+        <Name>test-http-parser-bad-ref.js</Name>
+        <Description>Uses V8 "gc" method.</Description>
+    </Excluded>
+    <Excluded>
+        <Name>test-tls-set-encoding.js</Name>
+        <Description>Depends on "readyState"</Description>
+    </Excluded>
+    <Excluded>
+        <Name>test-tls-server-slab.js</Name>
+        <Description>Depends on internal "slab buffer size"</Description>
+    </Excluded>
+    <Excluded>
+        <Name>test-tls-client-abort3.js</Name>
+        <Description>Assumes that there is something called "ssl" on the socket</Description>
+    </Excluded>
+    <Excluded>
+        <Name>test-https-timeout-server.js</Name>
+        <Description>Relies on internal fields.</Description>
+    </Excluded>
+    <Excluded>
+        <Name>test-https-no-reader.js</Name>
+        <Description>Relies on internal readableState</Description>
+    </Excluded>
+    <Excluded>
+        <Name>test-tls-close-notify.js</Name>
+        <Description>Assumes that "pair.ssl" is implemented, which it isn't.</Description>
+    </Excluded>
+    <Excluded>
+        <Name>test-https-req-split.js</Name>
+        <Description>Assumes that we can set SLAB_BUFFER_SIZE.</Description>
+    </Excluded>
+
+    <!-- MISCELLANEOUS
+         Tests that just don't work in Noderunner for other good reasons
+    -->
+    <Excluded>
+        <Name>test-regress.+\.js</Name>
+        <Description>These are a variety of tests that sometimes test stuff that's not supported.</Description>
+    </Excluded>
+    <Excluded>
+        <Name>test-cli-eval.js</Name>
+        <Description>Depends on different command-line params.</Description>
+    </Excluded>
+    <Excluded>
+        <Name>test-eval.js</Name>
+        <Description>Depends on different command-line params.</Description>
+    </Excluded>
+    <Excluded>
+        <Name>test-executable-path.js</Name>
+        <Description>Depends on different command-line params.</Description>
+    </Excluded>
+
+    <Excluded>
+        <Name>test-eval-require.js</Name>
+        <Description>We don't support the same command-line params.</Description>
+    </Excluded>
+    <Excluded>
+        <Name>test-require-json.js</Name>
+        <Reason>Checks against an error message when trying to parse JSON; Rhino and v8 generate different ones</Reason>
+    </Excluded>
+    <Excluded>
+        <Name>test-fs-readfile-pipe.js</Name>
+        <Reason>Depends on reading from /dev/stdin</Reason>
+    </Excluded>
+    <Excluded>
+        <Name>test-net-GH-5504.js</Name>
+        <Description>This is a complicated console-based test. Figure it out later.</Description>
+    </Excluded>
+    <Excluded>
+        <Name>test-http-byteswritten.js</Name>
+        <Description>Doesn't work exactly the same as Node yet.</Description>
+    </Excluded>
+    <Excluded>
+        <Name>test-http-full-response.js</Name>
+        <Description>Relies on ab which is hard to make portable.</Description>
+    </Excluded>
+    <Excluded>
+        <Name>test-script-context.js</Name>
+        <Description>Depends on specific Node error messages.</Description>
+    </Excluded>
+    <Excluded>
+        <Name>test-pipe.js</Name>
+        <Description>This is way broken now and needs to be disabled so others tests can run.</Description>
+    </Excluded>
+    <Excluded>
+        <Name>test-http-localaddress-bind-error.js</Name>
+        <Description>Race condition in closing the server socket when it may have been closed already.</Description>
+    </Excluded>
+    <Excluded>
+        <Name>test-https-localaddress-bind-error.js</Name>
+        <Description>Race condition in closing the server socket when it may have been closed already.</Description>
+    </Excluded>
+    <Excluded>
+        <Name>test-bad-unicode.js</Name>
+        <Description>Doesn't throw exactly the same error</Description>
+    </Excluded>
+    <Excluded>
+        <Name>test-error-reporting.js</Name>
+        <Description>Depends on specific errors.</Description>
+    </Excluded>
+    <Excluded>
+        <Name>test-sys.js</Name>
+        <Description>Depends on fix to Rhino date parsing limitations.</Description>
+    </Excluded>
+    <Excluded>
+        <Name>test-string-decoder.js</Name>
+        <Description>Something weird with UTF-16LE and others</Description>
+    </Excluded>
+    <Excluded>
+        <Name>test-path.js</Name>
+        <Description>A pretty complicated test with a bunch of very specific paths.</Description>
+    </Excluded>
+    <Excluded>
+        <Name>test-querystring.js</Name>
+        <Description>Something else with UTF...</Description>
+    </Excluded>
+    <Excluded>
+        <Name>test-tls-peer-certificate.*\.js</Name>
+        <Description>Can't seem to get all the cert fields out in Java that OpenSSL can for Node.</Description>
+    </Excluded>
+    <Excluded>
+        <Name>test-https-strict.js</Name>
+        <Description>Depends on additional host names like "agent1", etc.</Description>
+    </Excluded>
+    <Excluded>
+        <Name>test-stdin-from-file.js</Name>
+        <Description>Requires some arguments to "./node" that we don't support.</Description>
+    </Excluded>
+    <Excluded>
+        <Name>test-stdout-to-file.js</Name>
+        <Description>depends on ./node</Description>
+    </Excluded>
+    <Excluded>
+        <Name>test-stdout-stderr-reading.js</Name>
+        <Description>depends on ./node arguments and other stuff</Description>
+    </Excluded>
+    <Excluded>
+        <Name>test-http-full-response.js</Name>
+        <Description>Flaky test that depends on "ab"</Description>
+    </Excluded>
+    <Excluded>
+        <Name>performance.js</Name>
+        <Description>Not really a unit test but in there just for fun</Description>
+    </Excluded>
+    <Excluded>
+        <Name>test-stdout-cannot-be-closed-child-process-pipe.js</Name>
+        <Description>Depends on a specific error message</Description>
+    </Excluded>
+    <Excluded>
+        <Name>test-fs-realpath.js</Name>
+        <Description>This is pretty complex and depends on a lot of proprietary FS stuff.</Description>
+    </Excluded>
+    <Excluded>
+        <Name>test-crypto-verify-failure.js</Name>
+        <Description>Possibly a domain problem, not working</Description>
+    </Excluded>
+    <Excluded>
+        <Name>test-tls-interleave.js</Name>
+        <Description>Assumes that data will arrive in the same chunks sent by the server.</Description>
+    </Excluded>
+    <Excluded>
+        <Name>test-stream-pipe-multi.js</Name>
+        <Description>Recursive nextTick -- doesn't work in node either.</Description>
+    </Excluded>
+
+    <!-- NETTY ADAPTER
+         These tests don't work with the Netty adapter
+    -->
+    <Excluded>
+        <Name>test-http-server.js</Name>
+        <Adapter>netty</Adapter>
+        <Description>Unclear right now.</Description>
+    </Excluded>
+    <Excluded>
+        <Name>test-http-blank-header.js</Name>
+        <Adapter>netty</Adapter>
+        <Description>Unclear right now.</Description>
+    </Excluded>
+    <Excluded>
+        <Name>test-http-max-headers-count.js</Name>
+        <Adapter>netty</Adapter>
+        <Description>Doesn't work the same way.</Description>
+    </Excluded>
+    <Excluded>
+        <Name>test-http-host-headers.js</Name>
+        <Adapter>netty</Adapter>
+        <Description>Doesn't work the same way.</Description>
+    </Excluded>
+    <Excluded>
+        <Name>test-http-pipeline-flood.js</Name>
+        <Adapter>netty</Adapter>
+        <Description>Doesn't work the same way.</Description>
+    </Excluded>
+
+
+    <Excluded>
+        <Name>test-https-no-reader.js</Name>
+        <Adapter>netty</Adapter>
+        <Description>Some sort of SSL problem with the Netty adapter.</Description>
+    </Excluded>
+    <Excluded>
+        <Name>test-https-invalid-key.js</Name>
+        <Adapter>netty</Adapter>
+        <Description>Some sort of SSL problem with the Netty adapter.</Description>
+    </Excluded>
+    <Excluded>
+        <Name>test-https-client-resume.js</Name>
+        <Adapter>netty</Adapter>
+        <Description>Some sort of SSL problem with the Netty adapter.</Description>
+    </Excluded>
+    <Excluded>
+        <Name>test-https-timeout-server-2.js</Name>
+        <Adapter>netty</Adapter>
+        <Description>Some sort of SSL problem with the Netty adapter.</Description>
+    </Excluded>
+    <Excluded>
+        <Name>test-https-connecting-to-http.js</Name>
+        <Adapter>netty</Adapter>
+        <Description>Some sort of SSL problem with the Netty adapter.</Description>
+    </Excluded>
+    <Excluded>
+        <Name>test-http-url.parse-https.request.js</Name>
+        <Adapter>netty</Adapter>
+        <Description>Some sort of SSL problem with the Netty adapter.</Description>
+    </Excluded>
+    <Excluded>
+        <Name>test-http-client-abort.js</Name>
+        <Adapter>netty</Adapter>
+        <Description>Doesn't support that kind of notification</Description>
+    </Excluded>
+    <Excluded>
+        <Name>test-http-after-connect.js</Name>
+        <Adapter>netty</Adapter>
+        <Description>Doesn't support that kind of notification</Description>
+    </Excluded>
+    <Excluded>
+        <Name>test-http-connect.js</Name>
+        <Adapter>netty</Adapter>
+        <Description>Doesn't support that kind of notification</Description>
+    </Excluded>
+    <Excluded>
+        <Name>test-http-expect-continue.js</Name>
+        <Adapter>netty</Adapter>
+        <Description>Doesn't support that kind of notification</Description>
+    </Excluded>
+    <Excluded>
+        <Name>test-http-exceptions.js</Name>
+        <Adapter>netty</Adapter>
+        <Description>Doesn't support that kind of notification</Description>
+    </Excluded>
+    <Excluded>
+        <Name>test-http-header-response-splitting.js</Name>
+        <Adapter>netty</Adapter>
+        <Description>Doesn't support that kind of notification</Description>
+    </Excluded>
+    <Excluded>
+        <Name>test-http-bind-twice.js</Name>
+        <Adapter>netty</Adapter>
+        <Description>Doesn't support that kind of notification</Description>
+    </Excluded>
+    <Excluded>
+        <Name>test-http-exit-delay.js</Name>
+        <Adapter>netty</Adapter>
+        <Description>Doesn't support that kind of notification</Description>
+    </Excluded>
+    <Excluded>
+        <Name>test-https-byteswritten.js</Name>
+        <Adapter>netty</Adapter>
+        <Description>Doesn't support that kind of notification</Description>
+    </Excluded>
+    <Excluded>
+        <Name>test-http-mutable-headers.js</Name>
+        <Adapter>netty</Adapter>
+        <Description>Doesn't support that kind of notification</Description>
+    </Excluded>
+
+    <!-- DEPRECATION
+         These tests depend on the "&amp;&amp;throw-deprecation" feature of Node, not implemented here.
+    -->
+    <Excluded>
+        <Name>test-fs-readfile-error.js</Name>
+        <Reason>Depends on --throw-deprecation</Reason>
+    </Excluded>
+
+    <!-- FLAKY
+         These tests seem very sensitive to network blips and deployment environments. They may work
+         locally but not on the CI server.
+    -->
+    <Excluded>
+        <Name>test-http-curl-chunk-problem.js</Name>
+        <Description>Actually works but not always on the CI machine</Description>
+    </Excluded>
+    <Excluded>
+        <Name>test-dgram-pingpong.js</Name>
+        <Description>Some sort of timing related failures.</Description>
+    </Excluded>
+    <Excluded>
+        <Name>test-tls-server-large-request.js</Name>
+        <Description>Some sort of timing related failures.</Description>
+    </Excluded>
+    <Excluded>
+        <Name>test-exec-max-buffer.js</Name>
+        <Description>Not sure</Description>
+    </Excluded>
+    <Excluded>
+        <Name>test-net-bind-twice.js</Name>
+    </Excluded>
+    <Excluded>
+        <Name>test-tls-fast-writing.js</Name>
+    </Excluded>
+    <Excluded>
+        <Name>test-tls-stream2-readable-empty-buffer-no-eof.js</Name>
+    </Excluded>
+    <Excluded>
+        <Name>test-http-client-timeout-agent.js</Name>
+    </Excluded>
+    <Excluded>
+        <Name>test-http-1.0.js</Name>
+    </Excluded>
+
+    <!--
+         JUST BROKEN
+         These tests should be fixed but they are disabled so that we can track regression runs.
+    -->
+    <Excluded>
+        <Name>test-dgram-unref.js</Name>
+    </Excluded>
+    <Excluded>
+        <Name>test-http-response-no-headers.js</Name>
+    </Excluded>
+    <Excluded>
+        <Name>test-net-throttle.js</Name>
+    </Excluded>
+    <Excluded>
+        <Name>test-net-bytes-stats.js</Name>
+    </Excluded>
+    <Excluded>
+        <Name>test-http-set-timeout-server.js</Name>
+    </Excluded>
+    <Excluded>
+        <Name>test-https-connecting-to-http.js</Name>
+    </Excluded>
+    <Excluded>
+        <Name>test-tls-server-verify.js</Name>
+    </Excluded>
+    <Excluded>
+        <Name>test-fs-error-messages.js</Name>
+    </Excluded>
+</ExcludedTests>

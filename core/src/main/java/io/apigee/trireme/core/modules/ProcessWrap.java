@@ -39,6 +39,7 @@ import io.apigee.trireme.core.internal.NodeOSException;
 import io.apigee.trireme.core.internal.ScriptRunner;
 import io.apigee.trireme.core.internal.StreamPiper;
 import io.apigee.trireme.core.Utils;
+import io.apigee.trireme.core.modules.handle.JavaStreamWrap;
 import org.mozilla.javascript.Context;
 import org.mozilla.javascript.EvaluatorException;
 import org.mozilla.javascript.Function;

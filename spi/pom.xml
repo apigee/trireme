@@ -13,6 +13,10 @@
 
   <dependencies>
     <dependency>
+      <groupId>org.mozilla</groupId>
+      <artifactId>rhino</artifactId>
+    </dependency>
+    <dependency>
       <groupId>junit</groupId>
       <artifactId>junit</artifactId>
       <scope>test</scope>

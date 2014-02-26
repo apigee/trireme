@@ -8,7 +8,6 @@ io.apigee.trireme.core.modules.Evals
 io.apigee.trireme.core.modules.Crypto
 io.apigee.trireme.core.modules.HTTPParser
 io.apigee.trireme.core.modules.HTTPWrap
-io.apigee.trireme.core.modules.JavaStreamWrap
 io.apigee.trireme.core.modules.ModuleLoader
 io.apigee.trireme.core.modules.NativeModule
 io.apigee.trireme.core.modules.OS
@@ -19,3 +18,4 @@ io.apigee.trireme.core.modules.TCPWrap
 io.apigee.trireme.core.modules.TimerWrap
 io.apigee.trireme.core.modules.UDPWrap
 io.apigee.trireme.core.modules.ZLib
+io.apigee.trireme.core.modules.handle.JavaStreamWrap

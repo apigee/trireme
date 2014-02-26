@@ -19,25 +19,28 @@
  * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
  * SOFTWARE.
  */
-package io.apigee.trireme.core.modules;
+package io.apigee.trireme.core.modules.handle;
 
 import io.apigee.trireme.core.InternalNodeModule;
 import io.apigee.trireme.core.NodeRuntime;
 import io.apigee.trireme.core.ScriptTask;
 import io.apigee.trireme.core.Utils;
 import io.apigee.trireme.core.internal.Charsets;
+import io.apigee.trireme.core.internal.FunctionCaller;
+import io.apigee.trireme.core.internal.FunctionInvoker;
 import io.apigee.trireme.core.internal.ScriptRunner;
+import io.apigee.trireme.core.modules.Buffer;
+import io.apigee.trireme.core.modules.Constants;
+import io.apigee.trireme.spi.HandleWrapper;
 import org.mozilla.javascript.Context;
 import org.mozilla.javascript.Function;
 import org.mozilla.javascript.Scriptable;
 import org.mozilla.javascript.ScriptableObject;
-import org.mozilla.javascript.annotations.JSFunction;
 import org.mozilla.javascript.annotations.JSGetter;
 import org.mozilla.javascript.annotations.JSSetter;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.io.Console;
 import java.io.EOFException;
 import java.io.IOException;
 import java.io.InputStream;
@@ -75,6 +78,7 @@ public class JavaStreamWrap
     {
         ScriptableObject.defineClass(scope, ModuleImpl.class);
         ScriptableObject.defineClass(scope, StreamWrapImpl.class);
+
         ModuleImpl mod = (ModuleImpl)cx.newObject(scope, ModuleImpl.CLASS_NAME);
         mod.init(runtime);
         return mod;
@@ -101,16 +105,18 @@ public class JavaStreamWrap
         {
             StreamWrapImpl wrap = (StreamWrapImpl)cx.newObject(this, StreamWrapImpl.CLASS_NAME);
             wrap.setRunner((ScriptRunner)runtime);
+            Node10Handle handle = new Node10Handle(wrap, runtime);
+            handle.wrap();
             return wrap;
         }
     }
 
     public static class StreamWrapImpl
         extends ScriptableObject
+        implements HandleWrapper
     {
         public static final String CLASS_NAME = "_java_stream_wrap";
 
-        private int byteCount;
         private ScriptRunner runtime;
         private InputStream in;
         private OutputStream out;
@@ -134,20 +140,6 @@ public class JavaStreamWrap
             this.runtime = runtime;
         }
 
-        @JSGetter("bytes")
-        @SuppressWarnings("unused")
-        public int getByteCount() {
-            return byteCount;
-        }
-
-        @JSGetter("writeQueueSize")
-        @SuppressWarnings("unused")
-        public int getWriteQueueSize()
-        {
-            // All writes are synchronous
-            return 0;
-        }
-
         @JSSetter("onread")
         @SuppressWarnings("unused")
         public void setOnRead(Function r) {
@@ -160,27 +152,24 @@ public class JavaStreamWrap
             return onRead;
         }
 
-        @JSFunction
-        @SuppressWarnings("unused")
-        public static void close(Context cx, Scriptable thisObj, Object[] args, Function func)
+        public void close(Context cx, Object[] args)
         {
             Function cb = functionArg(args, 0, false);
-            StreamWrapImpl self = (StreamWrapImpl)thisObj;
 
-            self.stopReading();
+            stopReading();
 
-            if (self.out != null) {
+            if (out != null) {
                 try {
-                    self.out.close();
+                    out.close();
                 } catch (IOException ioe) {
                     if (log.isDebugEnabled()) {
                         log.debug("Error closing output stream: {}", ioe);
                     }
                 }
             }
-            if (self.in != null) {
+            if (in != null) {
                 try {
-                    self.in.close();
+                    in.close();
                 } catch (IOException ioe) {
                     if (log.isDebugEnabled()) {
                         log.debug("Error closing input stream: {}", ioe);
@@ -189,97 +178,43 @@ public class JavaStreamWrap
             }
 
             if (cb != null) {
-                cb.call(cx, cb, thisObj, null);
+                cb.call(cx, cb, this, null);
             }
         }
 
-        @JSFunction
-        @SuppressWarnings("unused")
-        public static Object writeBuffer(Context cx, Scriptable thisObj, Object[] args, Function func)
+        @Override
+        public WriteTracker write(Context cx, ByteBuffer buf)
         {
-            Buffer.BufferImpl buf = objArg(args, 0, Buffer.BufferImpl.class, true);
-            StreamWrapImpl self = (StreamWrapImpl)thisObj;
-            return self.doWrite(cx, buf.getBuffer());
-        }
-
-        @JSFunction
-        @SuppressWarnings("unused")
-        public static Object writeUtf8String(Context cx, Scriptable thisObj, Object[] args, Function func)
-        {
-            String s = stringArg(args, 0);
-            return ((StreamWrapImpl)thisObj).doWrite(cx, Utils.stringToBuffer(s, Charsets.UTF8));
-        }
-
-        @JSFunction
-        @SuppressWarnings("unused")
-        public static Object writeAsciiString(Context cx, Scriptable thisObj, Object[] args, Function func)
-        {
-            String s = stringArg(args, 0);
-            return ((StreamWrapImpl)thisObj).doWrite(cx, Utils.stringToBuffer(s, Charsets.ASCII));
-        }
-
-        @JSFunction
-        @SuppressWarnings("unused")
-        public static Object writeUcs2String(Context cx, Scriptable thisObj, Object[] args, Function func)
-        {
-            String s = stringArg(args, 0);
-            return ((StreamWrapImpl)thisObj).doWrite(cx, Utils.stringToBuffer(s, Charsets.UCS2));
-        }
-
-        private Scriptable doWrite(Context cx, ByteBuffer buf)
-        {
+            assert(buf.hasArray());
             if (out == null) {
                 throw Utils.makeError(cx, this, "Stream does not support write");
             }
 
+            WriteTracker ret = new WriteTracker();
             try {
                 out.write(buf.array(), buf.arrayOffset() + buf.position(), buf.remaining());
             } catch (IOException ioe) {
                 if (log.isDebugEnabled()) {
                     log.debug("Error writing to stream: {}", ioe);
                 }
-                runtime.setErrno(Constants.EIO);
-                return null;
+                ret.setErrno(Constants.EIO);
+                return ret;
             }
 
-            byteCount += buf.remaining();
-
-            final StreamWrapImpl self = this;
-            final Scriptable req = cx.newObject(this);
-            req.put("bytes", req, buf.remaining());
-
-            // net.Socket expects us to call afterWrite only after it has had a chance to process
-            // our result so that it can place a callback on it.
-            runtime.enqueueTask(new ScriptTask()
-            {
-                @Override
-                public void execute(Context cx, Scriptable scope)
-                {
-                    Object onComplete = ScriptableObject.getProperty(req, "oncomplete");
-                    if ((onComplete != null) && Context.getUndefinedValue().equals(onComplete)) {
-                        Function afterWrite = (Function)ScriptableObject.getProperty(req, "oncomplete");
-                        afterWrite.call(cx, scope, self,
-                                        new Object[] { Context.getUndefinedValue(), self, req });
-                    }
-                }
-            });
-
-            return req;
+            ret.setBytesWritten(buf.remaining());
+            return ret;
         }
 
-        @JSFunction
-        @SuppressWarnings("unused")
-        public static void readStart(Context cx, Scriptable thisObj, Object[] args, Function func)
+        public void readStart(Context cx)
         {
-            final StreamWrapImpl self = (StreamWrapImpl)thisObj;
-            if (self.in == null) {
-                throw Utils.makeError(cx, thisObj, "Stream does not support input");
+            if (in == null) {
+                throw Utils.makeError(cx, this, "Stream does not support input");
             }
 
             // Read by spawning a thread from the cached thread pool that will do the blocking reads.
             // It will be stopped by cancelling this task.
-            self.runtime.pin();
-            self.readTask = self.runtime.getUnboundedPool().submit(new Runnable() {
+            runtime.pin();
+            readTask = runtime.getUnboundedPool().submit(new Runnable() {
                 @Override
                 public void run()
                 {
@@ -288,29 +223,30 @@ public class JavaStreamWrap
                             // Allocate a big buffer for the lifetime of the stream, and copy to smaller
                             // ones when each read is complete for handoff to the JavaScript code
                             byte[] readBuf = new byte[READ_BUFFER_SIZE];
-                            final int count = self.in.read(readBuf);
+                            final int count = in.read(readBuf);
                             final byte[] buf = (count > 0 ? new byte[count] : null);
                             if (count > 0) {
                                 System.arraycopy(readBuf, 0, buf, 0, count);
                             }
 
                             // We read some data, so go back to the script thread and deliver it
-                            self.runtime.enqueueTask(new ScriptTask() {
+                            runtime.enqueueTask(new ScriptTask() {
                                 @Override
                                 public void execute(Context cx, Scriptable scope)
                                 {
-                                    if (self.onRead != null) {
+                                    if (onRead != null) {
                                         if (count > 0) {
-                                            Buffer.BufferImpl jbuf = Buffer.BufferImpl.newBuffer(cx, self, buf, 0, count);
-                                            self.runtime.clearErrno();
-                                            self.onRead.call(cx, self.onRead, self,
+                                            Buffer.BufferImpl jbuf =
+                                                Buffer.BufferImpl.newBuffer(cx, StreamWrapImpl.this, buf, 0, count);
+                                            runtime.clearErrno();
+                                            onRead.call(cx, onRead, StreamWrapImpl.this,
                                                              new Object[] { jbuf, 0, count });
                                         } else if (count < 0) {
                                             if (log.isDebugEnabled()) {
-                                                log.debug("Async read on {} reached EOF", self.in);
+                                                log.debug("Async read on {} reached EOF", in);
                                             }
-                                            self.runtime.setErrno(Constants.EOF);
-                                            self.onRead.call(cx, self.onRead, self, new Object[] { null, 0, 0 });
+                                            runtime.setErrno(Constants.EOF);
+                                            onRead.call(cx, onRead, StreamWrapImpl.this, new Object[] { null, 0, 0 });
                                         }
                                     }
                                 }
@@ -321,38 +257,38 @@ public class JavaStreamWrap
                         } catch (InterruptedIOException ii) {
                             // Nothing to do -- we were legitimately stopped
                             if (log.isDebugEnabled()) {
-                                log.debug("Async read on {} was interrupted", self.in);
+                                log.debug("Async read on {} was interrupted", in);
                             }
                             return;
                         } catch (EOFException eofe) {
                             if (log.isDebugEnabled()) {
-                                log.debug("Async read on {} got EOF error: {}", self.in, eofe);
+                                log.debug("Async read on {} got EOF error: {}", in, eofe);
                             }
-                            self.runtime.enqueueTask(new ScriptTask() {
+                            runtime.enqueueTask(new ScriptTask() {
                                 @Override
                                 public void execute(Context cx, Scriptable scope)
                                 {
-                                    if (self.onRead != null) {
-                                        self.runtime.setErrno(Constants.EOF);
-                                        self.onRead.call(cx, self.onRead, self, new Object[] { null, 0, 0 });
+                                    if (onRead != null) {
+                                        runtime.setErrno(Constants.EOF);
+                                        onRead.call(cx, onRead, StreamWrapImpl.this, new Object[] { null, 0, 0 });
                                     }
                                 }
                             });
                             return;
                         } catch (IOException ioe) {
                             if (log.isDebugEnabled()) {
-                                log.debug("Async read on {} got error: {}", self.in, ioe);
+                                log.debug("Async read on {} got error: {}", in, ioe);
                             }
                             // Not all streams will throw EOFException for us...
                             final String err =
                                 ("Stream Closed".equalsIgnoreCase(ioe.getMessage()) ? Constants.EOF : Constants.EIO);
-                            self.runtime.enqueueTask(new ScriptTask() {
+                            runtime.enqueueTask(new ScriptTask() {
                                 @Override
                                 public void execute(Context cx, Scriptable scope)
                                 {
-                                    if (self.onRead != null) {
-                                        self.runtime.setErrno(err);
-                                        self.onRead.call(cx, self.onRead, self, new Object[] { null, 0, 0 });
+                                    if (onRead != null) {
+                                        runtime.setErrno(err);
+                                        onRead.call(cx, onRead, StreamWrapImpl.this, new Object[] { null, 0, 0 });
                                     }
                                 }
                             });
@@ -363,8 +299,6 @@ public class JavaStreamWrap
             });
         }
 
-        @JSFunction
-        @SuppressWarnings("unused")
         public void readStop()
         {
             stopReading();

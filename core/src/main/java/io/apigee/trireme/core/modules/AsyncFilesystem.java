@@ -1305,28 +1305,40 @@ public class AsyncFilesystem
             Function callback = functionArg(args, 3, false);
             final FSImpl self = (FSImpl)thisObj;
 
+            // Ignore "type" parameter -- has meaning only on Windows.
             return self.runAction(cx, callback, new AsyncAction() {
                 @Override
                 public Object[] execute()
                    throws NodeOSException
                 {
-                    return self.doSymlink(destPath, srcPath, type);
+                    return self.doSymlink(destPath, srcPath);
                 }
             });
         }
 
-        private Object[] doSymlink(String destPath, String srcPath, String type)
+        private Object[] doSymlink(String destPath, String srcPath)
             throws NodeOSException
         {
             Path dest = translatePath(destPath);
             Path src = translatePath(srcPath);
+
+            if (dest == null) {
+                throw new NodeOSException(Constants.EPERM, "Attempt to link file above filesystem root");
+            }
+
+            // "symlink" supports relative paths. But now that we have checked to make sure that we're
+            // not trying to link an "illegal" path, we can just use the original path if it is relative.
+            Path origSrc = Paths.get(srcPath);
+            if (!origSrc.isAbsolute()) {
+                src = origSrc;
+            }
 
             try {
                 if (log.isDebugEnabled()) {
                     log.debug("symlink from {} to {}",
                               src, dest);
                 }
-                // TODO do we care about type?
+
                 Files.createSymbolicLink(dest, src);
                 return new Object[] { Context.getUndefinedValue(), Context.getUndefinedValue() };
 

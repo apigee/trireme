@@ -10,6 +10,7 @@
   "license": "MIT",
   "dependencies": {
     "argo": "0.4.x",
-    "usergrid": "0.10.x"
+    "usergrid": "0.10.x",
+    "jshint": "2.4.4"
   }
 }

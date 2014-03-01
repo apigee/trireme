@@ -25,6 +25,7 @@ import io.apigee.trireme.core.ScriptTask;
 import io.apigee.trireme.core.internal.Charsets;
 import io.apigee.trireme.core.internal.ScriptRunner;
 import io.apigee.trireme.core.modules.Buffer;
+import io.apigee.trireme.core.modules.Constants;
 import io.apigee.trireme.spi.FunctionCaller;
 import io.apigee.trireme.spi.ScriptCallable;
 import org.mozilla.javascript.Context;
@@ -33,23 +34,27 @@ import org.mozilla.javascript.Scriptable;
 import org.mozilla.javascript.ScriptableObject;
 
 import java.nio.ByteBuffer;
+import java.nio.charset.Charset;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import static io.apigee.trireme.core.ArgUtils.*;
 
 /**
  * This class implements the specific "handle" pattern that is required in Node.js 10.x.
  * It does it by adding methods and properties on the specified object that implement the required
- * interface.
+ * interface. A "handle" object is used by the "net" Node.js module. In Trireme, we use it for TCP sockets,
+ * standard input/output, and TTY input/output.
  */
 
 class Node10Handle
-    implements ScriptCallable
+    implements ScriptCallable, HandleWrapper.HandleListener
+
 {
     private final HandleWrapper target;
     private final ScriptRunner runtime;
 
     private int byteCount;
-    private int writeQueueSize;
+    private final AtomicInteger writeQueueSize = new AtomicInteger();
 
     Node10Handle(HandleWrapper target, ScriptRunner runtime)
     {
@@ -68,7 +73,7 @@ class Node10Handle
         target.put("readStop", target, new FunctionCaller(this, 7));
 
         updateByteCount(0);
-        updateWriteQueueSize(0);
+        target.put("writeQueueSize", target, 0);
     }
 
     @Override
@@ -90,7 +95,7 @@ class Node10Handle
             readStart(cx);
             break;
         case 7:
-            readStop();
+            readStop(cx);
             break;
         default:
             throw new IllegalArgumentException("Invalid method id");
@@ -101,65 +106,162 @@ class Node10Handle
     private void updateByteCount(int count)
     {
         byteCount += count;
-        target.put("bytes", target, Integer.valueOf(byteCount));
+        target.put("bytes", target, byteCount);
     }
 
-    private void updateWriteQueueSize(int delta)
+    private void incrementWriteQueueSize()
     {
-        writeQueueSize += delta;
-        target.put("writeQueueSize", target, Integer.valueOf(writeQueueSize));
+        int newSize = writeQueueSize.incrementAndGet();
+        target.put("writeQueueSize", target, newSize);
     }
 
-    private Object completeWrite(Context cx, HandleWrapper.WriteTracker tracker)
+    private void decrementWriteQueueSize()
     {
-        if (tracker.getErrno() != null) {
-            runtime.setErrno(tracker.getErrno());
-            return null;
+        int newSize = writeQueueSize.decrementAndGet();
+        target.put("writeQueueSize", target, newSize);
+    }
+
+    private Function getOnRead()
+    {
+        return (Function)ScriptableObject.getProperty(target, "onread");
+    }
+
+    private void close(Context cx, Object[] args)
+    {
+        Function cb = functionArg(args, 0, false);
+        target.close(cx);
+        if (cb != null) {
+            cb.call(cx, cb, target, null);
         }
+    }
 
-        final Scriptable req = cx.newObject(target);
-        req.put("bytes", req, tracker.getBytesWritten());
+    private void readStart(Context cx)
+    {
+        runtime.clearErrno();
+        target.readStart(cx, this);
+    }
 
-        // net.Socket expects us to call afterWrite only after it has had a chance to process
-        // our result so that it can place a callback on it.
+    private void readStop(Context cx)
+    {
+        runtime.clearErrno();
+        target.readStop(cx);
+    }
+
+    @Override
+    public void readComplete(final ByteBuffer buf)
+    {
+        // We read some data, so go back to the script thread and deliver it
+        final Function onRead = getOnRead();
+        runtime.enqueueTask(new ScriptTask() {
+            @Override
+            public void execute(Context cx, Scriptable scope)
+            {
+                if (onRead != null) {
+                    Buffer.BufferImpl jbuf =
+                        Buffer.BufferImpl.newBuffer(cx, target, buf, false);
+                    runtime.clearErrno();
+                    onRead.call(cx, onRead, target,
+                                new Object[] { jbuf, 0, buf.remaining() });
+                }
+            }
+        });
+    }
+
+    @Override
+    public void readError(final String err)
+    {
+        final Function onRead = getOnRead();
+        runtime.enqueueTask(new ScriptTask() {
+                                @Override
+                                public void execute(Context cx, Scriptable scope)
+                                {
+                                    if (onRead != null) {
+                                        runtime.setErrno(err);
+                                        onRead.call(cx, onRead, target, new Object[] { null, 0, 0 });
+                                    }
+                                }
+                            });
+    }
+
+    @Override
+    public void writeComplete(final HandleWrapper.WriteTracker tracker)
+    {
+        decrementWriteQueueSize();
+        // Always call oncomplete in another tick -- we have to set a request on it before it can be
+        // called, and furthermore in node 10, the caller only sets "oncomplete" after the write has returned.
         runtime.enqueueTask(new ScriptTask()
         {
             @Override
             public void execute(Context cx, Scriptable scope)
             {
-                Object onComplete = ScriptableObject.getProperty(req, "oncomplete");
-                if ((onComplete != null) && Context.getUndefinedValue().equals(onComplete)) {
-                    Function afterWrite = (Function) ScriptableObject.getProperty(req, "oncomplete");
-                    afterWrite.call(cx, scope, target,
-                                    new Object[]{Context.getUndefinedValue(), target, req});
+                Object oc = ScriptableObject.getProperty(tracker.getRequest(), "oncomplete");
+                if ((oc != null) && Context.getUndefinedValue().equals(oc)) {
+                    Function onComplete = (Function) oc;
+                    onComplete.call(cx, scope, target,
+                                    new Object[]{Context.getUndefinedValue(), target, tracker.getRequest()});
                 }
             }
         });
+    }
+
+    @Override
+    public void writeError(final HandleWrapper.WriteTracker tracker, final String err)
+    {
+        decrementWriteQueueSize();
+        runtime.enqueueTask(new ScriptTask()
+        {
+            @Override
+            public void execute(Context cx, Scriptable scope)
+            {
+                Object oc = ScriptableObject.getProperty(tracker.getRequest(), "oncomplete");
+                if ((oc != null) && Context.getUndefinedValue().equals(oc)) {
+                    Function onComplete = (Function)oc;
+                    onComplete.call(cx, scope, target,
+                                    new Object[]{err, target, tracker.getRequest()});
+                }
+            }
+        });
+    }
+
+    private Object writeBuffer(Context cx, Object[] args)
+    {
+        runtime.clearErrno();
+        Buffer.BufferImpl jBuf = objArg(args, 0, Buffer.BufferImpl.class, true);
+        ByteBuffer buf = jBuf.getBuffer();
+
+        incrementWriteQueueSize();
+        HandleWrapper.WriteTracker tracker = target.write(cx, buf, this);
+        Scriptable req = cx.newObject(target);
+        req.put("bytes", req, tracker.getBytesWritten());
+        tracker.setRequest(req);
         return req;
     }
 
-    public Object writeBuffer(Context cx, Object[] args)
+    private Object writeUtf8String(Context cx, Object[] args)
     {
-        Buffer.BufferImpl jBuf = objArg(args, 0, Buffer.BufferImpl.class, true);
-        ByteBuffer buf = jBuf.getBuffer();
-        return completeWrite(cx, target.write(cx, buf));
+        return writeString(cx, args, Charsets.UTF8);
     }
 
-    public Object writeUtf8String(Context cx, Object[] args)
+    private Object writeAsciiString(Context cx, Object[] args)
     {
-        String s = stringArg(args, 0);
-        return completeWrite(cx, target.write(cx, s, Charsets.UTF8));
+        return writeString(cx, args, Charsets.ASCII);
     }
 
-    public Object writeAsciiString(Context cx, Object[] args)
+    private Object writeUcs2String(Context cx, Object[] args)
     {
-        String s = stringArg(args, 0);
-        return completeWrite(cx, target.write(cx, s, Charsets.ASCII));
+        return writeString(cx, args, Charsets.UCS2);
     }
 
-    public Object writeUcs2String(Context cx, Object[] args)
+    private Object writeString(Context cx, Object[] args, Charset cs)
     {
+        runtime.clearErrno();
         String s = stringArg(args, 0);
-        return completeWrite(cx, target.write(cx, s, Charsets.UCS2));
+
+        incrementWriteQueueSize();
+        HandleWrapper.WriteTracker tracker = target.write(cx, s, cs, this);
+        Scriptable req = cx.newObject(target);
+        req.put("bytes", req, tracker.getBytesWritten());
+        tracker.setRequest(req);
+        return req;
     }
 }

@@ -38,14 +38,43 @@ public interface HandleWrapper
     /**
      * Write a buffer, in whatever the common understanding of a Buffer is.
      */
-    WriteTracker write(Context cx, ByteBuffer buf);
-    WriteTracker write(Context cx, String str, Charset encoding);
+    WriteTracker write(Context cx, ByteBuffer buf, HandleListener listener);
+    WriteTracker write(Context cx, String str, Charset encoding, HandleListener listener);
+
+    void readStart(Context cx, HandleListener reader);
+    void readStop(Context cx);
+
+    void close(Context cx);
+
+    public static interface HandleListener
+    {
+        void readComplete(ByteBuffer buf);
+        void readError(String err);
+        void writeComplete(WriteTracker tracker);
+        void writeError(WriteTracker tracker, String err);
+    }
 
     public static class WriteTracker
     {
-        private int bytesWritten;
-        private boolean complete;
-        private String errno;
+        private Scriptable request;
+        protected HandleListener listener;
+        protected int bytesWritten;
+
+        public void setRequest(Scriptable s) {
+            this.request = s;
+        }
+
+        public Scriptable getRequest() {
+            return request;
+        }
+
+        public void setListener(HandleListener l) {
+            this.listener = l;
+        }
+
+        public HandleListener getListener() {
+            return listener;
+        }
 
         public int getBytesWritten() {
             return bytesWritten;
@@ -53,22 +82,6 @@ public interface HandleWrapper
 
         public void setBytesWritten(int bytesWritten) {
             this.bytesWritten = bytesWritten;
-        }
-
-        public boolean isComplete() {
-            return complete;
-        }
-
-        public void setComplete(boolean complete) {
-            this.complete = complete;
-        }
-
-        public String getErrno() {
-            return errno;
-        }
-
-        public void setErrno(String errno) {
-            this.errno = errno;
         }
     }
 }

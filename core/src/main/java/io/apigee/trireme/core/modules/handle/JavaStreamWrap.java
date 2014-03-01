@@ -23,21 +23,12 @@ package io.apigee.trireme.core.modules.handle;
 
 import io.apigee.trireme.core.InternalNodeModule;
 import io.apigee.trireme.core.NodeRuntime;
-import io.apigee.trireme.core.ScriptTask;
 import io.apigee.trireme.core.Utils;
-import io.apigee.trireme.core.internal.Charsets;
-import io.apigee.trireme.core.internal.FunctionCaller;
-import io.apigee.trireme.core.internal.FunctionInvoker;
 import io.apigee.trireme.core.internal.ScriptRunner;
-import io.apigee.trireme.core.modules.Buffer;
 import io.apigee.trireme.core.modules.Constants;
-import io.apigee.trireme.spi.HandleWrapper;
 import org.mozilla.javascript.Context;
-import org.mozilla.javascript.Function;
 import org.mozilla.javascript.Scriptable;
 import org.mozilla.javascript.ScriptableObject;
-import org.mozilla.javascript.annotations.JSGetter;
-import org.mozilla.javascript.annotations.JSSetter;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -48,9 +39,8 @@ import java.io.InterruptedIOException;
 import java.io.OutputStream;
 import java.lang.reflect.InvocationTargetException;
 import java.nio.ByteBuffer;
+import java.nio.charset.Charset;
 import java.util.concurrent.Future;
-
-import static io.apigee.trireme.core.ArgUtils.*;
 
 /**
  * This class is used when wrapping Java InputStream and OutputStream objects for use with standard
@@ -105,7 +95,7 @@ public class JavaStreamWrap
         {
             StreamWrapImpl wrap = (StreamWrapImpl)cx.newObject(this, StreamWrapImpl.CLASS_NAME);
             wrap.setRunner((ScriptRunner)runtime);
-            Node10Handle handle = new Node10Handle(wrap, runtime);
+            Node10Handle handle = new Node10Handle(wrap, (ScriptRunner)runtime);
             handle.wrap();
             return wrap;
         }
@@ -121,7 +111,7 @@ public class JavaStreamWrap
         private InputStream in;
         private OutputStream out;
         private Future<?> readTask;
-        private Function onRead;
+        private volatile boolean reading;
 
         @Override
         public String getClassName() {
@@ -140,22 +130,9 @@ public class JavaStreamWrap
             this.runtime = runtime;
         }
 
-        @JSSetter("onread")
-        @SuppressWarnings("unused")
-        public void setOnRead(Function r) {
-            this.onRead = r;
-        }
-
-        @JSGetter("onread")
-        @SuppressWarnings("unused")
-        public Function getOnRead() {
-            return onRead;
-        }
-
-        public void close(Context cx, Object[] args)
+        @Override
+        public void close(Context cx)
         {
-            Function cb = functionArg(args, 0, false);
-
             stopReading();
 
             if (out != null) {
@@ -176,14 +153,10 @@ public class JavaStreamWrap
                     }
                 }
             }
-
-            if (cb != null) {
-                cb.call(cx, cb, this, null);
-            }
         }
 
         @Override
-        public WriteTracker write(Context cx, ByteBuffer buf)
+        public WriteTracker write(Context cx, ByteBuffer buf, HandleListener listener)
         {
             assert(buf.hasArray());
             if (out == null) {
@@ -197,16 +170,26 @@ public class JavaStreamWrap
                 if (log.isDebugEnabled()) {
                     log.debug("Error writing to stream: {}", ioe);
                 }
-                ret.setErrno(Constants.EIO);
+                listener.writeError(ret, Constants.EIO);
                 return ret;
             }
 
             ret.setBytesWritten(buf.remaining());
+            listener.writeComplete(ret);
             return ret;
         }
 
-        public void readStart(Context cx)
+        @Override
+        public WriteTracker write(Context cx, String msg, Charset cs, HandleListener listener)
         {
+            ByteBuffer bb = Utils.stringToBuffer(msg, cs);
+            return write(cx, bb, listener);
+        }
+
+        @Override
+        public void readStart(Context cx, final HandleListener reader)
+        {
+            reading = true;
             if (in == null) {
                 throw Utils.makeError(cx, this, "Stream does not support input");
             }
@@ -218,62 +201,33 @@ public class JavaStreamWrap
                 @Override
                 public void run()
                 {
-                    while (true) {
-                        try {
-                            // Allocate a big buffer for the lifetime of the stream, and copy to smaller
-                            // ones when each read is complete for handoff to the JavaScript code
-                            byte[] readBuf = new byte[READ_BUFFER_SIZE];
-                            final int count = in.read(readBuf);
-                            final byte[] buf = (count > 0 ? new byte[count] : null);
-                            if (count > 0) {
-                                System.arraycopy(readBuf, 0, buf, 0, count);
-                            }
+                    // Allocate a big buffer for the lifetime of the stream, and copy to smaller
+                    // ones when each read is complete for handoff to the JavaScript code
+                    byte[] readBuf = new byte[READ_BUFFER_SIZE];
 
-                            // We read some data, so go back to the script thread and deliver it
-                            runtime.enqueueTask(new ScriptTask() {
-                                @Override
-                                public void execute(Context cx, Scriptable scope)
-                                {
-                                    if (onRead != null) {
-                                        if (count > 0) {
-                                            Buffer.BufferImpl jbuf =
-                                                Buffer.BufferImpl.newBuffer(cx, StreamWrapImpl.this, buf, 0, count);
-                                            runtime.clearErrno();
-                                            onRead.call(cx, onRead, StreamWrapImpl.this,
-                                                             new Object[] { jbuf, 0, count });
-                                        } else if (count < 0) {
-                                            if (log.isDebugEnabled()) {
-                                                log.debug("Async read on {} reached EOF", in);
-                                            }
-                                            runtime.setErrno(Constants.EOF);
-                                            onRead.call(cx, onRead, StreamWrapImpl.this, new Object[] { null, 0, 0 });
-                                        }
-                                    }
-                                }
-                            });
-                            if (count < 0) {
+                    while (reading) {
+                        try {
+                            int count = in.read(readBuf);
+                            if (count > 0) {
+                                ByteBuffer bb = ByteBuffer.allocate(count);
+                                bb.put(readBuf, 0, count);
+                                bb.flip();
+                                reader.readComplete(bb);
+                            } else if (count < 0) {
+                                reader.readError(Constants.EOF);
                                 return;
                             }
+
                         } catch (InterruptedIOException ii) {
-                            // Nothing to do -- we were legitimately stopped
+                            // Nothing to do -- we were legitimately stopped. But re-loop to check the condition.
                             if (log.isDebugEnabled()) {
                                 log.debug("Async read on {} was interrupted", in);
                             }
-                            return;
                         } catch (EOFException eofe) {
                             if (log.isDebugEnabled()) {
                                 log.debug("Async read on {} got EOF error: {}", in, eofe);
                             }
-                            runtime.enqueueTask(new ScriptTask() {
-                                @Override
-                                public void execute(Context cx, Scriptable scope)
-                                {
-                                    if (onRead != null) {
-                                        runtime.setErrno(Constants.EOF);
-                                        onRead.call(cx, onRead, StreamWrapImpl.this, new Object[] { null, 0, 0 });
-                                    }
-                                }
-                            });
+                            reader.readError(Constants.EOF);
                             return;
                         } catch (IOException ioe) {
                             if (log.isDebugEnabled()) {
@@ -282,16 +236,7 @@ public class JavaStreamWrap
                             // Not all streams will throw EOFException for us...
                             final String err =
                                 ("Stream Closed".equalsIgnoreCase(ioe.getMessage()) ? Constants.EOF : Constants.EIO);
-                            runtime.enqueueTask(new ScriptTask() {
-                                @Override
-                                public void execute(Context cx, Scriptable scope)
-                                {
-                                    if (onRead != null) {
-                                        runtime.setErrno(err);
-                                        onRead.call(cx, onRead, StreamWrapImpl.this, new Object[] { null, 0, 0 });
-                                    }
-                                }
-                            });
+                            reader.readError(err);
                             return;
                         }
                     }
@@ -299,13 +244,15 @@ public class JavaStreamWrap
             });
         }
 
-        public void readStop()
+        @Override
+        public void readStop(Context cx)
         {
             stopReading();
         }
 
         private void stopReading()
         {
+            reading = false;
             if (readTask != null) {
                 readTask.cancel(true);
                 readTask = null;

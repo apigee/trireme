@@ -30,5 +30,5 @@ import org.mozilla.javascript.Scriptable;
 
 public interface ScriptCallable
 {
-    Object call(Context cx, Scriptable scope, int op, Object[] args);
+    Object call(Context cx, Scriptable scope, Scriptable thisObj, int op, Object[] args);
 }

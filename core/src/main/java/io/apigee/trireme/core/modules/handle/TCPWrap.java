@@ -113,22 +113,21 @@ public class TCPWrap
             Node10Handle handle = new Node10Handle(tcp, getRunner(cx));
             handle.wrap();
 
-            tcp.put("bind", tcp, new FunctionCaller(tcp, 1));
-            tcp.put("bind6", tcp, new FunctionCaller(tcp, 2));
-            tcp.put("listen", tcp, new FunctionCaller(tcp, 3));
-            tcp.put("shutdown", tcp, new FunctionCaller(tcp, 4));
-            tcp.put("connect", tcp, new FunctionCaller(tcp, 5));
-            tcp.put("connect6", tcp, new FunctionCaller(tcp, 6));
-            tcp.put("getsockname", tcp, new FunctionCaller(tcp, 7));
-            tcp.put("getpeername", tcp, new FunctionCaller(tcp, 8));
-            tcp.put("setNoDelay", tcp, new FunctionCaller(tcp, 9));
-            tcp.put("setKeepAlive", tcp, new FunctionCaller(tcp, 10));
-
+            FunctionCaller.put(tcp, "bind", 1, tcp);
+            FunctionCaller.put(tcp, "bind6", 2, tcp);
+            FunctionCaller.put(tcp, "listen", 3, tcp);
+            FunctionCaller.put(tcp, "shutdown", 4, tcp);
+            FunctionCaller.put(tcp, "connect", 5, tcp);
+            FunctionCaller.put(tcp, "connect6", 6, tcp);
+            FunctionCaller.put(tcp, "getsockname", 7, tcp);
+            FunctionCaller.put(tcp, "getpeername", 8, tcp);
+            FunctionCaller.put(tcp, "setNoDelay", 9, tcp);
+            FunctionCaller.put(tcp, "setKeepAlive", 10, tcp);
             return tcp;
         }
 
         @Override
-        public Object call(Context cx, Scriptable scope, int op, Object[] args)
+        public Object call(Context cx, Scriptable scope, Scriptable thisObj, int op, Object[] args)
         {
             switch (op) {
             case 1:
@@ -141,6 +140,7 @@ public class TCPWrap
                 return shutdown(cx);
             case 5:
             case 6:
+                // Similarly, "connect" and "connect6" are the same
                 return connect(cx, args);
             case 7:
                 return getsockname(cx);
@@ -418,7 +418,7 @@ public class TCPWrap
                     writeReady = false;
                     queueWrite(qw);
                 } else {
-                    qw.getListener().writeComplete(qw);
+                    qw.getListener().writeComplete(qw, true);
                 }
             } else {
                 queueWrite(qw);
@@ -619,9 +619,9 @@ public class TCPWrap
             writeQueue.poll();
             if (qw.getListener() != null) {
                 if (err == null) {
-                    qw.getListener().writeComplete(qw);
+                    qw.getListener().writeComplete(qw, true);
                 } else {
-                    qw.getListener().writeError(qw, err);
+                    qw.getListener().writeError(qw, err, true);
                 }
             }
         }
@@ -651,11 +651,11 @@ public class TCPWrap
                     buf.flip();
                     readBuffer.clear();
 
-                    readListener.readComplete(buf);
+                    readListener.readComplete(buf, true);
 
                 } else if (read < 0) {
                     removeInterest(SelectionKey.OP_READ);
-                    readListener.readError(Constants.EOF);
+                    readListener.readError(Constants.EOF, true);
                 }
             } while (readStarted && (read > 0));
         }

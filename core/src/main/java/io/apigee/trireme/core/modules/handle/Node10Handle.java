@@ -25,7 +25,6 @@ import io.apigee.trireme.core.ScriptTask;
 import io.apigee.trireme.core.internal.Charsets;
 import io.apigee.trireme.core.internal.ScriptRunner;
 import io.apigee.trireme.core.modules.Buffer;
-import io.apigee.trireme.core.modules.Constants;
 import io.apigee.trireme.spi.FunctionCaller;
 import io.apigee.trireme.spi.ScriptCallable;
 import org.mozilla.javascript.Context;
@@ -64,20 +63,20 @@ class Node10Handle
 
     void wrap()
     {
-        target.put("close", target, new FunctionCaller(this, 1));
-        target.put("writeBuffer", target, new FunctionCaller(this, 2));
-        target.put("writeAsciiString", target, new FunctionCaller(this, 3));
-        target.put("writeUtf8String", target, new FunctionCaller(this, 4));
-        target.put("writeUcs2String", target, new FunctionCaller(this, 5));
-        target.put("readStart", target, new FunctionCaller(this, 6));
-        target.put("readStop", target, new FunctionCaller(this, 7));
+        FunctionCaller.put(target, "close", 1, this);
+        FunctionCaller.put(target, "writeBuffer", 2, this);
+        FunctionCaller.put(target, "writeAsciiString", 3, this);
+        FunctionCaller.put(target, "writeUtf8String", 4, this);
+        FunctionCaller.put(target, "writeUcs2String", 5, this);
+        FunctionCaller.put(target, "readStart", 6, this);
+        FunctionCaller.put(target, "readStop", 7, this);
 
         updateByteCount(0);
-        target.put("writeQueueSize", target, 0);
+        updateWriteQueueSize();
     }
 
     @Override
-    public Object call(Context cx, Scriptable scope, int op, Object[] args)
+    public Object call(Context cx, Scriptable scope, Scriptable thisObj, int op, Object[] args)
     {
         switch (op) {
         case 1:
@@ -111,14 +110,17 @@ class Node10Handle
 
     private void incrementWriteQueueSize()
     {
-        int newSize = writeQueueSize.incrementAndGet();
-        target.put("writeQueueSize", target, newSize);
+       writeQueueSize.incrementAndGet();
     }
 
     private void decrementWriteQueueSize()
     {
-        int newSize = writeQueueSize.decrementAndGet();
-        target.put("writeQueueSize", target, newSize);
+        writeQueueSize.decrementAndGet();
+    }
+
+    private void updateWriteQueueSize()
+    {
+        target.put("writeQueueSize", target, writeQueueSize.get());
     }
 
     private Function getOnRead()
@@ -148,43 +150,66 @@ class Node10Handle
     }
 
     @Override
-    public void readComplete(final ByteBuffer buf)
+    public void readComplete(final ByteBuffer buf, boolean inScriptThread)
     {
         // We read some data, so go back to the script thread and deliver it
         final Function onRead = getOnRead();
-        runtime.enqueueTask(new ScriptTask() {
-            @Override
-            public void execute(Context cx, Scriptable scope)
-            {
-                if (onRead != null) {
-                    Buffer.BufferImpl jbuf =
-                        Buffer.BufferImpl.newBuffer(cx, target, buf, false);
-                    runtime.clearErrno();
-                    onRead.call(cx, onRead, target,
-                                new Object[] { jbuf, 0, buf.remaining() });
+
+        // This is an optimization that also makes callbacks appear in the right order
+        if (inScriptThread) {
+            callOnRead(onRead, Context.getCurrentContext(), buf);
+
+        } else {
+            runtime.enqueueTask(new ScriptTask() {
+                @Override
+                public void execute(Context cx, Scriptable scope)
+                {
+                    callOnRead(onRead, cx, buf);
                 }
-            }
-        });
+            });
+        }
+    }
+
+    private void callOnRead(Function onRead, Context cx, ByteBuffer buf)
+    {
+        if (onRead != null) {
+            Buffer.BufferImpl jbuf =
+                Buffer.BufferImpl.newBuffer(cx, target, buf, false);
+            runtime.clearErrno();
+            onRead.call(cx, onRead, target,
+                        new Object[] { jbuf, 0, buf.remaining() });
+        }
     }
 
     @Override
-    public void readError(final String err)
+    public void readError(final String err, boolean inScriptThread)
     {
         final Function onRead = getOnRead();
-        runtime.enqueueTask(new ScriptTask() {
-                                @Override
-                                public void execute(Context cx, Scriptable scope)
-                                {
-                                    if (onRead != null) {
-                                        runtime.setErrno(err);
-                                        onRead.call(cx, onRead, target, new Object[] { null, 0, 0 });
-                                    }
-                                }
-                            });
+
+        if (inScriptThread) {
+            callOnError(onRead, Context.getCurrentContext(), err);
+
+        } else {
+            runtime.enqueueTask(new ScriptTask() {
+                @Override
+                public void execute(Context cx, Scriptable scope)
+                {
+                    callOnError(onRead, cx, err);
+                }
+            });
+        }
+    }
+
+    private void callOnError(Function onRead, Context cx, String err)
+    {
+        if (onRead != null) {
+            runtime.setErrno(err);
+            onRead.call(cx, onRead, target, new Object[] { null, 0, 0 });
+        }
     }
 
     @Override
-    public void writeComplete(final HandleWrapper.WriteTracker tracker)
+    public void writeComplete(final HandleWrapper.WriteTracker tracker, boolean inScriptThread)
     {
         decrementWriteQueueSize();
         // Always call oncomplete in another tick -- we have to set a request on it before it can be
@@ -197,6 +222,7 @@ class Node10Handle
                 Object oc = ScriptableObject.getProperty(tracker.getRequest(), "oncomplete");
                 if ((oc != null) && Context.getUndefinedValue().equals(oc)) {
                     Function onComplete = (Function) oc;
+                    updateWriteQueueSize();
                     onComplete.call(cx, scope, target,
                                     new Object[]{Context.getUndefinedValue(), target, tracker.getRequest()});
                 }
@@ -205,7 +231,7 @@ class Node10Handle
     }
 
     @Override
-    public void writeError(final HandleWrapper.WriteTracker tracker, final String err)
+    public void writeError(final HandleWrapper.WriteTracker tracker, final String err, boolean inScriptThread)
     {
         decrementWriteQueueSize();
         runtime.enqueueTask(new ScriptTask()
@@ -215,7 +241,8 @@ class Node10Handle
             {
                 Object oc = ScriptableObject.getProperty(tracker.getRequest(), "oncomplete");
                 if ((oc != null) && Context.getUndefinedValue().equals(oc)) {
-                    Function onComplete = (Function)oc;
+                    Function onComplete = (Function) oc;
+                    updateWriteQueueSize();
                     onComplete.call(cx, scope, target,
                                     new Object[]{err, target, tracker.getRequest()});
                 }

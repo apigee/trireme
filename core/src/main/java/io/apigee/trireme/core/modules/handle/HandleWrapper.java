@@ -48,10 +48,10 @@ public interface HandleWrapper
 
     public static interface HandleListener
     {
-        void readComplete(ByteBuffer buf);
-        void readError(String err);
-        void writeComplete(WriteTracker tracker);
-        void writeError(WriteTracker tracker, String err);
+        void readComplete(ByteBuffer buf, boolean inScriptThread);
+        void readError(String err, boolean inScriptThread);
+        void writeComplete(WriteTracker tracker, boolean inScriptThread);
+        void writeError(WriteTracker tracker, String err, boolean inScriptThread);
     }
 
     public static class WriteTracker

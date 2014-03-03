@@ -21,10 +21,10 @@
  */
 package io.apigee.trireme.spi;
 
+import org.mozilla.javascript.BaseFunction;
 import org.mozilla.javascript.Context;
-import org.mozilla.javascript.Function;
+import org.mozilla.javascript.ScriptRuntime;
 import org.mozilla.javascript.Scriptable;
-import org.mozilla.javascript.ScriptableObject;
 
 /**
  * This class is used to fire functions up to an object that implements the ScriptCallable interface.
@@ -33,28 +33,29 @@ import org.mozilla.javascript.ScriptableObject;
  * different places. It also happens to be more efficient.
  */
 
-public class FunctionCaller
-    extends ScriptableObject
-    implements Function
+public final class FunctionCaller
+    extends BaseFunction
 {
     private final ScriptCallable target;
     private final int op;
 
-    public FunctionCaller(ScriptCallable target, int op)
+    public static void put(Scriptable scope, String name, int op, ScriptCallable target)
+    {
+        FunctionCaller f = new FunctionCaller(target, op);
+        scope.put(name, scope, f);
+        ScriptRuntime.setFunctionProtoAndParent(f, scope);
+    }
+
+    private FunctionCaller(ScriptCallable target, int op)
     {
         this.target = target;
         this.op = op;
     }
 
     @Override
-    public String getClassName() {
-        return "_functionCaller";
-    }
-
-    @Override
     public Object call(Context cx, Scriptable scope, Scriptable thisObj, Object[] args)
     {
-        return target.call(cx, scope, op, args);
+        return target.call(cx, scope, thisObj, op, args);
     }
 
     @Override

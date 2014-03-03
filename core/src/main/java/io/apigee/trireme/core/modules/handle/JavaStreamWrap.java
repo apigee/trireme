@@ -170,12 +170,12 @@ public class JavaStreamWrap
                 if (log.isDebugEnabled()) {
                     log.debug("Error writing to stream: {}", ioe);
                 }
-                listener.writeError(ret, Constants.EIO);
+                listener.writeError(ret, Constants.EIO, true);
                 return ret;
             }
 
             ret.setBytesWritten(buf.remaining());
-            listener.writeComplete(ret);
+            listener.writeComplete(ret, true);
             return ret;
         }
 
@@ -212,9 +212,9 @@ public class JavaStreamWrap
                                 ByteBuffer bb = ByteBuffer.allocate(count);
                                 bb.put(readBuf, 0, count);
                                 bb.flip();
-                                reader.readComplete(bb);
+                                reader.readComplete(bb, false);
                             } else if (count < 0) {
-                                reader.readError(Constants.EOF);
+                                reader.readError(Constants.EOF, false);
                                 return;
                             }
 
@@ -227,7 +227,7 @@ public class JavaStreamWrap
                             if (log.isDebugEnabled()) {
                                 log.debug("Async read on {} got EOF error: {}", in, eofe);
                             }
-                            reader.readError(Constants.EOF);
+                            reader.readError(Constants.EOF, false);
                             return;
                         } catch (IOException ioe) {
                             if (log.isDebugEnabled()) {
@@ -236,7 +236,7 @@ public class JavaStreamWrap
                             // Not all streams will throw EOFException for us...
                             final String err =
                                 ("Stream Closed".equalsIgnoreCase(ioe.getMessage()) ? Constants.EOF : Constants.EIO);
-                            reader.readError(err);
+                            reader.readError(err, false);
                             return;
                         }
                     }

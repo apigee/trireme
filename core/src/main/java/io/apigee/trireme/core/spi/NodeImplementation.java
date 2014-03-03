@@ -1,4 +1,4 @@
-package io.apigee.trireme.spi;
+package io.apigee.trireme.core.spi;
 
 /**
  * This class represents an implementation of Node.js -- it contains the JavaScript necessary to run all the

@@ -1,7 +1,7 @@
 package io.apigee.trireme.node10.test;
 
 import io.apigee.trireme.node10.Node10Implementation;
-import io.apigee.trireme.spi.NodeImplementation;
+import io.apigee.trireme.core.spi.NodeImplementation;
 import org.junit.BeforeClass;
 import org.junit.Test;
 import org.mozilla.javascript.Script;

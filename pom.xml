@@ -44,7 +44,6 @@
     <module>nodetests</module>
     <module>samples</module>
     <module>shell</module>
-    <module>spi</module>
     <module>util</module>
   </modules>
    

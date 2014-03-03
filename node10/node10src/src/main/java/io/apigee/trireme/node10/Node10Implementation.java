@@ -1,6 +1,6 @@
 package io.apigee.trireme.node10;
 
-import io.apigee.trireme.spi.NodeImplementation;
+import io.apigee.trireme.core.spi.NodeImplementation;
 
 public class Node10Implementation
     implements NodeImplementation

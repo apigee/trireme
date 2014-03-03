@@ -12,20 +12,6 @@
   <version>0.7.1-SNAPSHOT</version>
 
   <dependencies>
-    <!-- The code here doesn't really depend on this, but we need to make the tests work
-         and need to ensure that there is at least one implementation. So, his will be the
-         default version. -->
-    <dependency>
-      <groupId>io.apigee.trireme</groupId>
-      <artifactId>trireme-node10src</artifactId>
-      <version>0.7.1-SNAPSHOT</version>
-    </dependency>
-
-    <dependency>
-      <groupId>io.apigee.trireme</groupId>
-      <artifactId>trireme-spi</artifactId>
-      <version>0.7.1-SNAPSHOT</version>
-    </dependency>
     <dependency>
       <groupId>org.slf4j</groupId>
       <artifactId>slf4j-api</artifactId>

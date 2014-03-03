@@ -25,7 +25,7 @@ import io.apigee.trireme.core.InternalNodeModule;
 import io.apigee.trireme.core.NodeModule;
 import io.apigee.trireme.core.NodeScriptModule;
 import io.apigee.trireme.core.Utils;
-import io.apigee.trireme.spi.NodeImplementation;
+import io.apigee.trireme.core.spi.NodeImplementation;
 import org.mozilla.javascript.Context;
 import org.mozilla.javascript.Script;
 import org.slf4j.Logger;

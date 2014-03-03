@@ -118,10 +118,10 @@ public class PathTranslatorTest
     public void testMount()
         throws IOException
     {
-        File realFile = new File("./target/test-classes/global/globaltestmodule.js");
+        File realFile = new File("./target/test-classes/global/foo.txt");
         PathTranslator trans = new PathTranslator("./target/test-classes");
         trans.mount("/opt", new File("./target/test-classes/global"));
-        File globalFile = trans.translate("/opt/globaltestmodule.js");
+        File globalFile = trans.translate("/opt/foo.txt");
         assertTrue(globalFile.exists());
         assertEquals(realFile.getCanonicalPath(), globalFile.getCanonicalPath());
     }
@@ -130,10 +130,10 @@ public class PathTranslatorTest
     public void testMountNoRoot()
         throws IOException
     {
-        File realFile = new File("./target/test-classes/global/globaltestmodule.js");
+        File realFile = new File("./target/test-classes/global/foo.txt");
         PathTranslator trans = new PathTranslator();
         trans.mount("/opt", new File("./target/test-classes/global"));
-        File globalFile = trans.translate("/opt/globaltestmodule.js");
+        File globalFile = trans.translate("/opt/foo.txt");
         assertTrue(globalFile.exists());
         assertEquals(realFile.getCanonicalPath(), globalFile.getCanonicalPath());
     }
@@ -146,8 +146,8 @@ public class PathTranslatorTest
         trans.mount("/opt", new File("./target/test-classes/global"));
         trans.mount("/usr/local/lib", new File("./target"));
 
-        File realFile = new File("./target/test-classes/global/globaltestmodule.js");
-        File globalFile = trans.translate("/opt/globaltestmodule.js");
+        File realFile = new File("./target/test-classes/global/foo.txt");
+        File globalFile = trans.translate("/opt/foo.txt");
         assertTrue(globalFile.exists());
         assertEquals(realFile.getCanonicalPath(), globalFile.getCanonicalPath());
 

@@ -1,4 +1,4 @@
-package io.apigee.trireme.core.test;
+package io.apigee.trireme.node10.test;
 
 import io.apigee.trireme.core.NetworkPolicy;
 import io.apigee.trireme.core.NodeEnvironment;

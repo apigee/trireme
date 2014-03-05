@@ -23,6 +23,7 @@ package io.apigee.trireme.core;
 
 import io.apigee.trireme.core.internal.ModuleRegistry;
 import io.apigee.trireme.core.internal.RhinoContextFactory;
+import io.apigee.trireme.core.internal.SoftClassCache;
 import io.apigee.trireme.net.spi.HttpServerContainer;
 import org.mozilla.javascript.Context;
 import org.mozilla.javascript.ContextAction;
@@ -62,6 +63,7 @@ public class NodeEnvironment
     private Sandbox             sandbox;
     private RhinoContextFactory contextFactory;
     private long                scriptTimeLimit;
+    private ClassCache          classCache;
 
     private int                 optLevel = DEFAULT_OPT_LEVEL;
 
@@ -186,6 +188,26 @@ public class NodeEnvironment
 
     public long getScriptTimeLimit() {
         return scriptTimeLimit;
+    }
+
+    /**
+     * Set a cache that may be used to store compiled JavaScript classes. This can result in a large decrease
+     * in PermGen space for large environments. The user must implement the interface.
+     */
+    public void setClassCache(ClassCache cache) {
+        this.classCache = cache;
+    }
+
+    /**
+     * Create a default instance of the class cache using an internal implementation. Currently this implementation
+     * uses a hash map of SoftReference objects.
+     */
+    public void setDefaultClassCache() {
+        this.classCache = new SoftClassCache();
+    }
+
+    public ClassCache getClassCache() {
+        return classCache;
     }
 
     /**

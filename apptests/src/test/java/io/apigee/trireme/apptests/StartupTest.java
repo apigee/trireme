@@ -8,15 +8,25 @@ import org.junit.Test;
 
 import java.io.File;
 import java.io.IOException;
+import java.lang.management.ManagementFactory;
+import java.lang.management.MemoryPoolMXBean;
 import java.util.ArrayList;
+import java.util.List;
 
 public class StartupTest
 {
     private static final int PORT = 33333;
-    private static final int NUMSCRIPTS = 25;
+    private static final int NUMSCRIPTS = 10;
 
     private long getMemoryUsed()
     {
+        System.out.println("*** POOLS ***");
+        List<MemoryPoolMXBean> pools = ManagementFactory.getMemoryPoolMXBeans();
+        for (MemoryPoolMXBean p : pools) {
+            System.out.println(p.getName() + ": " + (p.getUsage().getUsed() / 1048576) + "MB");
+        }
+        System.out.println("***");
+
         Runtime r = Runtime.getRuntime();
         return r.totalMemory() - r.freeMemory();
     }
@@ -43,17 +53,71 @@ public class StartupTest
         NodeEnvironment env = new NodeEnvironment();
         ArrayList<ScriptFuture> futures = new ArrayList<ScriptFuture>();
 
+        System.out.print("Starting...");
         int p = PORT + 1;
         for (int i = 0; i < NUMSCRIPTS; i++) {
             NodeScript script = env.createScript("server.js", new File("./target/test-classes/dogs/server.js"),
                                                  new String[] { String.valueOf(p) });
             futures.add(script.execute());
+            p++;
+            System.out.print(i + " ");
+            System.out.flush();
+        }
+        System.out.println();
+
+        System.out.print("Waiting...");
+        p = PORT + 1;
+        for (int i = 0; i < NUMSCRIPTS; i++) {
             Utils.awaitPortOpen(p);
             p++;
+            System.out.print(i + " ");
+            System.out.flush();
         }
+        System.out.println();
 
         long after = getMemoryUsed();
         System.out.println("Added " + (after - before) + " bytes after starting " + NUMSCRIPTS + " scripts");
+
+        for (ScriptFuture f : futures) {
+            f.cancel(true);
+        }
+    }
+
+    @Test
+    public void testAppMemoryManyTimesWithCache()
+        throws NodeException, InterruptedException, IOException
+    {
+        long before = getMemoryUsed();
+        NodeEnvironment env = new NodeEnvironment();
+        env.setDefaultClassCache();
+        ArrayList<ScriptFuture> futures = new ArrayList<ScriptFuture>();
+
+        System.out.print("Starting with cache...");
+        int p = PORT + 1;
+        for (int i = 0; i < NUMSCRIPTS; i++) {
+            NodeScript script = env.createScript("server.js", new File("./target/test-classes/dogs/server.js"),
+                                                 new String[] { String.valueOf(p) });
+            futures.add(script.execute());
+            p++;
+            System.out.print(i + " ");
+            System.out.flush();
+        }
+        System.out.println();
+
+        System.out.print("Waiting...");
+        p = PORT + 1;
+        for (int i = 0; i < NUMSCRIPTS; i++) {
+            Utils.awaitPortOpen(p);
+            p++;
+            System.out.print(i + " ");
+            System.out.flush();
+        }
+        System.out.println();
+
+        long after = getMemoryUsed();
+        System.out.println("Added " + (after - before) + " bytes after starting " + NUMSCRIPTS +
+                           " scripts with class cache");
+        System.out.println(env.getClassCache().toString());
 
         for (ScriptFuture f : futures) {
             f.cancel(true);

@@ -21,9 +21,11 @@
  */
 package io.apigee.trireme.core.modules;
 
+import io.apigee.trireme.core.ClassCache;
 import io.apigee.trireme.core.NodeRuntime;
 import io.apigee.trireme.core.InternalNodeModule;
 import io.apigee.trireme.core.Utils;
+import io.apigee.trireme.core.internal.Charsets;
 import io.apigee.trireme.core.internal.ScriptRunner;
 import org.mozilla.javascript.Context;
 import org.mozilla.javascript.EvaluatorException;
@@ -38,6 +40,10 @@ import org.slf4j.LoggerFactory;
 import static io.apigee.trireme.core.ArgUtils.*;
 
 import java.lang.reflect.InvocationTargetException;
+import java.nio.ByteBuffer;
+import java.nio.charset.Charset;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
 import java.util.regex.Pattern;
 
 /**
@@ -50,6 +56,8 @@ public class Evals
     implements InternalNodeModule
 {
     protected static final Logger log = LoggerFactory.getLogger(Evals.class);
+
+    public static final String CACHE_KEY_HASH = "SHA-256";
 
     private static final Object CODE_KEY = "_compiledCode";
     private static final Object FILE_NAME_KEY = "_codeFileName";
@@ -80,6 +88,7 @@ public class Evals
         export.setParentScope(null);
 
         ScriptableObject.defineClass(export, NodeScriptImpl.class);
+        // TODO stick in the compiling and cache stuff here.
 
         return export;
     }
@@ -145,32 +154,12 @@ public class Evals
             ScriptableObject ret = (ScriptableObject)cx.newObject(thisObj);
             ret.associateValue(FILE_NAME_KEY, fileName);
 
-            if (code.length() > MAX_COMPILED_SCRIPT_LENGTH) {
-                // Assume that this script won't compile -- run it later in interpreted mode.
+            Script compiled = getCompiledScript(cx, code, fileName);
+            if (compiled == null) {
+                // Compilation failed, probably because the script is too large
                 ret.associateValue(SOURCE_KEY, code);
-
             } else {
-                // Try to compile and save compiled script on the object
-                try {
-                    Script compiled = cx.compileString(code, fileName, 1, null);
-                    ret.associateValue(CODE_KEY, compiled);
-
-                } catch (EvaluatorException ee) {
-                    // Test for a script that is too large. We have to do this by checking the error message
-                    if (BYTECODE_SIZE_MESSAGE.matcher(ee.getMessage()).matches()) {
-                        if (log.isDebugEnabled()) {
-                            log.debug("Source code for {} is too large -- running later in interpreted mode", fileName);
-                        }
-                        ret.associateValue(SOURCE_KEY, code);
-                    } else {
-                        throw ee;
-                    }
-                } catch (IllegalArgumentException ie) {
-                    if (log.isDebugEnabled()) {
-                        log.debug("Source code for {} failed compilation, possibly too large", fileName);
-                    }
-                    ret.associateValue(SOURCE_KEY, code);
-                }
+                ret.associateValue(CODE_KEY, compiled);
             }
             return ret;
         }
@@ -230,24 +219,12 @@ public class Evals
          */
         private static Object runScript(Context cx, Scriptable scope, String code, String fileName)
         {
-            if (code.length() > MAX_COMPILED_SCRIPT_LENGTH) {
-                // Assume that this script can never compile
+            Script compiled = getCompiledScript(cx, code, fileName);
+            if (compiled == null) {
+                // The script is probably too large to compile
                 return interpretScript(cx, scope, code, fileName);
             }
-
-            try {
-                return cx.evaluateString(scope, code, fileName, 1, null);
-
-            } catch (EvaluatorException ee) {
-                // Test for a script that is too large. We have to do this by checking the error message
-                if (BYTECODE_SIZE_MESSAGE.matcher(ee.getMessage()).matches()) {
-                    return interpretScript(cx, scope, code, fileName);
-                } else {
-                    throw ee;
-                }
-            } catch (IllegalArgumentException ie) {
-                return interpretScript(cx, scope, code, fileName);
-            }
+            return compiled.exec(cx, scope);
         }
 
         private static Object interpretScript(Context cx, Scriptable scope, String code, String fileName)
@@ -262,6 +239,73 @@ public class Evals
                 return cx.evaluateString(scope, code, fileName, 1, null);
             } finally {
                 cx.setOptimizationLevel(oldOpt);
+            }
+        }
+
+        private static Script getCompiledScript(Context cx, String code, String fileName)
+        {
+            ScriptRunner runner = (ScriptRunner)cx.getThreadLocal(ScriptRunner.RUNNER);
+            ClassCache cache = runner.getEnvironment().getClassCache();
+
+            if (cache == null) {
+                return compileScript(cx, code, fileName);
+            }
+
+            String cacheKey = makeCacheKey(code);
+            Script compiled = cache.getCachedScript(cacheKey);
+            if (compiled == null) {
+                compiled = compileScript(cx, code, fileName);
+                if (compiled != null) {
+                    cache.putCachedScript(cacheKey, compiled);
+                }
+            }
+            // Still may be null at this point...
+            return compiled;
+        }
+
+        private static Script compileScript(Context cx, String code, String fileName)
+        {
+            if (code.length() > MAX_COMPILED_SCRIPT_LENGTH) {
+                // Assume that this script won't compile -- run it later in interpreted mode.
+                return null;
+
+            } else {
+                try {
+                    return cx.compileString(code, fileName, 1, null);
+
+                } catch (EvaluatorException ee) {
+                    // Test for a script that is too large. We have to do this by checking the error message
+                    if (BYTECODE_SIZE_MESSAGE.matcher(ee.getMessage()).matches()) {
+                        if (log.isDebugEnabled()) {
+                            log.debug("Source code for {} is too large -- running later in interpreted mode", fileName);
+                        }
+                        return null;
+                    } else {
+                        throw ee;
+                    }
+                } catch (IllegalArgumentException ie) {
+                    if (log.isDebugEnabled()) {
+                        log.debug("Source code for {} failed compilation, possibly too large", fileName);
+                    }
+                    return null;
+                }
+            }
+        }
+
+        private static String makeCacheKey(String code)
+        {
+            try {
+                MessageDigest md = MessageDigest.getInstance(CACHE_KEY_HASH);
+                ByteBuffer codeBuf = Utils.stringToBuffer(code, Charsets.UTF8);
+                md.update(codeBuf);
+                ByteBuffer keyBuf = ByteBuffer.wrap(md.digest());
+                return Utils.bufferToString(keyBuf, Charsets.BASE64);
+
+            } catch (NoSuchAlgorithmException e) {
+                if (log.isDebugEnabled()) {
+                    log.debug("Can't calculate cache key for source code: " + e);
+                }
+                return null;
             }
         }
     }

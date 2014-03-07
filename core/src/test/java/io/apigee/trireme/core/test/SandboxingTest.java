@@ -7,11 +7,13 @@ import io.apigee.trireme.core.Sandbox;
 import io.apigee.trireme.core.ScriptFuture;
 import io.apigee.trireme.core.ScriptStatus;
 import org.junit.Test;
+import org.mozilla.javascript.ClassShutter;
 
 import static org.junit.Assert.*;
 
 import java.io.ByteArrayOutputStream;
 import java.io.File;
+import java.io.IOException;
 import java.nio.charset.Charset;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
@@ -167,5 +169,32 @@ public class SandboxingTest
             ns2.close();
             env.close();
         }
+    }
+
+    /**
+     * Verify the support for an extra {@link ClassShutter} works as expected.
+     */
+    @Test
+    public void testExtraClassShutter()
+            throws NodeException, ExecutionException, InterruptedException, IOException
+    {
+        NodeEnvironment env = new NodeEnvironment();
+
+        env.setSandbox(new Sandbox().setExtraClassShutter(new ClassShutter() {
+            @Override
+            public boolean visibleToScripts(String fullClassName) {
+                return true;
+            }
+        }));
+
+        File scriptFile = new File("./target/test-classes/tests/extraclassshuttertest.js");
+        NodeScript script = env.createScript(scriptFile.getName(),
+                                             scriptFile,
+                                             new String[] {
+                                                     scriptFile.getCanonicalPath()
+                                             });
+        ScriptStatus status = script.execute().get();
+        assertEquals(0, status.getExitCode());
+        script.close();
     }
 }

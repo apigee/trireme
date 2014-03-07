@@ -26,7 +26,6 @@ import org.mozilla.javascript.ClassShutter;
 import org.mozilla.javascript.Context;
 import org.mozilla.javascript.ContextFactory;
 import org.mozilla.javascript.JavaScriptException;
-import org.mozilla.javascript.RhinoException;
 
 import java.util.HashSet;
 
@@ -35,9 +34,11 @@ public class RhinoContextFactory
 {
     private static final int DEFAULT_INSTRUCTION_THRESHOLD = 100000;
 
+    private final ClassShutter defaultClassShutter = new OpaqueClassShutter();
     private int jsVersion = NodeEnvironment.DEFAULT_JS_VERSION;
     private int optLevel = NodeEnvironment.DEFAULT_OPT_LEVEL;
     private boolean countOperations;
+    private ClassShutter extraClassShutter;
 
     @Override
     protected Context makeContext()
@@ -49,7 +50,7 @@ public class RhinoContextFactory
         if (countOperations) {
             c.setInstructionObserverThreshold(DEFAULT_INSTRUCTION_THRESHOLD);
         }
-        c.setClassShutter(OpaqueClassShutter.INSTANCE);
+        c.setClassShutter(defaultClassShutter);
         return c;
     }
 
@@ -114,16 +115,22 @@ public class RhinoContextFactory
         this.countOperations = countOperations;
     }
 
+    public ClassShutter getExtraClassShutter() {
+        return this.extraClassShutter;
+    }
+
+    public void setExtraClassShutter(ClassShutter extraClassShutter) {
+        this.extraClassShutter = extraClassShutter;
+    }
+
     /**
      * Don't allow access to Java code at all from inside Node code. However, Rhino seems to depend on access
      * to certain internal classes, at least for error handing, so we will allow the code to have access
      * to them.
      */
-    private static final class OpaqueClassShutter
+    private final class OpaqueClassShutter
         implements ClassShutter
     {
-        static final OpaqueClassShutter INSTANCE = new OpaqueClassShutter();
-
         private final HashSet<String> whitelist = new HashSet<String>();
 
         private OpaqueClassShutter()
@@ -152,7 +159,7 @@ public class RhinoContextFactory
         @Override
         public boolean visibleToScripts(String s)
         {
-            return (whitelist.contains(s));
+            return (whitelist.contains(s)) || (extraClassShutter != null && extraClassShutter.visibleToScripts(s));
         }
     }
 }

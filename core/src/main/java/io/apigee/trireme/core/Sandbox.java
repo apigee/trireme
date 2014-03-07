@@ -21,6 +21,7 @@
  */
 package io.apigee.trireme.core;
 
+import org.mozilla.javascript.ClassShutter;
 import org.mozilla.javascript.Scriptable;
 
 import java.io.InputStream;
@@ -51,6 +52,7 @@ public class Sandbox
     private SubprocessPolicy processPolicy;
     private List<Map.Entry<String, String>> mounts;
     private boolean         hideOsDetails;
+    private ClassShutter    extraClassShutter;
 
     /**
      * Create a new sandbox that will not affect anything in any way.
@@ -78,6 +80,7 @@ public class Sandbox
             this.networkPolicy = parent.networkPolicy;
             this.processPolicy = parent.processPolicy;
             this.hideOsDetails = parent.hideOsDetails;
+            this.extraClassShutter = parent.extraClassShutter;
             if (parent.mounts != null) {
                 this.mounts = new ArrayList<Map.Entry<String, String>>(parent.mounts);
             }
@@ -238,5 +241,21 @@ public class Sandbox
 
     public boolean isHideOSDetails() {
         return hideOsDetails;
+    }
+
+    /**
+     * Attach an <b>extra</b> {@link ClassShutter} that can allow Trireme embedders the ability to expose
+     * extra Java classes to JavaScript code.
+     *
+     * <b>WARNING:</b> This must be used with care as passing Java objects disallowed by the default
+     * Trireme ClassShutter can result in unknown consequences.
+     */
+    public Sandbox setExtraClassShutter(ClassShutter extraClassShutter) {
+        this.extraClassShutter = extraClassShutter;
+        return this;
+    }
+
+    public ClassShutter getExtraClassShutter() {
+        return extraClassShutter;
     }
 }

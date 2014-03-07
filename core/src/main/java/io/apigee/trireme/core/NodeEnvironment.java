@@ -268,6 +268,7 @@ public class NodeEnvironment
             contextFactory.setJsVersion(DEFAULT_JS_VERSION);
             contextFactory.setOptLevel(optLevel);
             contextFactory.setCountOperations(scriptTimeLimit > 0L);
+            contextFactory.setExtraClassShutter(getSandbox() == null ? null : getSandbox().getExtraClassShutter());
 
             contextFactory.call(new ContextAction()
             {

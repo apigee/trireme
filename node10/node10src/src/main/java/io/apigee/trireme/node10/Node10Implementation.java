@@ -1,6 +1,13 @@
 package io.apigee.trireme.node10;
 
+import io.apigee.trireme.core.NodeModule;
 import io.apigee.trireme.core.spi.NodeImplementation;
+import io.apigee.trireme.node10.modules.ConsoleWrap;
+import io.apigee.trireme.node10.modules.JavaStreamWrap;
+import io.apigee.trireme.node10.modules.TCPWrap;
+
+import java.util.ArrayList;
+import java.util.Collection;
 
 public class Node10Implementation
     implements NodeImplementation
@@ -68,14 +75,12 @@ public class Node10Implementation
     }
 
     @Override
-    public String[][] getNativeModules()
+    public Collection<Class<? extends NodeModule>> getNativeModules()
     {
-        return null;
-    }
-
-    @Override
-    public String[][] getInternalModules()
-    {
-        return null;
+        ArrayList<Class<? extends NodeModule>> r = new ArrayList<Class<? extends NodeModule>>();
+        r.add(ConsoleWrap.class);
+        r.add(JavaStreamWrap.class);
+        r.add(TCPWrap.class);
+        return r;
     }
 }

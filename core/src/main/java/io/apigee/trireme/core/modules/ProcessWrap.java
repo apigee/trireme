@@ -39,6 +39,9 @@ import io.apigee.trireme.core.internal.NodeOSException;
 import io.apigee.trireme.core.internal.ScriptRunner;
 import io.apigee.trireme.core.internal.StreamPiper;
 import io.apigee.trireme.core.Utils;
+import io.apigee.trireme.core.internal.handles.AbstractHandle;
+import io.apigee.trireme.core.internal.handles.JavaInputStreamHandle;
+import io.apigee.trireme.core.internal.handles.JavaOutputStreamHandle;
 import org.mozilla.javascript.Context;
 import org.mozilla.javascript.EvaluatorException;
 import org.mozilla.javascript.Function;
@@ -366,11 +369,10 @@ public class ProcessWrap
             return null;
         }
 
-        protected JavaStreamWrap.StreamWrapImpl createStreamHandle(Context cx)
+        protected Scriptable createStreamHandle(Context cx, AbstractHandle handle)
         {
-            JavaStreamWrap.ModuleImpl mod =
-                (JavaStreamWrap.ModuleImpl)parent.runner.requireInternal(JavaStreamWrap.MODULE_NAME, cx);
-            return mod.createHandle(cx, parent);
+            Scriptable module = (Scriptable)parent.runner.requireInternal("java_stream_wrap", cx);
+            return cx.newObject(module, "JavaStream", new Object[] { handle });
         }
 
         protected void setEnvironment(List<String> pairs,
@@ -425,8 +427,8 @@ public class ProcessWrap
                 if (log.isDebugEnabled()) {
                     log.debug("Setting fd {} to output stream {}", arg, out);
                 }
-                JavaStreamWrap.StreamWrapImpl handle = createStreamHandle(cx);
-                handle.setOutput(out);
+                JavaOutputStreamHandle streamHandle = new JavaOutputStreamHandle(out);
+                Scriptable handle = createStreamHandle(cx, streamHandle);
                 opts.put("handle", opts, handle);
 
             } else if (STDIO_IGNORE.equals(type)) {
@@ -466,8 +468,8 @@ public class ProcessWrap
                 if (log.isDebugEnabled()) {
                     log.debug("Setting fd {} to input stream {}", arg, in);
                 }
-                JavaStreamWrap.StreamWrapImpl handle = createStreamHandle(cx);
-                handle.setInput(in);
+                JavaInputStreamHandle streamHandle = new JavaInputStreamHandle(in, parent.runner);
+                Scriptable handle = createStreamHandle(cx, streamHandle);
                 opts.put("handle", opts, handle);
 
             } else if (STDIO_IGNORE.equals(type)) {
@@ -612,8 +614,8 @@ public class ProcessWrap
                 PipedOutputStream pipeOut = new PipedOutputStream(pipeIn);
 
                 sandbox.setStdin(pipeIn);
-                JavaStreamWrap.StreamWrapImpl handle = createStreamHandle(cx);
-                handle.setOutput(pipeOut);
+                JavaOutputStreamHandle streamHandle = new JavaOutputStreamHandle(pipeOut);
+                Scriptable handle = createStreamHandle(cx, streamHandle);
                 opts.put("handle", opts, handle);
 
             } else if (STDIO_FD.equals(type)) {
@@ -655,8 +657,8 @@ public class ProcessWrap
                 PipedInputStream pipeIn = new PipedInputStream(PROCESS_PIPE_SIZE);
                 PipedOutputStream pipeOut = new PipedOutputStream(pipeIn);
 
-                JavaStreamWrap.StreamWrapImpl handle = createStreamHandle(cx);
-                handle.setInput(pipeIn);
+                JavaInputStreamHandle streamHandle = new JavaInputStreamHandle(pipeIn, parent.runner);
+                Scriptable handle = createStreamHandle(cx, streamHandle);
                 opts.put("handle", opts, handle);
 
                 switch (arg) {

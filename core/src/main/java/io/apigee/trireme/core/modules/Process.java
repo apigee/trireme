@@ -27,6 +27,10 @@ import io.apigee.trireme.core.internal.NodeExitException;
 import io.apigee.trireme.core.internal.ScriptRunner;
 import io.apigee.trireme.core.Utils;
 import io.apigee.trireme.core.internal.Version;
+import io.apigee.trireme.core.internal.handles.AbstractHandle;
+import io.apigee.trireme.core.internal.handles.ConsoleHandle;
+import io.apigee.trireme.core.internal.handles.JavaInputStreamHandle;
+import io.apigee.trireme.core.internal.handles.JavaOutputStreamHandle;
 import org.mozilla.javascript.Context;
 import org.mozilla.javascript.EvaluatorException;
 import org.mozilla.javascript.Function;
@@ -223,6 +227,18 @@ public class Process
             return mod;
         }
 
+        private Scriptable createStreamHandle(Context cx, AbstractHandle handle)
+        {
+            Scriptable module = (Scriptable)runner.requireInternal("java_stream_wrap", cx);
+            return cx.newObject(module, "JavaStream", new Object[] { handle });
+        }
+
+        private Scriptable createConsoleHandle(Context cx, AbstractHandle handle)
+        {
+            Scriptable module = (Scriptable)runner.requireInternal("console_wrap", cx);
+            return cx.newObject(module, "Console", new Object[] { handle });
+        }
+
         /*
          * Special getters and setters for the underlying stdin/out/err streams. "trireme.js" will wrap them with
          * the actual stream objects when needed. These streams are set up based on the underlying input
@@ -234,18 +250,13 @@ public class Process
         {
             Context cx = Context.getCurrentContext();
 
-            if ((runner.getStdout() == System.out) && ConsoleWrap.isConsoleSupported()) {
-                ConsoleWrap.ModuleImpl mod =
-                    (ConsoleWrap.ModuleImpl)runner.requireInternal(ConsoleWrap.MODULE_NAME, cx);
-                ConsoleWrap.ConsoleWrapImpl handle = mod.createHandle(cx, this);
-                return handle;
-
+            AbstractHandle streamHandle;
+            if ((runner.getStdout() == System.out) && ConsoleHandle.isConsoleSupported()) {
+                streamHandle = new ConsoleHandle(runner);
+                return createConsoleHandle(cx, streamHandle);
             } else {
-                JavaStreamWrap.ModuleImpl mod =
-                    (JavaStreamWrap.ModuleImpl)runner.requireInternal(JavaStreamWrap.MODULE_NAME, cx);
-                JavaStreamWrap.StreamWrapImpl handle = mod.createHandle(cx, this);
-                handle.setOutput(runner.getStdout());
-                return handle;
+                streamHandle = new JavaOutputStreamHandle(runner.getStdout());
+                return createStreamHandle(cx, streamHandle);
             }
         }
 
@@ -254,11 +265,8 @@ public class Process
         public Object getStderrHandle()
         {
             Context cx = Context.getCurrentContext();
-            JavaStreamWrap.ModuleImpl mod =
-                (JavaStreamWrap.ModuleImpl)runner.requireInternal(JavaStreamWrap.MODULE_NAME, cx);
-            JavaStreamWrap.StreamWrapImpl handle = mod.createHandle(cx, this);
-            handle.setOutput(runner.getStderr());
-            return handle;
+            JavaOutputStreamHandle streamHandle = new JavaOutputStreamHandle(runner.getStderr());
+            return createStreamHandle(cx, streamHandle);
         }
 
         /**
@@ -271,18 +279,13 @@ public class Process
         {
             Context cx = Context.getCurrentContext();
 
-            if ((runner.getStdin() == System.in) && ConsoleWrap.isConsoleSupported()) {
-                ConsoleWrap.ModuleImpl mod =
-                    (ConsoleWrap.ModuleImpl)runner.requireInternal(ConsoleWrap.MODULE_NAME, cx);
-                ConsoleWrap.ConsoleWrapImpl handle = mod.createHandle(cx, this);
-                return handle;
-
+            AbstractHandle streamHandle;
+            if ((runner.getStdin() == System.in) && ConsoleHandle.isConsoleSupported()) {
+                streamHandle = new ConsoleHandle(runner);
+                return createConsoleHandle(cx, streamHandle);
             } else {
-                JavaStreamWrap.ModuleImpl mod =
-                    (JavaStreamWrap.ModuleImpl)runner.requireInternal(JavaStreamWrap.MODULE_NAME, cx);
-                JavaStreamWrap.StreamWrapImpl handle = mod.createHandle(cx, this);
-                handle.setInput(runner.getStdin());
-                return handle;
+                streamHandle = new JavaInputStreamHandle(runner.getStdin(), runner);
+                return createStreamHandle(cx, streamHandle);
             }
         }
 

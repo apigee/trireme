@@ -1,5 +1,9 @@
 package io.apigee.trireme.core.spi;
 
+import io.apigee.trireme.core.NodeModule;
+
+import java.util.Collection;
+
 /**
  * This class represents an implementation of Node.js -- it contains the JavaScript necessary to run all the
  * various modules.
@@ -26,16 +30,8 @@ public interface NodeImplementation
     String[][] getBuiltInModules();
 
     /**
-     * Return a two-dimensional array of native (as in Java) module names. The first element must be
-     * the name of the module, like "buffer," and the second must be the name of a class that implements
-     * the NodeModule interface.
+     * Return a set of NodeModule class names that represent Java code built in to this implementation
+     * that should appear as the result of a "require" or "process.binding" call.
      */
-    String[][] getNativeModules();
-
-    /**
-     * Return a two-dimensional array of internal (Java) module names. The first element must be
-     * the name of the module, like "tcp_wrap," and the second must be the name of a class that implements
-     * the NodeModule interface. Internal modules are loaded using "process.binding".
-     */
-    String[][] getInternalModules();
+    Collection<Class<? extends NodeModule>> getNativeModules();
 }

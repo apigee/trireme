@@ -28,6 +28,7 @@ import org.mozilla.javascript.Scriptable;
 import java.io.Closeable;
 import java.io.File;
 import java.io.IOException;
+import java.nio.channels.Selector;
 import java.util.concurrent.ExecutorService;
 
 /**
@@ -161,4 +162,9 @@ public interface NodeRuntime
      * Remove the object from the list of handles that will be closed.
      */
     void unregisterCloseable(Closeable c);
+
+    /**
+     * Get the network selector -- internal only.
+     */
+    Selector getSelector();
 }

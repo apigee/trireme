@@ -31,7 +31,12 @@
       <groupId>io.apigee.trireme</groupId>
       <artifactId>trireme-shell</artifactId>
       <version>0.7.1-SNAPSHOT</version>
-     </dependency>
+    </dependency>
+    <dependency>
+      <groupId>io.apigee.trireme</groupId>
+      <artifactId>trireme-node10src</artifactId>
+      <version>0.7.1-SNAPSHOT</version>
+    </dependency>
 
     <dependency>
       <groupId>ch.qos.logback</groupId>

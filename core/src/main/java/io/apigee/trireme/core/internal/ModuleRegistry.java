@@ -105,13 +105,16 @@ public class ModuleRegistry
         }
 
         // Load the Node implementations.
-        // TODO for testing we will just load the first one!
+        // TODO until multi-version support is done, we will just load the first one
         ServiceLoader<NodeImplementation> implementations = ServiceLoader.load(NodeImplementation.class);
         NodeImplementation impl = implementations.iterator().next();
 
         loadMainScript(impl.getMainScriptClass());
         for (String[] builtin : impl.getBuiltInModules()) {
             addCompiledModule(builtin[0], builtin[1]);
+        }
+        for (Class<? extends NodeModule> nat : impl.getNativeModules()) {
+            loadModuleByClass(nat);
         }
     }
 
@@ -165,10 +168,17 @@ public class ModuleRegistry
     {
         try {
             Class<NodeModule> klass = (Class<NodeModule>)Class.forName(className);
-            NodeModule mod = klass.newInstance();
-            addNativeModule(mod);
+            loadModuleByClass(klass);
         } catch (ClassNotFoundException e) {
             throw new AssertionError(e);
+        }
+    }
+
+    private void loadModuleByClass(Class<? extends NodeModule> klass)
+    {
+        try {
+            NodeModule mod = klass.newInstance();
+            addNativeModule(mod);
         } catch (InstantiationException e) {
             throw new AssertionError(e);
         } catch (IllegalAccessException e) {

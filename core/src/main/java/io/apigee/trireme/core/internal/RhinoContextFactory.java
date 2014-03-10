@@ -34,12 +34,17 @@ public class RhinoContextFactory
 {
     private static final int DEFAULT_INSTRUCTION_THRESHOLD = 100000;
 
-    private final ClassShutter defaultClassShutter = new OpaqueClassShutter();
+    private static final ClassShutter DEFAULT_SHUTTER = new OpaqueClassShutter();
+
     private int jsVersion = NodeEnvironment.DEFAULT_JS_VERSION;
     private int optLevel = NodeEnvironment.DEFAULT_OPT_LEVEL;
     private boolean countOperations;
     private ClassShutter extraClassShutter;
 
+    /**
+     * This method is called by Rhino when it's time for the context to be actually created, so in here
+     * we can access all the stuff that was set previously.
+     */
     @Override
     protected Context makeContext()
     {
@@ -50,7 +55,11 @@ public class RhinoContextFactory
         if (countOperations) {
             c.setInstructionObserverThreshold(DEFAULT_INSTRUCTION_THRESHOLD);
         }
-        c.setClassShutter(defaultClassShutter);
+        if (extraClassShutter == null) {
+            c.setClassShutter(DEFAULT_SHUTTER);
+        } else {
+            c.setClassShutter(new NestedClassShutter(DEFAULT_SHUTTER, extraClassShutter));
+        }
         return c;
     }
 
@@ -128,12 +137,12 @@ public class RhinoContextFactory
      * to certain internal classes, at least for error handing, so we will allow the code to have access
      * to them.
      */
-    private final class OpaqueClassShutter
+    private static final class OpaqueClassShutter
         implements ClassShutter
     {
         private final HashSet<String> whitelist = new HashSet<String>();
 
-        private OpaqueClassShutter()
+        OpaqueClassShutter()
         {
             whitelist.add("org.mozilla.javascript.EcmaError");
             whitelist.add("org.mozilla.javascript.EvaluatorException");
@@ -159,7 +168,29 @@ public class RhinoContextFactory
         @Override
         public boolean visibleToScripts(String s)
         {
-            return (whitelist.contains(s)) || (extraClassShutter != null && extraClassShutter.visibleToScripts(s));
+            return whitelist.contains(s);
+        }
+    }
+
+    private static final class NestedClassShutter
+        implements ClassShutter
+    {
+        private final ClassShutter cs1;
+        private final ClassShutter cs2;
+
+        NestedClassShutter(ClassShutter cs1, ClassShutter cs2)
+        {
+            this.cs1 = cs1;
+            this.cs2 = cs2;
+        }
+
+        @Override
+        public boolean visibleToScripts(String s)
+        {
+            if (cs1.visibleToScripts(s)) {
+                return true;
+            }
+            return cs2.visibleToScripts(s);
         }
     }
 }

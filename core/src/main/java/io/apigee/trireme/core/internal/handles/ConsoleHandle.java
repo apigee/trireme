@@ -95,6 +95,7 @@ public class ConsoleHandle
         }
 
         reading = true;
+        runtime.pin();
         readTask = runtime.getUnboundedPool().submit(new Runnable()
         {
             @Override
@@ -140,7 +141,10 @@ public class ConsoleHandle
     @Override
     public void stopReading()
     {
-        reading = false;
+        if (reading) {
+            runtime.unPin();
+            reading = false;
+        }
         if (readTask != null) {
             readTask.cancel(true);
         }

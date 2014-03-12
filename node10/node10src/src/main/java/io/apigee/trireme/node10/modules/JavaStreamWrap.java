@@ -255,7 +255,6 @@ public class JavaStreamWrap
         public void readStart()
         {
             if (!reading) {
-                runtime.pin();
                 handle.startReading(this, null);
                 reading = true;
             }
@@ -267,7 +266,6 @@ public class JavaStreamWrap
         {
             if (reading) {
                 handle.stopReading();
-                runtime.unPin();
                 reading = false;
             }
         }

@@ -61,7 +61,11 @@ public class JavaInputStreamHandle
             return;
         }
 
+        // Pin explicitly before starting to read -- these handles don't necessarily keep the server open,
+        // but when we are reading many problems are averted when we do. Note that we don't do this for
+        // network handles, but instead "pin" when the socket is first created.
         reading = true;
+        runtime.pin();
         readTask = runtime.getUnboundedPool().submit(new Runnable()
         {
             @Override
@@ -70,6 +74,7 @@ public class JavaInputStreamHandle
                 try {
                     readLoop(listener, context);
                 } finally {
+                    runtime.unPin();
                     reading = false;
                 }
             }
@@ -108,7 +113,10 @@ public class JavaInputStreamHandle
     @Override
     public void stopReading()
     {
-        reading = false;
+        if (reading) {
+            runtime.unPin();
+            reading = false;
+        }
         if (readTask != null) {
             readTask.cancel(true);
         }

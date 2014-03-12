@@ -109,6 +109,8 @@ public class TCPWrap
                 handle = new NIOSocketHandle(runner);
             }
 
+            // Unlike other types of handles, every open socket "pins" the server explicitly and keeps it
+            // running until it is either closed or "unref" is called.
             TCPImpl tcp = new TCPImpl(handle, runner);
             tcp.ref();
             return tcp;

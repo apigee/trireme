@@ -59,6 +59,7 @@ public class NIOSocketHandle
     private SelectionKey            selKey;
     private boolean                 readStarted;
     private ArrayDeque<QueuedWrite> writeQueue;
+    private int                     queuedBytes;
     private ByteBuffer              readBuffer;
     private boolean                 writeReady;
     private NetworkHandleListener   listener;
@@ -292,16 +293,13 @@ public class NIOSocketHandle
     {
         addInterest(SelectionKey.OP_WRITE);
         writeQueue.addLast(qw);
+        queuedBytes += qw.getLength();
     }
 
     @Override
     public int getWritesOutstanding()
     {
-        int s = 0;
-        for (QueuedWrite qw : writeQueue) {
-            s += qw.getLength();
-        }
-        return s;
+        return queuedBytes;
     }
 
     @Override
@@ -434,6 +432,8 @@ public class NIOSocketHandle
             if (qw == null) {
                 break;
             }
+            queuedBytes -= qw.getLength();
+            assert(queuedBytes >= 0);
             try {
                 if (qw.shutdown) {
                     if (log.isDebugEnabled()) {
@@ -450,6 +450,7 @@ public class NIOSocketHandle
                         // We didn't write the whole thing -- need to keep writing.
                         writeReady = false;
                         writeQueue.addFirst(qw);
+                        queuedBytes += qw.getLength();
                         addInterest(SelectionKey.OP_WRITE);
                         break;
                     } else {

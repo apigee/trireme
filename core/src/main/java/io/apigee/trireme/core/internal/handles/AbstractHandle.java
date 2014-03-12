@@ -39,6 +39,11 @@ public abstract class AbstractHandle
 
     public int write(String s, Charset cs, HandleListener listener, Object context)
     {
+        // Convert the string to a buffer, which may involve some re-allocating and copying if the
+        // string has many long multi-byte characters.
+        // An alternative would be to use CharsetEncoder directly here and call "write" for every
+        // chunk of data that it produces. This would optimize for allocating and copying ByteBuffers
+        // but it would result in more "write" calls to the socket.
         ByteBuffer buf = Utils.stringToBuffer(s, cs);
         return write(buf, listener, context);
     }

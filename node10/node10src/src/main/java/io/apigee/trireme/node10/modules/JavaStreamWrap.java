@@ -85,10 +85,11 @@ public class JavaStreamWrap
     {
         public static final String CLASS_NAME = "JavaStream";
 
-        private int byteCount;
+        protected int byteCount;
         private Function onRead;
-        private ScriptRunner runtime;
+        protected ScriptRunner runtime;
         private AbstractHandle handle;
+        private boolean reading;
 
         @Override
         public String getClassName() {
@@ -150,11 +151,13 @@ public class JavaStreamWrap
             Function cb = functionArg(args, 0, false);
             StreamWrapImpl self = (StreamWrapImpl)thisObj;
 
+            self.readStop();
             self.handle.close();
             self.unref();
 
             if (cb != null) {
-                cb.call(cx, cb, thisObj, null);
+                self.runtime.enqueueCallback(cb, self, null,
+                                             self.runtime.getDomain(), new Object[] {});
             }
         }
 
@@ -249,22 +252,24 @@ public class JavaStreamWrap
 
         @JSFunction
         @SuppressWarnings("unused")
-        public static void readStart(Context cx, Scriptable thisObj, Object[] args, Function func)
+        public void readStart()
         {
-            StreamWrapImpl self = (StreamWrapImpl)thisObj;
-
-            // Read by spawning a thread from the cached thread pool that will do the blocking reads.
-            // It will be stopped by cancelling this task.
-            self.ref();
-            self.handle.startReading(self, null);
+            if (!reading) {
+                runtime.pin();
+                handle.startReading(this, null);
+                reading = true;
+            }
         }
 
         @JSFunction
         @SuppressWarnings("unused")
         public void readStop()
         {
-            handle.stopReading();
-            unref();
+            if (reading) {
+                handle.stopReading();
+                runtime.unPin();
+                reading = false;
+            }
         }
 
         private void deliverReadCallback(Context cx, ByteBuffer buf, String err)

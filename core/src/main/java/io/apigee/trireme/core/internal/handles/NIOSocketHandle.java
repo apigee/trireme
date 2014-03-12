@@ -200,7 +200,7 @@ public class NIOSocketHandle
         }
     }
 
-    private void serverSelected(SelectionKey key)
+    protected void serverSelected(SelectionKey key)
     {
         if (!key.isValid()) {
             return;
@@ -257,8 +257,8 @@ public class NIOSocketHandle
     public void shutdown(HandleListener listener, Object context)
     {
         QueuedWrite qw = new QueuedWrite(null, listener, context);
-        offerWrite(qw);
         qw.setShutdown(true);
+        offerWrite(qw);
     }
 
     private void offerWrite(QueuedWrite qw)
@@ -291,13 +291,17 @@ public class NIOSocketHandle
     private void queueWrite(QueuedWrite qw)
     {
         addInterest(SelectionKey.OP_WRITE);
-        writeQueue.offer(qw);
+        writeQueue.addLast(qw);
     }
 
     @Override
     public int getWritesOutstanding()
     {
-        return writeQueue.size();
+        int s = 0;
+        for (QueuedWrite qw : writeQueue) {
+            s += qw.getLength();
+        }
+        return s;
     }
 
     @Override
@@ -376,7 +380,7 @@ public class NIOSocketHandle
         }
     }
 
-    private void clientSelected(SelectionKey key)
+    protected void clientSelected(SelectionKey key)
     {
         if (log.isDebugEnabled()) {
             log.debug("Client {} selected: interest = {} r = {} w = {} c = {}", clientChannel,
@@ -424,8 +428,12 @@ public class NIOSocketHandle
     {
         writeReady = true;
         removeInterest(SelectionKey.OP_WRITE);
-        QueuedWrite qw = writeQueue.peek();
-        while (qw != null) {
+        QueuedWrite qw;
+        while (true) {
+            qw = writeQueue.pollFirst();
+            if (qw == null) {
+                break;
+            }
             try {
                 if (qw.shutdown) {
                     if (log.isDebugEnabled()) {
@@ -439,12 +447,12 @@ public class NIOSocketHandle
                         log.debug("Wrote {} to {} from {}", written, clientChannel, qw.buf);
                     }
                     if (qw.buf.hasRemaining()) {
-                        // We didn't write the whole thing.
+                        // We didn't write the whole thing -- need to keep writing.
                         writeReady = false;
+                        writeQueue.addFirst(qw);
                         addInterest(SelectionKey.OP_WRITE);
                         break;
                     } else {
-                        writeQueue.poll();
                         listener.onWriteComplete(qw.getLength(), true, qw.getContext());
                     }
                 }
@@ -453,16 +461,13 @@ public class NIOSocketHandle
                 if (log.isDebugEnabled()) {
                     log.debug("Channel is closed");
                 }
-                writeQueue.poll();
                 listener.onWriteError(Constants.EOF, true, qw.getContext());
             } catch (IOException ioe) {
                 if (log.isDebugEnabled()) {
                     log.debug("Error on write: {}", ioe);
                 }
-                writeQueue.poll();
                 listener.onWriteError(Constants.EIO, true, qw.getContext());
             }
-            qw = writeQueue.peek();
         }
     }
 

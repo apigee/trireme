@@ -175,7 +175,8 @@ public class TCPWrap
                 Context cx = Context.getCurrentContext();
                 sendOnConnection(cx, handle);
             } else {
-                getRunner().enqueueTask(new ScriptTask() {
+                runtime.enqueueTask(new ScriptTask()
+                {
                     @Override
                     public void execute(Context cx, Scriptable scope)
                     {
@@ -221,26 +222,33 @@ public class TCPWrap
         @Override
         public void onConnectComplete(boolean inScriptThread, final Object context)
         {
-            // Always call in the next tick because "oncomplete" gets set later
-            getRunner().enqueueTask(new ScriptTask() {
-                @Override
-                public void execute(Context cx, Scriptable scope)
-                {
-                    sendOnConnectComplete(cx, context, 0, true, true);
-                }
-            });
+            if (inScriptThread) {
+                sendOnConnectComplete(Context.getCurrentContext(), context, 0, true, true);
+            } else {
+                runtime.enqueueTask(new ScriptTask() {
+                    @Override
+                    public void execute(Context cx, Scriptable scope)
+                    {
+                        sendOnConnectComplete(cx, context, 0, true, true);
+                    }
+                });
+            }
         }
 
         @Override
         public void onConnectError(final String err, boolean inScriptThread, final Object context)
         {
-            getRunner().enqueueTask(new ScriptTask() {
-                @Override
-                public void execute(Context cx, Scriptable scope)
-                {
-                    sendOnConnectComplete(cx, context, err, true, true);
-                }
-            });
+            if (inScriptThread) {
+                sendOnConnectComplete(Context.getCurrentContext(), context, err, false, false);
+            } else {
+                runtime.enqueueTask(new ScriptTask() {
+                    @Override
+                    public void execute(Context cx, Scriptable scope)
+                    {
+                        sendOnConnectComplete(cx, context, err, false, false);
+                    }
+                });
+            }
         }
 
         private void sendOnConnectComplete(Context cx, Object context, Object status,
@@ -250,9 +258,27 @@ public class TCPWrap
             Object onComplete = ScriptableObject.getProperty(s, "oncomplete");
             if (onComplete != null) {
                 Function ocf = (Function)onComplete;
+
+                if (status instanceof String) {
+                    setErrno(status.toString());
+                } else {
+                    clearErrno();
+                }
                 ocf.call(cx, ocf, this,
                          new Object[]{status, this, s, readable, writable});
             }
+        }
+
+        @JSFunction
+        @SuppressWarnings("unused")
+        public static Object shutdown(Context cx, Scriptable thisObj, Object[] args, Function func)
+        {
+            TCPImpl tcp = (TCPImpl)thisObj;
+            Scriptable req = cx.newObject(tcp);
+
+            clearErrno();
+            tcp.sockHandle.shutdown(tcp, req);
+            return req;
         }
 
         @JSFunction

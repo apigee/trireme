@@ -71,12 +71,7 @@ public class JavaInputStreamHandle
             @Override
             public void run()
             {
-                try {
-                    readLoop(listener, context);
-                } finally {
-                    runtime.unPin();
-                    reading = false;
-                }
+                readLoop(listener, context);
             }
         });
     }

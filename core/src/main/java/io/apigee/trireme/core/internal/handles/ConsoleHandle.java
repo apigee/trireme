@@ -52,7 +52,7 @@ public class ConsoleHandle
     private final Reader reader = console.reader();
     private final NodeRuntime runtime;
 
-    private boolean reading;
+    private volatile boolean reading;
     private Future<?> readTask;
 
     public static boolean isConsoleSupported()
@@ -101,11 +101,7 @@ public class ConsoleHandle
             @Override
             public void run()
             {
-                try {
-                    readLoop(listener, context);
-                } finally {
-                    reading = false;
-                }
+                readLoop(listener, context);
             }
         });
     }

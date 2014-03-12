@@ -21,6 +21,7 @@
  */
 package io.apigee.trireme.core;
 
+import io.apigee.trireme.core.internal.ModuleRegistry;
 import io.apigee.trireme.core.internal.ScriptRunner;
 import org.mozilla.javascript.Scriptable;
 
@@ -51,6 +52,7 @@ public class NodeScript
     private boolean printEval;
     private String workingDir;
     private Map<String, String> environment;
+    private String nodeVersion = NodeEnvironment.DEFAULT_NODE_VERSION;
 
     NodeScript(NodeEnvironment env, String scriptName, File script, String[] args)
     {
@@ -93,6 +95,8 @@ public class NodeScript
     public ScriptFuture execute()
         throws NodeException
     {
+        ModuleRegistry registry = getRegistry();
+
         if ((scriptFile == null) && (script == null)) {
             runner = new ScriptRunner(this, env, sandbox, args, forceRepl);
         } else if (scriptFile == null) {
@@ -100,6 +104,7 @@ public class NodeScript
         } else {
             runner = new ScriptRunner(this, env, sandbox, scriptName, scriptFile, args);
         }
+        runner.setRegistry(registry);
         runner.setParentProcess(parentProcess);
         if (workingDir != null) {
             try {
@@ -135,10 +140,12 @@ public class NodeScript
         if (scriptFile == null) {
             throw new NodeException("Modules must be specified as a file name and not as a string");
         }
+        ModuleRegistry registry = getRegistry();
 
         runner = new ScriptRunner(this, env, sandbox, scriptName,
                                   makeModuleScript(), args);
         runner.setParentProcess(parentProcess);
+        runner.setRegistry(registry);
         if (workingDir != null) {
             try {
                 runner.setWorkingDirectory(workingDir);
@@ -152,6 +159,16 @@ public class NodeScript
 
         env.getScriptPool().execute(future);
         return future;
+    }
+
+    private ModuleRegistry getRegistry()
+        throws NodeException
+    {
+        ModuleRegistry registry = env.getRegistry(nodeVersion);
+        if (registry == null) {
+            throw new NodeException("No available Node.js implementation matches version " + nodeVersion);
+        }
+        return registry;
     }
 
     /**
@@ -266,6 +283,21 @@ public class NodeScript
     public String getWorkingDirectory()
     {
         return workingDir;
+    }
+
+    /**
+     * Specify which version of the Node.js runtime to select for this script. Versions are in
+     * the format "major.minor.revision", "x" may be used as a wildcard, and trailing digits may be
+     * left off. So, "1.2.3", "1.2", "1", "1.2.x", "1.x", and "x" are all valid version strings.
+     */
+    public void setNodeVersion(String v)
+    {
+        this.nodeVersion = v;
+    }
+
+    public String getNodeVersion()
+    {
+        return nodeVersion;
     }
 
     /**

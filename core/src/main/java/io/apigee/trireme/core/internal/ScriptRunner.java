@@ -84,6 +84,7 @@ public class ScriptRunner
     public static final String TIMEOUT_TIMESTAMP_KEY = "_tickTimeout";
 
     private final  NodeEnvironment env;
+    private        ModuleRegistry  registry;
     private        File            scriptFile;
     private        String          script;
     private final  NodeScript      scriptObject;
@@ -215,6 +216,14 @@ public class ScriptRunner
 
     public NodeEnvironment getEnvironment() {
         return env;
+    }
+
+    public ModuleRegistry getRegistry() {
+        return registry;
+    }
+
+    public void setRegistry(ModuleRegistry registry) {
+        this.registry = registry;
     }
 
     @Override
@@ -501,7 +510,7 @@ public class ScriptRunner
         return (ScriptStatus)ret;
     }
 
-    private ScriptStatus runScript(Context cx)
+    protected ScriptStatus runScript(Context cx)
     {
         ScriptStatus status;
 
@@ -513,6 +522,9 @@ public class ScriptRunner
             // This uses a bit more memory and in theory slows down script startup but in practice it is
             // a drop in the bucket.
             scope = cx.initStandardObjects();
+
+            // Lazy first-time init of the node version.
+            registry.load(cx);
 
             try {
                 initGlobals(cx);
@@ -538,7 +550,7 @@ public class ScriptRunner
 
             // Run "trireme.js," which is our equivalent of "node.js". It returns a function that takes
             // "process". When done, we may have ticks to execute.
-            Script mainScript = env.getRegistry().getMainScript();
+            Script mainScript = registry.getMainScript();
             Function main = (Function)mainScript.exec(cx, scope);
 
             boolean timing = startTiming(cx);
@@ -945,9 +957,9 @@ public class ScriptRunner
     {
         NodeModule mod;
         if (internal) {
-            mod = env.getRegistry().getInternal(modName);
+            mod = registry.getInternal(modName);
         } else {
-            mod = env.getRegistry().get(modName);
+            mod = registry.get(modName);
         }
         if (mod == null) {
             return null;
@@ -990,8 +1002,8 @@ public class ScriptRunner
      */
     public boolean isNativeModule(String name)
     {
-        return (env.getRegistry().get(name) != null) ||
-               (env.getRegistry().getCompiledModule(name) != null);
+        return (registry.get(name) != null) ||
+               (registry.getCompiledModule(name) != null);
     }
 
     /**

@@ -31,16 +31,24 @@ import java.util.regex.Pattern;
 public class JavaScriptTest
     extends TestBase
 {
-    public static final String[] BASE_DIRS =
+    public static final String NODE_VERSION_10 = "0.10";
+    public static final String NODE_VERSION_11 = "0.11";
+
+    public static final String[] BASE_DIRS_10 =
         new String[] { "../node10/node10tests/simple",
                        "../node10/node10tests/noderunner",
                        "../node10/node10tests/pummel",
                        "../node10/node10tests/iconv" };
+    public static final String[] BASE_DIRS_11 =
+    //    new String[] { "../node11/node11tests/simple" };
+        new String[] { };
     public static final String[] TEMP_DIRS = { "target/test-classes/test/tmp",
-                                               "../node10/node10tests/tmp" };
+                                               "../node10/node10tests/tmp" }; //,
+    //                                           "../node11/node11tests/tmp"};
     public static final String RESULT_FILE = "target/results.out";
     public static final String TEST_FILE_NAME_PROP = "TestFile";
     public static final String TEST_ADAPTER_PROP = "TestAdapter";
+    public static final String TEST_VERSION_PROP = "TestVersion";
 
     public static final String NETTY_ADAPTER = "netty";
 
@@ -81,12 +89,13 @@ public class JavaScriptTest
      * </ol>
      */
 
-    @Parameterized.Parameters(name="{index}: {0} ({1}, {2})")
+    @Parameterized.Parameters(name="{index}: {0} ({1}, {2}, {3})")
     public static Collection<Object[]> enumerateTests()
         throws IOException, SAXException, ParserConfigurationException
     {
         String testFile = System.getProperty(TEST_FILE_NAME_PROP);
-        final String adapter = System.getProperty(TEST_ADAPTER_PROP);
+        String adapter = System.getProperty(TEST_ADAPTER_PROP);
+        String version = System.getProperty(TEST_VERSION_PROP);
         Pattern namePattern;
         if (testFile == null) {
             namePattern = null;
@@ -100,54 +109,68 @@ public class JavaScriptTest
 
         ArrayList<Object[]> ret = new ArrayList<Object[]>();
 
-        for (String bd : BASE_DIRS) {
-            File baseDir = new File(bd);
-            Collection<Exclusion> excluded = loadExclusions(baseDir);
-            final Pattern np = namePattern;
+        if ((version == null) || "10".equals(version)) {
+            for (String bd : BASE_DIRS_10) {
+                addDirectory(ret, bd, namePattern, adapter, NODE_VERSION_10);
+            }
+        }
+        if ((version == null) || "11".equals(version)) {
+            for (String bd : BASE_DIRS_11) {
+                addDirectory(ret, bd, namePattern, adapter, NODE_VERSION_11);
+            }
+        }
+        return ret;
+    }
 
-            // Build a list of files that match the "-DTestFile" pattern, or are just .js files otherwise
-            File[] theseFiles = baseDir.listFiles(new FilenameFilter()
+    private static void addDirectory(ArrayList<Object[]> ret, String bd,
+                                     Pattern namePattern, String adapter, String nodeVersion)
+        throws IOException, SAXException, ParserConfigurationException
+    {
+        File baseDir = new File(bd);
+        Collection<Exclusion> excluded = loadExclusions(baseDir);
+        final Pattern np = namePattern;
+
+        // Build a list of files that match the "-DTestFile" pattern, or are just .js files otherwise
+        File[] theseFiles = baseDir.listFiles(new FilenameFilter()
+        {
+            @Override
+            public boolean accept(File file, String s)
             {
-                @Override
-                public boolean accept(File file, String s)
-                {
-                    if (np == null) {
-                        if (!isJs.matcher(s).matches()) {
-                            // Only run .js files
-                            return false;
+                if (np == null) {
+                    if (!isJs.matcher(s).matches()) {
+                        // Only run .js files
+                        return false;
+                    }
+                } else {
+                    if (!np.matcher(s).matches()) {
+                        // -DTestFile was specified -- only run files that match the pattern
+                        return false;
+                    }
+                }
+                return true;
+            }
+        });
+
+        // For each file that matches, we may run it under multiple adapters and Java versions
+        if (theseFiles != null) {
+            for (File f : theseFiles) {
+                for (String version : javaVersions) {
+                    if (adapter != null) {
+                        if (!isExcluded(f.getName(), adapter, excluded)) {
+                            ret.add(new Object[] { f, adapter, version, nodeVersion });
                         }
                     } else {
-                        if (!np.matcher(s).matches()) {
-                            // -DTestFile was specified -- only run files that match the pattern
-                            return false;
+                        if (!isExcluded(f.getName(), DEFAULT_ADAPTER, excluded)) {
+                            ret.add(new Object[] { f, DEFAULT_ADAPTER, version, nodeVersion });
                         }
-                    }
-                    return true;
-                }
-            });
-
-            // For each file that matches, we may run it under multiple adapters and Java versions
-            if (theseFiles != null) {
-                for (File f : theseFiles) {
-                    for (String version : javaVersions) {
-                        if (adapter != null) {
-                            if (!isExcluded(f.getName(), adapter, excluded)) {
-                                ret.add(new Object[] { f, adapter, version });
-                            }
-                        } else {
-                            if (!isExcluded(f.getName(), DEFAULT_ADAPTER, excluded)) {
-                                ret.add(new Object[] { f, DEFAULT_ADAPTER, version });
-                            }
-                            if (isHttp.matcher(f.getName()).matches() &&
-                                !isExcluded(f.getName(), NETTY_ADAPTER, excluded)) {
-                                ret.add(new Object[] { f, NETTY_ADAPTER, version });
-                            }
+                        if (isHttp.matcher(f.getName()).matches() &&
+                            !isExcluded(f.getName(), NETTY_ADAPTER, excluded)) {
+                            ret.add(new Object[] { f, NETTY_ADAPTER, version, nodeVersion });
                         }
                     }
                 }
             }
         }
-        return ret;
     }
 
     /**
@@ -220,26 +243,28 @@ public class JavaScriptTest
         return s.toString();
     }
 
-    public JavaScriptTest(File fileName, String adapter, String javaVersion)
+    public JavaScriptTest(File fileName, String adapter, String javaVersion, String nodeVersion)
     {
-        super(fileName, adapter, javaVersion);
+        super(fileName, adapter, javaVersion, nodeVersion);
     }
 
     @Test
     public void testJavaScript()
         throws IOException, InterruptedException
     {
-        System.out.println("**** Testing " + fileName.getName() + " (" + adapter + ", " + javaVersion + ")...");
+        String tn = fileName.getName() + " (" + nodeVersion + ", " + adapter + ", " + javaVersion + ')';
+
+        System.out.println("**** Testing " + tn + "...");
 
         int exitCode = launchTest(DEFAULT_TIMEOUT, null, true);
 
         resultWriter.println(fileName.getName() + '\t' + adapter + '\t' + javaVersion + '\t' + exitCode);
         if (exitCode == 0) {
-            System.out.println("** " + fileName.getName() + " (" + adapter + ", " + javaVersion + ") SUCCESS");
+            System.out.println("** " + tn + " SUCCESS");
         } else {
-            System.out.println("** " + fileName.getName() + " (" + adapter + ", " + javaVersion + ") FAILURE = " + exitCode);
+            System.out.println("** " + tn + " FAILURE = " + exitCode);
         }
-        assertEquals(fileName.getName() + " (" + adapter + ", " + javaVersion + ") failed with =" + exitCode,
+        assertEquals(tn + " failed with = " + exitCode,
                      0, exitCode);
     }
 

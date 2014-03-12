@@ -24,12 +24,18 @@ package io.apigee.trireme.core;
 import io.apigee.trireme.core.internal.ModuleRegistry;
 import io.apigee.trireme.core.internal.RhinoContextFactory;
 import io.apigee.trireme.core.internal.SoftClassCache;
+import io.apigee.trireme.core.internal.VersionMatcher;
+import io.apigee.trireme.core.spi.NodeImplementation;
 import io.apigee.trireme.net.spi.HttpServerContainer;
 import org.mozilla.javascript.Context;
-import org.mozilla.javascript.ContextAction;
 import org.mozilla.javascript.ContextFactory;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.io.File;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.ServiceLoader;
 import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -44,6 +50,13 @@ import java.util.concurrent.TimeUnit;
  */
 public class NodeEnvironment
 {
+    private static final Logger log = LoggerFactory.getLogger(ModuleRegistry.class);
+
+    /**
+     * The default version of the Node.js runtime that will be used.
+     */
+    public static final String DEFAULT_NODE_VERSION = "0.10.x";
+
     public static final int CORE_POOL_SIZE    = 50;
     public static final int MAX_POOL_SIZE     = 1000;
     public static final int POOL_QUEUE_SIZE   = 8;
@@ -56,7 +69,6 @@ public class NodeEnvironment
 
     private boolean             initialized;
     private final Object        initializationLock = new Object();
-    private ModuleRegistry      registry;
     private ExecutorService     asyncPool;
     private ExecutorService     scriptPool;
     private HttpServerContainer httpContainer;
@@ -67,11 +79,21 @@ public class NodeEnvironment
 
     private int                 optLevel = DEFAULT_OPT_LEVEL;
 
+    private final VersionMatcher<ModuleRegistry> versions =
+        new VersionMatcher<ModuleRegistry>();
+
     /**
      * Create a new NodeEnvironment with all the defaults.
      */
     public NodeEnvironment()
     {
+        ServiceLoader<NodeImplementation> impls = ServiceLoader.load(NodeImplementation.class);
+        for (NodeImplementation impl : impls) {
+            if (log.isDebugEnabled()) {
+                log.debug("Discovered Node version {}", impl.getVersion());
+            }
+            versions.add(new NodeVersion(impl.getVersion(), new ModuleRegistry(impl)));
+        }
     }
 
     /**
@@ -94,6 +116,30 @@ public class NodeEnvironment
      */
     public void close()
     {
+    }
+
+    /**
+     * Return a list of Node.js implementations available in this environment.
+     */
+    public List<String> getNodeVersions()
+    {
+        ArrayList<String> a = new ArrayList<String>();
+        for (ModuleRegistry reg : versions.getVersions()) {
+            a.add(reg.getImplementation().getVersion());
+        }
+        return a;
+    }
+
+    /**
+     * Return the default implementation version.
+     */
+    public String getDefaultNodeVersion()
+    {
+        ModuleRegistry reg = versions.match(DEFAULT_NODE_VERSION);
+        if (reg == null) {
+            return null;
+        }
+        return reg.getImplementation().getVersion();
     }
 
     /**
@@ -210,12 +256,6 @@ public class NodeEnvironment
         return classCache;
     }
 
-    /**
-     * Internal: Get the registry of built-in modules.
-     */
-    public ModuleRegistry getRegistry() {
-        return registry;
-    }
 
     /**
      * Internal: Get the thread pool for async tasks.
@@ -229,6 +269,17 @@ public class NodeEnvironment
      */
     public ExecutorService getScriptPool() {
         return scriptPool;
+    }
+
+    /**
+     * Internal: Get the registry for a particular implementation
+     */
+    public ModuleRegistry getRegistry(String version)
+    {
+        if (version == null) {
+            return versions.match(DEFAULT_NODE_VERSION);
+        }
+        return versions.match(version);
     }
 
     private void initialize()
@@ -262,23 +313,11 @@ public class NodeEnvironment
             // of the script.
             scriptPool = Executors.newCachedThreadPool(new PoolNameFactory("Trireme Script Thread"));
 
-            registry = new ModuleRegistry();
-
             contextFactory = new RhinoContextFactory();
             contextFactory.setJsVersion(DEFAULT_JS_VERSION);
             contextFactory.setOptLevel(optLevel);
             contextFactory.setCountOperations(scriptTimeLimit > 0L);
             contextFactory.setExtraClassShutter(getSandbox() == null ? null : getSandbox().getExtraClassShutter());
-
-            contextFactory.call(new ContextAction()
-            {
-                @Override
-                public Object run(Context cx)
-                {
-                    registry.load(cx);
-                    return null;
-                }
-            });
 
             initialized = true;
         }

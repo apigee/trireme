@@ -11,7 +11,7 @@ import java.util.Collection;
 public interface NodeImplementation
 {
     /**
-     * Return the version of Node.js supported here. It should be something like "10.0.24".
+     * Return the version of Node.js supported here. It must be a three-digit string like "0.10.24".
      */
     String getVersion();
 

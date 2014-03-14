@@ -22,6 +22,11 @@ adapter, built using Netty 4.0, is included.)
 * The sandbox supports a Rhino feature that makes it possible to limit the execution time for a script.
 With this feature enabled, a script that runs an infinite loop can be terminated after some time.
 
+## What version of Node.js does Trireme Support?
+
+Trireme is currently based on Node.js 0.10. We are also working on ways to support multiple versions of the Node.js
+runtime inside the same JVM.
+
 ## How Complete is Trireme?
 
 Trireme supports most of the Node.js APIs and passes much of the Node.js test suite.
@@ -86,7 +91,8 @@ Trireme uses Java's standard "SSLEngine" for TLS/SSL and HTTPS support, whereas 
 OpenSSL. The TLS implementation in Node.js is a fairly thin layer on top of OpenSSL and we chose not to try
 and replicate this in Java.
 
-SSLEngine and OpenSSL are not exactly the same. There are a few differences:
+For the most part, TLS and HTTPS in Trireme will work just like they do in Node.js. However, they SSLEngine and
+OpenSSL are not exactly the same. There are a few differences:
 
 1) Most notably, especially with Java 7, SSLEngine supports
 a different set of cipher suites, particularly the various elliptical curve ciphers. There are ciphers in common
@@ -236,7 +242,7 @@ another container is especially helpful.
 
 Since Trireme is supposed to be highly embeddable, we try to minimize the dependencies.
 
-### Rhino.
+### Rhino
 
 This is the most mature framework for running JavaScript under Java. When some of the other efforts are
 closer to working, we may look at replacing it if, as anticipated, they are much faster.
@@ -337,7 +343,6 @@ Trireme today consists of several modules. A typical application will wish to in
 CLASSPATH:
 
 * trireme-core
-* trireme-spi
 * trireme-node10src
 * trireme-crypto
 * trireme-util
@@ -345,13 +350,16 @@ CLASSPATH:
 The last two packages are optional for environments that are constrained by space or strong aversion to third-
 party dependencies.
 
+"trireme-node10src" is the module that contains the code from Node.js that runs the modules. Both it and "trireme-core"
+are required in order to actually run Trireme inside a larger container. If only "trireme-core" is on the
+classpath, then all scripts will fail with the message, "No available Node.js implementation."
+
 This table will help keep them straight:
 
 <table>
 <tr><td><b>module</b></td><td><b>Required?</b></td><td><b>Recommended?</b></td><td><b>Description</b></td></tr>
 <tr><td>trireme-core</td><td>X</td><td>X</td><td>The core module containing the guts of Trireme</td></tr>
-<tr><td>trireme-spi</td><td>X</td><td>X</td><td>Glue API that holds the implementations of the JavaScript to trireme-core</td></tr>
-<tr><td>trireme-node10src</td><td>X</td><td>X</td><td>JavaScript code that makes Trireme implement Node.js 10.x</td></tr>
+<tr><td>trireme-node10src</td><td>X</td><td>X</td><td>JavaScript code that makes Trireme implement Node.js 0.10</td></tr>
 <tr><td>trireme-crypto</td><td/><td>X</td>
   <td>Support code for reading PEM files and some other crypto operations. Uses Bouncy Castle. If not in the classpath,
   certain crypto operations (notably PEM file support for TLS and HTTPS) will not work. Nonetheless, this is a separate

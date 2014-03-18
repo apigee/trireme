@@ -1,4 +1,30 @@
-# 0.7.0 18-Feb-2013:
+# 0.7.1 18-Mar-2014:
+
+The biggest change in this release is that you must include at least two Jar files in order for Trireme to work:
+
+* trireme-core
+* trireme-node10src
+
+The reason is that we are separating the Node.js-specific JavaScript code from the generic runtime in Java.
+That way, in the future we may be able to support multiple versions of Node.js in the same runtime.
+
+In the past, you only had to declare "trireme-core" in pom.xml and Maven will pick up everything. Now, you need
+to include both packages listed above, or you will see the error: "No available Node.js implementation".
+
+* Separate version-specific JavaScript code from the core runtime. This lays the groundwork for supporting
+multiple versions of Node.js in the same instance of Trireme by using the same low-level support in Java
+across all versions, and running different versions of the Node.js JavaScript code.
+* [Issue 32](https://github.com/apigee/trireme/issues/32) Add a mechanism to cache compiled JavaScript
+classes. This reduces memory usage and startup time in servers that host many Node.js scripts in a single
+Trireme environment. The cache works by creating a SHA-256 hash of the source and using that as the key.
+* [Issue 41](https://github.com/apigee/trireme/issues/41) Relative symbolic links were being mangled by the
+code that implements the "sandbox" functionality. The result was that NPM didn't run. Now NPM can run on Trireme.
+* [Issue 45](https://github.com/apigee/trireme/issues/45) Add an "extra class shutter" to Sandbox that allows
+implementors to expand the list of Java classes that may be called directly from Trireme. By default, only
+a few classes are supported, which means that Node.js code cannot normally invoke Java code directly unless
+additional classes are whitelisted using this mechanism.
+
+# 0.7.0 18-Feb-2014:
 
 * [Issue 17](https://github.com/apigee/trireme/issues/17) Diffie-Hellman crypto
 is now supported. DSA is currently not supported, and "SecureContext" won't be supported because it's specific to Node's
@@ -17,7 +43,7 @@ network interfaces from scripts. We will use this when embedding Trireme in a se
 * [Issue 40](https://github.com/apigee/trireme/issues/40) Completion of the "tty" module, including support for
 getting the window size, which allow "mocha" to run on Trireme.
 
-# 0.6.9 22-Jan-2013:
+# 0.6.9 22-Jan-2014:
 
 * [Issue 35](https://github.com/apigee/trireme/issues/35) Add socket.localAddress, socket.remoteAddress, and socket.address() to HTTP requests
 * [Issue 33](https://github.com/apigee/trireme/issues/33) Add "attachment" object to HTTP requests passed through HTTP adapter that is attached to the "request" object in JS.

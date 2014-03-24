@@ -117,19 +117,13 @@ public class ScriptRunner
     private ScriptableObject    scope;
 
     public ScriptRunner(NodeScript so, NodeEnvironment env, Sandbox sandbox,
-                        String scriptName, File scriptFile,
-                        String[] args)
+                        File scriptFile, String[] args)
     {
         this(so, env, sandbox, args);
         this.scriptFile = scriptFile;
 
         try {
-            File scriptPath = new File(pathTranslator.reverseTranslate(scriptFile.getAbsolutePath()));
-            if (scriptPath == null) {
-                this.scriptFileName = "";
-            } else {
-                this.scriptFileName = scriptPath.getPath();
-            }
+            this.scriptFileName = new File(pathTranslator.reverseTranslate(scriptFile.getAbsolutePath())).getPath();
         } catch (IOException ioe) {
             throw new AssertionError("Error translating file path: " + ioe);
         }
@@ -540,9 +534,10 @@ public class ScriptRunner
                 setArgv(null);
             } else if (scriptFile == null) {
                 // If the script was passed as a string, pretend that "-e" was used to "eval" it.
+                // We also get here if we were called by "executeModule".
                 process.setEval(script);
                 process.setPrintEval(scriptObject.isPrintEval());
-                setArgv(null);
+                setArgv(scriptFileName);
             } else {
                 // Otherwise, assume that the script was the second argument to "argv".
                 setArgv(scriptFileName);

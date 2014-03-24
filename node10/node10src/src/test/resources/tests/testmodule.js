@@ -1,4 +1,6 @@
+var assert = require('assert');
 var name = 'testmodule';
+
 
 exports.modulename = 'testmodule';
 exports.modulefunc = function() {
@@ -10,5 +12,7 @@ exports.geterrno = function() {
 exports.seterrno = function(e) {
   errno = e;
 }
+assert.equal(process.argv.length, 2);
+
 
 

@@ -1,3 +1,11 @@
+# 0.7.2 28-Mar-2014:
+
+* [Issue 47](https://github.com/apigee/trireme/issues/47) When the executeModule() function is used to run
+a script (instead of the more typical "execute()"), process.argv was not being generated in a consistent
+way.
+* [Issue 49](https://github.com/apigee/trireme/issues/49) HTTP responses that included an extra space at the
+end of the status line (such as "HTTP/1.1 413 ") were resulting in a parsing error.
+
 # 0.7.1 18-Mar-2014:
 
 The biggest change in this release is that you must include at least two Jar files in order for Trireme to work:

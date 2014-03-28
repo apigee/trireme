@@ -22,6 +22,20 @@ adapter, built using Netty 4.0, is included.)
 * The sandbox supports a Rhino feature that makes it possible to limit the execution time for a script.
 With this feature enabled, a script that runs an infinite loop can be terminated after some time.
 
+## How do I get it?
+
+See [the releases page](https://github.com/apigee/trireme/releases) to download the latest release files.
+
+"trireme-x.y.z.jar" is always a stand-alone jar that you can run just like "node":
+
+    java -jar trireme-x.y.z.jar script.js
+
+To embed Trireme, you'll need the other jars in your classpath, as described in the "Package Map" below.
+
+Trireme is also available on [Maven Central](http://search.maven.org/#search%7Cga%7C1%7Cio.apigee.trireme).
+
+Finally, there is a [CI server](http://ci.apigee.io/job/Trireme/).
+
 ## What version of Node.js does Trireme Support?
 
 Trireme is currently based on Node.js 0.10. We are also working on ways to support multiple versions of the Node.js

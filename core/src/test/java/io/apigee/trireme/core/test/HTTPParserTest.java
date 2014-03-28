@@ -133,6 +133,25 @@ public class HTTPParserTest
     }
 
     @Test
+    public void testCompleteResponseNophraseSpace()
+    {
+        HTTPParsingMachine parser = new HTTPParsingMachine(HTTPParsingMachine.ParsingMode.RESPONSE);
+        HTTPParsingMachine.Result r =
+            parser.parse(Utils.stringToBuffer(COMPLETE_RESPONSE_NOPHRASE_SPACE, Charsets.ASCII));
+        assertFalse(r.isError());
+        assertTrue(r.isComplete());
+        assertTrue(r.isHeadersComplete());
+        assertTrue(r.hasHeaders());
+        assertTrue(r.hasBody());
+        assertEquals(1, r.getMajor());
+        assertEquals(1, r.getMinor());
+        assertEquals(200, r.getStatusCode());
+        assertEquals("Myself", getFirstHeader(r, "Server"));
+        assertEquals("Hello, World!", Utils.bufferToString(r.getBody(), Charsets.ASCII));
+        parser.parse(null);
+    }
+
+    @Test
     public void testCompleteResponseHead()
     {
         HTTPParsingMachine parser = new HTTPParsingMachine(HTTPParsingMachine.ParsingMode.RESPONSE);
@@ -459,6 +478,13 @@ public class HTTPParserTest
 
     private static final String COMPLETE_RESPONSE_NOPHRASE =
     "HTTP/1.1 200\r\n" +
+    "Server: Myself\r\n" +
+    "Content-Length: 13\r\n" +
+    "\r\n" +
+    "Hello, World!";
+
+    private static final String COMPLETE_RESPONSE_NOPHRASE_SPACE =
+    "HTTP/1.1 200 \r\n" +
     "Server: Myself\r\n" +
     "Content-Length: 13\r\n" +
     "\r\n" +

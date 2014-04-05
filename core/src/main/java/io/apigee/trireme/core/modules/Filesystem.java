@@ -727,17 +727,18 @@ public class Filesystem
         {
             File file = translatePath(path);
             if (file.exists()) {
-                NodeOSException ne = new NodeOSException(Constants.EEXIST);
-                ne.setPath(path);
-                throw ne;
+                throw new NodeOSException(Constants.EEXIST, path);
+            }
+            if (file.getParentFile() != null && !file.getParentFile().exists()) {
+                throw new NodeOSException(Constants.ENOENT, path);
             }
             if (!file.mkdir()) {
-                throw new NodeOSException(Constants.EIO);
+                throw new NodeOSException(Constants.EIO, path);
             }
             try {
                 setMode(file, mode);
             } catch (IOException ioe) {
-                throw new NodeOSException(Constants.EIO, ioe);
+                throw new NodeOSException(Constants.EIO, ioe, path);
             }
         }
 

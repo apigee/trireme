@@ -106,6 +106,7 @@ public class Process
         private boolean needImmediateCallback;
         private Function immediateCallback;
         private Function fatalException;
+        private Function emit;
         private Object domain;
         private boolean exiting;
         private int umask = DEFAULT_UMASK;
@@ -114,6 +115,7 @@ public class Process
         private String eval;
         private boolean printEval;
         private boolean forceRepl;
+        private boolean connected;
         private Scriptable tickInfoBox;
 
         @JSConstructor
@@ -177,6 +179,18 @@ public class Process
         @SuppressWarnings("unused")
         public Object getTickInfoBox() {
             return tickInfoBox;
+        }
+
+        @JSGetter("connected")
+        @SuppressWarnings("undefined")
+        public boolean isConnected() {
+            return connected;
+        }
+
+        @JSSetter("connected")
+        @SuppressWarnings("undefined")
+        public void setConnected(boolean c) {
+            this.connected = c;
         }
 
         /**
@@ -458,6 +472,9 @@ public class Process
             return System.identityHashCode(runner) % 65536;
         }
 
+        /**
+         * Send a message back to our parent process if there is one.
+         */
         @JSFunction
         @SuppressWarnings("unused")
         public static void send(Context cx, Scriptable thisObj, Object[] args, Function func)
@@ -465,12 +482,34 @@ public class Process
             Object message = objArg(args, 0, Object.class, true);
             ProcessImpl self = (ProcessImpl)thisObj;
 
+            if (!self.connected) {
+                throw Utils.makeError(cx, thisObj, "IPC to the parent is disconnected");
+            }
             if (self.runner.getParentProcess() == null) {
                 throw Utils.makeError(cx, thisObj, "IPC is not enabled back to the parent");
             }
 
-            ProcessWrap.ProcessImpl pw = (ProcessWrap.ProcessImpl)self.runner.getParentProcess();
-            pw.getOnMessage().call(cx, pw, pw, new Object[] { message });
+            // We have a parent, which has a reference to its own "child_process" object that
+            // refers back to us. Put a message on THAT script's queue that came from us.
+            ProcessWrap.ProcessImpl childObj = self.runner.getParentProcess();
+            childObj.getRuntime().enqueueIpc(cx, message, childObj);
+        }
+
+        @JSFunction
+        @SuppressWarnings("unused")
+        public static void disconnect(Context cx, Scriptable thisObj, Object[] args, Function func)
+        {
+            ProcessImpl self = (ProcessImpl)thisObj;
+
+            if (self.runner.getParentProcess() == null) {
+                throw Utils.makeError(cx, thisObj, "IPC is not enabled back to the parent");
+            }
+
+            ProcessWrap.ProcessImpl childObj = self.runner.getParentProcess();
+
+            self.emit.call(cx, self.emit, thisObj, new Object[] { "disconnected" });
+            self.connected = false;
+            childObj.getRuntime().enqueueIpc(cx, ProcessWrap.IPC_DISCONNECT, childObj);
         }
 
         @JSGetter("_errno")
@@ -501,10 +540,6 @@ public class Process
 
         public void fireExit(Context cx, int code)
         {
-            Function emit = (Function)ScriptableObject.getProperty(this, "emit");
-            if (emit == null) {
-                throw new AssertionError("process.emit not defined");
-            }
             emit.call(cx, emit, this, new Object[] { "exit", code });
         }
 
@@ -521,6 +556,23 @@ public class Process
         @JSGetter("_submitTick")
         public Function getSubmitTick() {
             return submitTick;
+        }
+
+        /**
+         * We use these functions when our own JS code needs to control whether the event loop stays alive.
+         */
+        @JSFunction("_pin")
+        @SuppressWarnings("unused")
+        public void pin()
+        {
+            runner.pin();
+        }
+
+        @JSFunction("_unpin")
+        @SuppressWarnings("unused")
+        public void unPin()
+        {
+            runner.unPin();
         }
 
         /**
@@ -547,6 +599,18 @@ public class Process
 
         public boolean isNeedTickCallback() {
             return needTickCallback;
+        }
+
+        @JSSetter("emit")
+        @SuppressWarnings("unused")
+        public void setEmit(Function f) {
+            this.emit = f;
+        }
+
+        @JSGetter("emit")
+        @SuppressWarnings("unused")
+        public Function getEmit() {
+            return emit;
         }
 
         @JSSetter("_tickCallback")

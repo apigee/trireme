@@ -84,7 +84,9 @@ public class ProcessWrap
     public static final String STDIO_IPC =       "ipc";
 
     private static final Pattern EQUALS = Pattern.compile("=");
-    private static final Pattern SPACE = Pattern.compile("\t ");
+
+    // A sentinal object for handling IPC "disconnect" events
+    public static final Object IPC_DISCONNECT = new Object();
 
     /**
      * This is a global process table for all Noderunner processes in the same JVM. This way PIDs are
@@ -175,6 +177,10 @@ public class ProcessWrap
             return CLASS_NAME;
         }
 
+        public ScriptRunner getRuntime() {
+            return runner;
+        }
+
         void initialize(ScriptRunner runner)
         {
             this.runner = runner;
@@ -261,6 +267,29 @@ public class ProcessWrap
             return 0;
         }
 
+        @JSFunction
+        @SuppressWarnings("unused")
+        public static void send(Context cx, Scriptable thisObj, Object[] args, Function fn)
+        {
+            ensureArg(args, 0);
+            ProcessImpl self = (ProcessImpl)thisObj;
+            if (self.spawned == null) {
+                throw new AssertionError("Sending to closed process");
+            }
+            self.spawned.send(cx, args[0]);
+        }
+
+        @JSFunction
+        @SuppressWarnings("unused")
+        public static void disconnect(Context cx, Scriptable thisObj, Object[] args, Function fn)
+        {
+            ProcessImpl self = (ProcessImpl)thisObj;
+            if (self.spawned == null) {
+                throw new AssertionError("Sending to closed process");
+            }
+            self.spawned.send(cx, IPC_DISCONNECT);
+        }
+
         @JSGetter("connected")
         @SuppressWarnings("unused")
         public boolean isConnected() {
@@ -308,7 +337,7 @@ public class ProcessWrap
         }
     }
 
-    private abstract static class SpawnedProcess
+    public abstract static class SpawnedProcess
     {
         protected boolean finished;
         protected final ProcessImpl parent;
@@ -321,6 +350,11 @@ public class ProcessWrap
         abstract void terminate(String code);
         abstract void close();
         abstract Object spawn(Context cx, List<String> execArgs, Scriptable options);
+
+        protected void send(Context cx, Object message)
+        {
+            throw new EvaluatorException("IPC is not enabled to the child");
+        }
 
         protected Scriptable getChildProcessObject() {
             return null;
@@ -386,7 +420,7 @@ public class ProcessWrap
         }
     }
 
-    private static class SpawnedOSProcess
+    public static class SpawnedOSProcess
         extends SpawnedProcess
     {
         private java.lang.Process proc;
@@ -566,7 +600,7 @@ public class ProcessWrap
         }
     }
 
-    private static class SpawnedTriremeProcess
+    public static class SpawnedTriremeProcess
         extends SpawnedProcess
     {
         // How much space to set aside for a pipe between processes
@@ -844,6 +878,12 @@ public class ProcessWrap
         @Override
         protected Scriptable getChildProcessObject() {
             return script._getProcessObject();
+        }
+
+        @Override
+        protected void send(Context cx, Object message)
+        {
+            script._getRuntime().enqueueIpc(cx, message, null);
         }
     }
 }

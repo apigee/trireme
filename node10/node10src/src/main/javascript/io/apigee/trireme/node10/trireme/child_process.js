@@ -501,14 +501,7 @@ function setupChannel(target) {
       throw new Error('Handles aren\'t supported yet');
     }
 
-    // Use JSON to efficiently copy the object -- in theory we could send the original
-    // but we may live to regret it some say
-    var messageCopy = JSON.parse(JSON.stringify(message));
-    var processTarget = target._handle.childProcess;
-    processTarget.nextTick(function() {
-      // Make sure that this runs in the right event loop of the right script
-      processTarget.emit('message', messageCopy);
-    });
+    target._handle.send(message);
   };
 
   target.disconnect = function() {
@@ -519,14 +512,15 @@ function setupChannel(target) {
 
     target._handle.disconnect();
     target.connected = false;
+    target.emit('disconnect');
   };
 
-  target._handle.onMessage = function(message) {
-    var messageCopy = JSON.parse(JSON.stringify(message));
-    process.nextTick(function() {
-      // Again, make sure that this runs in the right script thread
-      target.emit('message', messageCopy);
-    });
+  // Called when the child sends a message back to us.
+  target._handle.onMessage = function(event, message) {
+    if (event === 'disconnect') {
+      target.connected = false;
+    }
+    target.emit(event, message);
   };
 }
 

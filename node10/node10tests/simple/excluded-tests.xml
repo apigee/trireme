@@ -40,30 +40,7 @@
         <Description>No passing handles to children yet</Description>
     </Excluded>
     <Excluded>
-        <Name>test-child-process-internal.js</Name>
-    </Excluded>
-    <Excluded>
-        <Name>test-child-process-ipc.js</Name>
-        <Description>No passing handles to children yet</Description>
-    </Excluded>
-    <Excluded>
         <Name>test-child-process-recv-handle.js</Name>
-        <Description>No passing handles to children yet</Description>
-    </Excluded>
-    <Excluded>
-        <Name>test-child-process-disconnect.js</Name>
-        <Description>No passing handles to children yet</Description>
-    </Excluded>
-    <Excluded>
-        <Name>test-child-process-fork-ref.js</Name>
-        <Description>No passing handles to children yet</Description>
-    </Excluded>
-    <Excluded>
-        <Name>test-child-process-fork.js</Name>
-        <Description>No passing handles to children yet</Description>
-    </Excluded>
-    <Excluded>
-        <Name>test-child-process-silent.js</Name>
         <Description>No passing handles to children yet</Description>
     </Excluded>
     <Excluded>

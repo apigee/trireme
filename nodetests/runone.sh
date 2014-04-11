@@ -9,9 +9,9 @@ CLASSPATH=$PWD/target/classes:$PWD/target/test-classes:`cat ${CP}`
 export CLASSPATH
 rm ${CP}
 
-td=./src/test/resources/test/tmp
-rm -rf ${td}
-mkdir ${td}
+#td=./src/test/resources/test/tmp
+#rm -rf ${td}
+#mkdir ${td}
 
 ARGS=-Xmx1g
 

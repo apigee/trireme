@@ -23,6 +23,7 @@ package io.apigee.trireme.core;
 
 import io.apigee.trireme.core.internal.ModuleRegistry;
 import io.apigee.trireme.core.internal.ScriptRunner;
+import io.apigee.trireme.core.modules.ProcessWrap;
 import org.mozilla.javascript.Scriptable;
 
 import java.io.File;
@@ -46,7 +47,7 @@ public class NodeScript
     private ScriptRunner runner;
     private Object attachment;
     private Sandbox sandbox;
-    private Scriptable parentProcess;
+    private Object parentProcess;
     private boolean pin;
     private boolean forceRepl;
     private boolean printEval;
@@ -105,7 +106,7 @@ public class NodeScript
             runner = new ScriptRunner(this, env, sandbox, scriptFile, args);
         }
         runner.setRegistry(registry);
-        runner.setParentProcess(parentProcess);
+        runner.setParentProcess((ProcessWrap.ProcessImpl)parentProcess);
         if (workingDir != null) {
             try {
                 runner.setWorkingDirectory(workingDir);
@@ -144,7 +145,7 @@ public class NodeScript
 
         runner = new ScriptRunner(this, env, sandbox, scriptName,
                                   makeModuleScript(), args);
-        runner.setParentProcess(parentProcess);
+        runner.setParentProcess((ProcessWrap.ProcessImpl)parentProcess);
         runner.setRegistry(registry);
         if (workingDir != null) {
             try {
@@ -314,11 +315,11 @@ public class NodeScript
     /**
      * An internal method to identify the child process argument of the parent who forked this script.
      */
-    public void _setParentProcess(Scriptable parent)
+    public void _setParentProcess(Object parent)
     {
         this.parentProcess = parent;
         if (runner != null) {
-            runner.setParentProcess(parent);
+            runner.setParentProcess((ProcessWrap.ProcessImpl)parent);
         }
     }
 
@@ -332,6 +333,13 @@ public class NodeScript
         }
         runner.awaitInitialization();
         return runner.getProcess();
+    }
+
+    /**
+     * An internal method to get the runtime for this script.
+     */
+    public ScriptRunner _getRuntime() {
+        return runner;
     }
 }
 

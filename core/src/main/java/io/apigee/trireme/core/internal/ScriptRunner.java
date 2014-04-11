@@ -36,6 +36,7 @@ import io.apigee.trireme.core.modules.AbstractFilesystem;
 import io.apigee.trireme.core.modules.Buffer;
 import io.apigee.trireme.core.modules.NativeModule;
 import io.apigee.trireme.core.modules.Process;
+import io.apigee.trireme.core.modules.ProcessWrap;
 import io.apigee.trireme.net.SelectorHandler;
 import org.mozilla.javascript.Context;
 import org.mozilla.javascript.ContextAction;
@@ -47,6 +48,7 @@ import org.mozilla.javascript.RhinoException;
 import org.mozilla.javascript.Script;
 import org.mozilla.javascript.Scriptable;
 import org.mozilla.javascript.ScriptableObject;
+import org.mozilla.javascript.Undefined;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -56,6 +58,7 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.lang.reflect.InvocationTargetException;
+import java.nio.ByteBuffer;
 import java.nio.channels.SelectionKey;
 import java.nio.channels.Selector;
 import java.util.HashMap;
@@ -111,7 +114,7 @@ public class ScriptRunner
     private Buffer.BufferModuleImpl buffer;
     private String              workingDirectory;
     private String              scriptFileName;
-    private Scriptable          parentProcess;
+    private ProcessWrap.ProcessImpl parentProcess;
     private boolean             forceRepl;
 
     private ScriptableObject    scope;
@@ -286,7 +289,7 @@ public class ScriptRunner
         return ((sandbox != null) && (sandbox.getStderr() != null)) ? sandbox.getStderr() : System.err;
     }
 
-    public Scriptable getParentProcess() {
+    public ProcessWrap.ProcessImpl getParentProcess() {
         return parentProcess;
     }
 
@@ -294,7 +297,8 @@ public class ScriptRunner
         return process;
     }
 
-    public void setParentProcess(Scriptable parentProcess) {
+    public void setParentProcess(ProcessWrap.ProcessImpl parentProcess)
+    {
         this.parentProcess = parentProcess;
     }
 
@@ -376,6 +380,115 @@ public class ScriptRunner
         t.setDomain(domain);
         tickFunctions.offer(t);
         selector.wakeup();
+    }
+
+    /**
+     * This method is used by the "child_process" module when sending an IPC message between child processes
+     * in the same JVM.
+     *
+     * @param message A JavaScript object, String, or Buffer. We will make a copy to prevent confusion.
+     * @param child If null, deliver the message to the "process" object. Otherwise, deliver it to the
+     *              specified child.
+     */
+    public void enqueueIpc(Context cx, Object message, final ProcessWrap.ProcessImpl child)
+    {
+        Object toDeliver;
+        String event = "message";
+
+        if (message == ProcessWrap.IPC_DISCONNECT) {
+            event = "disconnect";
+            toDeliver = Undefined.instance;
+
+        } else if (message instanceof Buffer.BufferImpl) {
+            // Copy the bytes, because a buffer might be modified between apps
+            ByteBuffer bb = ((Buffer.BufferImpl)message).getBuffer();
+            toDeliver = Buffer.BufferImpl.newBuffer(cx, scope, bb, true);
+
+        } else if (message instanceof Scriptable) {
+            // Copy the object because we can't rely on safely sharing them between apps.
+            Scriptable s = (Scriptable)message;
+            toDeliver = copy(cx, s);
+            if (s.has("cmd", s)) {
+                String cmd = Context.toString(s.get("cmd", s));
+                if (cmd.startsWith("NODE_")) {
+                    event = "internalMessage";
+                }
+            }
+
+        } else if (message instanceof String) {
+            // Strings are immutable in Java!
+            toDeliver = message;
+        } else {
+            throw new AssertionError("Unsupported object type for IPC");
+        }
+
+        final Object reallyDeliver = toDeliver;
+        final String fevent = event;
+        if (child == null) {
+            // We are called on child's script runtime, so enqueue a task here
+            enqueueTask(new ScriptTask() {
+                @Override
+                public void execute(Context cx, Scriptable scope)
+                {
+                    if ("disconnect".equals(fevent)) {
+                        // Special handling for a disconnect from the parent
+                        if (process.isConnected()) {
+                            process.setConnected(false);
+                            process.getEmit().call(cx, scope, process, new Object[] { fevent });
+                        }
+                    } else {
+                        process.getEmit().call(cx, scope, process,
+                                               new Object[] { fevent, reallyDeliver });
+                    }
+                }
+            });
+
+        } else {
+            // We are the child's script runtime. Enqueue task that sends to the parent
+            // "child" here actually refers to the "child_process" object inside the parent!
+            assert(child.getRuntime() != this);
+            child.getRuntime().enqueueTask(new ScriptTask()
+            {
+                @Override
+                public void execute(Context cx, Scriptable scope)
+                {
+                    // Now we should be running inside the script thread of the other script
+                    child.getOnMessage().call(cx, scope, null, new Object[] { fevent, reallyDeliver });
+                }
+            });
+        }
+    }
+
+    /**
+     * Copy one JavaScript object to another, taking nested objects into account. Don't copy primitive fields
+     * because we assume that they are immutable (string, boolean, and number).
+     */
+    private Scriptable copy(Context cx, Scriptable s)
+    {
+        if (s instanceof Function) {
+            return null;
+        }
+        Scriptable t = cx.newObject(scope);
+        for (Object id : s.getIds()) {
+            if (id instanceof String) {
+                String n = (String)id;
+                Object val = s.get(n, s);
+                if (val instanceof Scriptable) {
+                    val = copy(cx, (Scriptable)val);
+                }
+                t.put(n, t, val);
+            } else if (id instanceof Number) {
+                int i = ((Number)id).intValue();
+                Object val = s.get(i, s);
+                if (val instanceof Scriptable) {
+                    val = copy(cx, (Scriptable)val);
+                }
+                t.put(i, t, val);
+            } else {
+                throw new AssertionError();
+            }
+        }
+        return t;
     }
 
     public Scriptable getDomain()
@@ -909,6 +1022,8 @@ public class ScriptRunner
 
             // Next we need "process" which takes a bit more care
             process = (Process.ProcessImpl)require(Process.MODULE_NAME, cx);
+            // Check if we are connected to a parent via API
+            process.setConnected(parentProcess != null);
 
             // The buffer module needs special handling because of the "charsWritten" variable
             buffer = (Buffer.BufferModuleImpl)require("buffer", cx);

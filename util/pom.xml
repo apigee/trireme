@@ -4,18 +4,18 @@
   <parent>
     <groupId>io.apigee.trireme</groupId>
     <artifactId>trireme</artifactId>
-    <version>0.7.3</version>
+    <version>0.7.4-SNAPSHOT</version>
   </parent>
 
   <name>trireme-util</name>
   <artifactId>trireme-util</artifactId>
-  <version>0.7.3</version>
+  <version>0.7.4-SNAPSHOT</version>
 
   <dependencies>
     <dependency>
       <groupId>io.apigee.trireme</groupId>
       <artifactId>trireme-core</artifactId>
-      <version>0.7.3</version>
+      <version>0.7.4-SNAPSHOT</version>
     </dependency>
     <dependency>
       <groupId>org.slf4j</groupId>

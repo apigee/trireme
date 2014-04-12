@@ -206,14 +206,17 @@ Child processes are supported. Arbitrary commands may be executed, just like in 
 may be used to restrict whether particular commands may be executed, or if none should be executed at all.
 
 When a Trireme script uses "fork" to spawn a new instance of itself, the script runs as a separate
-thread inside the same JVM, rather than as a separate OS process as it works in regular Node.js.
+thread inside the same JVM, rather than as a separate OS process as it works in regular Node.js. The parent
+may use "send" on the child process to send messages to the child, and the child can use "process.send"
+to talk back to the parent. This "IPC" mechanism works just like regular Node.js except that it all happens
+inside the same JVM using a concurrent queue.
+
+Support for "handles" is not currently implemented, however, so a parent may not send a TCP socket to the child
+and expect the child to be able to handle it.
 
 Some Node.js scripts rely on the ability to spawn a process called "./node" in order to fork itself. Trireme
 looks for this and tries to use it to spawn a new thread but it does not work in all cases. It does seem to
 be mostly the Node.js test suite itself that does this.
-
-Child process functionality to "pipe" commands back and forth between parent and child has not yet been
-implemented.
 
 ### Cluster
 

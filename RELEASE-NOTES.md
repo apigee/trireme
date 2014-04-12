@@ -1,3 +1,20 @@
+# 0.7.3 11-Apr-2014:
+
+* [Issue 51](https://github.com/apigee/trireme/pull/51) Java 6 only: mkdir should return ENOENT on non-existent
+parent directories.
+* Fix ipc in child_process module so that it works.
+
+With this fix, a Node.js app running in Trireme can "fork" a sub-process
+and communicate via the IPC pipe using "send" on the child process and on the "process" object, as described
+in the docs for the "child_process" module.
+
+Handles are not yet supported, which means that a parent cannot send a TCP socket to a child and expect it to
+process it.
+
+Note that unlike regular Node.js, child scripts spawned using "fork" run inside the same JVM as the parent,
+but with a totally different script context and in a separate thread. "IPC" communication happens using a
+concurrent queue. Communication between parent and child via this mechanism should be very fast.
+
 # 0.7.2 28-Mar-2014:
 
 * [Issue 47](https://github.com/apigee/trireme/issues/47) When the executeModule() function is used to run

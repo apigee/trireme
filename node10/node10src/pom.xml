@@ -4,24 +4,24 @@
   <parent>
     <groupId>io.apigee.trireme</groupId>
     <artifactId>trireme-node10</artifactId>
-    <version>0.7.3-SNAPSHOT</version>
+    <version>0.7.3</version>
   </parent>
 
   <name>trireme-node10src</name>
   <artifactId>trireme-node10src</artifactId>
-  <version>0.7.3-SNAPSHOT</version>
+  <version>0.7.3</version>
 
   <dependencies>
     <dependency>
       <groupId>io.apigee.trireme</groupId>
       <artifactId>rhino-compiler</artifactId>
-      <version>0.7.3-SNAPSHOT</version>
+      <version>0.7.3</version>
       <scope>provided</scope>
     </dependency>
       <dependency>
       <groupId>io.apigee.trireme</groupId>
       <artifactId>trireme-core</artifactId>
-      <version>0.7.3-SNAPSHOT</version>
+      <version>0.7.3</version>
     </dependency>
     <dependency>
       <groupId>org.mozilla</groupId>

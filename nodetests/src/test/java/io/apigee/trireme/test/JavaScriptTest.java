@@ -38,7 +38,8 @@ public class JavaScriptTest
         new String[] { "../node10/node10tests/simple",
                        "../node10/node10tests/noderunner",
                        "../node10/node10tests/pummel",
-                       "../node10/node10tests/iconv" };
+                       "../node10/node10tests/iconv",
+                       "../node10/node10tests/xml" };
     public static final String[] BASE_DIRS_11 =
     //    new String[] { "../node11/node11tests/simple" };
         new String[] { };

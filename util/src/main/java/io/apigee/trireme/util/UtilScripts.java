@@ -31,7 +31,9 @@ public class UtilScripts
     {
         return new String[][] {
             { "iconv", "/trireme-util/trireme-iconv.js" },
-            { "iconv-lite", "/trireme-util/trireme-iconv-lite.js" }
+            { "iconv-lite", "/trireme-util/trireme-iconv-lite.js" },
+            { "node_xslt", "/trireme-util/trireme-node-xslt.js"},
+            { "trireme-xslt", "/trireme-util/trireme-xslt.js"}
         };
     }
 }

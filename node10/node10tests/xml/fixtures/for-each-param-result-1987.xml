@@ -1,0 +1,29 @@
+<html><body>
+<h2>My CD Collection</h2>
+<table border="1">
+<tr bgcolor="#9acd32">
+<th>Title</th>
+<th>Artist</th>
+</tr>
+<tr>
+<td>When a man loves a woman</td>
+<td>Percy Sledge</td>
+</tr>
+<tr>
+<td>Bridge of Spies</td>
+<td>T`Pau</td>
+</tr>
+<tr>
+<td>The dock of the bay</td>
+<td>Otis Redding</td>
+</tr>
+<tr>
+<td>Red</td>
+<td>The Communards</td>
+</tr>
+<tr>
+<td>Unchain my heart</td>
+<td>Joe Cocker</td>
+</tr>
+</table>
+</body></html>

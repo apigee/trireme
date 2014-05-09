@@ -207,11 +207,11 @@ public class ProcessWrap
             final ProcessImpl self = (ProcessImpl)thisObj;
 
             if (!options.has("args", options)) {
-                throw new EvaluatorException("Missing args in options");
+                return Utils.makeErrorObject(cx, thisObj, Constants.EINVAL, Constants.EINVAL);
             }
             List<String> execArgs = Utils.toStringList((Scriptable)options.get("args", options));
             if (execArgs.isEmpty()) {
-                throw new EvaluatorException("Invalid to execute script with no argument 0");
+                return Utils.makeErrorObject(cx, thisObj, Constants.EINVAL, Constants.EINVAL);
             }
 
             for (int i = 0; i < execArgs.size(); i++) {
@@ -221,7 +221,7 @@ public class ProcessWrap
             if (self.runner.getSandbox() != null) {
                 SubprocessPolicy policy = self.runner.getSandbox().getSubprocessPolicy();
                 if ((policy != null) && !policy.allowSubprocess(execArgs)) {
-                    throw Utils.makeError(cx, thisObj, "Permission denied", Constants.EPERM);
+                    return Utils.makeErrorObject(cx, thisObj, Constants.EPERM, Constants.EPERM);
                 }
             }
 

@@ -341,7 +341,12 @@ public class BasicTest
     public void testSpawnSuccess()
         throws InterruptedException, ExecutionException, NodeException
     {
-        runTest("spawntest.js");
+        NodeScript script = env.createScript("spawntest.js",
+                                             new File("./target/test-classes/tests/spawntest.js"),
+                                             new String[] { "success" });
+
+        ScriptStatus status = script.execute().get();
+        assertEquals(0, status.getExitCode());
     }
 
     @Test
@@ -354,13 +359,9 @@ public class BasicTest
         localEnv.setSandbox(sb);
         NodeScript script = localEnv.createScript("spawntest.js",
                                              new File("./target/test-classes/tests/spawntest.js"),
-                                             null);
-        try {
-            script.execute().get();
-            assertTrue("Script should have thrown exception", false);
-        } catch (ExecutionException jse) {
-            // GOOD.
-        }
+                                             new String[] { "fail" });
+        ScriptStatus status = script.execute().get();
+        assertEquals(0, status.getExitCode());
     }
 
     @Test

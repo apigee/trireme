@@ -95,6 +95,23 @@ public class Process
     {
         protected static final String CLASS_NAME = "_processClass";
 
+        private static String platform;
+
+        static {
+            // Must be one of'darwin', 'freebsd', 'linux', 'sunos' or 'win32' as per
+            // http://nodejs.org/api/process.html#process_process_platform
+            String OS = System.getProperty("os.name").toLowerCase();
+            if (OS.contains("mac")) platform = "darwin";
+            else if (OS.contains("freebsd")) platform = "freebsd";
+            else if (OS.contains("linux")) platform = "linux";
+            else if (OS.contains("sunos")) platform = "sunos";
+            else if (OS.contains("win")) platform = "win32";
+            else {
+                log.error("Unknown operating system to Node: {}", OS);
+                platform = "?";
+            }
+        }
+
         private Scriptable argv;
         private Scriptable env;
         private long startTime;
@@ -523,7 +540,7 @@ public class Process
         @SuppressWarnings("unused")
         public String getPlatform()
         {
-            return "java";
+            return platform;
         }
 
         @JSFunction

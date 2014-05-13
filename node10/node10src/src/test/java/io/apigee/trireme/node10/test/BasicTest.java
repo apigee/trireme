@@ -10,6 +10,7 @@ import io.apigee.trireme.core.ScriptStatus;
 import io.apigee.trireme.core.ScriptStatusListener;
 import io.apigee.trireme.core.SubprocessPolicy;
 import io.apigee.trireme.core.Utils;
+import io.apigee.trireme.core.internal.Platform;
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
@@ -235,6 +236,10 @@ public class BasicTest
     public void testChrootAndChdir()
         throws InterruptedException, ExecutionException, NodeException, IOException
     {
+        if (Platform.get().isWindows()) {
+            System.out.println("Disabled chroot tests on Windows for now");
+            return;
+        }
         Sandbox sb = new Sandbox();
         sb.setFilesystemRoot("./target");
         sb.setWorkingDirectory("./test-classes");
@@ -251,6 +256,10 @@ public class BasicTest
     public void testChrootAndChdirAbsolute()
         throws InterruptedException, ExecutionException, NodeException, IOException
     {
+        if (Platform.get().isWindows()) {
+            System.out.println("Absolute mounts not yet supported on Windows");
+            return;
+        }
         Sandbox sb = new Sandbox();
         sb.setFilesystemRoot("./target");
         sb.setWorkingDirectory("/test-classes");
@@ -267,6 +276,10 @@ public class BasicTest
     public void testChrootAbsolutePath()
         throws InterruptedException, ExecutionException, NodeException, IOException
     {
+        if (Platform.get().isWindows()) {
+            System.out.println("Absolute mounts not yet supported on Windows");
+            return;
+        }
         Sandbox sb = new Sandbox();
         sb.setFilesystemRoot("./target/test-classes");
         NodeEnvironment rootEnv = new NodeEnvironment();
@@ -433,6 +446,11 @@ public class BasicTest
     public void testMountGlobalModule()
         throws InterruptedException, ExecutionException, NodeException
     {
+        if (Platform.get().isWindows()) {
+            System.out.println("Mount is currently not supported on Windows");
+            return;
+        }
+        
         Sandbox sb = new Sandbox();
         NodeScript script = env.createScript("globalmoduletest.js",
                                              new File("./target/test-classes/tests/globalmoduletest.js"), null);
@@ -451,6 +469,11 @@ public class BasicTest
     public void testMountChrootGlobalModule()
         throws InterruptedException, ExecutionException, NodeException
     {
+        if (Platform.get().isWindows()) {
+            System.out.println("Mount is currently not supported on Windows");
+            return;
+        }
+        
         Sandbox sb = new Sandbox();
         sb.setFilesystemRoot("./target/test-classes");
         sb.mount("/node_modules", "./target/test-classes/global");

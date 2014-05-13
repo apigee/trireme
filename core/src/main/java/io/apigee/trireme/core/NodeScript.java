@@ -177,9 +177,12 @@ public class NodeScript
      */
     private String makeModuleScript()
     {
+        // Make filename replacement Windows-compatible
+        String scriptName = 
+            scriptFile.getAbsolutePath().replace("\\", "\\\\");
         return
             "var runtime = process.binding('trireme-module-loader');\n" +
-            "var suppliedModule = require('" + scriptFile.getAbsolutePath() + "');\n" +
+            "var suppliedModule = require('" + scriptName + "');\n" +
             "runtime.loaded(suppliedModule);";
     }
 

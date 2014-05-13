@@ -24,6 +24,7 @@ package io.apigee.trireme.core.modules;
 import io.apigee.trireme.core.NodeRuntime;
 import io.apigee.trireme.core.InternalNodeModule;
 import io.apigee.trireme.core.internal.NodeOSException;
+import io.apigee.trireme.core.internal.Platform;
 import io.apigee.trireme.core.internal.ScriptRunner;
 import io.apigee.trireme.core.Utils;
 import org.mozilla.javascript.Context;
@@ -61,9 +62,11 @@ import java.nio.file.StandardCopyOption;
 import java.nio.file.StandardOpenOption;
 import java.nio.file.attribute.BasicFileAttributeView;
 import java.nio.file.attribute.BasicFileAttributes;
+import java.nio.file.attribute.FileAttribute;
 import java.nio.file.attribute.FileTime;
 import java.nio.file.attribute.GroupPrincipal;
 import java.nio.file.attribute.PosixFileAttributes;
+import java.nio.file.attribute.PosixFileAttributeView;
 import java.nio.file.attribute.PosixFilePermission;
 import java.nio.file.attribute.PosixFilePermissions;
 import java.nio.file.attribute.UserPrincipal;
@@ -251,6 +254,9 @@ public class AsyncFilesystem
         {
             FileHandle handle = descriptors.get(fd);
             if (handle == null) {
+                if (log.isTraceEnabled()) {
+                    log.trace("File handle {} is not a regular file, fd");
+                }
                 throw new NodeOSException(Constants.EBADF);
             }
             return handle;
@@ -262,7 +268,13 @@ public class AsyncFilesystem
             FileHandle h = ensureHandle(fd);
             if (h.file == null) {
                 if (Files.isDirectory(h.path)) {
+                    if (log.isTraceEnabled()) {
+                        log.trace("File handle {} is a directory and not a regular file", fd);
+                    }
                     throw new NodeOSException(Constants.EISDIR);
+                }
+                if (log.isTraceEnabled()) {
+                    log.trace("File handle {} is not a regular file", fd);
                 }
                 throw new NodeOSException(Constants.EBADF);
             }
@@ -349,8 +361,14 @@ public class AsyncFilesystem
                     if (log.isDebugEnabled()) {
                         log.debug("Opening {} with {}", path, options);
                     }
-                    file = AsynchronousFileChannel.open(path, options, pool,
-                                                        PosixFilePermissions.asFileAttribute(modeToPerms(mode, true)));
+                    if (Platform.get().isPosixFilesystem()) {
+                        file = AsynchronousFileChannel.open(path, options, pool,
+                            PosixFilePermissions.asFileAttribute(modeToPerms(mode, true)));
+                    } else {
+                        file = AsynchronousFileChannel.open(path, options, pool,
+                                                            new FileAttribute<?>[0]);
+                        setModeNoPosix(path, mode);
+                    }
 
                 } catch (IOException ioe) {
                     throw new NodeOSException(getErrorCode(ioe), ioe, pathStr);
@@ -405,7 +423,7 @@ public class AsyncFilesystem
         private void doClose(int fd)
             throws NodeOSException
         {
-            FileHandle handle = ensureRegularFileHandle(fd);
+            FileHandle handle = ensureHandle(fd);
             try {
                 if (log.isDebugEnabled()) {
                     log.debug("close({})", fd);
@@ -442,10 +460,10 @@ public class AsyncFilesystem
                 return mapResponse(fs.doRead(cx, fd, buf, off, len, pos, callback));
 
             } catch (NodeOSException ne) {
-                Object err = Utils.makeErrorObject(cx, thisObj, ne);
                 if (callback == null) {
-                    return err;
+                    throw Utils.makeError(cx, thisObj, ne);
                 }
+                Object err = Utils.makeErrorObject(cx, thisObj, ne);
                 fs.runner.enqueueCallback(callback, callback, null, fs.runner.getDomain(), new Object[] { err });
                 return null;
             }
@@ -862,11 +880,16 @@ public class AsyncFilesystem
                 log.debug("mkdir({})", path);
             }
             Path p  = translatePath(path);
-            Set<PosixFilePermission> perms = modeToPerms(mode, true);
 
             try {
-                Files.createDirectory(p,
-                                      PosixFilePermissions.asFileAttribute(perms));
+                if (Platform.get().isPosixFilesystem()) {
+                    Set<PosixFilePermission> perms = modeToPerms(mode, true);
+                    Files.createDirectory(p,
+                                          PosixFilePermissions.asFileAttribute(perms));
+                } else {
+                    Files.createDirectory(p);
+                    setModeNoPosix(p, mode);
+                }
 
             } catch (IOException ioe) {
                 throw new NodeOSException(getErrorCode(ioe), ioe, path);
@@ -953,20 +976,40 @@ public class AsyncFilesystem
         {
             Context cx = Context.enter();
             try {
-                PosixFileAttributes attrs;
+                StatsImpl s;
+                
                 try {
-                if (noFollow) {
-                    attrs = Files.readAttributes(p, PosixFileAttributes.class,
-                                                 LinkOption.NOFOLLOW_LINKS);
-                } else {
-                    attrs = Files.readAttributes(p, PosixFileAttributes.class);
-                }
+                    if (Platform.get().isPosixFilesystem()) {
+                        PosixFileAttributes attrs;
+                        if (noFollow) {
+                            attrs = Files.readAttributes(p, PosixFileAttributes.class,
+                                                         LinkOption.NOFOLLOW_LINKS);
+                        } else {
+                            attrs = Files.readAttributes(p, PosixFileAttributes.class);
+                        }
+    
+                        s = (StatsImpl)cx.newObject(this, StatsImpl.CLASS_NAME);
+                        s.setPosixAttributes(cx, attrs);
+                    
+                    } else {
+                        BasicFileAttributes attrs;
+                        if (noFollow) {
+                            attrs = Files.readAttributes(p, BasicFileAttributes.class,
+                                                         LinkOption.NOFOLLOW_LINKS);
+                        } else {
+                            attrs = Files.readAttributes(p, BasicFileAttributes.class);
+                        }
+                        s = (StatsImpl)cx.newObject(this, StatsImpl.CLASS_NAME);
+                        s.setNonPosixAttributes(cx, attrs, p);
+                    }
+                //} catch (IOException ioe) {
                 } catch (IOException ioe) {
                     throw new NodeOSException(getErrorCode(ioe), ioe, p.toString());
+                } catch (Throwable t) {
+                    log.error("Error on stat: {}", t);
+                    throw new NodeOSException("Error on Stat", t);
                 }
-
-                StatsImpl s = (StatsImpl)cx.newObject(this, StatsImpl.CLASS_NAME);
-                s.setAttributes(cx, attrs);
+                
                 if (log.isTraceEnabled()) {
                     log.trace("stat {} = {}", p, s);
                 }
@@ -1095,7 +1138,10 @@ public class AsyncFilesystem
                 public Object[] execute() throws NodeOSException
                 {
                     Path p = self.translatePath(path);
-                    return self.doChmod(p, mode, false);
+                    if (Platform.get().isPosixFilesystem()) {
+                        return self.doChmod(p, mode, false);
+                    } 
+                    return self.setModeNoPosix(p, mode);
                 }
             });
         }
@@ -1166,6 +1212,41 @@ public class AsyncFilesystem
                 throw new NodeOSException(getErrorCode(ioe), ioe, path.toString());
             }
         }
+        
+        private Object[] setModeNoPosix(Path p, int origMode)
+        {
+            File f = p.toFile();
+            // We won't check the result of these calls. They don't all work
+            // on all OSes, like Windows. If some fail, then we did the best
+            // that we could to follow the request.
+            int mode =
+                origMode & (~(runner.getProcess().getUmask()));
+            if (((mode & Constants.S_IROTH) != 0) || ((mode & Constants.S_IRGRP) != 0)) {
+                f.setReadable(true, false);
+            } else if ((mode & Constants.S_IRUSR) != 0) {
+                f.setReadable(true, true);
+            } else {
+                f.setReadable(false, true);
+            }
+
+            if (((mode & Constants.S_IWOTH) != 0) || ((mode & Constants.S_IWGRP) != 0)) {
+                f.setWritable(true, false);
+            } else if ((mode & Constants.S_IWUSR) != 0) {
+                f.setWritable(true, true);
+            } else {
+                f.setWritable(false, true);
+            }
+
+            if (((mode & Constants.S_IXOTH) != 0) || ((mode & Constants.S_IXGRP) != 0)) {
+                f.setExecutable(true, false);
+            } else if ((mode & Constants.S_IXUSR) != 0) {
+                f.setExecutable(true, true);
+            } else {
+                f.setExecutable(false, true);
+            }
+            
+            return new Object[] { Context.getUndefinedValue(), Context.getUndefinedValue() };
+        }
 
         @JSFunction
         @SuppressWarnings("unused")
@@ -1181,7 +1262,10 @@ public class AsyncFilesystem
                 public Object[] execute() throws NodeOSException
                 {
                     FileHandle fh = self.ensureHandle(fd);
-                    return self.doChmod(fh.path, mode, fh.noFollow);
+                    if (Platform.get().isPosixFilesystem()) {
+                        return self.doChmod(fh.path, mode, fh.noFollow);
+                    }
+                    return self.setModeNoPosix(fh.path, mode);
                 }
             });
         }
@@ -1200,14 +1284,20 @@ public class AsyncFilesystem
             // than a UID. That may cause problems for NPM, which may try to use a UID.
             try {
                 UserPrincipal user = lookupService.lookupPrincipalByName(uid);
-                GroupPrincipal group = lookupService.lookupPrincipalByGroupName(gid);
-
-                if (noFollow) {
-                    Files.setAttribute(path, "posix:owner", user, LinkOption.NOFOLLOW_LINKS);
-                    Files.setAttribute(path, "posix:group", group, LinkOption.NOFOLLOW_LINKS);
+                
+                if (Platform.get().isPosixFilesystem()) {
+                    GroupPrincipal group = lookupService.lookupPrincipalByGroupName(gid);
+    
+                    if (noFollow) {
+                        Files.setAttribute(path, "posix:owner", user, LinkOption.NOFOLLOW_LINKS);
+                        Files.setAttribute(path, "posix:group", group, LinkOption.NOFOLLOW_LINKS);
+                    } else {
+                        Files.setAttribute(path, "posix:owner", user);
+                        Files.setAttribute(path, "posix:group", group);
+                    }
+                    
                 } else {
-                    Files.setAttribute(path, "posix:owner", user);
-                    Files.setAttribute(path, "posix:group", group);
+                    Files.setAttribute(path, "owner:owner", user);
                 }
                 return new Object[] { Context.getUndefinedValue(), Context.getUndefinedValue() };
             } catch (IOException ioe) {
@@ -1402,8 +1492,8 @@ public class AsyncFilesystem
         public String getClassName() {
             return CLASS_NAME;
         }
-
-        public void setAttributes(Context cx, PosixFileAttributes attrs)
+        
+        public void setBasicAttributes(Context cx, BasicFileAttributes attrs)
         {
             // Fake "dev" and "ino" based on whatever information we can get from the product
             put("size", this, attrs.size());
@@ -1411,13 +1501,18 @@ public class AsyncFilesystem
             Object ino = attrs.fileKey();
             if (ino instanceof Number) {
                 put("ino", this, ino);
-            } else {
+            } else if (ino != null) {
                 put("ino", this, ino.hashCode());
             }
             put("atime", this, makeDate(cx, attrs.lastAccessTime().toMillis()));
             put("mtime", this, makeDate(cx, attrs.lastModifiedTime().toMillis()));
-            put("ctime", this, makeDate(cx, attrs.creationTime().toMillis()));
+            put("ctime", this, makeDate(cx, attrs.creationTime().toMillis()));    
+        }
 
+        public void setPosixAttributes(Context cx, PosixFileAttributes attrs)
+        {
+            setBasicAttributes(cx, attrs);
+            
             // This is a bit gross -- we can't actually get the real Unix UID of the user or group, but some
             // code -- notably NPM -- expects that this is returned as a number. So, returned the hashed
             // value, which is the best that we can do without native code.
@@ -1466,6 +1561,36 @@ public class AsyncFilesystem
             if (perms.contains(PosixFilePermission.OWNER_WRITE)) {
                 mode |= Constants.S_IWUSR;
             }
+            put("mode", this, mode);
+        }
+        
+        public void setNonPosixAttributes(Context cx, BasicFileAttributes attrs, Path p)
+        {       
+            setBasicAttributes(cx, attrs);
+            
+            File file = p.toFile();
+            int mode = 0;
+            
+            if (attrs.isDirectory()) {
+                mode |= Constants.S_IFDIR;
+            }
+            if (attrs.isRegularFile()) {
+                mode |= Constants.S_IFREG;
+            }
+            if (attrs.isSymbolicLink()) {
+                mode |= Constants.S_IFLNK;
+            }
+            
+            if (file.canRead()) {
+                mode |= Constants.S_IRUSR;
+            }
+            if (file.canWrite()) {
+                mode |= Constants.S_IWUSR;
+            }
+            if (file.canExecute()) {
+                mode |= Constants.S_IXUSR;
+            }
+            
             put("mode", this, mode);
         }
 

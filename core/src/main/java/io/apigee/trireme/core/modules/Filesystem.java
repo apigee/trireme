@@ -130,6 +130,9 @@ public class Filesystem
                     if (log.isDebugEnabled()) {
                         log.debug("I/O exception: {}: {}", e.getCode(), e);
                     }
+                    if (log.isTraceEnabled()) {
+                        log.trace(e.toString() ,e);
+                    }
                     Object[] err = action.mapSyncException(e);
                     if (err == null) {
                         throw Utils.makeError(cx, this, e);
@@ -176,6 +179,9 @@ public class Filesystem
             throws IOException
         {
             if (!result) {
+                if (log.isDebugEnabled()) {
+                    log.debug("Permission {} failed for {}", name, f.getPath());
+                }
                 throw new IOException(name + " failed for " + f.getPath());
             }
         }
@@ -198,32 +204,34 @@ public class Filesystem
         }
 
         private void setMode(File f, int origMode)
-            throws IOException
         {
+            // We won't check the result of these calls. They don't all work
+            // on all OSes, like Windows. If some fail, then we did the best
+            // that we could to follow the request.
             int mode =
                 origMode & (~(runner.getProcess().getUmask()));
             if (((mode & Constants.S_IROTH) != 0) || ((mode & Constants.S_IRGRP) != 0)) {
-                checkCall(f.setReadable(true, false), f, "setReadable");
+                f.setReadable(true, false);
             } else if ((mode & Constants.S_IRUSR) != 0) {
-                checkCall(f.setReadable(true, true), f, "setReadable");
+                f.setReadable(true, true);
             } else {
-                checkCall(f.setReadable(false, true), f, "setReadable");
+                f.setReadable(false, true);
             }
 
             if (((mode & Constants.S_IWOTH) != 0) || ((mode & Constants.S_IWGRP) != 0)) {
-                checkCall(f.setWritable(true, false), f, "setWritable");
+                f.setWritable(true, false);
             } else if ((mode & Constants.S_IWUSR) != 0) {
-                checkCall(f.setWritable(true, true), f, "setWritable");
+                f.setWritable(true, true);
             } else {
-                checkCall(f.setWritable(false, true), f, "setWritable");
+                f.setWritable(false, true);
             }
 
             if (((mode & Constants.S_IXOTH) != 0) || ((mode & Constants.S_IXGRP) != 0)) {
-                checkCall(f.setExecutable(true, false), f, "setExecutable");
+                f.setExecutable(true, false);
             } else if ((mode & Constants.S_IXUSR) != 0) {
-                checkCall(f.setExecutable(true, true), f, "setExecutable");
+                f.setExecutable(true, true);
             } else {
-                checkCall(f.setExecutable(false, true), f, "setExecutable");
+                f.setExecutable(false, true);
             }
         }
 
@@ -317,6 +325,9 @@ public class Filesystem
                 try {
                     createFile(path, mode);
                 } catch (IOException e) {
+                    if (log.isDebugEnabled()) {
+                        log.debug("Error in createFile: {}", e, e);
+                    }
                     throw new NodeOSException(Constants.EIO, e);
                 }
             }
@@ -347,11 +358,13 @@ public class Filesystem
                         file.seek(file.length());
                     }
                 } catch (FileNotFoundException fnfe) {
-                    log.debug("File not found");
+                    if (log.isDebugEnabled()) {
+                        log.debug("File not found: {}", path);
+                    }
                     throw new NodeOSException(Constants.ENOENT);
                 } catch (IOException ioe) {
                     if (log.isDebugEnabled()) {
-                        log.debug("I/O error: {}", ioe);
+                        log.debug("I/O error: {}", ioe, ioe);
                     }
                     throw new NodeOSException(Constants.EIO, ioe);
                 }
@@ -735,11 +748,7 @@ public class Filesystem
             if (!file.mkdir()) {
                 throw new NodeOSException(Constants.EIO, path);
             }
-            try {
-                setMode(file, mode);
-            } catch (IOException ioe) {
-                throw new NodeOSException(Constants.EIO, ioe, path);
-            }
+            setMode(file, mode);
         }
 
         @JSFunction
@@ -874,13 +883,39 @@ public class Filesystem
         @JSFunction
         public static void chmod(Context cx, Scriptable thisObj, Object[] args, Function func)
         {
-            throw Utils.makeError(cx, thisObj, "Not implemented");
+            final String path = stringArg(args, 0);
+            final int mode = intArg(args, 1);
+            Function callback = functionArg(args, 2, false);
+            final FSImpl self = (FSImpl)thisObj;
+
+            self.runAction(cx, callback, new AsyncAction() {
+                @Override
+                public Object[] execute() throws NodeOSException
+                {
+                    File f = self.translatePath(path);
+                    self.setMode(f, mode);
+                    return null;
+                }
+            });
         }
 
         @JSFunction
         public static void fchmod(Context cx, Scriptable thisObj, Object[] args, Function func)
         {
-            throw Utils.makeError(cx, thisObj, "Not implemented");
+            final int fd = intArg(args, 0);
+            final int mode = intArg(args, 1);
+            Function callback = functionArg(args, 2, false);
+            final FSImpl self = (FSImpl)thisObj;
+
+            self.runAction(cx, callback, new AsyncAction() {
+                @Override
+                public Object[] execute() throws NodeOSException
+                {
+                    FileHandle fh = self.ensureHandle(fd);
+                    self.setMode(fh.fileRef, mode);
+                    return null;
+                }
+            });
         }
 
         @JSFunction

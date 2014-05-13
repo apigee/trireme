@@ -118,7 +118,7 @@ public class RhinoCompiler
             for (String fn : scanner.getIncludedFiles()) {
                 File input = new File(baseDir, fn);
                 String baseName = getBaseName(fn);
-                String className = baseName.replace("/", ".");
+                String className = baseName.replaceAll("[/\\\\]", ".");
                 File output = new File(targetDirFile, baseName + ".class");
 
                 if (input.lastModified() >= output.lastModified()) {

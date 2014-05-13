@@ -126,7 +126,7 @@ public class ScriptRunner
         this.scriptFile = scriptFile;
 
         try {
-            this.scriptFileName = new File(pathTranslator.reverseTranslate(scriptFile.getAbsolutePath())).getPath();
+            this.scriptFileName = pathTranslator.reverseTranslate(scriptFile.getPath());
         } catch (IOException ioe) {
             throw new AssertionError("Error translating file path: " + ioe);
         }
@@ -583,6 +583,10 @@ public class ScriptRunner
     private void closeCloseables(Context cx)
     {
         AbstractFilesystem fs = (AbstractFilesystem)requireInternal("fs", cx);
+        if (fs == null) {
+            // We might still be initializing
+            return;
+        }
         fs.cleanup();
 
         for (Closeable c: openHandles.values()) {
@@ -738,6 +742,12 @@ public class ScriptRunner
         }
         if (args != null) {
             System.arraycopy(args, 0, argv, p, args.length);
+        }
+        
+        if (log.isDebugEnabled()) {
+            for (int i = 0; i < argv.length; i++) {
+                log.debug("argv[{}] = {}", i, argv[i]);
+            }
         }
         process.setArgv(argv);
     }
@@ -1098,12 +1108,16 @@ public class ScriptRunner
         } catch (InstantiationException e) {
             throw new EvaluatorException("Error initializing module: " + e.toString());
         } catch (IllegalAccessException e) {
-            throw new EvaluatorException("Error initializing module: " + e.toString());
+            throw new EvaluatorException("Error initializing modugle: " + e.toString());
         }
     }
 
     public Object requireInternal(String modName, Context cx)
     {
+        if (process == null) {
+            // This might be called after a fatal initialization error.
+            return null;
+        }
         return process.getInternalModule(modName, cx);
     }
 

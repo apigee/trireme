@@ -64,6 +64,7 @@ import java.nio.file.attribute.BasicFileAttributes;
 import java.nio.file.attribute.FileTime;
 import java.nio.file.attribute.GroupPrincipal;
 import java.nio.file.attribute.PosixFileAttributes;
+import java.nio.file.attribute.PosixFileAttributeView;
 import java.nio.file.attribute.PosixFilePermission;
 import java.nio.file.attribute.PosixFilePermissions;
 import java.nio.file.attribute.UserPrincipal;
@@ -349,8 +350,12 @@ public class AsyncFilesystem
                     if (log.isDebugEnabled()) {
                         log.debug("Opening {} with {}", path, options);
                     }
-                    file = AsynchronousFileChannel.open(path, options, pool,
-                                                        PosixFilePermissions.asFileAttribute(modeToPerms(mode, true)));
+                    if (Files.getFileStore(path).supportsFileAttributeView(PosixFileAttributeView.class)) {
+                        file = AsynchronousFileChannel.open(path, options, pool,
+                            PosixFilePermissions.asFileAttribute(modeToPerms(mode, true)));
+                    } else {
+                        file = AsynchronousFileChannel.open(path, options, pool);
+                    }
 
                 } catch (IOException ioe) {
                     throw new NodeOSException(getErrorCode(ioe), ioe, pathStr);
@@ -862,11 +867,15 @@ public class AsyncFilesystem
                 log.debug("mkdir({})", path);
             }
             Path p  = translatePath(path);
-            Set<PosixFilePermission> perms = modeToPerms(mode, true);
 
             try {
-                Files.createDirectory(p,
-                                      PosixFilePermissions.asFileAttribute(perms));
+                if (Files.getFileStore(p).supportsFileAttributeView(PosixFileAttributeView.class)) {
+                    Set<PosixFilePermission> perms = modeToPerms(mode, true);
+                    Files.createDirectory(p,
+                                          PosixFilePermissions.asFileAttribute(perms));
+                } else {
+                    Files.createDirectory(p);
+                }
 
             } catch (IOException ioe) {
                 throw new NodeOSException(getErrorCode(ioe), ioe, path);
@@ -953,20 +962,40 @@ public class AsyncFilesystem
         {
             Context cx = Context.enter();
             try {
-                PosixFileAttributes attrs;
+                StatsImpl s;
+                
                 try {
-                if (noFollow) {
-                    attrs = Files.readAttributes(p, PosixFileAttributes.class,
-                                                 LinkOption.NOFOLLOW_LINKS);
-                } else {
-                    attrs = Files.readAttributes(p, PosixFileAttributes.class);
-                }
+                    if (Files.getFileStore(p).supportsFileAttributeView(PosixFileAttributeView.class)) {
+                        PosixFileAttributes attrs;
+                        if (noFollow) {
+                            attrs = Files.readAttributes(p, PosixFileAttributes.class,
+                                                         LinkOption.NOFOLLOW_LINKS);
+                        } else {
+                            attrs = Files.readAttributes(p, PosixFileAttributes.class);
+                        }
+    
+                        s = (StatsImpl)cx.newObject(this, StatsImpl.CLASS_NAME);
+                        s.setPosixAttributes(cx, attrs);
+                    
+                    } else {
+                        BasicFileAttributes attrs;
+                        if (noFollow) {
+                            attrs = Files.readAttributes(p, BasicFileAttributes.class,
+                                                         LinkOption.NOFOLLOW_LINKS);
+                        } else {
+                            attrs = Files.readAttributes(p, BasicFileAttributes.class);
+                        }
+                        s = (StatsImpl)cx.newObject(this, StatsImpl.CLASS_NAME);
+                        s.setBasicAttributes(cx, attrs);
+                    }
+                //} catch (IOException ioe) {
                 } catch (IOException ioe) {
                     throw new NodeOSException(getErrorCode(ioe), ioe, p.toString());
+                } catch (Throwable t) {
+                    log.error("Error on stat: {}", t);
+                    throw new NodeOSException("Error on Stat", t);
                 }
-
-                StatsImpl s = (StatsImpl)cx.newObject(this, StatsImpl.CLASS_NAME);
-                s.setAttributes(cx, attrs);
+                
                 if (log.isTraceEnabled()) {
                     log.trace("stat {} = {}", p, s);
                 }
@@ -1402,8 +1431,8 @@ public class AsyncFilesystem
         public String getClassName() {
             return CLASS_NAME;
         }
-
-        public void setAttributes(Context cx, PosixFileAttributes attrs)
+        
+        public void setBasicAttributes(Context cx, BasicFileAttributes attrs)
         {
             // Fake "dev" and "ino" based on whatever information we can get from the product
             put("size", this, attrs.size());
@@ -1411,13 +1440,18 @@ public class AsyncFilesystem
             Object ino = attrs.fileKey();
             if (ino instanceof Number) {
                 put("ino", this, ino);
-            } else {
+            } else if (ino != null) {
                 put("ino", this, ino.hashCode());
             }
             put("atime", this, makeDate(cx, attrs.lastAccessTime().toMillis()));
             put("mtime", this, makeDate(cx, attrs.lastModifiedTime().toMillis()));
-            put("ctime", this, makeDate(cx, attrs.creationTime().toMillis()));
+            put("ctime", this, makeDate(cx, attrs.creationTime().toMillis()));    
+        }
 
+        public void setPosixAttributes(Context cx, PosixFileAttributes attrs)
+        {
+            setBasicAttributes(cx, attrs);
+            
             // This is a bit gross -- we can't actually get the real Unix UID of the user or group, but some
             // code -- notably NPM -- expects that this is returned as a number. So, returned the hashed
             // value, which is the best that we can do without native code.

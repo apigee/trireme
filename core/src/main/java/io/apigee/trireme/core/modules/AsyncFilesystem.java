@@ -74,6 +74,7 @@ import java.nio.file.attribute.UserPrincipalLookupService;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.EnumSet;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Map;
 import java.util.Set;
@@ -932,6 +933,9 @@ public class AsyncFilesystem
                                        @Override
                                        public FileVisitResult visitFile(Path child, BasicFileAttributes attrs)
                                        {
+                                           if (log.isTraceEnabled()) {
+                                               log.trace("  " + child.getFileName());
+                                           }
                                            paths.add(child.getFileName().toString());
                                            return FileVisitResult.CONTINUE;
                                        }
@@ -972,6 +976,17 @@ public class AsyncFilesystem
                 }
             });
         }
+        
+        private Map<String, Object> readAttrs(String attrNames, Path p, 
+                                              boolean noFollow)
+            throws IOException
+        {
+            if (noFollow) {
+                return Files.readAttributes(p, attrNames,
+                                            LinkOption.NOFOLLOW_LINKS);
+            }
+            return Files.readAttributes(p, attrNames);
+        }
 
         private Object[] doStat(Path p, boolean noFollow)
         {
@@ -981,20 +996,14 @@ public class AsyncFilesystem
                 
                 try {
                     Map<String, Object> attrs;
-                    String attrNames;
-                    if (Files.getFileStore(p).supportsFileAttributeView("posix")) {
-                        attrNames = "posix:*";
-                    } else if (Files.getFileStore(p).supportsFileAttributeView("owner")) {
-                        attrNames = "*";
-                    } else {
-                        attrNames = "*";
-                    }
                     
-                    if (noFollow) {
-                        attrs = Files.readAttributes(p, attrNames,
-                                                     LinkOption.NOFOLLOW_LINKS);
+                    if (Platform.get().isPosixFilesystem()) {
+                        attrs = readAttrs("posix:*", p, noFollow);
                     } else {
-                        attrs = Files.readAttributes(p, attrNames);
+                        // The Map returned by "readAttributes" can't be modified
+                        attrs = new HashMap<String, Object>();
+                        attrs.putAll(readAttrs("*", p, noFollow));
+                        attrs.putAll(readAttrs("owner:*", p, noFollow));
                     }
                     
                     s = (StatsImpl)cx.newObject(this, StatsImpl.CLASS_NAME);
@@ -1294,7 +1303,7 @@ public class AsyncFilesystem
                     }
                     
                 } else {
-                    Files.setAttribute(path, "owner:owner", user);
+                    Files.setOwner(path, user);
                 }
                 return new Object[] { Context.getUndefinedValue(), Context.getUndefinedValue() };
             } catch (IOException ioe) {
@@ -1509,12 +1518,14 @@ public class AsyncFilesystem
             // code -- notably NPM -- expects that this is returned as a number. So, returned the hashed
             // value, which is the best that we can do without native code.
             if (attrs.containsKey("owner")) {
-                put("uid", this, attrs.get("owner").hashCode());
+                UserPrincipal up = (UserPrincipal)attrs.get("owner");
+                put("uid", this, up.hashCode());
             } else {
                 put("uid", this, 0);
             }
             if (attrs.containsKey("group")) {
-                put("gid", this, attrs.get("group").hashCode());
+                GroupPrincipal gp = (GroupPrincipal)attrs.get("group");
+                put("gid", this, gp.hashCode());
             } else {
                 put("gid", this, 0);
             }

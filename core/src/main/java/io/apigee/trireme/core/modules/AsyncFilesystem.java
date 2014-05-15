@@ -983,7 +983,7 @@ public class AsyncFilesystem
                     Map<String, Object> attrs;
                     String attrNames;
                     if (Files.getFileStore(p).supportsFileAttributeView("posix")) {
-                        attrNames = "*,posix:*";
+                        attrNames = "posix:*";
                     } else if (Files.getFileStore(p).supportsFileAttributeView("owner")) {
                         attrNames = "*";
                     } else {
@@ -1508,13 +1508,13 @@ public class AsyncFilesystem
             // This is a bit gross -- we can't actually get the real Unix UID of the user or group, but some
             // code -- notably NPM -- expects that this is returned as a number. So, returned the hashed
             // value, which is the best that we can do without native code.
-            if (attrs.containsKey("owner:owner")) {
-                put("uid", this, attrs.get("owner:owner").hashCode());
+            if (attrs.containsKey("owner")) {
+                put("uid", this, attrs.get("owner").hashCode());
             } else {
                 put("uid", this, 0);
             }
-            if (attrs.containsKey("posix:group")) {
-                put("gid", this, attrs.get("posix:group").hashCode());
+            if (attrs.containsKey("group")) {
+                put("gid", this, attrs.get("group").hashCode());
             } else {
                 put("gid", this, 0);
             }
@@ -1531,9 +1531,9 @@ public class AsyncFilesystem
                 mode |= Constants.S_IFLNK;
             }
             
-            if (attrs.containsKey("posix:permissions")) {
+            if (attrs.containsKey("permissions")) {
                 Set<PosixFilePermission> perms = 
-                    (Set<PosixFilePermission>)attrs.get("posix:permissions");
+                    (Set<PosixFilePermission>)attrs.get("permissions");
                 mode |= setPosixPerms(perms);
             } else {
                 mode |= setNonPosixPerms(path);

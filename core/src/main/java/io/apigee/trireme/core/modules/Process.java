@@ -26,6 +26,7 @@ import io.apigee.trireme.core.NodeRuntime;
 import io.apigee.trireme.core.internal.NodeExitException;
 import io.apigee.trireme.core.internal.ScriptRunner;
 import io.apigee.trireme.core.Utils;
+import io.apigee.trireme.core.internal.Platform;
 import io.apigee.trireme.core.internal.Version;
 import io.apigee.trireme.core.internal.handles.AbstractHandle;
 import io.apigee.trireme.core.internal.handles.ConsoleHandle;
@@ -523,7 +524,7 @@ public class Process
         @SuppressWarnings("unused")
         public String getPlatform()
         {
-            return "java";
+            return Platform.get().getPlatform();
         }
 
         @JSFunction

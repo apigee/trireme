@@ -42,6 +42,7 @@ public class PathTranslator
 {
     private static final Logger log = LoggerFactory.getLogger(PathTranslator.class.getName());
     private static final Pattern separator = Pattern.compile("\\" + File.separatorChar);
+    private static final Pattern windowsRoot = Pattern.compile("^[A-Za-z]:.*$");
 
     private File root;
     private String canonicalRoot;
@@ -95,8 +96,14 @@ public class PathTranslator
      */
     public File translate(String pathStr)
     {
+        // Node.js tries to resolve Windows paths to UNC paths, but this in turn
+        // confuses Java -- un-confuse it here:
+        if (pathStr.startsWith("\\\\?\\")) {
+            pathStr = pathStr.substring(4);
+        }
+        
         File path = new File(pathStr);
-        if (!path.isAbsolute()) {
+        if (!path.isAbsolute() && !windowsRoot.matcher(pathStr).matches()) {
             // Make the path relative to the working directory in case it starts with a ".".
             // We need this because we may have manually overridden the OS's notion of the "cwd"
             path = new File(workingDir, pathStr);
@@ -118,10 +125,13 @@ public class PathTranslator
         }
 
         if (root == null) {
+            if (log.isTraceEnabled()) {
+                log.trace("translate: {} -> {}", pathStr, path.getPath());
+            }
             return path;
         }
 
-        // Now we process the "chmod" stuff.
+        // Now we process the "chroot" stuff.
         String[] components = separator.split(path.getPath());
         int depth = 0;
         for (String c : components) {
@@ -140,7 +150,7 @@ public class PathTranslator
 
         File realPath = new File(root, path.getPath());
         if (log.isDebugEnabled()) {
-            log.debug("PathTranslator: {} -> {}", path, realPath.getPath());
+            log.debug("translate: {} -> {}", path, realPath.getPath());
         }
         return realPath;
     }

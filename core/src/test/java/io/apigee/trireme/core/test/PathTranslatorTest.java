@@ -1,6 +1,7 @@
 package io.apigee.trireme.core.test;
 
 import io.apigee.trireme.core.internal.PathTranslator;
+import io.apigee.trireme.core.internal.Platform;
 import org.junit.Test;
 
 import static org.junit.Assert.*;
@@ -42,6 +43,16 @@ public class PathTranslatorTest
         assertTrue(realFile.exists());
         assertEquals(realFile.getCanonicalPath(), xl.getCanonicalPath());
     }
+    
+    private static String trimPath(String p)
+    {
+        if (p.endsWith("/")) {
+            return p.substring(0, p.length() - 1);
+        } else if (p.endsWith("\\")) {
+            return p.substring(0, p.length() - 1);
+        }
+        return p;
+    }
 
     @Test
     public void testSlash()
@@ -50,8 +61,12 @@ public class PathTranslatorTest
         PathTranslator trans = new PathTranslator("./target/test-classes");
         File xl = trans.translate("/");
         File realFile = new File("./target/test-classes");
+        
+        String canonXL = trimPath(xl.getCanonicalPath());
+        String canonTrans = trimPath(realFile.getCanonicalPath());
+        
         assertTrue(realFile.exists());
-        assertEquals(realFile.getCanonicalPath(), xl.getCanonicalPath());
+        assertEquals(canonXL, canonTrans);
     }
 
     @Test
@@ -118,18 +133,27 @@ public class PathTranslatorTest
     public void testMount()
         throws IOException
     {
+        if (Platform.get().isWindows()) {
+            System.out.println("Mount is currently not supported on Windows");
+            return;
+        }
         File realFile = new File("./target/test-classes/global/foo.txt");
         PathTranslator trans = new PathTranslator("./target/test-classes");
         trans.mount("/opt", new File("./target/test-classes/global"));
         File globalFile = trans.translate("/opt/foo.txt");
         assertTrue(globalFile.exists());
-        assertEquals(realFile.getCanonicalPath(), globalFile.getCanonicalPath());
+        assertEquals(trimPath(realFile.getCanonicalPath()), 
+                     trimPath(globalFile.getCanonicalPath()));
     }
 
     @Test
     public void testMountNoRoot()
         throws IOException
     {
+        if (Platform.get().isWindows()) {
+            System.out.println("Mount is currently not supported on Windows");
+            return;
+        }
         File realFile = new File("./target/test-classes/global/foo.txt");
         PathTranslator trans = new PathTranslator();
         trans.mount("/opt", new File("./target/test-classes/global"));
@@ -142,6 +166,10 @@ public class PathTranslatorTest
     public void testMultiMount()
         throws IOException
     {
+        if (Platform.get().isWindows()) {
+            System.out.println("Mount is currently not supported on Windows");
+            return;
+        }
         PathTranslator trans = new PathTranslator();
         trans.mount("/opt", new File("./target/test-classes/global"));
         trans.mount("/usr/local/lib", new File("./target"));

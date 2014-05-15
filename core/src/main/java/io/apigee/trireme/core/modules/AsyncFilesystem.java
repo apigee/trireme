@@ -75,6 +75,7 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.EnumSet;
 import java.util.HashSet;
+import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutionException;
@@ -979,30 +980,26 @@ public class AsyncFilesystem
                 StatsImpl s;
                 
                 try {
-                    if (Platform.get().isPosixFilesystem()) {
-                        PosixFileAttributes attrs;
-                        if (noFollow) {
-                            attrs = Files.readAttributes(p, PosixFileAttributes.class,
-                                                         LinkOption.NOFOLLOW_LINKS);
-                        } else {
-                            attrs = Files.readAttributes(p, PosixFileAttributes.class);
-                        }
-    
-                        s = (StatsImpl)cx.newObject(this, StatsImpl.CLASS_NAME);
-                        s.setPosixAttributes(cx, attrs);
-                    
+                    Map<String, Object> attrs;
+                    String attrNames;
+                    if (Files.getFileStore(p).supportsFileAttributeView("posix")) {
+                        attrNames = "*,posix:*";
+                    } else if (Files.getFileStore(p).supportsFileAttributeView("owner")) {
+                        attrNames = "*";
                     } else {
-                        BasicFileAttributes attrs;
-                        if (noFollow) {
-                            attrs = Files.readAttributes(p, BasicFileAttributes.class,
-                                                         LinkOption.NOFOLLOW_LINKS);
-                        } else {
-                            attrs = Files.readAttributes(p, BasicFileAttributes.class);
-                        }
-                        s = (StatsImpl)cx.newObject(this, StatsImpl.CLASS_NAME);
-                        s.setNonPosixAttributes(cx, attrs, p);
+                        attrNames = "*";
                     }
-                //} catch (IOException ioe) {
+                    
+                    if (noFollow) {
+                        attrs = Files.readAttributes(p, attrNames,
+                                                     LinkOption.NOFOLLOW_LINKS);
+                    } else {
+                        attrs = Files.readAttributes(p, attrNames);
+                    }
+                    
+                    s = (StatsImpl)cx.newObject(this, StatsImpl.CLASS_NAME);
+                    s.setAttributes(cx, p, attrs);
+
                 } catch (IOException ioe) {
                     throw new NodeOSException(getErrorCode(ioe), ioe, p.toString());
                 } catch (Throwable t) {
@@ -1493,47 +1490,62 @@ public class AsyncFilesystem
             return CLASS_NAME;
         }
         
-        public void setBasicAttributes(Context cx, BasicFileAttributes attrs)
+        public void setAttributes(Context cx, Path path, Map<String, Object> attrs)
         {
             // Fake "dev" and "ino" based on whatever information we can get from the product
-            put("size", this, attrs.size());
+            put("size", this, attrs.get("size"));
             put("dev", this, 0);
-            Object ino = attrs.fileKey();
+            Object ino = attrs.get("fileKey");
             if (ino instanceof Number) {
                 put("ino", this, ino);
             } else if (ino != null) {
                 put("ino", this, ino.hashCode());
             }
-            put("atime", this, makeDate(cx, attrs.lastAccessTime().toMillis()));
-            put("mtime", this, makeDate(cx, attrs.lastModifiedTime().toMillis()));
-            put("ctime", this, makeDate(cx, attrs.creationTime().toMillis()));    
-        }
-
-        public void setPosixAttributes(Context cx, PosixFileAttributes attrs)
-        {
-            setBasicAttributes(cx, attrs);
+            put("atime", this, makeDate(cx, attrs.get("lastAccessTime")));
+            put("mtime", this, makeDate(cx, attrs.get("lastModifiedTime")));
+            put("ctime", this, makeDate(cx, attrs.get("creationTime")));
             
             // This is a bit gross -- we can't actually get the real Unix UID of the user or group, but some
             // code -- notably NPM -- expects that this is returned as a number. So, returned the hashed
             // value, which is the best that we can do without native code.
-            put("uid", this, attrs.owner().hashCode());
-            put("gid", this, attrs.group().hashCode());
-
+            if (attrs.containsKey("owner:owner")) {
+                put("uid", this, attrs.get("owner:owner").hashCode());
+            } else {
+                put("uid", this, 0);
+            }
+            if (attrs.containsKey("posix:group")) {
+                put("gid", this, attrs.get("posix:group").hashCode());
+            } else {
+                put("gid", this, 0);
+            }
+            
             int mode = 0;
-
-            // File mode flags -- these are used by the JS code to handle "isFile" and other methods
-            if (attrs.isRegularFile()) {
+            
+            if ((Boolean)attrs.get("isRegularFile")) {
                 mode |= Constants.S_IFREG;
             }
-            if (attrs.isDirectory()) {
+            if ((Boolean)attrs.get("isDirectory")) {
                 mode |= Constants.S_IFDIR;
             }
-            if (attrs.isSymbolicLink()) {
+            if ((Boolean)attrs.get("isSymbolicLink")) {
                 mode |= Constants.S_IFLNK;
             }
+            
+            if (attrs.containsKey("posix:permissions")) {
+                Set<PosixFilePermission> perms = 
+                    (Set<PosixFilePermission>)attrs.get("posix:permissions");
+                mode |= setPosixPerms(perms);
+            } else {
+                mode |= setNonPosixPerms(path);
+            }
+            
+            put("mode", this, mode);
+        }
 
+        public int setPosixPerms(Set<PosixFilePermission> perms)
+        {
+            int mode = 0;
             // Posix file perms
-            Set<PosixFilePermission> perms = attrs.permissions();
             if (perms.contains(PosixFilePermission.GROUP_EXECUTE)) {
                 mode |= Constants.S_IXGRP;
             }
@@ -1561,25 +1573,13 @@ public class AsyncFilesystem
             if (perms.contains(PosixFilePermission.OWNER_WRITE)) {
                 mode |= Constants.S_IWUSR;
             }
-            put("mode", this, mode);
+            return mode;
         }
         
-        public void setNonPosixAttributes(Context cx, BasicFileAttributes attrs, Path p)
+        public int setNonPosixPerms(Path p)
         {       
-            setBasicAttributes(cx, attrs);
-            
             File file = p.toFile();
             int mode = 0;
-            
-            if (attrs.isDirectory()) {
-                mode |= Constants.S_IFDIR;
-            }
-            if (attrs.isRegularFile()) {
-                mode |= Constants.S_IFREG;
-            }
-            if (attrs.isSymbolicLink()) {
-                mode |= Constants.S_IFLNK;
-            }
             
             if (file.canRead()) {
                 mode |= Constants.S_IRUSR;
@@ -1590,13 +1590,13 @@ public class AsyncFilesystem
             if (file.canExecute()) {
                 mode |= Constants.S_IXUSR;
             }
-            
-            put("mode", this, mode);
+            return mode;
         }
 
-        private Object makeDate(Context cx, long ts)
+        private Object makeDate(Context cx, Object o)
         {
-            return cx.newObject(this, "Date", new Object[] { ts });
+            FileTime ft = (FileTime)o;
+            return cx.newObject(this, "Date", new Object[] { ft.toMillis() });
         }
     }
 

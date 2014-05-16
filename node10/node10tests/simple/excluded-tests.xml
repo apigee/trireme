@@ -331,6 +331,10 @@
          Tests that exercise internal, undocumented APIs in the original Node implementation.
     -->
     <Excluded>
+        <Name>test-module-loading-error.js</Name>
+        <Description>Depends on specific error messages from the module</Description>
+    </Excluded>
+    <Excluded>
         <Name>test-tcp-wrap.+</Name>
         <Description>Internal Node module.</Description>
     </Excluded>
@@ -434,6 +438,14 @@
     <Excluded>
         <Name>test-pipe.js</Name>
         <Description>This is way broken now and needs to be disabled so others tests can run.</Description>
+    </Excluded>
+    <Excluded>
+        <Name>test-http-localaddress.js</Name>
+        <Description>Assumes that we have 127.0.0.2.</Description>
+    </Excluded>
+    <Excluded>
+        <Name>test-https-localaddress.js</Name>
+        <Description>Assumes that we have 127.0.0.2.</Description>
     </Excluded>
     <Excluded>
         <Name>test-http-localaddress-bind-error.js</Name>

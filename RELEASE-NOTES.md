@@ -1,3 +1,11 @@
+# 0.7.4 15-May-2014:
+
+* [Issue 54](https://github.com/apigee/trireme/issues/54) Properly raise an 'error' event if
+child_process.spawn() is blocked due to the Sandbox being enabled.
+* [Issue 53](https://github.com/apigee/trireme/issues/54) Add the new "trireme-xslt" module which uses native
+Java XSLST processing and supports multiple threads. Also, create a compatible version of the
+"node_xslt" module so that it may be used in Trireme as well without requiring libxml.
+
 # 0.7.3 11-Apr-2014:
 
 * [Issue 51](https://github.com/apigee/trireme/pull/51) Java 6 only: mkdir should return ENOENT on non-existent

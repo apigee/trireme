@@ -524,6 +524,10 @@ public class BasicTest
     public void testHiddenOs()
         throws InterruptedException, ExecutionException, NodeException
     {
+        if (Platform.get().isWindows()) {
+            System.out.println("Sandbox test disabled on Windows");
+            return;
+        }
         NodeEnvironment testEnv = new NodeEnvironment();
         Sandbox sb = new Sandbox().setHideOSDetails(true);
         testEnv.setSandbox(sb);

@@ -1,3 +1,25 @@
+# 0.7.5 16-May-2014:
+
+* [Issue 56](https://github.com/apigee/trireme/issues/56) Support Windows. This entails a bunch of work around
+path handling and file permissions handling.
+* [Issue 55](https://github.com/apigee/trireme/issues/55) Fix process.platform to guess the platform and return
+a reasonable value.
+
+With this release, by default Trireme will use the "os.name" system property to provide a value for the
+"process.platform" property. Supported values are:
+
+* darwin
+* freebsd
+* linux
+* sunos
+* win32
+
+In addition, if a "Sandbox" is configured on the NodeEnvironment and the "setHideOSDetails" function is called, then
+process.platform will instead return "java" as it did in previous releases.
+
+This is an important change for the Windows platform as many parts of Node.js and third-party modules try to do
+things differently on Windows.
+
 # 0.7.4 15-May-2014:
 
 * [Issue 54](https://github.com/apigee/trireme/issues/54) Properly raise an 'error' event if

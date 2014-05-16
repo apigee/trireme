@@ -59,6 +59,25 @@ and you can press "Promote."
 
 Apparently this can be automated, but it has not been automated yet.
 
+* If Sonatype validation fails:
+
+Sometimes the validation step fails, so you can't do the release. This
+might happen if a file upload breaks.
+
+In that case, you can:
+
+Get the tag that you pushed during release:prepare:
+
+    git checkout <tag>
+
+Re-deploy the affected modules (or the whole thing) to Sonatype:
+
+    mvn -DperformRelease=true deploy
+
+The "performRelease=true" is important because it sets a setting in the
+master pom.xml that causes the GPG signature and sources and
+javadocs to all be generated -- by default they are not.
+
 * How to update the license:
 
 mvn -Dyear=2013 license:format

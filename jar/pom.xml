@@ -4,38 +4,38 @@
   <parent>
     <groupId>io.apigee.trireme</groupId>
     <artifactId>trireme</artifactId>
-    <version>0.7.4-SNAPSHOT</version>
+    <version>0.7.4</version>
   </parent>
 
   <name>trireme-jar</name>
   <artifactId>trireme-jar</artifactId>
-  <version>0.7.4-SNAPSHOT</version>
+  <version>0.7.4</version>
 
   <dependencies>
     <dependency>
       <groupId>io.apigee.trireme</groupId>
       <artifactId>trireme-core</artifactId>
-      <version>0.7.4-SNAPSHOT</version>
+      <version>0.7.4</version>
     </dependency>
     <dependency>
       <groupId>io.apigee.trireme</groupId>
       <artifactId>trireme-crypto</artifactId>
-      <version>0.7.4-SNAPSHOT</version>
+      <version>0.7.4</version>
     </dependency>
     <dependency>
       <groupId>io.apigee.trireme</groupId>
       <artifactId>trireme-util</artifactId>
-      <version>0.7.4-SNAPSHOT</version>
+      <version>0.7.4</version>
     </dependency>
     <dependency>
       <groupId>io.apigee.trireme</groupId>
       <artifactId>trireme-shell</artifactId>
-      <version>0.7.4-SNAPSHOT</version>
+      <version>0.7.4</version>
     </dependency>
     <dependency>
       <groupId>io.apigee.trireme</groupId>
       <artifactId>trireme-node10src</artifactId>
-      <version>0.7.4-SNAPSHOT</version>
+      <version>0.7.4</version>
     </dependency>
 
     <dependency>
@@ -64,7 +64,7 @@
                     <mainClass>io.apigee.trireme.shell.Main</mainClass>
                 </transformer>
                 <!-- This is necessary so that the multiple META-INF/services files get coalesced into one -->
-                <transformer implementation="org.apache.maven.plugins.shade.resource.ServicesResourceTransformer"/>
+                <transformer implementation="org.apache.maven.plugins.shade.resource.ServicesResourceTransformer" />
               </transformers>
               <filters>
                   <filter>

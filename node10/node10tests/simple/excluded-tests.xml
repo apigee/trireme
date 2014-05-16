@@ -65,6 +65,10 @@
     </Excluded>
 
     <Excluded>
+        <Name>test-setproctitle.js</Name>
+        <Description>Can't do this the way that the test expects.</Description>
+    </Excluded>
+    <Excluded>
         <Name>test-dgram-multicast-multi-process.js</Name>
         <Description>Haven't tested or done infrastructure for multicast</Description>
     </Excluded>

@@ -19,33 +19,17 @@
 // OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE
 // USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-var common = require('../common');
+var common = require('../common.js');
 var assert = require('assert');
-var net = require('net');
+var zlib = require('zlib');
+
 var closed = false;
 
-var server = net.createServer(function(s) {
-  console.error('SERVER: got connection');
-  s.end();
-});
-
-server.listen(common.PORT, function() {
-  var c = net.createConnection(common.PORT);
-  c.on('close', function() {
-    console.error('connection closed');
-    assert.strictEqual(c._handle, null);
+zlib.gzip('hello', function(err, out) {
+  var unzip = zlib.createGunzip();
+  unzip.write(out);
+  unzip.close(function() {
     closed = true;
-    assert.doesNotThrow(function() {
-      c.setNoDelay();
-      c.setKeepAlive();
-      c.bufferSize;
-      c.pause();
-      c.resume();
-      c.address();
-      c.remoteAddress;
-      c.remotePort;
-    });
-    server.close();
   });
 });
 

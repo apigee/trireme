@@ -54,7 +54,6 @@ function readStop(socket) {
 // called to process trailing HTTP headers.
 function parserOnHeaders(headers, url) {
   // Once we exceeded headers limit - stop collecting them
-  debug('parserOnHeaders');
   if (this.maxHeaderPairs <= 0 ||
       this._headers.length < this.maxHeaderPairs) {
     this._headers = this._headers.concat(headers);
@@ -71,8 +70,6 @@ function parserOnHeadersComplete(info) {
   var parser = this;
   var headers = info.headers;
   var url = info.url;
-
-  debug('parseOnHeadersComplete: ' + info.statusCode);
 
   if (!headers) {
     headers = parser._headers;
@@ -133,8 +130,6 @@ function parserOnBody(b, start, len) {
   var parser = this;
   var stream = parser.incoming;
 
-  debug('parserOnBody (' + start + ', ' + len + ')');
-
   // if the stream has already been removed, then drop it.
   if (!stream)
     return;
@@ -153,8 +148,6 @@ function parserOnBody(b, start, len) {
 function parserOnMessageComplete() {
   var parser = this;
   var stream = parser.incoming;
-
-  debug('parseOnMessageComplete');
 
   if (stream) {
     stream.complete = true;
@@ -351,9 +344,7 @@ IncomingMessage.prototype._read = function(n) {
   // We actually do almost nothing here, because the parserOnBody
   // function fills up our internal buffer directly.  However, we
   // do need to unpause the underlying socket so that it flows.
-  if (!this.socket.readable)
-    this.push(null);
-  else
+  if (this.socket.readable)
     readStart(this.socket);
 };
 
@@ -1353,7 +1344,9 @@ function ClientRequest(options, cb) {
   var self = this;
   OutgoingMessage.call(self);
 
-  self.agent = options.agent === undefined ? globalAgent : options.agent;
+  self.agent = options.agent;
+  if (!options.agent && options.agent !== false && !options.createConnection)
+    self.agent = globalAgent;
 
   var defaultPort = options.defaultPort || 80;
 

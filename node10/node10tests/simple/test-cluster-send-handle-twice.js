@@ -19,36 +19,38 @@
 // OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE
 // USE OR OTHER DEALINGS IN THE SOFTWARE.
 
+// Testing to send an handle twice to the parent process.
+
 var common = require('../common');
 var assert = require('assert');
+var cluster = require('cluster');
 var net = require('net');
-var closed = false;
 
-var server = net.createServer(function(s) {
-  console.error('SERVER: got connection');
-  s.end();
-});
+var workers = {
+  toStart: 1
+};
 
-server.listen(common.PORT, function() {
-  var c = net.createConnection(common.PORT);
-  c.on('close', function() {
-    console.error('connection closed');
-    assert.strictEqual(c._handle, null);
-    closed = true;
-    assert.doesNotThrow(function() {
-      c.setNoDelay();
-      c.setKeepAlive();
-      c.bufferSize;
-      c.pause();
-      c.resume();
-      c.address();
-      c.remoteAddress;
-      c.remotePort;
+if (cluster.isMaster) {
+  for (var i = 0; i < workers.toStart; ++i) {
+    var worker = cluster.fork();
+    worker.on('exit', function(code, signal) {
+      assert.equal(code, 0, 'Worker exited with an error code');
+      assert(!signal, 'Worker exited by a signal');
     });
-    server.close();
+  }
+} else {
+  var server = net.createServer(function(socket) {
+    process.send('send-handle-1', socket);
+    process.send('send-handle-2', socket);
   });
-});
 
-process.on('exit', function() {
-  assert(closed);
-});
+  server.listen(common.PORT, function() {
+    var client = net.connect({ host: 'localhost', port: common.PORT });
+    client.on('close', function() { cluster.worker.disconnect(); });
+    setTimeout(function() { client.end(); }, 50);
+  }).on('error', function(e) {
+    console.error(e);
+    assert(false, 'server.listen failed');
+    cluster.worker.disconnect();
+  });
+}

@@ -16,7 +16,7 @@ public class Node10Implementation
     @Override
     public String getVersion()
     {
-        return "0.10.24";
+        return "0.10.28";
     }
 
     @Override

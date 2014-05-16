@@ -1,5 +1,5 @@
 // Copyright Joyent, Inc. and other Node contributors.
-//
+
 // Permission is hereby granted, free of charge, to any person obtaining a
 // copy of this software and associated documentation files (the
 // "Software"), to deal in the Software without restriction, including
@@ -7,10 +7,10 @@
 // distribute, sublicense, and/or sell copies of the Software, and to permit
 // persons to whom the Software is furnished to do so, subject to the
 // following conditions:
-//
+
 // The above copyright notice and this permission notice shall be included
 // in all copies or substantial portions of the Software.
-//
+
 // THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS
 // OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
 // MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN
@@ -19,36 +19,21 @@
 // OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE
 // USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-var common = require('../common');
 var assert = require('assert');
-var net = require('net');
-var closed = false;
+var common = require('../common');
 
-var server = net.createServer(function(s) {
-  console.error('SERVER: got connection');
-  s.end();
-});
+if (process.platform === 'win32') {
+  console.log('skipping test on windows');
+  process.exit(0);
+}
 
-server.listen(common.PORT, function() {
-  var c = net.createConnection(common.PORT);
-  c.on('close', function() {
-    console.error('connection closed');
-    assert.strictEqual(c._handle, null);
-    closed = true;
-    assert.doesNotThrow(function() {
-      c.setNoDelay();
-      c.setKeepAlive();
-      c.bufferSize;
-      c.pause();
-      c.resume();
-      c.address();
-      c.remoteAddress;
-      c.remotePort;
-    });
-    server.close();
-  });
-});
+var exec = require('child_process').exec;
 
-process.on('exit', function() {
-  assert(closed);
+var cmdline = 'ulimit -c 0; ' + process.execPath;
+cmdline += ' --max-old-space-size=1 --max-new-space-size=1';
+cmdline += ' -e "setInterval(function() { new Buffer(1024); }, 1);"';
+
+exec(cmdline, function(err, stdout, stderr) {
+  assert(err);
+  assert(stderr.toString().match(/abort/i));
 });

@@ -19,36 +19,18 @@
 // OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE
 // USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-var common = require('../common');
+
+// Make sure the domain stack doesn't get clobbered by un-matched .exit()
+
 var assert = require('assert');
-var net = require('net');
-var closed = false;
+var domain = require('domain');
 
-var server = net.createServer(function(s) {
-  console.error('SERVER: got connection');
-  s.end();
-});
+var a = domain.create();
+var b = domain.create();
 
-server.listen(common.PORT, function() {
-  var c = net.createConnection(common.PORT);
-  c.on('close', function() {
-    console.error('connection closed');
-    assert.strictEqual(c._handle, null);
-    closed = true;
-    assert.doesNotThrow(function() {
-      c.setNoDelay();
-      c.setKeepAlive();
-      c.bufferSize;
-      c.pause();
-      c.resume();
-      c.address();
-      c.remoteAddress;
-      c.remotePort;
-    });
-    server.close();
-  });
-});
+a.enter(); // push
+b.enter(); // push
+assert.deepEqual(domain._stack, [a, b], 'b not pushed');
 
-process.on('exit', function() {
-  assert(closed);
-});
+domain.create().exit(); // no-op
+assert.deepEqual(domain._stack, [a, b], 'stack mangled!');

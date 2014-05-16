@@ -104,6 +104,9 @@ function WritableState(options, stream) {
   this.writelen = 0;
 
   this.buffer = [];
+
+  // True if the error was already emitted and should not be thrown again
+  this.errorEmitted = false;
 }
 
 function Writable(options) {
@@ -203,7 +206,9 @@ function writeOrBuffer(stream, state, chunk, encoding, cb) {
   state.length += len;
 
   var ret = state.length < state.highWaterMark;
-  state.needDrain = !ret;
+  // we must ensure that previous needDrain will not be reset to false.
+  if (!ret)
+    state.needDrain = true;
 
   if (state.writing)
     state.buffer.push(new WriteReq(chunk, encoding, cb));
@@ -230,6 +235,7 @@ function onwriteError(stream, state, sync, er, cb) {
   else
     cb(er);
 
+  stream._writableState.errorEmitted = true;
   stream.emit('error', er);
 }
 

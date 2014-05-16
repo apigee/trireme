@@ -22,33 +22,32 @@
 var common = require('../common');
 var assert = require('assert');
 var net = require('net');
-var closed = false;
 
-var server = net.createServer(function(s) {
-  console.error('SERVER: got connection');
-  s.end();
-});
+var buf = new Buffer(2 * 1024 * 1024);
 
-server.listen(common.PORT, function() {
-  var c = net.createConnection(common.PORT);
-  c.on('close', function() {
-    console.error('connection closed');
-    assert.strictEqual(c._handle, null);
-    closed = true;
-    assert.doesNotThrow(function() {
-      c.setNoDelay();
-      c.setKeepAlive();
-      c.bufferSize;
-      c.pause();
-      c.resume();
-      c.address();
-      c.remoteAddress;
-      c.remotePort;
-    });
-    server.close();
+buf.fill(0x62);
+
+var errs = [];
+
+var srv = net.createServer(function onConnection(conn) {
+  conn.write(buf);
+  conn.on('error', function (err) {
+    errs.push(err);
+    if (errs.length > 1 && errs[0] === errs[1])
+      assert(false, "We should not be emitting the same error twice");
+  });
+  conn.on('close', function() {
+    srv.unref();
+  });
+}).listen(common.PORT, function () {
+  var client = net.connect({ port: common.PORT });
+
+  client.on('connect', function () {
+    client.destroy();
   });
 });
 
 process.on('exit', function() {
-  assert(closed);
+  console.log(errs);
+  assert.equal(errs.length, 1);
 });

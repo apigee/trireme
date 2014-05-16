@@ -19,36 +19,44 @@
 // OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE
 // USE OR OTHER DEALINGS IN THE SOFTWARE.
 
+
 var common = require('../common');
 var assert = require('assert');
+var cluster = require('cluster');
+var path = require('path');
+var fs = require('fs');
 var net = require('net');
-var closed = false;
 
-var server = net.createServer(function(s) {
-  console.error('SERVER: got connection');
-  s.end();
-});
+var socketPath = path.join(common.fixturesDir, 'socket-path');
 
-server.listen(common.PORT, function() {
-  var c = net.createConnection(common.PORT);
-  c.on('close', function() {
-    console.error('connection closed');
-    assert.strictEqual(c._handle, null);
-    closed = true;
-    assert.doesNotThrow(function() {
-      c.setNoDelay();
-      c.setKeepAlive();
-      c.bufferSize;
-      c.pause();
-      c.resume();
-      c.address();
-      c.remoteAddress;
-      c.remotePort;
-    });
-    server.close();
+if (cluster.isMaster) {
+  var worker = cluster.fork();
+  var gotError = 0;
+  worker.on('message', function(err) {
+    gotError++;
+    console.log(err);
+    if (process.platform === 'win32')
+      assert.strictEqual('EACCES', err.code);
+    else
+      assert.strictEqual('EADDRINUSE', err.code);
+    worker.disconnect();
   });
-});
+  process.on('exit', function() {
+    console.log('master exited');
+    try {
+      fs.unlinkSync(socketPath);
+    } catch (e) {
+    }
+    assert.equal(gotError, 1);
+  });
+} else {
+  fs.writeFileSync(socketPath, 'some contents');
 
-process.on('exit', function() {
-  assert(closed);
-});
+  var server = net.createServer().listen(socketPath, function() {
+    console.log('here');
+  });
+
+  server.on('error', function(err) {
+    process.send(err);
+  });
+}

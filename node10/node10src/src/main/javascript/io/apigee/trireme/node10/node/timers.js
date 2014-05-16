@@ -117,14 +117,11 @@ function listOnTimeout() {
           // is complete, but not by using whatever domain was left over
           // when the timeout threw its exception.
           var oldDomain = process.domain;
-          process.domain = undefined;
-          try {
-            process.nextTick(function() {
-              list.ontimeout();
-            });
-          } finally {
-            process.domain = oldDomain;
-          }
+          process.domain = null;
+          process.nextTick(function() {
+            list.ontimeout();
+          });
+          process.domain = oldDomain;
         }
       }
     }

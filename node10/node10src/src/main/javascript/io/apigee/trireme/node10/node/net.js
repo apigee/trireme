@@ -122,7 +122,6 @@ exports._normalizeConnectArgs = normalizeConnectArgs;
 // called when creating new Socket, or when re-using a closed Socket
 function initSocketHandle(self) {
   self.destroyed = false;
-  self.errorEmitted = false;
   self.bytesRead = 0;
   self._bytesDispatched = 0;
 
@@ -436,11 +435,11 @@ Socket.prototype._destroy = function(exception, cb) {
 
   function fireErrorCallbacks() {
     if (cb) cb(exception);
-    if (exception && !self.errorEmitted) {
+    if (exception && !self._writableState.errorEmitted) {
       process.nextTick(function() {
         self.emit('error', exception);
       });
-      self.errorEmitted = true;
+      self._writableState.errorEmitted = true;
     }
   };
 
@@ -469,8 +468,11 @@ Socket.prototype._destroy = function(exception, cb) {
     this._handle = null;
   }
 
-  fireErrorCallbacks();
+  // we set destroyed to true before firing error callbacks in order
+  // to make it re-entrance safe in case Socket.prototype.destroy()
+  // is called within callbacks
   this.destroyed = true;
+  fireErrorCallbacks();
 
   if (this.server) {
     COUNTER_NET_SERVER_CONNECTION_CLOSE(this);
@@ -781,6 +783,7 @@ Socket.prototype.connect = function(options, cb) {
   if (this.destroyed) {
     this._readableState.reading = false;
     this._readableState.ended = false;
+    this._readableState.endEmitted = false;
     this._writableState.ended = false;
     this._writableState.ending = false;
     this._writableState.finished = false;
@@ -1062,21 +1065,29 @@ function listen(self, address, port, addressType, backlog, fd) {
     return;
   }
 
-  cluster._getServer(self, address, port, addressType, fd, function(handle) {
-    // Some operating systems (notably OS X and Solaris) don't report EADDRINUSE
-    // errors right away. libuv mimics that behavior for the sake of platform
-    // consistency but that means we have have a socket on our hands that is
-    // not actually bound. That's why we check if the actual port matches what
-    // we requested and if not, raise an error. The exception is when port == 0
-    // because that means "any random port".
-    if (port && handle.getsockname && port != handle.getsockname().port) {
-      self.emit('error', errnoException('EADDRINUSE', 'bind'));
-      return;
-    }
+  cluster._getServer(self, address, port, addressType, fd, function(handle,
+                                                                    err) {
+        // EACCESS and friends
+        if (err) {
+          self.emit('error', errnoException(err, 'bind'));
+          return;
+        }
 
-    self._handle = handle;
-    self._listen2(address, port, addressType, backlog, fd);
-  });
+        // Some operating systems (notably OS X and Solaris) don't report
+        // EADDRINUSE errors right away. libuv mimics that behavior for the
+        // sake of platform consistency but that means we have have a socket on
+        // our hands that is not actually bound. That's why we check if the
+        // actual port matches what we requested and if not, raise an error.
+        // The exception is when port == 0 because that means "any random
+        // port".
+        if (port && handle.getsockname && port != handle.getsockname().port) {
+          self.emit('error', errnoException('EADDRINUSE', 'bind'));
+          return;
+        }
+
+        self._handle = handle;
+        self._listen2(address, port, addressType, backlog, fd);
+      });
 }
 
 

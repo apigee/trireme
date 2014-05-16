@@ -21,34 +21,27 @@
 
 var common = require('../common');
 var assert = require('assert');
+var http = require('http');
 var net = require('net');
-var closed = false;
 
-var server = net.createServer(function(s) {
-  console.error('SERVER: got connection');
-  s.end();
+var create = 0;
+var response = 0;
+process.on('exit', function() {
+  assert.equal(1, create, 'createConnection() http option was not called');
+  assert.equal(1, response, 'http server "request" callback was not called');
 });
 
-server.listen(common.PORT, function() {
-  var c = net.createConnection(common.PORT);
-  c.on('close', function() {
-    console.error('connection closed');
-    assert.strictEqual(c._handle, null);
-    closed = true;
-    assert.doesNotThrow(function() {
-      c.setNoDelay();
-      c.setKeepAlive();
-      c.bufferSize;
-      c.pause();
-      c.resume();
-      c.address();
-      c.remoteAddress;
-      c.remotePort;
-    });
+var server = http.createServer(function(req, res) {
+  res.end();
+  response++;
+}).listen(common.PORT, '127.0.0.1', function() {
+  http.get({ createConnection: createConnection }, function (res) {
+    res.resume();
     server.close();
   });
 });
 
-process.on('exit', function() {
-  assert(closed);
-});
+function createConnection() {
+  create++;
+  return net.createConnection(common.PORT, '127.0.0.1');
+}

@@ -19,36 +19,58 @@
 // OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE
 // USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-var common = require('../common');
+var common = require('../common.js');
 var assert = require('assert');
-var net = require('net');
-var closed = false;
+var domain = require('domain');
+var disposalFailed = false;
 
-var server = net.createServer(function(s) {
-  console.error('SERVER: got connection');
-  s.end();
-});
+// no matter what happens, we should increment a 10 times.
+var a = 0;
+log();
+function log(){
+  console.log(a++, process.domain);
+  if (a < 10) setTimeout(log, 20);
+}
 
-server.listen(common.PORT, function() {
-  var c = net.createConnection(common.PORT);
-  c.on('close', function() {
-    console.error('connection closed');
-    assert.strictEqual(c._handle, null);
-    closed = true;
-    assert.doesNotThrow(function() {
-      c.setNoDelay();
-      c.setKeepAlive();
-      c.bufferSize;
-      c.pause();
-      c.resume();
-      c.address();
-      c.remoteAddress;
-      c.remotePort;
+var secondTimerRan = false;
+
+// in 50ms we'll throw an error.
+setTimeout(err, 50);
+setTimeout(secondTimer, 50);
+function err(){
+  var d = domain.create();
+  d.on('error', handle);
+  d.run(err2);
+
+  function err2() {
+    // this timeout should never be called, since the domain gets
+    // disposed when the error happens.
+    setTimeout(function() {
+      console.error('This should not happen.');
+      disposalFailed = true;
+      process.exit(1);
     });
-    server.close();
-  });
-});
+
+    // this function doesn't exist, and throws an error as a result.
+    err3();
+  }
+
+  function handle(e) {
+    // this should clean up everything properly.
+    d.dispose();
+    console.error(e);
+    console.error('in handler', process.domain, process.domain === d);
+  }
+}
+
+function secondTimer() {
+  console.log('In second timer');
+  secondTimerRan = true;
+}
 
 process.on('exit', function() {
-  assert(closed);
+  assert.equal(a, 10);
+  assert.equal(disposalFailed, false);
+  assert(secondTimerRan);
+  console.log('ok');
 });

@@ -1,0 +1,120 @@
+digraph T {
+    node [shape=box, style=filled];
+        
+    /* Built-in and OSS stuff */
+    java [label="Java SE", color=grey]
+    bouncycastle [label="Bouncy Castle", color=grey]
+    rhino [label="Rhino", color=grey]
+      
+    /* Java stuff */
+    cares_wrap [color=green];
+    crypto_wrap [label="crypto", color=green];
+    fs_wrap [label="fs", color=green];
+    http_parser [color=green];
+    os_wrap [label="os", color=green];
+    evals_wrap [label="evals", color=green];
+    zlib_wrap [label="zlib", color=green];
+    process_wrap [color=green];
+    stream_wrap [color=green];
+    tcp_wrap [color=green];
+    timer_wrap [color=green];
+    tty_wrap [color=green];
+    udp_wrap [color=green];
+    trireme_java [label="Trireme", color=green];
+    buffer_wrap [label="buffer", color=green];
+    os_wrap [label="os", color=green];
+    stdout [color=green];
+    decoder_wrap [color=green];
+    
+    /* JS stuff */
+    trireme_js [label="trireme.js", color=red];
+    assert [color=red];
+    child_process [color=red];
+    cluster [color=red];
+    console [color=red];
+    crypto [color=red];
+    dgram [color=red];
+    dns [color=red];
+    domain [color=red];
+    events [color=red];
+    fs [color=red];
+    http [color=red];
+    https [color=red];
+    module [color=red];
+    net [color=red];
+    os [color=red];
+    path [color=red];
+    punycode [color=red];
+    querystring [color=red];
+    readline [color=red];
+    stream [color=red];
+    string_decoder [color=red];
+    timers [color=red];
+    tls [color=red];
+    tty [color=red];
+    url [color=red];
+    util [color=red];
+    vm [color=red];
+    zlib [color=red];
+    
+    /* The Tree */
+    rhino -> java;
+    bouncycastle -> java;
+    cares_wrap -> java;
+    crypto_wrap -> java;
+    crypto_wrap -> bouncycastle;
+    fs_wrap -> java;
+    os_wrap -> java;
+    evals_wrap -> rhino;
+    zlib_wrap -> java;
+    process_wrap -> java;
+    stream_wrap -> java;
+    tcp_wrap -> java;
+    timer_wrap -> java;
+    tty_wrap -> java;
+    udp_wrap -> java;
+    trireme_js -> trireme_java;
+    trireme_js -> java;
+    buffer_wrap -> java;
+    os_wrap -> java;
+    stdout -> stream_wrap;
+    tls_wrap -> bouncycastle;
+    trireme_java -> java;
+    trireme_java -> rhino;
+    
+    child_process -> process_wrap;
+    cluster -> child_process;
+    console -> stdout;
+    crypto -> crypto_wrap;
+    dgram -> udp_wrap;
+    dns -> cares_wrap;
+    fs -> fs_wrap; 
+    http -> http_parser;
+    http -> net;
+    https -> tls;
+    https -> http;
+    module -> fs;
+    net -> tcp_wrap;
+    os -> os_wrap;
+    repl -> tty;
+    readline -> tty;
+    repl -> tty;
+    timers -> timer_wrap;
+    string_decoder -> decoder_wrap;
+    tls -> tls_wrap;
+    tls -> net;
+    tty -> tty_wrap;
+    vm -> evals_wrap;
+    zlib -> zlib_wrap;
+    
+    assert -> rhino;
+    dns -> rhino;
+    domain -> rhino;
+    events -> rhino;
+    path -> rhino;
+    punycode -> rhino;
+    querystring -> rhino;
+    stream -> rhino;
+    url -> rhino;
+    util -> rhino;
+}

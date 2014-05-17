@@ -1,0 +1,121 @@
+digraph N {
+    node [shape=box, style=filled];
+        
+    /* Built-in and OSS stuff */
+    cares [color=grey];
+    openssl [color=grey];
+    libuv [color=grey];
+    v8 [color=grey];
+    zlib_oss [label="zlib", color=grey];
+      
+    /* C++ stuff */
+    cares_wrap [color=green];
+    crypto_wrap [label="crypto", color=green];
+    fs_wrap [label="fs", color=green];
+    http_parser [color=green];
+    os_wrap [label="os", color=green];
+    evals_wrap [label="evals", color=green];
+    zlib_wrap [label="zlib", color=green];
+    pipe_wrap [color=green];
+    process_wrap [color=green];
+    signal_wrap [color=green];
+    stream_wrap [color=green];
+    tcp_wrap [color=green];
+    timer_wrap [color=green];
+    tty_wrap [color=green];
+    udp_wrap [color=green];
+    node_cc [label="node.cc", color=green];
+    buffer_wrap [label="buffer", color=green];
+    os_wrap [label="os", color=green];
+    stdout [color=green];
+    
+    /* JS stuff */
+    node_js [label="node.js", color=red];
+    assert [color=red];
+    buffer [color=red];
+    child_process [color=red];
+    cluster [color=red];
+    console [color=red];
+    crypto [color=red];
+    dgram [color=red];
+    dns [color=red];
+    domain [color=red];
+    events [color=red];
+    fs [color=red];
+    http [color=red];
+    https [color=red];
+    module [color=red];
+    net [color=red];
+    os [color=red];
+    path [color=red];
+    punycode [color=red];
+    querystring [color=red];
+    readline [color=red];
+    repl [color=red];
+    stream [color=red];
+    string_decoder [color=red];
+    timers [color=red];
+    tls [color=red];
+    tty [color=red];
+    url [color=red];
+    util [color=red];
+    vm [color=red];
+    zlib [color=red];
+    
+    /* The Tree */
+    cares_wrap -> cares;
+    crypto_wrap -> openssl;
+    fs_wrap -> libuv;
+    os_wrap -> libuv;
+    evals_wrap -> v8;
+    pipe_wrap -> libuv;
+    process_wrap -> libuv;
+    signal_wrap -> libuv;
+    stream_wrap -> libuv;
+    tcp_wrap -> libuv;
+    timer_wrap -> libuv;
+    tty_wrap -> libuv;
+    udp_wrap -> libuv;
+    node_js -> node_cc;
+    node_cc -> libuv;
+    buffer_wrap -> v8;
+    os_wrap -> libuv;
+    stdout -> stream_wrap;
+    zlib_wrap -> zlib_oss;
+    
+    buffer -> buffer_wrap;
+    child_process -> process_wrap;
+    cluster -> child_process;
+    console -> stdout;
+    crypto -> crypto_wrap;
+    dgram -> udp_wrap;
+    dns -> cares_wrap;
+    fs -> fs_wrap; 
+    http -> http_parser;
+    http -> net;
+    https -> tls;
+    https -> http;
+    module -> fs;
+    net -> tcp_wrap;
+    os -> os_wrap;
+    repl -> tty;
+    readline -> tty;
+    repl -> tty;
+    timers -> timer_wrap;
+    tls -> crypto;
+    tls -> net;
+    tty -> tty_wrap;
+    vm -> evals_wrap;
+    zlib -> zlib_wrap;
+
+    assert -> v8;
+    dns -> v8;
+    domain -> v8;
+    events -> v8;
+    path -> v8;
+    punycode -> v8;
+    querystring -> v8;
+    stream -> v8;
+    url -> v8;
+    util -> v8;
+}

@@ -56,7 +56,8 @@ public class Main
 
     private static void printVersion()
     {
-        System.err.println("Trireme");
+        NodeEnvironment env = new NodeEnvironment();
+        System.err.println('v' + env.getDefaultNodeVersion());
     }
 
     public static void main(String[] args)
@@ -78,7 +79,7 @@ public class Main
             if ("-h".equals(args[i]) || "--help".equals(args[i])) {
                 printUsage();
                 return false;
-            } else if ("-v".equals(args[i])) {
+            } else if ("-v".equals(args[i]) || "--version".equals(args[i])) {
                 printVersion();
                 return false;
             } else if (wasEval) {

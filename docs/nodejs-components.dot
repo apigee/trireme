@@ -1,6 +1,14 @@
 digraph N {
     node [shape=box, style=filled];
         
+    /* key */
+    subgraph clusterLegend {
+    label="Legend";
+    oss [label="Open Source", color = grey];
+    cplusplus [label="C/C++", color=green];
+    JavaScript [color=red];
+    }
+        
     /* Built-in and OSS stuff */
     cares [color=grey];
     openssl [color=grey];
@@ -31,7 +39,6 @@ digraph N {
     
     /* JS stuff */
     node_js [label="node.js", color=red];
-    assert [color=red];
     buffer [color=red];
     child_process [color=red];
     cluster [color=red];
@@ -39,26 +46,16 @@ digraph N {
     crypto [color=red];
     dgram [color=red];
     dns [color=red];
-    domain [color=red];
-    events [color=red];
     fs [color=red];
     http [color=red];
     https [color=red];
     module [color=red];
     net [color=red];
     os [color=red];
-    path [color=red];
-    punycode [color=red];
-    querystring [color=red];
-    readline [color=red];
     repl [color=red];
-    stream [color=red];
-    string_decoder [color=red];
     timers [color=red];
     tls [color=red];
     tty [color=red];
-    url [color=red];
-    util [color=red];
     vm [color=red];
     zlib [color=red];
     
@@ -81,6 +78,8 @@ digraph N {
     buffer_wrap -> v8;
     os_wrap -> libuv;
     stdout -> stream_wrap;
+    stdout -> pipe_wrap;
+    stdout -> fs;
     zlib_wrap -> zlib_oss;
     
     buffer -> buffer_wrap;
@@ -99,23 +98,10 @@ digraph N {
     net -> tcp_wrap;
     os -> os_wrap;
     repl -> tty;
-    readline -> tty;
-    repl -> tty;
     timers -> timer_wrap;
     tls -> crypto;
     tls -> net;
     tty -> tty_wrap;
     vm -> evals_wrap;
     zlib -> zlib_wrap;
-
-    assert -> v8;
-    dns -> v8;
-    domain -> v8;
-    events -> v8;
-    path -> v8;
-    punycode -> v8;
-    querystring -> v8;
-    stream -> v8;
-    url -> v8;
-    util -> v8;
 }

@@ -1,6 +1,14 @@
 digraph T {
     node [shape=box, style=filled];
         
+    /* key */
+    subgraph clusterLegend {
+    label="Legend";
+    oss [label="Open Source", color = grey];
+    Java [color=green];
+    JavaScript [color=red];
+    }
+        
     /* Built-in and OSS stuff */
     java [label="Java SE", color=grey]
     bouncycastle [label="Bouncy Castle", color=grey]
@@ -20,6 +28,7 @@ digraph T {
     timer_wrap [color=green];
     tty_wrap [color=green];
     udp_wrap [color=green];
+    tls_wrap [color=green];
     trireme_java [label="Trireme", color=green];
     buffer_wrap [label="buffer", color=green];
     os_wrap [label="os", color=green];
@@ -28,43 +37,36 @@ digraph T {
     
     /* JS stuff */
     trireme_js [label="trireme.js", color=red];
-    assert [color=red];
     child_process [color=red];
     cluster [color=red];
     console [color=red];
     crypto [color=red];
     dgram [color=red];
     dns [color=red];
-    domain [color=red];
-    events [color=red];
     fs [color=red];
     http [color=red];
     https [color=red];
     module [color=red];
     net [color=red];
     os [color=red];
-    path [color=red];
-    punycode [color=red];
-    querystring [color=red];
-    readline [color=red];
-    stream [color=red];
+    repl [color=red];
     string_decoder [color=red];
     timers [color=red];
     tls [color=red];
     tty [color=red];
-    url [color=red];
-    util [color=red];
     vm [color=red];
     zlib [color=red];
     
     /* The Tree */
     rhino -> java;
     bouncycastle -> java;
+    buffer_wrap -> rhino;
     cares_wrap -> java;
     crypto_wrap -> java;
     crypto_wrap -> bouncycastle;
     fs_wrap -> java;
     os_wrap -> java;
+    decoder_wrap -> java;
     evals_wrap -> rhino;
     zlib_wrap -> java;
     process_wrap -> java;
@@ -97,7 +99,6 @@ digraph T {
     net -> tcp_wrap;
     os -> os_wrap;
     repl -> tty;
-    readline -> tty;
     repl -> tty;
     timers -> timer_wrap;
     string_decoder -> decoder_wrap;
@@ -106,15 +107,4 @@ digraph T {
     tty -> tty_wrap;
     vm -> evals_wrap;
     zlib -> zlib_wrap;
-    
-    assert -> rhino;
-    dns -> rhino;
-    domain -> rhino;
-    events -> rhino;
-    path -> rhino;
-    punycode -> rhino;
-    querystring -> rhino;
-    stream -> rhino;
-    url -> rhino;
-    util -> rhino;
 }

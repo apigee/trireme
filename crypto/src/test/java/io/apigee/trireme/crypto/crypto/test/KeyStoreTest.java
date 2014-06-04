@@ -58,7 +58,7 @@ public class KeyStoreTest
     }
 
     @Test
-    public void testLoadKeys()
+    public void testLoadRsaKey()
         throws IOException, CryptoException, GeneralSecurityException
     {
         final String ALIAS = "key";
@@ -78,7 +78,7 @@ public class KeyStoreTest
     }
 
     @Test
-    public void testLoadCerts()
+    public void testLoadRsaCert()
         throws IOException, CryptoException, GeneralSecurityException
     {
         final String ALIAS = "cert";

@@ -23,7 +23,10 @@ package io.apigee.trireme.core.internal;
 
 import java.security.Provider;
 import java.security.Security;
+import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashMap;
+import java.util.List;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -40,6 +43,7 @@ public class SignatureAlgorithms
 
     private final Pattern SIGNATURE_NAME = Pattern.compile("([0-9a-zA-Z]+)with([0-9a-zA-Z]+)");
     private final HashMap<String, Algorithm> algs = new HashMap<String, Algorithm>();
+    private final ArrayList<String> algNames;
 
     public static SignatureAlgorithms get() {
         return myself;
@@ -63,10 +67,17 @@ public class SignatureAlgorithms
                 }
             }
         }
+
+        algNames = new ArrayList<String>(algs.keySet());
+        Collections.sort(algNames);
     }
 
     public Algorithm get(String name) {
         return algs.get(name.toUpperCase());
+    }
+
+    public List<String> getAlgorithms() {
+        return algNames;
     }
 
     public static class Algorithm

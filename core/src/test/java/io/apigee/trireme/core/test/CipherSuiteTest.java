@@ -1,6 +1,7 @@
 package io.apigee.trireme.core.test;
 
 import io.apigee.trireme.core.internal.CryptoAlgorithms;
+import io.apigee.trireme.core.internal.SignatureAlgorithms;
 import org.junit.BeforeClass;
 import org.junit.Test;
 
@@ -53,6 +54,12 @@ public class CipherSuiteTest
         } catch (NoSuchPaddingException e) {
             assertFalse("No such padding " + name + " (" + javaName + ')', true);
         }
+    }
+
+    @Test
+    public void dumpSignatureAlgorithms()
+    {
+        System.out.println(SignatureAlgorithms.get().getAlgorithms());
     }
 
     /*

@@ -637,7 +637,6 @@ assert.strictEqual(rsaVerify.verify(rsaPubPem, rsaSignature, 'hex'), true);
 //
 // Test DSA signing and verification
 //
-/* Trireme: Not complete yet
 (function() {
   var privateKey = fs.readFileSync(
       common.fixturesDir + '/test_dsa_privkey.pem');
@@ -649,16 +648,15 @@ assert.strictEqual(rsaVerify.verify(rsaPubPem, rsaSignature, 'hex'), true);
 
   // DSA signatures vary across runs so there is no static string to verify
   // against
-  var sign = crypto.createSign('DSS1');
+  var sign = crypto.createSign('DSA-SHA1');
   sign.update(input);
   var signature = sign.sign(privateKey, 'hex');
 
-  var verify = crypto.createVerify('DSS1');
+  var verify = crypto.createVerify('DSA-SHA1');
   verify.update(input);
 
   assert.strictEqual(verify.verify(publicKey, signature, 'hex'), true);
 })();
-*/
 
 /* Trireme: PBKDF implemented but seems to be different
 //

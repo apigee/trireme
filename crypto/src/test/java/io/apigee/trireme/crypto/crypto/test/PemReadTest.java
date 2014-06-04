@@ -61,7 +61,6 @@ public class PemReadTest
         assertNotNull(kp);
     }
 
-    /*
     @Test
     public void testDsaKeyPair()
         throws IOException, CryptoException
@@ -70,7 +69,7 @@ public class PemReadTest
         KeyPair kp = service.readKeyPair("DSA", is, null);
         assertNotNull(kp);
     }
-
+    /*
     @Test
     public void testDsaKeyPairDes3()
         throws IOException, CryptoException
@@ -105,6 +104,15 @@ public class PemReadTest
     {
         InputStream is = PemReadTest.class.getResourceAsStream("/test_rsa_pubkey_2.pem");
         PublicKey pk = service.readPublicKey("RSA", is);
+        assertNotNull(pk);
+    }
+
+    @Test
+    public void testDsaPublicKey()
+        throws IOException, CryptoException
+    {
+        InputStream is = PemReadTest.class.getResourceAsStream("/dsapublickey.pem");
+        PublicKey pk = service.readPublicKey("DSA", is);
         assertNotNull(pk);
     }
 

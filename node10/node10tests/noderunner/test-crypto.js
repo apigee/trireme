@@ -793,8 +793,6 @@ assert.strictEqual(rsaVerify.verify(rsaPubPem, rsaSignature, 'hex'), true);
   assert.strictEqual(verify.verify(publicKey, signature, 'hex'), true);
 })();
 
-/* 
- * Noderunner: Don't understand DSA fully yet
 //
 // Test DSA signing and verification
 //
@@ -818,7 +816,6 @@ assert.strictEqual(rsaVerify.verify(rsaPubPem, rsaSignature, 'hex'), true);
 
   assert.strictEqual(verify.verify(publicKey, signature, 'hex'), true);
 })();
-*/
 
 /*
  * Noderunner: PBKDF2 is implemented, but it seems to use a 

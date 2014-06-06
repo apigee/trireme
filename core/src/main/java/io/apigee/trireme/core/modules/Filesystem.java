@@ -49,7 +49,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 
 /**
  * An implementation of the "fs" internal Node module. The "fs.js" script depends on it.
- * This is an implementaion that supports Java versions up to and including Java 6. That means that
+ * This is an implementation that supports Java versions up to and including Java 6. That means that
  * it does not have all the features supported by "real" Node.js "AsyncFilesystem" uses the new Java 7
  * APIs and is much more complete.
  */
@@ -871,13 +871,15 @@ public class Filesystem
         @JSFunction
         public static void utimes(Context cx, Scriptable thisObj, Object[] args, Function func)
         {
-            throw Utils.makeError(cx, thisObj, "Not implemented");
+            Function callback = functionArg(args, 3, false);
+            ((FSImpl)thisObj).returnError(cx, Constants.EACCES, callback);
         }
 
         @JSFunction
         public static void futimes(Context cx, Scriptable thisObj, Object[] args, Function func)
         {
-            throw Utils.makeError(cx, thisObj, "Not implemented");
+            Function callback = functionArg(args, 3, false);
+            ((FSImpl)thisObj).returnError(cx, Constants.EACCES, callback);
         }
 
         @JSFunction
@@ -918,34 +920,53 @@ public class Filesystem
             });
         }
 
+        private void returnError(Context cx, String code, Function cb)
+        {
+            if (cb == null) {
+                throw Utils.makeError(cx, this, code, code);
+            } else {
+                Scriptable err = Utils.makeErrorObject(cx, this, code, code);
+                runner.enqueueCallback(cb, cb, null, runner.getDomain(),
+                                       new Object[] { err });
+            }
+        }
+
         @JSFunction
         public static void chown(Context cx, Scriptable thisObj, Object[] args, Function func)
         {
-            throw Utils.makeError(cx, thisObj, "Not implemented");
+            // Not possible to do this in Java 6. Return an error message so that we act as if we can't
+            // do it because we aren't root, which is nice because tools like NPM fail gracefully in that case.
+            // Skip the first three arguments since we always fail
+            Function callback = functionArg(args, 3, false);
+            ((FSImpl)thisObj).returnError(cx, Constants.EPERM, callback);
         }
 
         @JSFunction
         public static void fchown(Context cx, Scriptable thisObj, Object[] args, Function func)
         {
-            throw Utils.makeError(cx, thisObj, "Not implemented");
+            Function callback = functionArg(args, 3, false);
+            ((FSImpl)thisObj).returnError(cx, Constants.EPERM, callback);
         }
 
         @JSFunction
         public static void link(Context cx, Scriptable thisObj, Object[] args, Function func)
         {
-            throw Utils.makeError(cx, thisObj, "Not implemented");
+            Function callback = functionArg(args, 2, false);
+            ((FSImpl)thisObj).returnError(cx, Constants.EACCES, callback);
         }
 
         @JSFunction
         public static void symlink(Context cx, Scriptable thisObj, Object[] args, Function func)
         {
-            throw Utils.makeError(cx, thisObj, "Not implemented");
+            Function callback = functionArg(args, 3, false);
+            ((FSImpl)thisObj).returnError(cx, Constants.EACCES, callback);
         }
 
         @JSFunction
         public static void readlink(Context cx, Scriptable thisObj, Object[] args, Function func)
         {
-            throw Utils.makeError(cx, thisObj, "Not implemented");
+            Function callback = functionArg(args, 1, false);
+            ((FSImpl)thisObj).returnError(cx, Constants.EINVAL, callback);
         }
     }
 

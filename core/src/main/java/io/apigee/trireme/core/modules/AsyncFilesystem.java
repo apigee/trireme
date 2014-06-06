@@ -1318,7 +1318,7 @@ public class AsyncFilesystem
             final String path = stringArg(args, 0);
             final String uid = stringArg(args, 1);
             final String gid = stringArg(args, 2);
-            Function callback = functionArg(args, 3, true);
+            Function callback = functionArg(args, 3, false);
             final FSImpl self = (FSImpl)thisObj;
 
             self.runAction(cx, callback, new AsyncAction() {
@@ -1339,7 +1339,7 @@ public class AsyncFilesystem
             final int fd = intArg(args, 0);
             final String uid = stringArg(args, 1);
             final String gid = stringArg(args, 2);
-            Function callback = functionArg(args, 3, true);
+            Function callback = functionArg(args, 3, false);
             final FSImpl self = (FSImpl)thisObj;
 
             self.runAction(cx, callback, new AsyncAction() {

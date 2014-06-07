@@ -149,16 +149,16 @@ public class Filesystem
                 @Override
                 public void run()
                 {
-                    if (log.isDebugEnabled()) {
-                        log.debug("Executing async action {}", action);
+                    if (log.isTraceEnabled()) {
+                        log.trace("Executing async action {}", action);
                     }
                     try {
                         Object[] args = action.execute();
                         if (args == null) {
                             args = new Object[0];
                         }
-                        if (log.isDebugEnabled()) {
-                            log.debug("Calling {} with {}", ((BaseFunction)callback).getFunctionName(), args);
+                        if (log.isTraceEnabled()) {
+                            log.trace("Calling {} with {}", ((BaseFunction)callback).getFunctionName(), args);
                         }
                         runner.enqueueCallback(callback, callback, null, domain, args);
                     } catch (NodeOSException e) {
@@ -184,13 +184,6 @@ public class Filesystem
                 }
                 throw new IOException(name + " failed for " + f.getPath());
             }
-        }
-
-        private  void createFile(File f, int mode)
-            throws IOException
-        {
-            checkCall(f.createNewFile(), f, "createNewFile");
-            setMode(f, mode);
         }
 
         private File translatePath(String path)
@@ -240,6 +233,9 @@ public class Filesystem
         {
             FileHandle handle = descriptors.get(fd);
             if (handle == null) {
+                if (log.isDebugEnabled()) {
+                    log.debug("FD {} is not a valid handle", fd);
+                }
                 throw new NodeOSException(Constants.EBADF);
             }
             return handle;
@@ -250,6 +246,9 @@ public class Filesystem
         {
             FileHandle h = ensureHandle(fd);
             if (h.file == null) {
+                if (log.isDebugEnabled()) {
+                    log.debug("FD {} is not a valid handle or regular file", fd);
+                }
                 throw new NodeOSException(Constants.EBADF);
             }
             return h;
@@ -300,36 +299,28 @@ public class Filesystem
             }
 
             File path = translatePath(pathStr);
-            if (path.exists()) {
-                if ((flags & Constants.O_TRUNC) != 0) {
-                    // For exact compatibility, perhaps this should open and truncate
-                    try {
-                        checkCall(path.delete(), path, "delete");
-                        createFile(path, mode);
-                    } catch (IOException e) {
-                        throw new NodeOSException(Constants.EIO, e);
+            if ((flags & Constants.O_CREAT) != 0) {
+                boolean justCreated;
+                try {
+                    // This is the Java 6 way to atomically create a file and test for existence
+                    justCreated = path.createNewFile();
+                } catch (IOException e) {
+                    if (log.isDebugEnabled()) {
+                        log.debug("Error in createNewFile: {}", e, e);
                     }
+                    throw new NodeOSException(Constants.EIO, e);
                 }
-                if (((flags & Constants.O_CREAT) != 0) &&
-                    ((flags & Constants.O_EXCL) != 0)) {
+                if (justCreated) {
+                    setMode(path, mode);
+                } else if ((flags & Constants.O_EXCL) != 0) {
                     NodeOSException ne = new NodeOSException(Constants.EEXIST);
                     ne.setPath(pathStr);
                     throw ne;
                 }
-            } else {
-                if ((flags & Constants.O_CREAT) == 0) {
-                    NodeOSException ne = new NodeOSException(Constants.ENOENT);
-                    ne.setPath(pathStr);
-                    throw ne;
-                }
-                try {
-                    createFile(path, mode);
-                } catch (IOException e) {
-                    if (log.isDebugEnabled()) {
-                        log.debug("Error in createFile: {}", e, e);
-                    }
-                    throw new NodeOSException(Constants.EIO, e);
-                }
+            } else if (!path.exists()) {
+                NodeOSException ne = new NodeOSException(Constants.ENOENT);
+                ne.setPath(pathStr);
+                throw ne;
             }
 
             RandomAccessFile file = null;
@@ -354,10 +345,13 @@ public class Filesystem
                         log.debug("Opening {} with {}", path.getPath(), modeStr);
                     }
                     file = new RandomAccessFile(path, modeStr);
-                    if (((flags & Constants.O_APPEND) != 0) && (file.length() > 0)) {
+                    if ((flags & Constants.O_TRUNC) != 0) {
+                        file.setLength(0L);
+                    } else if (((flags & Constants.O_APPEND) != 0) && (file.length() > 0)) {
                         file.seek(file.length());
                     }
                 } catch (FileNotFoundException fnfe) {
+                    // We should only get here if O_CREAT was NOT set
                     if (log.isDebugEnabled()) {
                         log.debug("File not found: {}", path);
                     }
@@ -370,11 +364,14 @@ public class Filesystem
                 }
             }
 
-            Context cx = Context.enter();
+            Context.enter();
             try {
                 FileHandle fileHandle = new FileHandle(path, file);
                 int fd = nextFd.getAndIncrement();
                 descriptors.put(fd, fileHandle);
+                if (log.isDebugEnabled()) {
+                    log.debug("Returning FD {}", fd);
+                }
                 return new Object [] { Context.getUndefinedValue(), fd };
             } finally {
                 Context.exit();
@@ -403,7 +400,7 @@ public class Filesystem
         private void doClose(int fd)
             throws NodeOSException
         {
-            FileHandle handle = ensureRegularFileHandle(fd);
+            FileHandle handle = ensureHandle(fd);
             try {
                 if (handle.file != null) {
                     handle.file.close();
@@ -868,18 +865,56 @@ public class Filesystem
             }
         }
 
+        private Object[] doUtimes(File f, double atime, double mtime)
+            throws NodeOSException
+        {
+            // In Java 6, we can only set the modification time, not the access time
+            // "mtime" comes from JavaScript as a decimal number of seconds
+            if (!f.exists()) {
+                NodeOSException ne = new NodeOSException(Constants.ENOENT);
+                ne.setPath(f.getPath());
+                throw ne;
+            }
+            f.setLastModified((long)(mtime * 1000.0));
+            return new Object[] { Context.getUndefinedValue(), Context.getUndefinedValue() };
+        }
+
         @JSFunction
         public static void utimes(Context cx, Scriptable thisObj, Object[] args, Function func)
         {
+            final String path = stringArg(args, 0);
+            final double atime = doubleArg(args, 1);
+            final double mtime = doubleArg(args, 2);
             Function callback = functionArg(args, 3, false);
-            ((FSImpl)thisObj).returnError(cx, Constants.EACCES, callback);
+            final FSImpl self = (FSImpl)thisObj;
+
+            self.runAction(cx, callback, new AsyncAction() {
+                @Override
+                public Object[] execute() throws NodeOSException
+                {
+                    File f = self.translatePath(path);
+                    return self.doUtimes(f, atime, mtime);
+                }
+            });
         }
 
         @JSFunction
         public static void futimes(Context cx, Scriptable thisObj, Object[] args, Function func)
         {
+            final int fd = intArg(args, 0);
+            final double atime = doubleArg(args, 1);
+            final double mtime = doubleArg(args, 2);
             Function callback = functionArg(args, 3, false);
-            ((FSImpl)thisObj).returnError(cx, Constants.EACCES, callback);
+            final FSImpl self = (FSImpl)thisObj;
+
+            self.runAction(cx, callback, new AsyncAction() {
+                @Override
+                public Object[] execute() throws NodeOSException
+                {
+                    FileHandle fh = self.ensureHandle(fd);
+                    return self.doUtimes(fh.fileRef, atime, mtime);
+                }
+            });
         }
 
         @JSFunction
@@ -1060,6 +1095,34 @@ public class Filesystem
         public Object getMTime()
         {
             return Context.getCurrentContext().newObject(this, "Date", new Object[] { file.lastModified() });
+        }
+
+        @JSGetter("atime")
+        public Object getATime()
+        {
+            return getMTime();
+        }
+
+        @JSGetter("ctime")
+        public Object getCTime()
+        {
+            return getMTime();
+        }
+
+        // These have to be implemented for things like NPM to work although we cannot set them properly
+        @JSGetter("uid")
+        public int getUid() {
+            return 0;
+        }
+
+        @JSGetter("gid")
+        public int getGid() {
+            return 0;
+        }
+
+        @JSGetter("dev")
+        public int getDev() {
+            return 0;
         }
 
         @JSFunction

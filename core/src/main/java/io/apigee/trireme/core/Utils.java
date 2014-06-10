@@ -21,7 +21,6 @@
  */
 package io.apigee.trireme.core;
 
-import com.sun.org.apache.xerces.internal.impl.xpath.regex.Match;
 import io.apigee.trireme.core.internal.Charsets;
 import io.apigee.trireme.core.internal.NodeOSException;
 import io.apigee.trireme.core.modules.Constants;

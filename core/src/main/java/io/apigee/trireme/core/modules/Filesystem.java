@@ -818,7 +818,7 @@ public class Filesystem
                     throw ne;
                 }
                 StatsImpl s = (StatsImpl)cx.newObject(this, StatsImpl.CLASS_NAME);
-                s.setFile(f);
+                s.setAttributes(cx, f);
                 if (log.isTraceEnabled()) {
                     log.trace("stat {} = {}", f.getPath(), s);
                 }
@@ -858,7 +858,7 @@ public class Filesystem
             Context cx = Context.enter();
             try {
                 StatsImpl s = (StatsImpl)cx.newObject(this, StatsImpl.CLASS_NAME);
-                s.setFile(handle.fileRef);
+                s.setAttributes(cx, handle.fileRef);
                 return new Object[] { Context.getUndefinedValue(), s };
             } finally {
                 Context.exit();
@@ -1010,63 +1010,26 @@ public class Filesystem
     {
         public static final String CLASS_NAME = "Stats";
 
-        private File file;
-
         @Override
         public String getClassName() {
             return CLASS_NAME;
         }
 
-        public void setFile(File file)
+        public void setAttributes(Context cx, File file)
         {
-            this.file = file;
-        }
+            put("size", this, file.length());
 
-        @JSFunction
-        public boolean isFile()
-        {
-            return file.isFile();
-        }
+            Scriptable modDate =
+                cx.newObject(this, "Date", new Object[] { file.lastModified() });
+            put("atime", this, modDate);
+            put("mtime", this, modDate);
+            put("ctime", this, modDate);
 
-        @JSFunction
-        public boolean isDirectory()
-        {
-            return file.isDirectory();
-        }
+            // Need to fake some things because some code expects these things to be there
+            put("dev", this, 0);
+            put("uid", this, 0);
+            put("gid", this, 0);
 
-        @JSFunction
-        public boolean isBlockDevice()
-        {
-            return false;
-        }
-
-        @JSFunction
-        public boolean isCharacterDevice()
-        {
-            return false;
-        }
-
-        @JSFunction
-        public boolean isSymbolicLink()
-        {
-            return false;
-        }
-
-        @JSFunction
-        public boolean isFIFO()
-        {
-            return false;
-        }
-
-        @JSFunction
-        public boolean isSocket()
-        {
-            return false;
-        }
-
-        @JSGetter("mode")
-        public int getMode()
-        {
             int mode = 0;
             if (file.isDirectory()) {
                 mode |= Constants.S_IFDIR;
@@ -1083,56 +1046,7 @@ public class Filesystem
             if (file.canExecute()) {
                 mode |= Constants.S_IXUSR;
             }
-            return mode;
-        }
-
-        @JSGetter("size")
-        public double getSize() {
-            return file.length();
-        }
-
-        @JSGetter("mtime")
-        public Object getMTime()
-        {
-            return Context.getCurrentContext().newObject(this, "Date", new Object[] { file.lastModified() });
-        }
-
-        @JSGetter("atime")
-        public Object getATime()
-        {
-            return getMTime();
-        }
-
-        @JSGetter("ctime")
-        public Object getCTime()
-        {
-            return getMTime();
-        }
-
-        // These have to be implemented for things like NPM to work although we cannot set them properly
-        @JSGetter("uid")
-        public int getUid() {
-            return 0;
-        }
-
-        @JSGetter("gid")
-        public int getGid() {
-            return 0;
-        }
-
-        @JSGetter("dev")
-        public int getDev() {
-            return 0;
-        }
-
-        @JSFunction
-        public Object toJSON()
-        {
-            Scriptable s = Context.getCurrentContext().newObject(this);
-            s.put("mode", s, getMode());
-            s.put("size", s, getSize());
-            s.put("mtime", s, getMTime());
-            return s;
+            put("mode", this, mode);
         }
     }
 

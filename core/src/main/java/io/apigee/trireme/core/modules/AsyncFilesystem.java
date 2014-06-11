@@ -1492,8 +1492,6 @@ public class AsyncFilesystem
     {
         public static final String CLASS_NAME = "Stats";
 
-        private PosixFileAttributes attrs;
-
         @Override
         public String getClassName() {
             return CLASS_NAME;

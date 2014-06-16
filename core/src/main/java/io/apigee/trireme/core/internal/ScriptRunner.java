@@ -749,7 +749,7 @@ public class ScriptRunner
                 log.debug("argv[{}] = {}", i, argv[i]);
             }
         }
-        process.setArgv(argv);
+        process.initializeArgv(argv);
     }
 
     private ScriptStatus mainLoop(Context cx)

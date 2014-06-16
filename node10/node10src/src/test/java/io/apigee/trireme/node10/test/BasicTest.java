@@ -520,7 +520,19 @@ public class BasicTest
         runTest("cryptotests.js");
     }
 
-    /* TODO FIXME but don't break the build.
+    @Test
+    public void testArgv()
+        throws InterruptedException, ExecutionException, NodeException
+    {
+        NodeScript script = env.createScript("argvtest.js",
+                                             new File("./target/test-classes/tests/argvtest.js"),
+                                             new String[] { "One", "Two", "Three" });
+        ScriptStatus status = script.execute().get();
+        assertEquals(0, status.getExitCode());
+        script.close();
+    }
+
+    /* TODO FIXME but don't break the build. */
     @Test
     public void testHiddenOs()
         throws InterruptedException, ExecutionException, NodeException
@@ -536,7 +548,7 @@ public class BasicTest
         script.close();
         testEnv.close();
     }
-    */
+    /* */
 
     @Test
     public void testDefaultVersion()

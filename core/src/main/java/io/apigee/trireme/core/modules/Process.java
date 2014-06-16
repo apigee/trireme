@@ -312,7 +312,14 @@ public class Process
             return argv;
         }
 
-        public void setArgv(String[] args)
+        @JSSetter("argv")
+        @SuppressWarnings("unused")
+        public void setArgv(Scriptable argv)
+        {
+            this.argv = argv;
+        }
+
+        public void initializeArgv(String[] args)
         {
             Object[] argvArgs = new Object[args.length];
             for (int i = 0; i < args.length; i++) {

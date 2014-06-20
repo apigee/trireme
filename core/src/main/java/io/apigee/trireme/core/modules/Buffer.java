@@ -997,6 +997,11 @@ public class Buffer
             Charset charset = resolveEncoding(args, 1);
             CharsetEncoder encoder = Charsets.get().getEncoder(charset);
 
+            if (encoder.averageBytesPerChar() == encoder.maxBytesPerChar()) {
+                // Optimize for ASCII
+                return Math.ceil(encoder.maxBytesPerChar() * data.length());
+            }
+
             // Encode into a small temporary buffer to make counting easiest.
             // I don't know of a better way.
             CharBuffer chars = CharBuffer.wrap(data);

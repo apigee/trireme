@@ -548,7 +548,12 @@ public class HTTPParsingMachine
                 // Be sure to read from the odd-data buffer as well.
                 String ret;
                 if (oddData == null) {
-                    ret = Utils.bufferToString(line, Charsets.ASCII);
+                    if (buf.hasArray()) {
+                        ret = new String(line.array(), line.arrayOffset() + line.position(),
+                                         line.remaining(), Charsets.ASCII);
+                    } else {
+                        ret = Utils.bufferToString(line, Charsets.ASCII);
+                    }
                 } else {
                     oddData.flip();
                     ret = Utils.bufferToString(new ByteBuffer[] { oddData, line }, Charsets.ASCII);

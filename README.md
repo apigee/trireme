@@ -22,6 +22,10 @@ adapter, built using Netty 4.0, is included.)
 * The sandbox supports a Rhino feature that makes it possible to limit the execution time for a script.
 With this feature enabled, a script that runs an infinite loop can be terminated after some time.
 
+For a more detailed introduction, see our intro presentation:
+
+* [Introduction to Trireme](./docs/trireme-intro.pdf)
+
 ## How do I get it?
 
 See [the releases page](https://github.com/apigee/trireme/releases) to download the latest release files.
@@ -272,7 +276,8 @@ This is the de facto standard logging API for Java.
 
 Trireme runs on Java 6 and up. If Java 7 is available, it will use the new filesystem APIs, which allow a much wider
 range of filesystem features, like links and permissions that work the same way as regular Node. It also uses
-the asynchronous I/O interfaces for file I/O which are theoretically faster.
+the asynchronous I/O interfaces for file I/O which are theoretically faster. (Although it turns out that on
+anything but Windows they are actually doing the same thing under the covers.)
 
 ## Design
 

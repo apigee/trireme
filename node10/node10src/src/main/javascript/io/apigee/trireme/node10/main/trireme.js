@@ -73,6 +73,7 @@
     startup.processSignalHandlers();
 
     startup.processTrireme();
+    startup.processJavaScriptCompatibility();
 
     startup.processChannel();
 
@@ -864,6 +865,40 @@
           }
         }
       });
+    }
+  };
+
+  /*
+   * Do things to make our version of JavaScript more compatible with V8.
+   */
+  startup.processJavaScriptCompatibility = function() {
+    // Replace "escape" with a function that ignores all but the first parameter.
+    var rhinoEscape = escape;
+    escape = function(s) {
+      return rhinoEscape(s);
+    };
+
+    // Correct but not-as-efficient-as-possible implementations of trimLeft() and trimRight()
+    if (!String.prototype.trimLeft) {
+      var wsLeft = /^\s.*/;
+      String.prototype.trimLeft = function() {
+        var s = this;
+        while (wsLeft.test(s)) {
+          s = s.substring(1);
+        }
+        return s;
+      };
+    }
+
+    if (!String.prototype.trimRight) {
+      var wsRight = /.*\s$/;
+      String.prototype.trimRight = function() {
+        var s = this;
+        while (wsRight.test(s)) {
+          s = s.substring(0, s.length - 1);
+        }
+        return s;
+      };
     }
   };
 

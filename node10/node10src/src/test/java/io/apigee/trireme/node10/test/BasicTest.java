@@ -532,7 +532,6 @@ public class BasicTest
         script.close();
     }
 
-    /* TODO FIXME but don't break the build. */
     @Test
     public void testHiddenOs()
         throws InterruptedException, ExecutionException, NodeException
@@ -548,7 +547,13 @@ public class BasicTest
         script.close();
         testEnv.close();
     }
-    /* */
+
+    @Test
+    public void testJavaScriptCompatibility()
+        throws InterruptedException, ExecutionException, NodeException
+    {
+        runTest("compatibilitytest.js");
+    }
 
     @Test
     public void testDefaultVersion()

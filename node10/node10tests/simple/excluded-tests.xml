@@ -73,10 +73,6 @@
         <Description>Haven't tested or done infrastructure for multicast</Description>
     </Excluded>
     <Excluded>
-        <Name>test-dgram-multicast-setTTL.js</Name>
-        <Description>Haven't tested or done infrastructure for multicast</Description>
-    </Excluded>
-    <Excluded>
         <Name>test-dgram-broadcast-multi-process.js</Name>
         <Description>Can't test broadcast yet.</Description>
     </Excluded>

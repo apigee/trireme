@@ -45,35 +45,29 @@ import java.util.ArrayDeque;
  * Node's own script modules use this internal module to implement the guts of async TCP.
  */
 public class NIOSocketHandle
-    extends AbstractHandle
+    extends AbstractNIOHandle
 {
     private static final Logger log = LoggerFactory.getLogger(NIOSocketHandle.class);
 
     public static final int    READ_BUFFER_SIZE = 32767;
 
-    private final NodeRuntime runtime;
-
     private InetSocketAddress       boundAddress;
     private ServerSocketChannel     svrChannel;
     private SocketChannel           clientChannel;
-    private SelectionKey            selKey;
     private boolean                 readStarted;
-    private ArrayDeque<QueuedWrite> writeQueue;
-    private int                     queuedBytes;
     private ByteBuffer              readBuffer;
-    private boolean                 writeReady;
     private NetworkHandleListener   listener;
     private Object                  listenerCtx;
 
     public NIOSocketHandle(NodeRuntime runtime)
     {
-        this.runtime = runtime;
+        super(runtime);
     }
 
     public NIOSocketHandle(NodeRuntime runtime, SocketChannel clientChannel)
         throws IOException
     {
-        this.runtime = runtime;
+        super(runtime);
         this.clientChannel = clientChannel;
         clientInit();
         selKey = clientChannel.register(runtime.getSelector(), SelectionKey.OP_WRITE,
@@ -90,28 +84,9 @@ public class NIOSocketHandle
     private void clientInit()
         throws IOException
     {
-        writeQueue = new ArrayDeque<QueuedWrite>();
         readBuffer = ByteBuffer.allocate(READ_BUFFER_SIZE);
         clientChannel.configureBlocking(false);
         setNoDelay(true);
-    }
-
-    private void addInterest(int i)
-    {
-        selKey.interestOps(selKey.interestOps() | i);
-        if (log.isDebugEnabled()) {
-            log.debug("Interest now {}", selKey.interestOps());
-        }
-    }
-
-    private void removeInterest(int i)
-    {
-        if (selKey.isValid()) {
-            selKey.interestOps(selKey.interestOps() & ~i);
-            if (log.isDebugEnabled()) {
-                log.debug("Interest now {}", selKey.interestOps());
-            }
-        }
     }
 
     @Override
@@ -289,13 +264,6 @@ public class NIOSocketHandle
         }
     }
 
-    private void queueWrite(QueuedWrite qw)
-    {
-        addInterest(SelectionKey.OP_WRITE);
-        writeQueue.addLast(qw);
-        queuedBytes += qw.getLength();
-    }
-
     @Override
     public int getWritesOutstanding()
     {
@@ -378,25 +346,8 @@ public class NIOSocketHandle
         }
     }
 
-    protected void clientSelected(SelectionKey key)
-    {
-        if (log.isDebugEnabled()) {
-            log.debug("Client {} selected: interest = {} r = {} w = {} c = {}", clientChannel,
-                      selKey.interestOps(), key.isReadable(), key.isWritable(), key.isConnectable());
-        }
-
-        if (key.isValid() && key.isConnectable()) {
-            processConnect();
-        }
-        if (key.isValid() && (key.isWritable() || writeReady)) {
-            processWrites();
-        }
-        if (key.isValid() && key.isReadable()) {
-            processReads();
-        }
-    }
-
-    private void processConnect()
+    @Override
+    protected void processConnect()
     {
         try {
             removeInterest(SelectionKey.OP_CONNECT);
@@ -422,7 +373,8 @@ public class NIOSocketHandle
         }
     }
 
-    private void processWrites()
+    @Override
+    protected void processWrites()
     {
         writeReady = true;
         removeInterest(SelectionKey.OP_WRITE);
@@ -472,7 +424,8 @@ public class NIOSocketHandle
         }
     }
 
-    private void processReads()
+    @Override
+    protected void processReads()
     {
         if (!readStarted) {
             return;
@@ -544,81 +497,6 @@ public class NIOSocketHandle
                 log.error("Error setting TCP keep alive on {}: {}", this, e);
                 throw new NodeOSException(Constants.EIO);
             }
-        }
-    }
-
-    private NetworkPolicy getNetworkPolicy()
-    {
-        if (runtime.getSandbox() == null) {
-            return null;
-        }
-        return runtime.getSandbox().getNetworkPolicy();
-    }
-
-    public static class QueuedWrite
-    {
-        ByteBuffer buf;
-        int length;
-        HandleListener listener;
-        Object context;
-        boolean shutdown;
-
-        public QueuedWrite(ByteBuffer buf, HandleListener listener, Object context)
-        {
-            this.buf = buf;
-            this.length = (buf == null ? 0 : buf.remaining());
-            this.listener = listener;
-            this.context = context;
-        }
-
-        public ByteBuffer getBuf()
-        {
-            return buf;
-        }
-
-        public void setBuf(ByteBuffer buf)
-        {
-            this.buf = buf;
-        }
-
-        public int getLength()
-        {
-            return length;
-        }
-
-        public void setLength(int length)
-        {
-            this.length = length;
-        }
-
-        public HandleListener getListener()
-        {
-            return listener;
-        }
-
-        public void setListener(HandleListener listener)
-        {
-            this.listener = listener;
-        }
-
-        public Object getContext()
-        {
-            return context;
-        }
-
-        public void setContext(Object context)
-        {
-            this.context = context;
-        }
-
-        public boolean isShutdown()
-        {
-            return shutdown;
-        }
-
-        public void setShutdown(boolean shutdown)
-        {
-            this.shutdown = shutdown;
         }
     }
 }

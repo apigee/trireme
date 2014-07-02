@@ -25,7 +25,10 @@ import io.apigee.trireme.core.NetworkPolicy;
 import io.apigee.trireme.core.NodeRuntime;
 import io.apigee.trireme.core.ScriptTask;
 import io.apigee.trireme.core.InternalNodeModule;
+import io.apigee.trireme.core.internal.NodeOSException;
 import io.apigee.trireme.core.internal.ScriptRunner;
+import io.apigee.trireme.core.internal.handles.HandleListener;
+import io.apigee.trireme.core.internal.handles.NIODatagramHandle;
 import io.apigee.trireme.net.NetUtils;
 import org.mozilla.javascript.Context;
 import org.mozilla.javascript.Function;
@@ -40,14 +43,9 @@ import org.slf4j.LoggerFactory;
 
 import static io.apigee.trireme.core.ArgUtils.*;
 
-import java.io.IOException;
 import java.lang.reflect.InvocationTargetException;
-import java.net.BindException;
-import java.net.DatagramPacket;
-import java.net.DatagramSocket;
 import java.net.InetSocketAddress;
-import java.net.SocketException;
-import java.util.ArrayDeque;
+import java.nio.ByteBuffer;
 
 public class UDPWrap
     implements InternalNodeModule
@@ -75,14 +73,13 @@ public class UDPWrap
 
     public static class UDPImpl
         extends Referenceable
+        implements HandleListener
     {
         public static final String CLASS_NAME = "UDP";
 
         private Function onMessage;
-        private DatagramSocket socket;
-        private final ArrayDeque<QueuedWrite> writeQueue = new ArrayDeque<QueuedWrite>();
-        private Thread readThread;
         private ScriptRunner runner;
+        private NIODatagramHandle handle;
 
         @JSConstructor
         @SuppressWarnings("unused")
@@ -122,31 +119,14 @@ public class UDPWrap
             int options = intArg(args, 2);
             UDPImpl self = (UDPImpl)thisObj;
 
-            boolean success = false;
+            self.handle = new NIODatagramHandle(self.runner);
             try {
-                InetSocketAddress targetAddress = new InetSocketAddress(address, port);
+                self.handle.bind(address, port);
                 clearErrno();
-
-                self.socket = new DatagramSocket(targetAddress);
-                if (log.isDebugEnabled()) {
-                    log.debug("UDP socket {} bound to {}}", self.socket, targetAddress);
-                }
-
-                success = true;
                 return 0;
-
-            } catch (BindException be) {
-                log.debug("Error listening: {}", be);
-                setErrno(Constants.EADDRINUSE);
+            } catch (NodeOSException nse) {
+                setErrno(nse.getCode());
                 return -1;
-            } catch (IOException ioe) {
-                log.debug("Error on bind: {}", ioe);
-                setErrno(Constants.EIO);
-                return -1;
-            } finally {
-                if (!success && (self.socket != null)) {
-                    self.socket.close();
-                }
             }
         }
 
@@ -162,11 +142,8 @@ public class UDPWrap
         public void close()
         {
             super.close();
-            if (socket != null) {
-                if (log.isDebugEnabled()) {
-                    log.debug("Closing {}", socket);
-                }
-                socket.close();
+            if (handle != null) {
+                handle.close();
             }
         }
 
@@ -182,51 +159,26 @@ public class UDPWrap
             String host = stringArg(args, 4);
             final UDPImpl self = (UDPImpl)thisObj;
 
-            final InetSocketAddress address = new InetSocketAddress(host, port);
-            NetworkPolicy netPolicy = self.getNetworkPolicy();
-            if ((netPolicy != null) && !netPolicy.allowConnection(address)) {
-                log.debug("Address {} not allowed by network policy", address);
-                setErrno(Constants.EINVAL);
-                return -1;
-            }
-
             clearErrno();
             final QueuedWrite qw = (QueuedWrite)cx.newObject(thisObj, QueuedWrite.CLASS_NAME);
-            qw.initialize(buf.getArray(), buf.getArrayOffset() + offset, length, address);
+            qw.buf = buf;
+            qw.domain = self.runner.getDomain();
 
-            final DatagramPacket packet = new DatagramPacket(qw.buf, qw.offset, qw.length,
-                                                             address.getAddress(), port);
-            final Scriptable domain = self.runner.getDomain();
-
-            self.runner.getAsyncPool().execute(new Runnable()
-            {
-                @Override
-                public void run()
-                {
-                    try {
-                        if (log.isDebugEnabled()) {
-                            log.debug("Sending UDP packet {} to {} with {} ", packet, address, self.socket);
-                        }
-                        self.socket.send(packet);
-
+            ByteBuffer bbuf = buf.getBuffer();
+            try {
+                self.handle.send(host, port, bbuf, self, qw);
+            } catch (final NodeOSException nse) {
+                self.runner.enqueueTask(new ScriptTask() {
+                    @Override
+                    public void execute(Context cx, Scriptable scope)
+                    {
                         if (qw.onComplete != null) {
-                            self.runner.enqueueCallback(qw.onComplete,
-                                                        self, null, domain,
-                                                        new Object[] { 0, self, qw, buf });
-                        }
-
-                    } catch (IOException ioe) {
-                        if (log.isDebugEnabled()) {
-                            log.debug("Error sending UDP packet to {} with {}: {}", address, self.socket, ioe);
-                        }
-                        if (qw.onComplete != null) {
-                            self.runner.enqueueCallback(qw.onComplete,
-                                                        self, null, domain,
-                                                        new Object[] { Constants.EIO, self, qw, buf });
+                            qw.onComplete.call(cx, scope, null,
+                              new Object[] { nse.getCode(), self, qw, buf });
                         }
                     }
-                }
-            });
+                });
+            }
 
             return qw;
         }
@@ -242,57 +194,11 @@ public class UDPWrap
         @SuppressWarnings("unused")
         public void recvStart()
         {
-            final UDPImpl self = this;
-            final Scriptable domain = runner.getDomain();
             clearErrno();
-            if (readThread == null) {
-                readThread = new Thread(new Runnable() {
-                    @Override
-                    public void run() {
-                        if (log.isDebugEnabled()) {
-                            log.debug("Starting to receive UDP packets from {}", socket);
-                        }
-                        try {
-                            int recvLen = socket.getReceiveBufferSize();
-                            final byte[] recvBuf = new byte[recvLen];
-
-                            while (true) {
-                                final DatagramPacket packet = new DatagramPacket(recvBuf, recvLen);
-                                socket.receive(packet);
-                                if (log.isDebugEnabled()) {
-                                    log.debug("Received {}", packet);
-                                }
-                                if (packet.getLength() > 0) {
-                                    runner.enqueueTask(new ScriptTask()
-                                    {
-                                        @Override
-                                        public void execute(Context cx, Scriptable scope)
-                                        {
-                                            Buffer.BufferImpl buf =
-                                                Buffer.BufferImpl.newBuffer(cx, scope, recvBuf,
-                                                                            packet.getOffset(), packet.getLength());
-                                            if (onMessage != null) {
-                                                Scriptable rinfo = cx.newObject(self);
-                                                rinfo.put("port", rinfo, packet.getPort());
-                                                rinfo.put("address", rinfo, packet.getAddress().getHostAddress());
-                                                onMessage.call(cx, onMessage, self,
-                                                               new Object[] { self, buf, 0, packet.getLength(), rinfo });
-                                            }
-                                        }
-                                    }, domain);
-                                }
-                            }
-                        } catch (IOException ioe) {
-                            if (log.isDebugEnabled()) {
-                                log.debug("Error receiving from UDP socket {}: exiting", socket);
-                            }
-                        }
-                    }
-                }, "Trireme UDP read thread");
-                ref();
-                readThread.setDaemon(true);
-                readThread.start();
+            if (handle != null) {
+                handle.startReading(this, null);
             }
+            ref();
         }
 
         @JSFunction
@@ -301,9 +207,8 @@ public class UDPWrap
         {
             unref();
             clearErrno();
-            if (readThread != null) {
-                readThread.interrupt();
-                readThread = null;
+            if (handle != null) {
+                handle.stopReading();
             }
         }
 
@@ -315,7 +220,7 @@ public class UDPWrap
             InetSocketAddress addr;
 
             clearErrno();
-            addr = (InetSocketAddress)(self.socket.getLocalSocketAddress());
+            addr = self.handle.getSockName();
             if (addr == null) {
                 return null;
             }
@@ -343,31 +248,49 @@ public class UDPWrap
         @SuppressWarnings("unused")
         public static int setMulticastTTL(Context cx, Scriptable thisObj, Object[] args, Function func)
         {
-            setErrno(Constants.EINVAL);
-            return -1;
+            int ttl = intArg(args, 0);
+            UDPImpl self = (UDPImpl)thisObj;
+
+            try {
+                self.handle.setMulticastTtl(ttl);
+                clearErrno();
+                return 0;
+            } catch (NodeOSException nse) {
+                setErrno(nse.getCode());
+                return -1;
+            }
         }
 
         @JSFunction
         @SuppressWarnings("unused")
         public static int setMulticastLoopback(Context cx, Scriptable thisObj, Object[] args, Function func)
         {
-            setErrno(Constants.EINVAL);
-            return -1;
+            int loop = intArg(args, 0);
+            UDPImpl self = (UDPImpl)thisObj;
+
+            try {
+                self.handle.setMulticastLoopback(loop != 0);
+                clearErrno();
+                return 0;
+            } catch (NodeOSException nse) {
+                setErrno(nse.getCode());
+                return -1;
+            }
         }
 
         @JSFunction
         @SuppressWarnings("unused")
-        public int setBroadcast(int on)
+        public static int setBroadcast(Context cx, Scriptable thisObj, Object[] args, Function func)
         {
+            int broadcastOn = intArg(args, 0);
+            UDPImpl self = (UDPImpl)thisObj;
+
             try {
+                self.handle.setBroadcast(broadcastOn != 0);
                 clearErrno();
-                if (socket != null) {
-                    socket.setBroadcast(on != 0);
-                }
                 return 0;
-            } catch (SocketException se) {
-                log.debug("Error setting broadcast flag to {}: {}", on, se);
-                setErrno(Constants.EIO);
+            } catch (NodeOSException nse) {
+                setErrno(nse.getCode());
                 return -1;
             }
         }
@@ -376,8 +299,8 @@ public class UDPWrap
         @SuppressWarnings("unused")
         public static int setTTL(Context cx, Scriptable thisObj, Object[] args, Function func)
         {
-            // TODO not implements
-            return 0;
+            setErrno(Constants.EINVAL);
+            return -1;
         }
 
         private NetworkPolicy getNetworkPolicy()
@@ -387,6 +310,64 @@ public class UDPWrap
             }
             return getRunner().getSandbox().getNetworkPolicy();
         }
+
+        @Override
+        public void onWriteComplete(int bytesWritten, boolean inScriptThread, Object context)
+        {
+            QueuedWrite qw = (QueuedWrite)context;
+            if (qw.onComplete != null) {
+                runner.enqueueCallback(qw.onComplete,
+                                       this, null, qw.domain,
+                                       new Object[] { 0, this, qw, qw.buf });
+            }
+        }
+
+        @Override
+        public void onWriteError(String err, boolean inScriptThread, Object context)
+        {
+            QueuedWrite qw = (QueuedWrite)context;
+            if (qw.onComplete != null) {
+                runner.enqueueCallback(qw.onComplete,
+                                       this, null, qw.domain,
+                                       new Object[] { Constants.EIO, this, qw, qw.buf });
+            }
+        }
+
+        @Override
+        public void onReadComplete(final ByteBuffer bbuf, boolean inScriptThread, final Object context)
+        {
+            runner.enqueueTask(new ScriptTask() {
+                @Override
+                public void execute(Context cx, Scriptable scope)
+                {
+                    if (onMessage != null) {
+                        InetSocketAddress addr = (InetSocketAddress)context;
+                        Buffer.BufferImpl buf =
+                            Buffer.BufferImpl.newBuffer(cx, scope, bbuf, false);
+                        Scriptable rinfo = cx.newObject(UDPImpl.this);
+                        rinfo.put("port", rinfo, addr.getPort());
+                        rinfo.put("address", rinfo, addr.getHostString());
+                        onMessage.call(cx, onMessage, UDPImpl.this,
+                                       new Object[] { UDPImpl.this, buf, 0, buf.getLength(), rinfo });
+                    }
+                }
+            });
+        }
+
+        @Override
+        public void onReadError(String err, boolean inScriptThread, Object context)
+        {
+            runner.enqueueTask(new ScriptTask() {
+                @Override
+                public void execute(Context cx, Scriptable scope)
+                {
+                    if (onMessage != null) {
+                        onMessage.call(cx, onMessage, UDPImpl.this,
+                                       new Object[] { UDPImpl.this, null, Constants.EIO, 0 });
+                    }
+                }
+            });
+        }
     }
 
     public static class QueuedWrite
@@ -394,19 +375,9 @@ public class UDPWrap
     {
         public static final String CLASS_NAME = "_writeWrap";
 
-        byte[] buf;
-        int offset;
-        int length;
         Function onComplete;
-        InetSocketAddress address;
-
-        void initialize(byte[] buf, int offset, int length, InetSocketAddress address)
-        {
-            this.buf = buf;
-            this.offset = offset;
-            this.length = length;
-            this.address = address;
-        }
+        Scriptable domain;
+        Buffer.BufferImpl buf;
 
         @Override
         public String getClassName()

@@ -60,9 +60,9 @@
         <version>1.0.9</version>
       </dependency>
       <dependency>
-        <groupId>org.mozilla</groupId>
+        <groupId>io.apigee</groupId>
         <artifactId>rhino</artifactId>
-        <version>1.7R4</version>
+        <version>1.7R5pre3-SNAPSHOT</version>
       </dependency>
       <dependency>
         <groupId>io.netty</groupId>

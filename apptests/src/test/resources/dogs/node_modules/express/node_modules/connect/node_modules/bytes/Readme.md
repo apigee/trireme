@@ -16,6 +16,9 @@ bytes('1gb')
 
 bytes(1073741824)
 // => 1gb
+
+bytes(1099511627776)
+// => 1tb
 ```
 
 ## Installation

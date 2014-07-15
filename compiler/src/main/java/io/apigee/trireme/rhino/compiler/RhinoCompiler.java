@@ -131,7 +131,7 @@ public class RhinoCompiler
                     try {
                         Object[] bytes;
                         try {
-                            bytes = compiler.compileToClassFiles(loadSource(input), input.getPath(),
+                            bytes = compiler.compileToClassFiles(loadSource(input), input.getName(),
                                                                  1, className);
                         } catch (RhinoException re) {
                             throw new MojoExecutionException(

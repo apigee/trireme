@@ -29,6 +29,8 @@ import io.apigee.trireme.core.spi.NodeImplementation;
 import io.apigee.trireme.net.spi.HttpServerContainer;
 import org.mozilla.javascript.Context;
 import org.mozilla.javascript.ContextFactory;
+import org.mozilla.javascript.RhinoException;
+import org.mozilla.javascript.StackStyle;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -287,6 +289,13 @@ public class NodeEnvironment
         synchronized (initializationLock) {
             if (initialized) {
                 return;
+            }
+
+            try {
+                RhinoException.setStackStyle(StackStyle.V8);
+            } catch (Throwable t) {
+                // Be forgiving of people running old Rhino versions
+                log.debug("Running on a version of Rhino without V8-style stack traces");
             }
 
             if (sandbox != null) {

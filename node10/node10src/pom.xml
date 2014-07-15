@@ -24,7 +24,7 @@
       <version>0.7.6-SNAPSHOT</version>
     </dependency>
     <dependency>
-      <groupId>org.mozilla</groupId>
+      <groupId>io.apigee</groupId>
       <artifactId>rhino</artifactId>
     </dependency>
 

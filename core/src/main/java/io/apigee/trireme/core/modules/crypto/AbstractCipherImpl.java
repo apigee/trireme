@@ -168,12 +168,16 @@ public abstract class AbstractCipherImpl
     protected Object update(Context cx, Object[] args)
     {
         ensureArg(args, 0);
+        String enc = stringArg(args, 1, "binary");
         ByteBuffer buf;
 
         initCipher(cx);
 
         if (args[0] instanceof String) {
-            String enc = stringArg(args, 1, "binary");
+            // Support incorrect code that passes a string with no encoding specified
+            if ("buffer".equals(enc)) {
+                enc = "binary";
+            }
             buf = Utils.stringToBuffer((String)args[0], Charsets.get().resolveCharset(enc));
         } else {
             Buffer.BufferImpl jsBuf = objArg(args, 0, Buffer.BufferImpl.class, true);

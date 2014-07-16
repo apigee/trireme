@@ -125,13 +125,6 @@ public class UDPWrap
             boolean success = false;
             try {
                 InetSocketAddress targetAddress = new InetSocketAddress(address, port);
-                NetworkPolicy netPolicy = self.getNetworkPolicy();
-                if ((netPolicy != null) && !netPolicy.allowListening(targetAddress)) {
-                    log.debug("Address {} not allowed by network policy", targetAddress);
-                    setErrno(Constants.EINVAL);
-                    return -1;
-                }
-
                 clearErrno();
 
                 self.socket = new DatagramSocket(targetAddress);
@@ -191,7 +184,7 @@ public class UDPWrap
 
             final InetSocketAddress address = new InetSocketAddress(host, port);
             NetworkPolicy netPolicy = self.getNetworkPolicy();
-            if ((netPolicy != null) && !netPolicy.allowListening(address)) {
+            if ((netPolicy != null) && !netPolicy.allowConnection(address)) {
                 log.debug("Address {} not allowed by network policy", address);
                 setErrno(Constants.EINVAL);
                 return -1;

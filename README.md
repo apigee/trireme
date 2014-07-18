@@ -58,7 +58,7 @@ although it may not necessarily pass all the node.js tests.
   <tr><td>child_process</td><td>Partial</td><td>Trireme</td></tr>
   <tr><td>cluster</td><td>Not Implemented Yet</td><td>node.js</td></tr>
   <tr><td>console</td><td>Complete</td><td>node.js</td></tr>
-  <tr><td>crypto</td><td>Almost Complete</td><td>node.js + Trireme</td></tr>
+  <tr><td>crypto</td><td>Complete</td><td>node.js + Trireme</td></tr>
   <tr><td>debugger</td><td>Not Supported</td><td><NA/td></tr>
   <tr><td>dgram</td><td>Partial</td><td>node.js + Trireme</td></tr>
   <tr><td>dns</td><td>Partial</td><td>Trireme</td></tr>
@@ -179,29 +179,12 @@ In addition, the following is also valid, and "trireme-crypto" will not be neede
 
 ### Crypto
 
-With the combination of the built-in crypto support in Java, plus Bouncy Castle, crypto support is mostly
-complete.
-
 Like TLS, certain features (Sign/Verify in particular) only work if the "trireme-crypto" module and its
 dependencies are in the class path. If they are not present then these methods will throw an exception.
+This is primarily because the trireme-crypto module uses Bouncy Castle to implement PEM file reading
+and decryption.
 
-The following crypto features
-work the same way in Trireme as they do in standard Node.js:
-
-* Random bytes
-* Hash
-* Hmac
-* Sign / Verify (requires the "crypto" module because it handles PEM files)
-* Cipher / Decipher (DES, Triple DES, and AES support)
-* Diffie-Hellman
-* PBKDF2 (however Java and OpenSSL appear to implement different algorithms, so some more work is required)
-
-The following features have not yet been implemented (although the underlying platform has all the support required
-to make it happen):
-
-* DSA Signatures
-
-Finally, the "Context" feature of the Crypto module is not implemented. This module is really used inside Node.js
+Also, the "Context" feature of the Crypto module is not implemented. This module is really used inside Node.js
 to implement TLS, and Trireme does TLS a different way, as explained above.
 
 ### Child Process

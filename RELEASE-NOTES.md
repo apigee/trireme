@@ -1,3 +1,38 @@
+# 0.8.0 17-Jul-2014:
+
+This release fixes many compatibility issues with standard Node. The most significant is that we have switched
+from the old "org.mozilla.rhino" to "io.apigee.rhino", and to the latest release of 1.7R5pre3. This has
+a lot of fixes that improve compatibility with V8.
+
+Trireme itself will continue to function on older versions of Rhino, but for best results, follow the
+POM and use the one that is specified here...
+
+* [Issue 17](https://github.com/apigee/trireme/issues/17) Support DSA signing and verification to complete the
+"crypto" module.
+* [Issue 24](https://github.com/apigee/trireme/issues/24) Small tweaks to string encoding and decoding for
+a small performance gain.
+* [Issue 42](https://github.com/apigee/trireme/issues/42) Implement "trimLeft" and "trimRight" on the String
+prototype even if they are not supported by the JavaScript runtime. This un-breaks the "jade" template
+engine.
+* [Issue 62](https://github.com/apigee/trireme/issues/62) Make Java 6 filesystem code throw the same errors
+for symlinks and chmod as in Java 7.
+* [Issue 63](https://github.com/apigee/trireme/issues/63) Allow process.argv to be replaced.
+* [Issue 64](https://github.com/apigee/trireme/issues/64) Explicitly ignore the second argument to the global
+"escape()" function. This un-breaks several Amazon AWS modules.
+* [Issue 67](https://github.com/apigee/trireme/issues/67) Support Error.captureStackTrace() and
+Error.prepareStackTrace() for better Node.js compatibility. This un-breaks the latest versions of Express
+3.x.
+* [Issue 68](https://github.com/apigee/trireme/issues/68) Support string arguments to Cipher.update that
+have no encoding. This un-breaks the "httpntlm" module.
+* [Issue 69](https://github.com/apigee/trireme/issues/69) Thanks to issue 67, update tests to Express 3.12.1
+to ensure that it keeps working.
+* [Issue 70](https://github.com/apigee/trireme/issues/70) Don't use the "NetworkPolicy" in the Sandbox to control
+UDP ports. This makes it possible to send and receive UDP datagrams even if the NetworkPolicy does not
+allow listening on any port.
+* [Issue 71](https://github.com/apigee/trireme/issues/71) Upgrade from org.mozilla.rhino version 1.7R4 to
+io.apigee.rhino version 1.7R5pre3. This adds a number of compatibility fixes that make more V8 code run
+unmodified inside Trireme.
+
 # 0.7.5 16-May-2014:
 
 * [Issue 56](https://github.com/apigee/trireme/issues/56) Support Windows. This entails a bunch of work around

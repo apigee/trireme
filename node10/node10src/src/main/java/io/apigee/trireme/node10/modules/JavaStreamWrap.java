@@ -153,7 +153,7 @@ public class JavaStreamWrap
 
             self.readStop();
             self.handle.close();
-            self.unref();
+            self.close();
 
             if (cb != null) {
                 self.runtime.enqueueCallback(cb, self, null,

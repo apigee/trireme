@@ -33,6 +33,7 @@ import java.io.IOException;
 import java.net.BindException;
 import java.net.InetSocketAddress;
 import java.net.SocketAddress;
+import java.net.SocketException;
 import java.net.StandardSocketOptions;
 import java.nio.ByteBuffer;
 import java.nio.channels.ClosedChannelException;
@@ -47,6 +48,7 @@ public class NIODatagramHandle
     private DatagramChannel channel;
     private boolean readStarted;
     private HandleListener listener;
+    private ByteBuffer receiveBuffer;
 
     public NIODatagramHandle(NodeRuntime runtime)
     {
@@ -59,11 +61,6 @@ public class NIODatagramHandle
         InetSocketAddress bound = new InetSocketAddress(address, port);
         if (bound.isUnresolved()) {
             throw new NodeOSException(Constants.ENOENT);
-        }
-        NetworkPolicy netPolicy = getNetworkPolicy();
-        if ((netPolicy != null) && !netPolicy.allowListening(bound)) {
-            log.debug("Address {} not allowed by network policy", bound);
-            throw new NodeOSException(Constants.EINVAL);
         }
 
         boolean success = false;
@@ -204,6 +201,13 @@ public class NIODatagramHandle
     {
         if (!readStarted) {
             this.listener = listener;
+            if (receiveBuffer == null) {
+                try {
+                    receiveBuffer = ByteBuffer.allocate(channel.socket().getReceiveBufferSize());
+                } catch (SocketException ignore) {
+                    // We only get here if the channel has been closed
+                }
+            }
             addInterest(SelectionKey.OP_READ);
             readStarted = true;
         }
@@ -229,9 +233,8 @@ public class NIODatagramHandle
         do {
             ByteBuffer buf = null;
             try {
-                // TODO this is wayyy too big. Try a shared buffer instead.
-                buf = ByteBuffer.allocate(channel.socket().getReceiveBufferSize());
-                addr = channel.receive(buf);
+                receiveBuffer.clear();
+                addr = channel.receive(receiveBuffer);
 
             } catch (IOException ioe) {
                 if (log.isDebugEnabled()) {
@@ -243,8 +246,13 @@ public class NIODatagramHandle
                 log.debug("Read from {} into {}", channel, buf);
             }
             if (addr != null) {
-                buf.flip();
-                listener.onReadComplete(buf, true, addr);
+                // Copy the contents of the receive buffer into a temporary buffer, which will
+                // almost always be much smaller. Then clear the receive buffer so we can re-use it.
+                receiveBuffer.flip();
+                ByteBuffer readBuf = ByteBuffer.allocate(receiveBuffer.remaining());
+                readBuf.put(receiveBuffer);
+                readBuf.flip();
+                listener.onReadComplete(readBuf, true, addr);
             }
         } while (readStarted && (addr != null));
     }

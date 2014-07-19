@@ -184,7 +184,7 @@ public class ProcessWrap
         void initialize(ScriptRunner runner)
         {
             this.runner = runner;
-            ref();
+            requestPin();
         }
 
         @Override

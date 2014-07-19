@@ -656,10 +656,6 @@
         <Description>Actually works but not always on the CI machine</Description>
     </Excluded>
     <Excluded>
-        <Name>test-dgram-pingpong.js</Name>
-        <Description>Some sort of timing related failures.</Description>
-    </Excluded>
-    <Excluded>
         <Name>test-tls-server-large-request.js</Name>
         <Description>Some sort of timing related failures.</Description>
     </Excluded>
@@ -687,9 +683,6 @@
          JUST BROKEN
          These tests should be fixed but they are disabled so that we can track regression runs.
     -->
-    <Excluded>
-        <Name>test-dgram-unref.js</Name>
-    </Excluded>
     <Excluded>
         <Name>test-http-response-no-headers.js</Name>
     </Excluded>

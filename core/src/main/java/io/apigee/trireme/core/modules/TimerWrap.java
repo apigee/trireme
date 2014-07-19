@@ -89,7 +89,7 @@ public class TimerWrap
         public static Object newTimerImpl(Context cx, Object[] args, Function fn, boolean isNew)
         {
             TimerImpl t = new TimerImpl();
-            t.ref();
+            t.requestPin();
             return t;
         }
 
@@ -148,7 +148,6 @@ public class TimerWrap
             if (activity != null) {
                 activity.setCancelled(true);
             }
-            unref();
         }
 
         @Override

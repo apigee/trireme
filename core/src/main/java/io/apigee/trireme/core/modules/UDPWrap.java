@@ -198,14 +198,14 @@ public class UDPWrap
             if (handle != null) {
                 handle.startReading(this, null);
             }
-            ref();
+            requestPin();
         }
 
         @JSFunction
         @SuppressWarnings("unused")
         public void recvStop()
         {
-            unref();
+            clearPin();
             clearErrno();
             if (handle != null) {
                 handle.stopReading();
@@ -303,34 +303,36 @@ public class UDPWrap
             return -1;
         }
 
-        private NetworkPolicy getNetworkPolicy()
-        {
-            if (getRunner().getSandbox() == null) {
-                return null;
-            }
-            return getRunner().getSandbox().getNetworkPolicy();
-        }
-
         @Override
         public void onWriteComplete(int bytesWritten, boolean inScriptThread, Object context)
         {
-            QueuedWrite qw = (QueuedWrite)context;
-            if (qw.onComplete != null) {
-                runner.enqueueCallback(qw.onComplete,
-                                       this, null, qw.domain,
-                                       new Object[] { 0, this, qw, qw.buf });
-            }
+            final QueuedWrite qw = (QueuedWrite)context;
+            runner.enqueueTask(new ScriptTask() {
+                @Override
+                public void execute(Context cx, Scriptable scope)
+                {
+                    if (qw.onComplete != null) {
+                        qw.onComplete.call(cx, qw.onComplete, UDPImpl.this,
+                                           new Object[] { 0, UDPImpl.this, qw, qw.buf });
+                    }
+                }
+            });
         }
 
         @Override
         public void onWriteError(String err, boolean inScriptThread, Object context)
         {
-            QueuedWrite qw = (QueuedWrite)context;
-            if (qw.onComplete != null) {
-                runner.enqueueCallback(qw.onComplete,
-                                       this, null, qw.domain,
-                                       new Object[] { Constants.EIO, this, qw, qw.buf });
-            }
+            final QueuedWrite qw = (QueuedWrite)context;
+            runner.enqueueTask(new ScriptTask() {
+                @Override
+                public void execute(Context cx, Scriptable scope)
+                {
+                    if (qw.onComplete != null) {
+                        qw.onComplete.call(cx, qw.onComplete, UDPImpl.this,
+                                           new Object[] { Constants.EIO, UDPImpl.this, qw, qw.buf });
+                    }
+                }
+            });
         }
 
         @Override

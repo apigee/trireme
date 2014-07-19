@@ -29,7 +29,13 @@ import org.mozilla.javascript.annotations.JSFunction;
 public class Referenceable
     extends ScriptableObject
 {
-    protected boolean referenced;
+    /** If set, then the object has requested a pin from the OS */
+    private static final int PIN_REQUESTED = 0x01;
+    /** If set, then the user called "unref" which explicitly avoids the pinned state */
+    private static final int PIN_ALLOWED = 0x02;
+    private static final int PINNABLE = PIN_REQUESTED | PIN_ALLOWED;
+
+    private int pinState = PIN_ALLOWED;
 
     @Override
     public String getClassName()
@@ -37,31 +43,58 @@ public class Referenceable
         return "_Referenceable";
     }
 
+    private void updatePinState(int newState)
+    {
+        if ((pinState != PINNABLE) && (newState == PINNABLE)) {
+            getRunner().pin();
+        } else if ((pinState == PINNABLE) && (newState != PINNABLE)) {
+            getRunner().unPin();
+        }
+        pinState = newState;
+    }
+
+    /**
+     * Clear the state set by unref and pin the script if one had been previously requested.
+     */
     @JSFunction
     public void ref()
     {
         clearErrno();
-        if (!referenced) {
-            referenced = true;
-            getRunner().pin();
-        }
+        updatePinState(pinState | PIN_ALLOWED);
     }
 
+    /**
+     * Set a flag preventing this object from ever pinning the script even if a pin
+     * was requested and un-pin if it ever was.
+     */
     @JSFunction
     public void unref()
     {
         clearErrno();
-        if (referenced) {
-            referenced = false;
-            getRunner().unPin();
-        }
+        updatePinState(pinState & ~PIN_ALLOWED);
+    }
+
+    /**
+     * Set a flag requesting that we pin the script if it was not already pinned or unrefed.
+     */
+    protected void requestPin()
+    {
+        updatePinState(pinState | PIN_REQUESTED);
+    }
+
+    /**
+     * Clear the flag requesting that we pin the script.
+     */
+    protected void clearPin()
+    {
+        updatePinState(pinState & ~PIN_REQUESTED);
     }
 
     @JSFunction
     public void close()
     {
         clearErrno();
-        unref();
+        clearPin();
     }
 
     protected static void setErrno(String err)

@@ -22,10 +22,14 @@
 package io.apigee.trireme.core.internal;
 
 import io.apigee.trireme.core.NodeEnvironment;
+import org.mozilla.javascript.Callable;
 import org.mozilla.javascript.ClassShutter;
 import org.mozilla.javascript.Context;
 import org.mozilla.javascript.ContextFactory;
+import org.mozilla.javascript.Function;
 import org.mozilla.javascript.JavaScriptException;
+import org.mozilla.javascript.Scriptable;
+import org.mozilla.javascript.ScriptRuntime;
 
 import java.util.HashSet;
 
@@ -78,6 +82,18 @@ public class RhinoContextFactory
         if (System.currentTimeMillis() > (Long)timeoutObj) {
             throw new JavaScriptException("Script timed out");
         }
+    }
+
+    /**
+     * overwritten as Trireme sometimes calls
+     * {@link Function#call(Context, Scriptable, Scriptable, Object[])} with a
+     * <code>null</code> <tt>args</tt> parameter instead of passing
+     * {@link ScriptRuntime#emptyArgs} which causes {@link NullPointerException}
+     * in Rhino.
+     */
+    @Override
+    protected Object doTopCall(final Callable callable, final Context cx, final Scriptable scope, final Scriptable thisObj, final Object[] args) {
+        return super.doTopCall(callable, cx, scope, thisObj, args != null ? args : ScriptRuntime.emptyArgs);
     }
 
     /**

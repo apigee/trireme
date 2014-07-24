@@ -366,7 +366,7 @@ public class HTTPParser
             if (onMessageComplete == null) {
                 return;
             }
-            onMessageComplete.call(cx, onMessageComplete, this, null);
+            onMessageComplete.call(cx, onMessageComplete, this, org.mozilla.javascript.ScriptRuntime.emptyArgs);
         }
 
         private Scriptable buildHeaders(Context cx, HTTPParsingMachine.Result result)

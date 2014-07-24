@@ -106,7 +106,7 @@ public class BinaryCharset
                 if (!out.hasRemaining()) {
                     return CoderResult.OVERFLOW;
                 }
-                char c = (char)in.get();
+                char c = (char)(in.get() & 0xff); // unsigned conversion to stay in single character code points!
                 out.put(c);
             }
             return CoderResult.UNDERFLOW;

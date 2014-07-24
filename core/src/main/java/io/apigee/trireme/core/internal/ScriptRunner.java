@@ -319,6 +319,10 @@ public class ScriptRunner
     @Override
     public File translatePath(String path)
     {
+        // NIO does not like \\?\ UNC path prefix
+        if(path.startsWith("\\\\?\\"))
+            path = path.substring(4);
+
         File pf = new File(path);
         /*
         if (!pf.isAbsolute()) {

@@ -161,6 +161,26 @@ public class PathTranslator
     public String reverseTranslate(String path)
         throws IOException
     {
+        // mounts may be defined outside of root
+        if (!mounts.isEmpty()) {
+            String mountRoot = null;
+            String mountPath = path;
+            for (final Map.Entry<String, File> mount : mounts) {
+                final String realMount = mount.getValue().getPath();
+                if (path.startsWith(realMount)) {
+                    // We hit one of the "mounted filesystems," so reverse translate from here.
+                    final String remaining = path.substring(realMount.length());
+                    if (remaining.length() < mountPath.length()) {
+                        // first matching mount wins, unless a deeper match is found
+                        mountRoot = mount.getKey();
+                        mountPath = remaining;
+                    }
+                }
+            }
+            if (mountRoot != null) {
+                return mountRoot + mountPath;
+            }
+        }
         if (root == null) {
             return path;
         }

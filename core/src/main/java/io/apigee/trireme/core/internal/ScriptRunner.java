@@ -961,6 +961,7 @@ public class ScriptRunner
         Iterator<SelectionKey> keys = selector.selectedKeys().iterator();
         while (keys.hasNext()) {
             SelectionKey selKey = keys.next();
+            keys.remove();
             boolean timed = startTiming(cx);
             try {
                 ((SelectorHandler)selKey.attachment()).selected(selKey);
@@ -974,7 +975,6 @@ public class ScriptRunner
                     endTiming(cx);
                 }
             }
-            keys.remove();
         }
     }
 

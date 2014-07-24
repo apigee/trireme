@@ -48,6 +48,7 @@ import org.mozilla.javascript.RhinoException;
 import org.mozilla.javascript.Script;
 import org.mozilla.javascript.Scriptable;
 import org.mozilla.javascript.ScriptableObject;
+import org.mozilla.javascript.ScriptRuntime;
 import org.mozilla.javascript.Undefined;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -102,8 +103,35 @@ public class ScriptRunner
     private final IdentityHashMap<Closeable, Closeable> openHandles =
         new IdentityHashMap<Closeable, Closeable>();
 
-    private final  ConcurrentLinkedQueue<Activity> tickFunctions = new ConcurrentLinkedQueue<Activity>();
-    private final  PriorityQueue<Activity>       timerQueue    = new PriorityQueue<Activity>();
+    /**
+	 * called whenever some {@link Activity} is offered to
+	 * {@link #tickFunctions} or {@link #timerQueue}.
+	 */
+    public Runnable wakeup;
+
+    private final  ConcurrentLinkedQueue<Activity> tickFunctions = new ConcurrentLinkedQueue<Activity>() {
+    	@Override
+    	public boolean offer(Activity e) {
+			// sync with executeTicks() to maintain ordering of events!
+			synchronized (ScriptRunner.this) {
+				final boolean result = super.offer(e);
+				if (result && wakeup != null) {
+					wakeup.run();
+				}
+				return result;
+    		}
+    	};
+    };
+    private final  PriorityQueue<Activity>       timerQueue    = new PriorityQueue<Activity>() {
+    	@Override
+    	public boolean offer(Activity e) {
+    		final boolean result = super.offer(e);
+    		if(result && wakeup != null) {
+    			wakeup.run();
+    		}
+    		return result;
+    	};
+    };
     private final  Selector                      selector;
     private        int                           timerSequence;
     private final  AtomicInteger                 pinCount      = new AtomicInteger(0);
@@ -313,12 +341,35 @@ public class ScriptRunner
         }
     }
 
+	/**
+	 * whether any {@link Activity} exists in {@link #tickFunctions}.
+	 * 
+	 * @return whether any {@link Activity} exists in {@link #tickFunctions}.
+	 */
+	public boolean hasTickFunctions() {
+		return !tickFunctions.isEmpty();
+	}
+
+	/**
+	 * peeks the top {@link Activity} of {@link #timerQueue}.
+	 * 
+	 * @return top {@link Activity} of {@link #timerQueue}, maybe
+	 *         <code>null</code>.
+	 */
+	public Activity peekTimerQueue() {
+		return timerQueue.peek();
+	}
+
     /**
      * Translate a path based on the root.
      */
     @Override
     public File translatePath(String path)
     {
+        // NIO does not like \\?\ UNC path prefix
+        if(path.startsWith("\\\\?\\"))
+            path = path.substring(4);
+
         File pf = new File(path);
         /*
         if (!pf.isAbsolute()) {
@@ -623,6 +674,24 @@ public class ScriptRunner
 
     protected ScriptStatus runScript(Context cx)
     {
+    	ScriptStatus status = enterScript(cx);
+		if(status != null) {
+			return status;
+		}
+
+		try {
+			do {
+    			status = mainPump(cx);
+			} while(status == null);
+		} catch (IOException ioe) {
+			log.debug("I/O exception processing script: {}", ioe);
+			status = new ScriptStatus(ioe);
+		}
+    	return leaveScript(cx, status);
+    }
+
+    public ScriptStatus enterScript(Context cx)
+    {
         ScriptStatus status;
 
         cx.putThreadLocal(RUNNER, this);
@@ -692,6 +761,11 @@ public class ScriptRunner
             status = new ScriptStatus(t);
         }
 
+        return status;
+    }
+
+    public ScriptStatus leaveScript(Context cx, ScriptStatus status)
+    {
         log.debug("Script exiting with exit code {}", status.getExitCode());
 
         if (!status.hasCause() && !process.isExiting()) {
@@ -754,6 +828,14 @@ public class ScriptRunner
 
     private ScriptStatus mainLoop(Context cx)
         throws IOException
+    {
+    	// THIS FUNCTION IS A NOOP:
+    	// mainPump(cx) is called until non-null is returned instead!
+    	return null;
+    }
+
+    public ScriptStatus mainPump(Context cx)
+            throws IOException
     {
         // Exit if there's no work do to but only if we're not pinned by a module.
         // We might exit if there are events on the timer queue if they are not also pinned.
@@ -822,6 +904,7 @@ public class ScriptRunner
                 // if we get a RhinoException here, then we know that it is fatal.
                 return new ScriptStatus(re);
             }
+			return null;
         }
         return ScriptStatus.OK;
     }
@@ -961,6 +1044,7 @@ public class ScriptRunner
         Iterator<SelectionKey> keys = selector.selectedKeys().iterator();
         while (keys.hasNext()) {
             SelectionKey selKey = keys.next();
+            keys.remove();
             boolean timed = startTiming(cx);
             try {
                 ((SelectorHandler)selKey.attachment()).selected(selKey);
@@ -974,7 +1058,6 @@ public class ScriptRunner
                     endTiming(cx);
                 }
             }
-            keys.remove();
         }
     }
 

@@ -839,7 +839,7 @@ public class ProcessWrap
 
             try {
                 script =
-                    parent.runner.getEnvironment().createScript(scriptPath, new File(scriptPath),
+                    parent.runner.getEnvironment().createScript(scriptPath, parent.runner.translatePath(scriptPath),
                                                                 args.toArray(new String[args.size()]));
                 script.setSandbox(scriptSandbox);
                 script.setWorkingDirectory(cwd);

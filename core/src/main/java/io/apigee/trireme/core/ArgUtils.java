@@ -314,6 +314,13 @@ public class ArgUtils
             if (type.isInstance(args[pos])) {
                 return type.cast(args[pos]);
             } else {
+                Object arg = args[pos];
+                while(arg instanceof org.mozilla.javascript.Wrapper) {
+                    arg = ((org.mozilla.javascript.Wrapper)arg).unwrap();
+                    if(type.isInstance(arg)) {
+                        return type.cast(arg);
+                    }
+                }
                 if (required) {
                     throw new EvaluatorException("Object of type " + type + " expected");
                 } else {

@@ -29,6 +29,7 @@ import org.mozilla.javascript.Context;
 import org.mozilla.javascript.Function;
 import org.mozilla.javascript.Scriptable;
 import org.mozilla.javascript.ScriptableObject;
+import org.mozilla.javascript.ScriptRuntime;
 import org.mozilla.javascript.annotations.JSConstructor;
 import org.mozilla.javascript.annotations.JSFunction;
 import org.mozilla.javascript.annotations.JSGetter;
@@ -161,7 +162,7 @@ public class TimerWrap
                 if (domain != null) {
                     getRunner().getProcess().setDomain(domain);
                 }
-                onTimeout.call(cx, onTimeout, this, null);
+                onTimeout.call(cx, onTimeout, this, ScriptRuntime.emptyArgs);
                 if (domain != null) {
                     // Don't do this in a try...finally -- the main loop will catch the exception and clear the domain
                     getRunner().getProcess().setDomain(oldDomain);

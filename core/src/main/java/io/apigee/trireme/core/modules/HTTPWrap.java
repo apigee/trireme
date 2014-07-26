@@ -39,6 +39,7 @@ import org.mozilla.javascript.Function;
 import org.mozilla.javascript.RhinoException;
 import org.mozilla.javascript.Scriptable;
 import org.mozilla.javascript.ScriptableObject;
+import org.mozilla.javascript.ScriptRuntime;
 import org.mozilla.javascript.annotations.JSFunction;
 import org.mozilla.javascript.annotations.JSGetter;
 import org.mozilla.javascript.annotations.JSSetter;
@@ -827,7 +828,7 @@ public class HTTPWrap
                             // on an HTTP response, no need to get all upset about a close
                             if (closed) {
                                 ResponseAdapter.this.onChannelClosed.call(cx, ResponseAdapter.this.onChannelClosed,
-                                                                          ResponseAdapter.this, null);
+                                                                          ResponseAdapter.this, ScriptRuntime.emptyArgs);
                             } else {
                                 if (!success) {
                                     err = Utils.makeErrorObject(cx, ResponseAdapter.this,

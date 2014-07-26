@@ -46,6 +46,7 @@ import org.mozilla.javascript.Function;
 import org.mozilla.javascript.JavaScriptException;
 import org.mozilla.javascript.RhinoException;
 import org.mozilla.javascript.Script;
+import org.mozilla.javascript.ScriptRuntime;
 import org.mozilla.javascript.Scriptable;
 import org.mozilla.javascript.ScriptableObject;
 import org.mozilla.javascript.Undefined;
@@ -1314,7 +1315,7 @@ public class ScriptRunner
                     log.debug("Entering domain {}", System.identityHashCode(domain));
                 }
                 Function enter = (Function)ScriptableObject.getProperty(domain, "enter");
-                enter.call(cx, enter, domain, new Object[0]);
+                enter.call(cx, enter, domain, ScriptRuntime.emptyArgs);
             }
 
             task.execute(cx, scope);
@@ -1327,7 +1328,7 @@ public class ScriptRunner
                     log.debug("Exiting domain {}", System.identityHashCode(domain));
                 }
                 Function exit = (Function)ScriptableObject.getProperty(domain, "exit");
-                exit.call(cx, exit, domain, new Object[0]);
+                exit.call(cx, exit, domain, ScriptRuntime.emptyArgs);
             }
         }
     }

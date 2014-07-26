@@ -27,7 +27,6 @@ import io.apigee.trireme.core.internal.NodeExitException;
 import io.apigee.trireme.core.internal.ScriptRunner;
 import io.apigee.trireme.core.Utils;
 import io.apigee.trireme.core.internal.Platform;
-import io.apigee.trireme.core.internal.ScriptRunner;
 import io.apigee.trireme.core.internal.Version;
 import io.apigee.trireme.core.internal.handles.AbstractHandle;
 import io.apigee.trireme.core.internal.handles.ConsoleHandle;
@@ -36,6 +35,7 @@ import io.apigee.trireme.core.internal.handles.JavaOutputStreamHandle;
 import org.mozilla.javascript.Context;
 import org.mozilla.javascript.EvaluatorException;
 import org.mozilla.javascript.Function;
+import org.mozilla.javascript.ScriptRuntime;
 import org.mozilla.javascript.Scriptable;
 import org.mozilla.javascript.ScriptableObject;
 import org.mozilla.javascript.annotations.JSConstructor;
@@ -607,7 +607,7 @@ public class Process
         {
             // Reset this first because it's possible that we'll queue ticks while queuing ticks.
             needTickCallback = false;
-            tickSpinnerCallback.call(cx, tickSpinnerCallback, this, null);
+            tickSpinnerCallback.call(cx, tickSpinnerCallback, this, ScriptRuntime.emptyArgs);
         }
 
         public boolean isNeedTickCallback() {
@@ -687,7 +687,7 @@ public class Process
             if (log.isTraceEnabled()) {
                 log.trace("Calling immediate timer tasks");
             }
-            immediateCallback.call(cx, immediateCallback, this, null);
+            immediateCallback.call(cx, immediateCallback, this, ScriptRuntime.emptyArgs);
             if (log.isTraceEnabled()) {
                 log.trace("Immediate tasks done. needImmediateCallback = {}", needImmediateCallback);
             }

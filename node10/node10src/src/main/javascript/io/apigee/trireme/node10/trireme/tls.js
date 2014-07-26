@@ -731,6 +731,7 @@ CleartextStream.prototype.handleSSLError = function(err) {
     debug(this.id + ' Received an error (handshake complete = ' +
           this.handshakeComplete + '): ' + err);
   }
+  err = new Error('SSL Error: ' + err); // fix to emit error objects such that npm recognizes SSL errors
   if (this.handshakeComplete) {
     this.emit('error', err);
     doClose(this, true);

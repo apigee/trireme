@@ -85,7 +85,7 @@ public class ProcessWrap
 
     private static final Pattern EQUALS = Pattern.compile("=");
 
-    // A sentinal object for handling IPC "disconnect" events
+    // A sentinel object for handling IPC "disconnect" events
     public static final Object IPC_DISCONNECT = new Object();
 
     /**

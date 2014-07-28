@@ -331,17 +331,20 @@ public class NodeScript
      */
     public Scriptable _getProcessObject()
     {
-        if (runner == null) {
-            return null;
-        }
-        runner.awaitInitialization();
-        return runner.getProcess();
+        ScriptRunner runner = _getRuntime();
+        return (runner == null ? null : runner.getProcess());
     }
 
     /**
      * An internal method to get the runtime for this script.
      */
-    public ScriptRunner _getRuntime() {
+    public ScriptRunner _getRuntime()
+    {
+        if (runner == null) {
+            return null;
+        }
+        // Don't return it until it is usable for sending events.
+        runner.awaitInitialization();
         return runner;
     }
 }

@@ -33,6 +33,7 @@ import io.apigee.trireme.core.modules.crypto.DHImpl;
 import io.apigee.trireme.core.modules.crypto.DecipherImpl;
 import io.apigee.trireme.core.modules.crypto.HashImpl;
 import io.apigee.trireme.core.modules.crypto.MacImpl;
+import io.apigee.trireme.core.modules.crypto.SecureContextImpl;
 import io.apigee.trireme.core.modules.crypto.SignImpl;
 import io.apigee.trireme.core.modules.crypto.VerifyImpl;
 import org.mozilla.javascript.Context;
@@ -130,7 +131,7 @@ public class Crypto
         ScriptableObject.defineClass(export, DecipherImpl.class);
         ScriptableObject.defineClass(export, SignImpl.class);
         ScriptableObject.defineClass(export, VerifyImpl.class);
-        ScriptableObject.defineClass(export, SecureContext.class);
+        ScriptableObject.defineClass(export, SecureContextImpl.class);
         ScriptableObject.defineClass(export, DHImpl.class);
         ScriptableObject.defineClass(export, DHGroupImpl.class);
 
@@ -305,26 +306,6 @@ public class Crypto
 
         private void setRuntime(NodeRuntime runtime) {
             this.runtime = runtime;
-        }
-    }
-
-    /*
-     * This class seems to be used only by Node's implementation of TLS and we use SSLEngine for that anyway.
-     */
-    public static class SecureContext
-        extends ScriptableObject
-    {
-        @Override
-        public String getClassName()
-        {
-            return "SecureContext";
-        }
-
-        @JSConstructor
-        @SuppressWarnings("unused")
-        public static void construct(Context cx, Object[] args, Function ctor, boolean inNew)
-        {
-            throw Utils.makeError(cx, ctor, "SecureContext is not supported in Trireme");
         }
     }
 }

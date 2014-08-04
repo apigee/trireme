@@ -24,8 +24,7 @@ package io.apigee.trireme.crypto.algorithms;
 import io.apigee.trireme.core.internal.CryptoException;
 
 import java.io.IOException;
-import java.io.InputStream;
-import java.nio.charset.Charset;
+import java.io.Reader;
 import java.security.KeyPair;
 import java.security.PublicKey;
 
@@ -34,13 +33,11 @@ import java.security.PublicKey;
  */
 public abstract class KeyPairProvider
 {
-    public static final Charset ASCII = Charset.forName("ASCII");
-
     public abstract boolean isSupported(String algorithm);
 
-    public abstract KeyPair readKeyPair(String algorithm, InputStream is, char[] passphrase)
+    public abstract KeyPair readKeyPair(String algorithm, Reader rdr, char[] passphrase)
         throws CryptoException, IOException;
 
-    public abstract PublicKey readPublicKey(String algorithm, InputStream is)
+    public abstract PublicKey readPublicKey(String algorithm, Reader rdr)
         throws CryptoException, IOException;
 }

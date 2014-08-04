@@ -34,8 +34,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
-import java.io.InputStream;
-import java.io.InputStreamReader;
+import java.io.Reader;
 import java.security.GeneralSecurityException;
 import java.security.KeyFactory;
 import java.security.KeyPair;
@@ -56,10 +55,10 @@ public class RsaKeyPairProvider
     }
 
     @Override
-    public KeyPair readKeyPair(String algorithm, InputStream is, char[] passphrase)
+    public KeyPair readKeyPair(String algorithm, Reader rdr, char[] passphrase)
         throws CryptoException, IOException
     {
-        PEMParser pp = new PEMParser(new InputStreamReader(is, ASCII));
+        PEMParser pp = new PEMParser(rdr);
         try {
             Object po = pp.readObject();
             if (log.isDebugEnabled()) {
@@ -82,9 +81,9 @@ public class RsaKeyPairProvider
     }
 
     @Override
-    public PublicKey readPublicKey(String algorithm, InputStream is) throws CryptoException, IOException
+    public PublicKey readPublicKey(String algorithm, Reader rdr) throws CryptoException, IOException
     {
-        PEMParser pp = new PEMParser(new InputStreamReader(is, ASCII));
+        PEMParser pp = new PEMParser(rdr);
         try {
             Object po = pp.readObject();
             if (log.isDebugEnabled()) {

@@ -39,8 +39,12 @@ public interface CryptoService
 {
     KeyPair readKeyPair(String algorithm, InputStream is, char[] passphrase)
         throws IOException, CryptoException;
+    KeyPair readKeyPair(String algorithm, String pem, char[] passphrase)
+        throws IOException, CryptoException;
 
     PublicKey readPublicKey(String algorithm, InputStream is)
+        throws IOException, CryptoException;
+    PublicKey readPublicKey(String algorithm, String pem)
         throws IOException, CryptoException;
 
     X509Certificate readCertificate(InputStream is)

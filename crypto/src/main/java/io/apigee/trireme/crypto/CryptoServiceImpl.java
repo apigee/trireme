@@ -30,6 +30,10 @@ import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
 import java.io.InputStream;
+import java.io.InputStreamReader;
+import java.io.Reader;
+import java.io.StringReader;
+import java.nio.charset.Charset;
 import java.security.GeneralSecurityException;
 import java.security.KeyPair;
 import java.security.KeyStore;
@@ -50,6 +54,8 @@ public class CryptoServiceImpl
     public static final String RSA = "RSA";
     public static final String DSA = "DSA";
 
+    private static final Charset ASCII = Charset.forName("ascii");
+
     static {
         // Install Bouncy Castle. It will be at the end of the list, and it will not be selected
         // unless we explicitly ask for it.
@@ -64,15 +70,27 @@ public class CryptoServiceImpl
         return new BouncyCastleProvider();
     }
 
-    @Override
     public KeyPair readKeyPair(String algorithm, InputStream is, char[] passphrase)
+        throws IOException, CryptoException
+    {
+        return doReadKeyPair(algorithm, new InputStreamReader(is, ASCII), passphrase);
+    }
+
+    @Override
+    public KeyPair readKeyPair(String algorithm, String pem, char[] passphrase)
+        throws IOException, CryptoException
+    {
+        return doReadKeyPair(algorithm, new StringReader(pem), passphrase);
+    }
+
+    private KeyPair doReadKeyPair(String algorithm, Reader rdr, char[] passphrase)
         throws IOException, CryptoException
     {
         ServiceLoader<KeyPairProvider> algs =
             ServiceLoader.load(KeyPairProvider.class);
         for (KeyPairProvider p : algs) {
             if (p.isSupported(algorithm)) {
-                return p.readKeyPair(algorithm, is, passphrase);
+                return p.readKeyPair(algorithm, rdr, passphrase);
             }
         }
         throw new CryptoException("Unsupported key pair algorithm " + algorithm);
@@ -82,11 +100,24 @@ public class CryptoServiceImpl
     public PublicKey readPublicKey(String algorithm, InputStream is)
         throws IOException, CryptoException
     {
+       return doReadPublicKey(algorithm, new InputStreamReader(is, ASCII));
+    }
+
+    @Override
+    public PublicKey readPublicKey(String algorithm, String pem)
+        throws IOException, CryptoException
+    {
+        return doReadPublicKey(algorithm, new StringReader(pem));
+    }
+
+    private PublicKey doReadPublicKey(String algorithm, Reader rdr)
+        throws IOException, CryptoException
+    {
         ServiceLoader<KeyPairProvider> algs =
             ServiceLoader.load(KeyPairProvider.class);
         for (KeyPairProvider p : algs) {
             if (p.isSupported(algorithm)) {
-                return p.readPublicKey(algorithm, is);
+                return p.readPublicKey(algorithm, rdr);
             }
         }
         throw new CryptoException("Unsupported key pair algorithm " + algorithm);

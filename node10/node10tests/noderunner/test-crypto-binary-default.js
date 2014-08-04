@@ -48,7 +48,6 @@ var rsaPubPem = fs.readFileSync(common.fixturesDir + '/test_rsa_pubkey.pem',
 var rsaKeyPem = fs.readFileSync(common.fixturesDir + '/test_rsa_privkey.pem',
     'ascii');
 
-/* Trireme: No credentials support
 try {
   var credentials = crypto.createCredentials(
                                              {key: keyPem,
@@ -75,7 +74,6 @@ assert.throws(function() {
 assert.throws(function() {
   crypto.createCredentials({pfx:'sample', passphrase:'test'});
 }, 'not enough data');
-*/
 
 // Test HMAC
 var h1 = crypto.createHmac('sha1', 'Node')

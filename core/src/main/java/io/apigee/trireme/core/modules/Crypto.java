@@ -28,6 +28,7 @@ import io.apigee.trireme.core.InternalNodeModule;
 import io.apigee.trireme.core.Utils;
 import io.apigee.trireme.core.NodeRuntime;
 import io.apigee.trireme.core.modules.crypto.CipherImpl;
+import io.apigee.trireme.core.modules.crypto.ConnectionImpl;
 import io.apigee.trireme.core.modules.crypto.DHGroupImpl;
 import io.apigee.trireme.core.modules.crypto.DHImpl;
 import io.apigee.trireme.core.modules.crypto.DecipherImpl;
@@ -134,6 +135,7 @@ public class Crypto
         ScriptableObject.defineClass(export, SecureContextImpl.class);
         ScriptableObject.defineClass(export, DHImpl.class);
         ScriptableObject.defineClass(export, DHGroupImpl.class);
+        ScriptableObject.defineClass(export, ConnectionImpl.class);
 
         return export;
     }

@@ -45,6 +45,9 @@ public class NIODatagramHandle
 {
     private static final Logger log = LoggerFactory.getLogger(NIODatagramHandle.class);
 
+    /** Realistically actual UDP packets on the Internet are not gigantic. */
+    public static final int MAX_READ_BUFFER = 8192;
+
     private DatagramChannel channel;
     private boolean readStarted;
     private HandleListener listener;
@@ -203,7 +206,8 @@ public class NIODatagramHandle
             this.listener = listener;
             if (receiveBuffer == null) {
                 try {
-                    receiveBuffer = ByteBuffer.allocate(channel.socket().getReceiveBufferSize());
+                    receiveBuffer =
+                        ByteBuffer.allocate(Math.min(MAX_READ_BUFFER, channel.socket().getReceiveBufferSize()));
                 } catch (SocketException ignore) {
                     // We only get here if the channel has been closed
                 }

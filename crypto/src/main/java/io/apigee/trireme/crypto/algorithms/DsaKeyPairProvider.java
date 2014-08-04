@@ -29,7 +29,6 @@ import org.bouncycastle.asn1.ASN1Sequence;
 import org.bouncycastle.asn1.DERInteger;
 import org.bouncycastle.asn1.x509.AlgorithmIdentifier;
 import org.bouncycastle.asn1.x509.SubjectPublicKeyInfo;
-import org.bouncycastle.openssl.PEMKeyPair;
 import org.bouncycastle.openssl.PEMParser;
 import org.bouncycastle.util.io.pem.PemObject;
 import org.bouncycastle.util.io.pem.PemReader;
@@ -37,8 +36,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
-import java.io.InputStream;
-import java.io.InputStreamReader;
+import java.io.Reader;
 import java.security.GeneralSecurityException;
 import java.security.KeyFactory;
 import java.security.KeyPair;
@@ -65,10 +63,10 @@ public class DsaKeyPairProvider
      * p, q, g, y, and x. We construct the appropriate Java data structures after parsing those.
      */
     @Override
-    public KeyPair readKeyPair(String algorithm, InputStream is, char[] passphrase)
+    public KeyPair readKeyPair(String algorithm, Reader rdr, char[] passphrase)
         throws CryptoException, IOException
     {
-        PemReader reader = new PemReader(new InputStreamReader(is, ASCII));
+        PemReader reader = new PemReader(rdr);
 
         PemObject pemObj = reader.readPemObject();
         if (pemObj == null) {
@@ -129,10 +127,10 @@ public class DsaKeyPairProvider
      * integer representing y. We use those four parts to assemble a Java public key.
      */
     @Override
-    public PublicKey readPublicKey(String algorithm, InputStream is)
+    public PublicKey readPublicKey(String algorithm, Reader rdr)
         throws CryptoException, IOException
     {
-        PEMParser pp = new PEMParser(new InputStreamReader(is, ASCII));
+        PEMParser pp = new PEMParser(rdr);
         try {
             Object po = pp.readObject();
             if (log.isDebugEnabled()) {

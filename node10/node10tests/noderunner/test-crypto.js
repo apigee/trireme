@@ -41,25 +41,13 @@ var rsaPubPem = fs.readFileSync(common.fixturesDir + '/test_rsa_pubkey.pem',
 var rsaKeyPem = fs.readFileSync(common.fixturesDir + '/test_rsa_privkey.pem',
     'ascii');
 
-/*
- * Noderunner: Not supported yet
- */
-
-assert.throws(function() {
-  crypto.createCredentials(
-                                             {key: keyPem,
-                                               cert: certPem,
-                                               ca: caPem});
-});
-
-/*
 try {
   var credentials = crypto.createCredentials(
                                              {key: keyPem,
                                                cert: certPem,
                                                ca: caPem});
 } catch (e) {
-  console.log('Not compiled with OPENSSL support.');
+  console.log('Not compiled with OPENSSL support: %s: %s', e, e.stack);
   process.exit();
 }
 
@@ -79,7 +67,6 @@ assert.throws(function() {
 assert.throws(function() {
   crypto.createCredentials({pfx:'sample', passphrase:'test'});
 }, 'not enough data');
-*/
 
 // Test HMAC
 var h1 = crypto.createHmac('sha1', 'Node')

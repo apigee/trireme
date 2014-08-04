@@ -71,7 +71,7 @@ public class NIODatagramHandle
             channel = DatagramChannel.open();
             runtime.registerCloseable(channel);
             channel.configureBlocking(false);
-            channel.bind(bound);
+            channel.socket().bind(bound);
             selKey = channel.register(runtime.getSelector(), 0,
                              new SelectorHandler() {
                                  @Override
@@ -276,7 +276,7 @@ public class NIODatagramHandle
         throws NodeOSException
     {
         try {
-            channel.setOption(StandardSocketOptions.SO_BROADCAST, on);
+            channel.socket().setBroadcast(true);
         } catch (IOException e) {
             throw new NodeOSException(Constants.EIO, e);
         }
@@ -289,6 +289,9 @@ public class NIODatagramHandle
             channel.setOption(StandardSocketOptions.IP_MULTICAST_TTL, ttl);
         } catch (IOException e) {
             throw new NodeOSException(Constants.EIO, e);
+        } catch (NoClassDefFoundError cnfe) {
+            // This happens on Java 6
+            throw new NodeOSException(Constants.ESRCH, "Multicast not available on Java 6");
         }
     }
 
@@ -299,6 +302,9 @@ public class NIODatagramHandle
             channel.setOption(StandardSocketOptions.IP_MULTICAST_LOOP, on);
         } catch (IOException e) {
             throw new NodeOSException(Constants.EIO, e);
+        } catch (NoClassDefFoundError cnfe) {
+            // This happens on Java 6
+            throw new NodeOSException(Constants.ESRCH, "Multicast not available on Java 6");
         }
     }
 }

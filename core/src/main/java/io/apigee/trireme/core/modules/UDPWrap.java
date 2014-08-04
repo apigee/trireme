@@ -348,7 +348,7 @@ public class UDPWrap
                             Buffer.BufferImpl.newBuffer(cx, scope, bbuf, false);
                         Scriptable rinfo = cx.newObject(UDPImpl.this);
                         rinfo.put("port", rinfo, addr.getPort());
-                        rinfo.put("address", rinfo, addr.getHostString());
+                        rinfo.put("address", rinfo, addr.getAddress().getHostAddress());
                         onMessage.call(cx, onMessage, UDPImpl.this,
                                        new Object[] { UDPImpl.this, buf, 0, buf.getLength(), rinfo });
                     }

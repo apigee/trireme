@@ -75,6 +75,7 @@ import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
+import java.util.Collections;
 import java.util.HashSet;
 import java.util.List;
 import java.util.ServiceLoader;
@@ -442,7 +443,8 @@ public class SSLWrap
             // Add the CRL check if it was specified
             TrustManager[] tms = self.trustManagers;
             if ((self.trustManagers != null) && (self.crl != null)) {
-                tms[0] = new CompositeTrustManager((X509TrustManager)self.trustManagers[0], self.crl);
+                tms[0] = new CompositeTrustManager((X509TrustManager)self.trustManagers[0],
+                                                   Collections.singletonList(self.crl));
             }
 
             // On a client, we may want to use the default SSL context, which will automatically check
@@ -471,7 +473,8 @@ public class SSLWrap
                     factory.init(self.trustedCertStore);
                     self.trustedCertManager = (X509TrustManager)factory.getTrustManagers()[0];
                     if (self.crl != null) {
-                        self.trustedCertManager = new CompositeTrustManager(self.trustedCertManager, self.crl);
+                        self.trustedCertManager = new CompositeTrustManager(self.trustedCertManager,
+                                                                            Collections.singletonList(self.crl));
                     }
                 } catch (GeneralSecurityException gse) {
                     throw Utils.makeError(cx, thisObj, gse.toString());

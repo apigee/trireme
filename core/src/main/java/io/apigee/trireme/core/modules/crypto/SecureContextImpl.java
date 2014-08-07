@@ -23,6 +23,7 @@ package io.apigee.trireme.core.modules.crypto;
 
 import io.apigee.trireme.core.Utils;
 import io.apigee.trireme.core.internal.Charsets;
+import io.apigee.trireme.core.internal.CompositeTrustManager;
 import io.apigee.trireme.core.internal.CryptoException;
 import io.apigee.trireme.core.internal.SSLCiphers;
 import io.apigee.trireme.core.modules.Buffer;
@@ -38,10 +39,14 @@ import org.slf4j.LoggerFactory;
 import javax.net.ssl.KeyManager;
 import javax.net.ssl.KeyManagerFactory;
 import javax.net.ssl.SSLContext;
+import javax.net.ssl.TrustManager;
+import javax.net.ssl.TrustManagerFactory;
+import javax.net.ssl.X509TrustManager;
 
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.security.GeneralSecurityException;
+import java.security.KeyManagementException;
 import java.security.KeyPair;
 import java.security.KeyStore;
 import java.security.NoSuchAlgorithmException;
@@ -68,9 +73,12 @@ public class SecureContextImpl
 
     private static final String DEFAULT_PROTO = "TLS";
     private static final Pattern COLON = Pattern.compile(":");
+    private static final String DEFAULT_KEY_ENTRY = "key";
 
-    private SSLContext ctx;
+    private SSLContext context;
     private KeyManager[] keyManagers;
+    private TrustManager[] trustManagers;
+    private X509TrustManager trustedCertManager;
     private PrivateKey privateKey;
     private X509Certificate[] certChain;
     private KeyStore trustedCertStore;
@@ -80,6 +88,7 @@ public class SecureContextImpl
     private String protocol;
     private String mainProtocol;
     private String[] cipherSuites;
+    private boolean trustStoreValidation;
 
     @Override
     public String getClassName() {
@@ -318,5 +327,89 @@ public class SecureContextImpl
                 Arrays.fill(passphrase, '\0');
             }
         }
+    }
+
+    /**
+     * Once all that stuff on top has been all set, then this actually creates an SSLContext object.
+     */
+    public SSLContext makeContext(Context cx, Scriptable scope)
+    {
+        if (context != null) {
+            return context;
+        }
+
+        // Set up the key managers, either to what was already set or create one using PEM
+        if ((keyManagers == null) && (privateKey != null)) {
+            // A Java key store was not already loaded
+            Crypto.ensureCryptoService(cx, scope);
+            KeyStore pemKs = Crypto.getCryptoService().createPemKeyStore();
+
+            try {
+                pemKs.load(null, null);
+                pemKs.setKeyEntry(DEFAULT_KEY_ENTRY, privateKey, null, certChain);
+                KeyManagerFactory keyFactory = KeyManagerFactory.getInstance("SunX509");
+                keyFactory.init(pemKs, null);
+                keyManagers = keyFactory.getKeyManagers();
+            } catch (GeneralSecurityException gse) {
+                throw Utils.makeError(cx, scope, gse.toString());
+            } catch (IOException ioe) {
+                throw Utils.makeError(cx, scope, ioe.toString());
+            }
+        }
+
+        // Set up the trust manager, either to what was already set or create one using the loaded CAs.
+        // The trust manager may have already been set to "all trusting" for instance
+        if ((trustedCertStore != null) && (trustManagers == null)) {
+            // CAs were added to validate the client, and "rejectUnauthorized" was also set --
+            // in this case, use SSLEngine to automatically reject unauthorized clients
+            try {
+                TrustManagerFactory factory = TrustManagerFactory.getInstance("SunX509");
+                factory.init(trustedCertStore);
+                trustManagers = factory.getTrustManagers();
+                trustStoreValidation = true;
+            } catch (GeneralSecurityException gse) {
+                throw Utils.makeError(cx, scope, gse.toString());
+            }
+        }
+        // Add the CRL check if it was specified
+        TrustManager[] tms = trustManagers;
+        if ((trustManagers != null) && (crls != null)) {
+            tms[0] = new CompositeTrustManager((X509TrustManager)trustManagers[0], crls);
+        }
+
+        // On a client, we may want to use the default SSL context, which will automatically check
+        // servers against a built-in CA list. We should only get here if "rejectUnauthorized" is true
+        // and there is no client-side cert and no explicit set of CAs to trust
+        try {
+            if ((keyManagers == null) && (tms == null)) {
+                context = SSLContext.getDefault();
+                trustStoreValidation = true;
+            } else {
+                context = SSLContext.getInstance("TLS");
+                context.init(keyManagers, tms, null);
+            }
+        } catch (NoSuchAlgorithmException nse) {
+            throw new AssertionError(nse);
+        } catch (KeyManagementException kme) {
+            throw Utils.makeError(cx, scope, "Error initializing SSL context: " + kme);
+        }
+
+        // If "rejectUnauthorized" was set to false, and at the same time we have a bunch of CAs that
+        // were supplied, set up a second trust manager that we will check manually to set the
+        // "authorized" flag that Node.js insists on supporting.
+        if (trustedCertStore != null) {
+            try {
+                TrustManagerFactory factory = TrustManagerFactory.getInstance("SunX509");
+                factory.init(trustedCertStore);
+                trustedCertManager = (X509TrustManager)factory.getTrustManagers()[0];
+                if (crls != null) {
+                    trustedCertManager = new CompositeTrustManager(trustedCertManager, crls);
+                }
+            } catch (GeneralSecurityException gse) {
+                throw Utils.makeError(cx, scope, gse.toString());
+            }
+        }
+
+        return context;
     }
 }

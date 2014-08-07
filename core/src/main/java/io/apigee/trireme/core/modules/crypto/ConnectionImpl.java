@@ -25,13 +25,17 @@ import io.apigee.trireme.core.Utils;
 import io.apigee.trireme.core.modules.Buffer;
 import org.mozilla.javascript.Context;
 import org.mozilla.javascript.Function;
+import org.mozilla.javascript.ScriptRuntime;
 import org.mozilla.javascript.Scriptable;
 import org.mozilla.javascript.ScriptableObject;
 import org.mozilla.javascript.annotations.JSConstructor;
 import org.mozilla.javascript.annotations.JSFunction;
+import org.mozilla.javascript.annotations.JSGetter;
+import org.mozilla.javascript.annotations.JSSetter;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import javax.net.ssl.SSLContext;
 import javax.net.ssl.SSLEngine;
 import javax.net.ssl.SSLEngineResult;
 import javax.net.ssl.SSLException;
@@ -47,14 +51,25 @@ public class ConnectionImpl
 
     public static final String CLASS_NAME = "Connection";
 
-    private final boolean serverMode;
-    private final boolean requestCert;
-    private final boolean rejectUnauthorized;
-    private final String serverName;
+    private boolean serverMode;
+    private boolean requestCert;
+    private boolean rejectUnauthorized;
+    private String serverName;
 
+    SecureContextImpl context;
     private SSLEngine engine;
     private ByteBuffer readBuf;
     private ByteBuffer writeBuf;
+
+    private boolean handshaking;
+    private boolean initFinished;
+
+    private Function onHandshakeStart;
+    private Function onHandshakeDone;
+
+    public ConnectionImpl()
+    {
+    }
 
     @Override
     public String getClassName() {
@@ -81,15 +96,26 @@ public class ConnectionImpl
         }
         boolean rejectUnauthorized = booleanArg(args, 3, false);
 
-        return new ConnectionImpl(isServer, requestCert, rejectUnauthorized, serverName);
+        ConnectionImpl conn = new ConnectionImpl(isServer, requestCert, rejectUnauthorized, serverName);
+        conn.context = ctxImpl;
 
         // TODO client at this point has set:
-        // onhandshakestart
-        // onhandshakedone
         // onclienthello
         // onnewsession
         // lastHandshakeTime = 0
         // handshakes = 0
+
+        SSLContext ctx = conn.context.makeContext(cx, conn);
+        conn.engine = ctx.createSSLEngine();
+        conn.engine.setUseClientMode(!isServer);
+        if (requestCert) {
+            conn.engine.setWantClientAuth(true);
+        }
+
+        conn.readBuf = ByteBuffer.allocate(conn.engine.getSession().getApplicationBufferSize());
+        conn.writeBuf = ByteBuffer.allocate(conn.engine.getSession().getPacketBufferSize());
+
+        return conn;
     }
 
     private ConnectionImpl(boolean serverMode, boolean requestCert,
@@ -101,16 +127,34 @@ public class ConnectionImpl
         this.serverName = serverName;
     }
 
+    @JSSetter("onhandshakestart")
+    @SuppressWarnings("unused")
+    public void setHandshakeStart(Function f) {
+        onHandshakeStart = f;
+    }
+
+    @JSGetter("onhandshakestart")
+    @SuppressWarnings("unused")
+    public Function getHandshakeStart() {
+        return onHandshakeStart;
+    }
+
+    @JSSetter("onhandshakedone")
+    @SuppressWarnings("unused")
+    public void setHandshakeDone(Function f) {
+        onHandshakeDone = f;
+    }
+
+    @JSGetter("onhandshakedone")
+    @SuppressWarnings("unused")
+    public Function getHandshakeDone() {
+        return onHandshakeDone;
+    }
+
     @JSFunction
     @SuppressWarnings("unused")
     public static void start(Context cx, Scriptable thisObj, Object[] args, Function func)
     {
-        // TODO
-        // Have the SecureContextImpl complete initialization (and throw exceptions if necessary).
-        // Create the SSLEngine
-        // Initialize the buffers
-        // readBuf == getApplicationBufferSize
-        // writeBuf = getPacketBufferSize
     }
 
     @JSFunction
@@ -182,6 +226,7 @@ public class ConnectionImpl
             if (log.isTraceEnabled()) {
                 log.trace("clearOut: unwrapped from {}: {}", self.readBuf, result);
             }
+            self.checkHandshakeStatus(cx, result.getHandshakeStatus());
 
             int bytesRead = self.readBuf.position() - oldPos;
             if (self.readBuf.hasRemaining()) {
@@ -230,6 +275,7 @@ public class ConnectionImpl
             if (log.isTraceEnabled()) {
                 log.trace("clearOut: unwrapped from {}: {}", readBuf, result);
             }
+            self.checkHandshakeStatus(cx, result.getHandshakeStatus());
 
             int bytesWritten = self.writeBuf.position() - oldPos;
             if (log.isTraceEnabled()) {
@@ -280,6 +326,57 @@ public class ConnectionImpl
         return toWrite;
     }
 
+    private void checkHandshakeStatus(Context cx, SSLEngineResult.HandshakeStatus status)
+    {
+        switch (status) {
+        case NOT_HANDSHAKING:
+        case FINISHED:
+            processNotHandshaking(cx);
+            break;
+        case NEED_TASK:
+            processHandshaking(cx);
+            processTasks();
+            break;
+        case NEED_WRAP:
+        case NEED_UNWRAP:
+            processHandshaking(cx);
+            break;
+        }
+    }
+
+    private void processHandshaking(Context cx)
+    {
+        if (!handshaking) {
+            handshaking = true;
+            if (onHandshakeStart != null) {
+                onHandshakeStart.call(cx, onHandshakeStart, this, ScriptRuntime.emptyArgs);
+            }
+        }
+    }
+
+    private void processNotHandshaking(Context cx)
+    {
+        if (handshaking) {
+            handshaking = false;
+            initFinished = true;
+            if (onHandshakeDone != null) {
+                onHandshakeDone.call(cx, onHandshakeDone, this, ScriptRuntime.emptyArgs);
+            }
+        }
+    }
+
+    private void processTasks()
+    {
+        Runnable task = engine.getDelegatedTask();
+        while (task != null) {
+            if (log.isTraceEnabled()) {
+                log.trace("Running SSLEngine task {}", task);
+            }
+            task.run();
+            task = engine.getDelegatedTask();
+        }
+    }
+
     /**
      * Tell us how many bytes are waiting to decrypt from the "read" buffer.
      * (which sounds backwards to me!)
@@ -326,14 +423,18 @@ public class ConnectionImpl
 
     @JSFunction
     @SuppressWarnings("unused")
-    public static void isSessionReused(Context cx, Scriptable thisObj, Object[] args, Function func)
+    public static boolean isSessionReused(Context cx, Scriptable thisObj, Object[] args, Function func)
     {
+        ConnectionImpl self = (ConnectionImpl)thisObj;
+        return false;
     }
 
     @JSFunction
     @SuppressWarnings("unused")
-    public static void isInitFinished(Context cx, Scriptable thisObj, Object[] args, Function func)
+    public static boolean isInitFinished(Context cx, Scriptable thisObj, Object[] args, Function func)
     {
+        ConnectionImpl self = (ConnectionImpl)thisObj;
+        return self.initFinished;
     }
 
     @JSFunction

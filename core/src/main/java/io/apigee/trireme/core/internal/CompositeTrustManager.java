@@ -25,17 +25,18 @@ import javax.net.ssl.X509TrustManager;
 import java.security.cert.CertificateException;
 import java.security.cert.X509CRL;
 import java.security.cert.X509Certificate;
+import java.util.List;
 
 public  class CompositeTrustManager
     implements X509TrustManager
 {
     private final X509TrustManager tm;
-    private final X509CRL crl;
+    private final List<X509CRL> crls;
 
-    public CompositeTrustManager(X509TrustManager tm, X509CRL crl)
+    public CompositeTrustManager(X509TrustManager tm, List<X509CRL> crls)
     {
         this.tm = tm;
-        this.crl = crl;
+        this.crls = crls;
     }
 
     @Override
@@ -58,8 +59,10 @@ public  class CompositeTrustManager
         throws CertificateException
     {
         for (X509Certificate cert : certs) {
-            if (crl.isRevoked(cert)) {
-                throw new CertificateException("Certificate not trusted per the CRL");
+            for (X509CRL crl : crls) {
+                if (crl.isRevoked(cert)) {
+                    throw new CertificateException("Certificate not trusted per the CRL");
+                }
             }
         }
     }

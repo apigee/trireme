@@ -58,6 +58,7 @@ public class Node10Implementation
             { "stream",                P + "node.stream" },
             { "sys",                   P + "node.sys" },
             { "timers",                P + "node.timers" },
+            { "tls",                   P + "node.tls" },
             { "url",                   P + "node.url" },
             { "util",                  P + "node.util" },
 
@@ -66,8 +67,6 @@ public class Node10Implementation
             { "child_process",          P + "trireme.child_process" },
             { "trireme_metrics",        P + "trireme.trireme_metrics" },
             { "string_decoder",         P + "trireme.trireme_string_decoder" },
-            { "tls",                    P + "trireme.tls" },
-            { "tls_checkidentity",      P + "trireme.tls_checkidentity" },
             { "tty",                    P + "trireme.tty" },
             { "vm",                     P + "trireme.vm" },
             { "zlib",                   P + "trireme.zlib" }

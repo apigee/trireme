@@ -227,6 +227,11 @@ public class NativeModule
         {
             String name = stringArg(args, 0);
             NativeImpl self = (NativeImpl)thisObj;
+            if ("repl".equals(name)) {
+                // "repl" is hard-coded in the module source and must be available as source,
+                // but it's the only one, so deal with it here!
+                return true;
+            }
             return self.runner.isNativeModule(name);
         }
 

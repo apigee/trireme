@@ -117,7 +117,17 @@ public class Evals
             if (log.isDebugEnabled()) {
                 log.debug("Running code from {} in this context of {}", fileName, thisObj);
             }
-            return runScript(cx, thisObj, code, fileName);
+
+            boolean ran = false;
+            try {
+                Object r = runScript(cx, thisObj, code, fileName);
+                ran = true;
+                return r;
+            } finally {
+                if (!ran && log.isTraceEnabled()) {
+                    log.trace("Error running script code \"{}\"", code);
+                }
+            }
         }
 
         /**
@@ -134,7 +144,17 @@ public class Evals
             if (log.isDebugEnabled()) {
                 log.debug("Running code from {} in new context of {}", fileName, sandbox);
             }
-            return runScript(cx, sandbox, code, fileName);
+
+            boolean ran = false;
+            try {
+                Object r = runScript(cx, sandbox, code, fileName);
+                ran = true;
+                return r;
+            } finally {
+                if (!ran && log.isTraceEnabled()) {
+                    log.trace("Error running script code \"{}\"", code);
+                }
+            }
         }
 
         /**

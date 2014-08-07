@@ -266,12 +266,11 @@ public class Process
         {
             Context cx = Context.getCurrentContext();
 
-            AbstractHandle streamHandle;
-            if ((runner.getStdout() == System.out) && ConsoleHandle.isConsoleSupported()) {
-                streamHandle = new ConsoleHandle(runner);
+            AbstractHandle streamHandle = new JavaOutputStreamHandle(runner.getStdout());
+            if ((runner.getStdout() == System.out) && (System.console() != null)) {
+                // We are using an interactive console so have a bit more support in JavaScript
                 return createConsoleHandle(cx, streamHandle);
             } else {
-                streamHandle = new JavaOutputStreamHandle(runner.getStdout());
                 return createStreamHandle(cx, streamHandle);
             }
         }
@@ -295,12 +294,11 @@ public class Process
         {
             Context cx = Context.getCurrentContext();
 
-            AbstractHandle streamHandle;
-            if ((runner.getStdin() == System.in) && ConsoleHandle.isConsoleSupported()) {
-                streamHandle = new ConsoleHandle(runner);
+            AbstractHandle streamHandle = new JavaInputStreamHandle(runner.getStdin(), runner);
+            if ((runner.getStdin() == System.in) && (System.console() != null)) {
+                // We are using an interactive console so have a bit more support in JavaScript
                 return createConsoleHandle(cx, streamHandle);
             } else {
-                streamHandle = new JavaInputStreamHandle(runner.getStdin(), runner);
                 return createStreamHandle(cx, streamHandle);
             }
         }

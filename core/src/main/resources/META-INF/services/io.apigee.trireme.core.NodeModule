@@ -1,5 +1,6 @@
 io.apigee.trireme.core.modules.Buffer
 io.apigee.trireme.core.modules.CaresWrap
+io.apigee.trireme.core.modules.Console
 io.apigee.trireme.core.modules.Constants
 io.apigee.trireme.core.modules.DecoderWrap
 io.apigee.trireme.core.modules.DNS

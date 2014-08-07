@@ -112,7 +112,7 @@ public class ConsoleWrap
         @SuppressWarnings("unused")
         public static void setRawMode(Context cx, Scriptable thisObj, Object[] args, Function func)
         {
-            // There is actually no such thing as raw mode in Java
+            // There is actually no such thing as raw mode in Java. However we fake it in "readline".
             throw Utils.makeError(cx, thisObj, "Raw mode is not supported in Trireme.");
         }
 

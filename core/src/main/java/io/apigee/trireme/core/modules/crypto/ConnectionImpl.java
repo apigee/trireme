@@ -161,12 +161,19 @@ public class ConnectionImpl
     @SuppressWarnings("unused")
     public static void shutdown(Context cx, Scriptable thisObj, Object[] args, Function func)
     {
+        ConnectionImpl self = (ConnectionImpl)thisObj;
+
+        if (log.isTraceEnabled()) {
+            log.trace("Shutting down SSL");
+        }
+        self.engine.closeOutbound();
     }
 
     @JSFunction
     @SuppressWarnings("unused")
     public static void close(Context cx, Scriptable thisObj, Object[] args, Function func)
     {
+        // Nothing to do in Java
     }
 
     /**

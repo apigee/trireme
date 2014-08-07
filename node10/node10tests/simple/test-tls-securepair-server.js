@@ -125,8 +125,11 @@ server.listen(common.PORT, function() {
   client.stdout.on('data', function(d) {
     out += d;
 
+    console.log('Server got \"%s\"', d);
+
     if (!gotHello && /hello/.test(out)) {
       gotHello = true;
+      console.log('Sending world');
       client.stdin.write('world\r\n');
       sentWorld = true;
     }

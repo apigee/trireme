@@ -356,6 +356,7 @@ CryptoStream.prototype._write = function write(data, encoding, cb) {
       debug('encrypted.write called with ' + data.length + ' bytes');
       written = this.pair.ssl.encIn(data, 0, data.length);
     }
+    debug('written: ' + written);
 
     // Handle and report errors
     if (this.pair.ssl && this.pair.ssl.error) {
@@ -389,8 +390,10 @@ CryptoStream.prototype._write = function write(data, encoding, cb) {
       }
       return;
     } else if (written !== 0 && written !== -1) {
-      assert(!this._retryAfterPartial);
+      // Trireme: Java might require a few more tries...
+      //assert(!this._retryAfterPartial);
       this._retryAfterPartial = true;
+      debug('Retrying with ' + (data.length - written) + ' more bytes');
       this._write(data.slice(written), encoding, cb);
       this._retryAfterPartial = false;
       return;

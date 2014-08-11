@@ -36,6 +36,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.lang.reflect.InvocationTargetException;
+import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.CancellationException;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutionException;
@@ -74,9 +75,9 @@ public class Console
         public static final String CLASS_NAME = "_consoleWrapClass";
 
         private ScriptRunner runner;
-        private String prompt = "";
         private Function onLine;
         private Future<?> readTask;
+        private final ArrayBlockingQueue<String> promptQueue = new ArrayBlockingQueue<String>(1);
 
         private volatile boolean readEnabled;
 
@@ -120,26 +121,35 @@ public class Console
                     (System.console() != null));
         }
 
+        /**
+         * Called by readline.js whenever we want to issue a new prompt to the user.
+         */
         @JSFunction
         @SuppressWarnings("unused")
-        public static void setPrompt(Context cx, Scriptable thisObj, Object[] args, Function func)
+        public static void prompt(Context cx, Scriptable thisObj, Object[] args, Function func)
         {
             String prompt = stringArg(args, 0);
             ConsoleImpl self = (ConsoleImpl)thisObj;
-            self.prompt = prompt;
+
+            boolean status = self.promptQueue.offer(prompt);
+            if (!status && (log.isDebugEnabled())) {
+                log.debug("Console prompt is already in progress when another was requested");
+            }
         }
 
+        /**
+         * If we are in the middle of prompting the user, then stop.
+         */
         @JSFunction
         @SuppressWarnings("unused")
-        public static void startReading(Context cx, Scriptable thisObj, Object[] args, Function func)
+        public static void startPrompting(Context cx, Scriptable thisObj, Object[] args, Function func)
         {
             final ConsoleImpl self = (ConsoleImpl)thisObj;
-            self.readEnabled = true;
-
             if (log.isTraceEnabled()) {
                 log.trace("Console starting to read");
             }
 
+            self.readEnabled = true;
             self.readTask = self.runner.getUnboundedPool().submit(new Runnable() {
                 @Override
                 public void run()
@@ -149,13 +159,16 @@ public class Console
             });
         }
 
+        /**
+         * If we are in the middle of prompting the user, then stop.
+         */
         @JSFunction
         @SuppressWarnings("unused")
-        public static void stopReading(Context cx, Scriptable thisObj, Object[] args, Function func)
+        public static void stopPrompting(Context cx, Scriptable thisObj, Object[] args, Function func)
         {
             ConsoleImpl self = (ConsoleImpl)thisObj;
-            self.readEnabled = false;
 
+            self.readEnabled = false;
             if (self.readTask != null) {
                 if (log.isTraceEnabled()) {
                     log.trace("Console cancelling read task");
@@ -181,40 +194,35 @@ public class Console
          */
         protected void readLoop()
         {
-            try {
-                while (readEnabled) {
-                    final String line =
-                        (prompt == null ? System.console().readLine() : System.console().readLine(prompt));
-                    if (log.isTraceEnabled()) {
-                        log.trace("Console read {} characters", (line == null ? -1 : line.length()));
-                    }
-
-                    if (line == null) {
-                        break;
-                    } else if (onLine != null) {
-                        // We need to wait until the callback completes, because often that will trigger another
-                        // write, and otherwise the output is really ugly...
-                        final CountDownLatch latch = new CountDownLatch(1);
-
-                        runner.enqueueTask(new ScriptTask() {
-                            @Override
-                            public void execute(Context cx, Scriptable scope)
-                            {
-                                if (onLine != null) {
-                                    onLine.call(cx, onLine, ConsoleImpl.this,
-                                                new Object[] { line });
-                                }
-                                latch.countDown();
-                            }
-                        });
-
-                        latch.await();
-                    }
+            while (readEnabled) {
+                String prompt;
+                try {
+                    // Here we wait until the JavaScript code asks for another line.
+                    prompt = promptQueue.take();
+                } catch (InterruptedException ie) {
+                    // Keep on looping -- if we were properly interrupted then we will exit next.
+                    continue;
                 }
 
-            } catch (Throwable t) {
-                if (log.isDebugEnabled()) {
-                    log.debug("Error reading from console: {}", t);
+                final String line = System.console().readLine(prompt);
+                if (log.isTraceEnabled()) {
+                    log.trace("Console read {} characters", (line == null ? -1 : line.length()));
+                }
+
+                if (line == null) {
+                    // EOF
+                    break;
+                } else if (onLine != null) {
+                    runner.enqueueTask(new ScriptTask() {
+                        @Override
+                        public void execute(Context cx, Scriptable scope)
+                        {
+                            if (onLine != null) {
+                                onLine.call(cx, onLine, ConsoleImpl.this,
+                                            new Object[] { line });
+                            }
+                        }
+                    });
                 }
             }
         }

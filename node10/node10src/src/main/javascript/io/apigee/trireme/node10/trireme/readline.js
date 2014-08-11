@@ -23,6 +23,10 @@
  * This is an implementation of "readline" that is designed for Trireme. Java does not have
  * raw terminal output, so all of what readline does is not possible. However, the main purpose
  * is to read individual lines from the terminal and readline does that fine.
+ *
+ * Sadly, the "readline" interface assumes that it is running on a plain old stdin/stdout stream with
+ * "raw mode" and Java presents the abstraction of a line-oriented input "Console" object, and
+ * the two don't work well together.
  */
 
 var binding = process.binding('console-wrap');
@@ -93,6 +97,7 @@ function Interface(input, output, completer, terminal) {
 
   function online(line) {
     self._onLine(line);
+    self.rePrompt();
   }
 
   this._decoder = new StringDecoder('utf8');
@@ -133,27 +138,40 @@ Interface.prototype.__defineGetter__('columns', function() {
 
 Interface.prototype.setPrompt = function(prompt, length) {
   this._prompt = prompt;
-  if (this.terminal) {
-    binding.setPrompt(prompt);
-  }
 };
 
+// When talking to the "terminal," this function will tell the console to start reading lines,
+// each with a prompt, and not to stop until we "pause."
+
 Interface.prototype.prompt = function(preserveCursor) {
-  if (this.paused) this.resume();
+  if (this.paused) {
+    this.resume();
+  }
   if (this.terminal) {
-    // Re-start the reading, possibly with a new prompt
-    binding.stopReading();
-    binding.startReading();
+    // prompt once. We will keep re-prompting...
+    startPrompting();
+    binding.prompt(this._prompt);
   } else {
     this.output.write(this._prompt);
   }
 };
 
+Interface.prototype.rePrompt = function() {
+  if (!this.paused && this.prompting) {
+    binding.prompt(this._prompt);
+  }
+};
 
+// If we are prompting, then just change the prompt. But if we are not, then
+// just issue a single question.
 Interface.prototype.question = function(query, cb) {
   if (typeof cb === 'function') {
     if (this._questionCallback) {
       this.prompt();
+    } else if (this.terminal) {
+      this._questionCallback = cb;
+      startPrompting();
+      binding.prompt(query);
     } else {
       this._oldPrompt = this._prompt;
       this.setPrompt(query);
@@ -163,18 +181,29 @@ Interface.prototype.question = function(query, cb) {
   }
 };
 
+function startPrompting() {
+  if (!this.prompting) {
+      binding.startPrompting();
+      this.prompting = true;
+    }
+}
+
 Interface.prototype.close = function() {
   if (this.closed) return;
   this.pause();
   this.closed = true;
+  if (this.terminal) {
+    binding.close();
+  }
   this.emit('close');
 };
 
 
 Interface.prototype.pause = function() {
   if (this.paused) return;
-  if (this.terminal) {
-    binding.stopReading();
+  if (this.prompting) {
+    this.prompting = false;
+    binding.stopPrompting();
   } else {
     this.input.pause();
   }
@@ -185,8 +214,8 @@ Interface.prototype.pause = function() {
 
 Interface.prototype.resume = function() {
   if (!this.paused) return;
-  if (this.terminal) {
-    binding.startReading();
+  if (this.terminal && this.prompting) {
+    binding.prompt(this._prompt);
   } else {
     this.input.resume();
   }

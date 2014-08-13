@@ -22,12 +22,14 @@
 package io.apigee.trireme.core.modules.crypto;
 
 import io.apigee.trireme.core.Utils;
+import io.apigee.trireme.core.internal.SSLCiphers;
 import io.apigee.trireme.core.modules.Buffer;
 import org.mozilla.javascript.Context;
 import org.mozilla.javascript.Function;
 import org.mozilla.javascript.ScriptRuntime;
 import org.mozilla.javascript.Scriptable;
 import org.mozilla.javascript.ScriptableObject;
+import org.mozilla.javascript.Undefined;
 import org.mozilla.javascript.annotations.JSConstructor;
 import org.mozilla.javascript.annotations.JSFunction;
 import org.mozilla.javascript.annotations.JSGetter;
@@ -39,8 +41,17 @@ import javax.net.ssl.SSLContext;
 import javax.net.ssl.SSLEngine;
 import javax.net.ssl.SSLEngineResult;
 import javax.net.ssl.SSLException;
+import javax.net.ssl.SSLPeerUnverifiedException;
+import javax.security.auth.x500.X500Principal;
 
 import java.nio.ByteBuffer;
+import java.security.cert.Certificate;
+import java.security.cert.CertificateParsingException;
+import java.security.cert.X509Certificate;
+import java.text.DateFormat;
+import java.text.SimpleDateFormat;
+import java.util.Collection;
+import java.util.List;
 
 import static io.apigee.trireme.core.ArgUtils.*;
 
@@ -50,6 +61,9 @@ public class ConnectionImpl
     private static final Logger log = LoggerFactory.getLogger(ConnectionImpl.class.getName());
 
     public static final String CLASS_NAME = "Connection";
+
+    protected static final ByteBuffer EMPTY = ByteBuffer.allocate(0);
+    protected static final DateFormat X509_DATE = new SimpleDateFormat("MMM dd HH:mm:ss yyyy zzz");
 
     private boolean serverMode;
     private boolean requestCert;
@@ -63,9 +77,14 @@ public class ConnectionImpl
 
     private boolean handshaking;
     private boolean initFinished;
+    private boolean sentShutdown;
+    private boolean receivedShutdown;
 
     private Function onHandshakeStart;
     private Function onHandshakeDone;
+
+    private Scriptable verifyError;
+    private Scriptable error;
 
     public ConnectionImpl()
     {
@@ -105,13 +124,25 @@ public class ConnectionImpl
         // lastHandshakeTime = 0
         // handshakes = 0
 
+        if (!rejectUnauthorized) {
+            conn.context.setTrustEverybody();
+        }
         SSLContext ctx = conn.context.makeContext(cx, conn);
         conn.engine = ctx.createSSLEngine();
         conn.engine.setUseClientMode(!isServer);
         if (requestCert) {
             conn.engine.setWantClientAuth(true);
         }
+        if (conn.context.getCipherSuites() != null) {
+            try {
+                conn.engine.setEnabledCipherSuites(conn.context.getCipherSuites());
+            } catch (IllegalArgumentException iae) {
+                // throw a proper Error
+                throw Utils.makeError(cx, ctor, iae.toString());
+            }
+        }
 
+        // TODO "applicationBufferSize" is too big!
         conn.readBuf = ByteBuffer.allocate(conn.engine.getSession().getApplicationBufferSize());
         conn.writeBuf = ByteBuffer.allocate(conn.engine.getSession().getPacketBufferSize());
 
@@ -151,22 +182,72 @@ public class ConnectionImpl
         return onHandshakeDone;
     }
 
-    @JSFunction
+    @JSGetter("error")
     @SuppressWarnings("unused")
-    public static void start(Context cx, Scriptable thisObj, Object[] args, Function func)
-    {
+    public Scriptable getError() {
+        return error;
+    }
+
+    @JSGetter("sentShutdown")
+    @SuppressWarnings("unused")
+    public boolean isSentShutdown() {
+        return sentShutdown;
+    }
+
+    @JSGetter("receivedShutdown")
+    @SuppressWarnings("unused")
+    public boolean isReceivedShutdown() {
+        return receivedShutdown;
     }
 
     @JSFunction
     @SuppressWarnings("unused")
-    public static void shutdown(Context cx, Scriptable thisObj, Object[] args, Function func)
+    public static int start(Context cx, Scriptable thisObj, Object[] args, Function func)
+    {
+        ConnectionImpl self = (ConnectionImpl)thisObj;
+
+        if (self.engine.getUseClientMode()) {
+            // OpenSSL will start with the equivalent of a "wrap" call right away so we need to do that too
+            try {
+                SSLEngineResult result = self.engine.wrap(EMPTY, self.writeBuf);
+                if (log.isTraceEnabled()) {
+                    log.trace("start: wrapped to {}: {}", self.writeBuf, result);
+                }
+                self.checkHandshakeStatus(cx, result.getHandshakeStatus());
+                return 0;
+
+            } catch (SSLException ssle) {
+                self.handleError(cx, ssle);
+                return -1;
+            }
+        }
+        return 0;
+    }
+
+    @JSFunction
+    @SuppressWarnings("unused")
+    public static int shutdown(Context cx, Scriptable thisObj, Object[] args, Function func)
     {
         ConnectionImpl self = (ConnectionImpl)thisObj;
 
         if (log.isTraceEnabled()) {
-            log.trace("Shutting down SSL");
+            log.trace("Shutting down SSL outbound");
         }
+        self.sentShutdown = true;
         self.engine.closeOutbound();
+        try {
+            SSLEngineResult result = self.engine.wrap(EMPTY, self.writeBuf);
+            if (log.isTraceEnabled()) {
+                log.trace("start: wrapped to {}: {}", self.writeBuf, result);
+            }
+            // Don't mark stuff based on handshake status here, since we want it to come from "read".
+
+        } catch (SSLException ssle) {
+            self.handleError(cx, ssle);
+            return -1;
+        }
+        // Like SSL_shutdown, return 1 if we got the bidirectional shutdown here.
+        return (self.receivedShutdown ? 1 : 0);
     }
 
     @JSFunction
@@ -193,9 +274,11 @@ public class ConnectionImpl
 
         // Copy as much as we can into the buffer for pending incoming data
         int toRead = Math.min(length, self.readBuf.remaining());
+
         ByteBuffer readTmp = buf.getBuffer().duplicate();
         readTmp.position(readTmp.position() + offset);
         readTmp.limit(readTmp.position() + toRead);
+
         self.readBuf.put(readTmp);
 
         if (log.isTraceEnabled()) {
@@ -227,13 +310,40 @@ public class ConnectionImpl
         writeBuf.position(writeBuf.position() + offset);
         writeBuf.limit(writeBuf.position() + length);
 
-        // Will probably fail because of buffer being too small. Probably need a double buffer.
         try {
-            SSLEngineResult result = self.engine.unwrap(self.readBuf, writeBuf);
-            if (log.isTraceEnabled()) {
-                log.trace("clearOut: unwrapped from {}: {}", self.readBuf, result);
-            }
-            self.checkHandshakeStatus(cx, result.getHandshakeStatus());
+            SSLEngineResult.HandshakeStatus status = SSLEngineResult.HandshakeStatus.NEED_UNWRAP;
+            SSLEngineResult.Status err;
+            do {
+                SSLEngineResult result;
+                if (status == SSLEngineResult.HandshakeStatus.NEED_WRAP) {
+                    log.trace("clearOut: Wrapping nothing into {}", self.writeBuf);
+                    do {
+                        result = self.engine.wrap(EMPTY, self.writeBuf);
+                        if (result.getStatus() == SSLEngineResult.Status.BUFFER_OVERFLOW) {
+                            self.writeBuf = Utils.doubleBuffer(self.writeBuf);
+                        }
+                    } while (result.getStatus() == SSLEngineResult.Status.BUFFER_OVERFLOW);
+
+                } else {
+                    if (log.isTraceEnabled()) {
+                        log.trace("clearOut: Unwrapping {}", self.readBuf);
+                    }
+                    result = self.engine.unwrap(self.readBuf, writeBuf);
+                    if (result.getStatus() == SSLEngineResult.Status.CLOSED) {
+                        self.receivedShutdown = true;
+                    }
+                }
+                status = result.getHandshakeStatus();
+                err = result.getStatus();
+
+                if (log.isTraceEnabled()) {
+                    log.trace("clearOut: {}", result);
+                }
+                self.checkHandshakeStatus(cx, status);
+            } while ((err != SSLEngineResult.Status.BUFFER_UNDERFLOW) &&
+                     ((status == SSLEngineResult.HandshakeStatus.NEED_TASK) ||
+                      (status == SSLEngineResult.HandshakeStatus.NEED_UNWRAP) ||
+                      (status == SSLEngineResult.HandshakeStatus.NEED_WRAP)));
 
             int bytesRead = self.readBuf.position() - oldPos;
             if (self.readBuf.hasRemaining()) {
@@ -248,10 +358,7 @@ public class ConnectionImpl
             return bytesRead;
 
         } catch (SSLException ssle) {
-            // TODO some sort of a conversion table?
-            if (log.isDebugEnabled()) {
-                log.debug("SSL error: {}", ssle);
-            }
+            self.handleError(cx, ssle);
             return -1;
         }
     }
@@ -274,27 +381,56 @@ public class ConnectionImpl
         ByteBuffer readBuf = buf.getBuffer().duplicate();
         readBuf.position(readBuf.position() + offset);
         readBuf.limit(readBuf.position() + length);
+        int oldPos = self.writeBuf.position();
 
         // Will probably fail because of buffer being too small. Probably need a double buffer.
         try {
-            int oldPos = self.writeBuf.position();
-            SSLEngineResult result = self.engine.wrap(readBuf, self.writeBuf);
-            if (log.isTraceEnabled()) {
-                log.trace("clearOut: unwrapped from {}: {}", readBuf, result);
-            }
-            self.checkHandshakeStatus(cx, result.getHandshakeStatus());
+            SSLEngineResult.HandshakeStatus status = SSLEngineResult.HandshakeStatus.NEED_WRAP;
+            SSLEngineResult.Status err;
+            do {
+                SSLEngineResult result;
+                if (status == SSLEngineResult.HandshakeStatus.NEED_UNWRAP) {
+                    log.trace("clearIn: Unwrapping nothing");
+                    do {
+                        result = self.engine.unwrap(EMPTY, self.readBuf);
+                        if (result.getStatus() == SSLEngineResult.Status.BUFFER_OVERFLOW) {
+                            self.readBuf = Utils.doubleBuffer(self.readBuf);
+                        }
+                    } while (result.getStatus() == SSLEngineResult.Status.BUFFER_OVERFLOW);
+                    if (result.getStatus() == SSLEngineResult.Status.CLOSED) {
+                        self.receivedShutdown = true;
+                    }
+
+                } else {
+                    if (log.isTraceEnabled()) {
+                        log.trace("clearIn: wrapping {}", readBuf);
+                    }
+                    do {
+                        result = self.engine.wrap(readBuf, self.writeBuf);
+                        if (result.getStatus() == SSLEngineResult.Status.BUFFER_OVERFLOW) {
+                            self.writeBuf = Utils.doubleBuffer(self.writeBuf);
+                        }
+                    } while (result.getStatus() == SSLEngineResult.Status.BUFFER_OVERFLOW);
+                }
+                status = result.getHandshakeStatus();
+                err = result.getStatus();
+                if (log.isTraceEnabled()) {
+                    log.trace("clearIn: {}", result);
+                }
+                self.checkHandshakeStatus(cx, status);
+            } while ((err != SSLEngineResult.Status.BUFFER_UNDERFLOW) &&
+                     ((status == SSLEngineResult.HandshakeStatus.NEED_TASK) ||
+                      (status == SSLEngineResult.HandshakeStatus.NEED_WRAP) ||
+                      (status == SSLEngineResult.HandshakeStatus.NEED_UNWRAP)));
 
             int bytesWritten = self.writeBuf.position() - oldPos;
             if (log.isTraceEnabled()) {
-                log.trace("clearOut: write buf is {}", self.writeBuf);
+                log.trace("clearIn: write buf is {}", self.writeBuf);
             }
             return bytesWritten;
 
         } catch (SSLException ssle) {
-            // TODO some sort of a conversion table?
-            if (log.isDebugEnabled()) {
-                log.debug("SSL error: {}", ssle);
-            }
+            self.handleError(cx, ssle);
             return -1;
         }
     }
@@ -317,14 +453,19 @@ public class ConnectionImpl
         // Copy as much as we can into the buffer for pending incoming data
         self.writeBuf.flip();
         int toWrite = Math.min(length, self.writeBuf.remaining());
+
         ByteBuffer writeTmp = buf.getBuffer().duplicate();
         writeTmp.position(writeTmp.position() + offset);
         writeTmp.limit(writeTmp.position() + toWrite);
-        writeTmp.put(self.writeBuf);
 
+        ByteBuffer readTmp = self.writeBuf.duplicate();
+        readTmp.limit(readTmp.position() + toWrite);
         if (log.isTraceEnabled()) {
-            log.trace("encIn: read {} bytes into {}", toWrite, writeTmp);
+            log.trace("encOut: putting {} into {}", self.writeBuf, writeTmp);
         }
+        writeTmp.put(readTmp);
+        self.writeBuf.position(self.writeBuf.position() + toWrite);
+
         if (self.writeBuf.hasRemaining()) {
             self.writeBuf.compact();
         } else {
@@ -372,6 +513,22 @@ public class ConnectionImpl
         }
     }
 
+    private void handleError(Context cx, SSLException ssle)
+    {
+        if (log.isDebugEnabled()) {
+            log.debug("SSL exception: {}", ssle, ssle);
+        }
+        Throwable cause = ssle;
+        while (cause.getCause() != null) {
+            cause = cause.getCause();
+        }
+        Scriptable err = Utils.makeErrorObject(cx, this, cause.toString());
+        if (handshaking) {
+            verifyError = err;
+        }
+        error = err;
+    }
+
     private void processTasks()
     {
         Runnable task = engine.getDelegatedTask();
@@ -406,14 +563,87 @@ public class ConnectionImpl
 
     @JSFunction
     @SuppressWarnings("unused")
-    public static void getPeerCertificate(Context cx, Scriptable thisObj, Object[] args, Function func)
+    public static Object getPeerCertificate(Context cx, Scriptable thisObj, Object[] args, Function func)
     {
+        ConnectionImpl self = (ConnectionImpl)thisObj;
+        if ((self.engine == null) || (self.engine.getSession() == null)) {
+            return Undefined.instance;
+        }
+        Certificate cert;
+        try {
+            cert = self.engine.getSession().getPeerCertificates()[0];
+        } catch (SSLPeerUnverifiedException puve) {
+            if (log.isDebugEnabled()) {
+                log.debug("getPeerCertificates threw {}", puve);
+            }
+            cert = null;
+        }
+        if (!(cert instanceof X509Certificate)) {
+            log.debug("Peer certificate is not an X.509 cert");
+            return Undefined.instance;
+        }
+        return self.makeCertificate(cx, (X509Certificate) cert);
+    }
+
+    private Object makeCertificate(Context cx, X509Certificate cert)
+    {
+        if (log.isDebugEnabled()) {
+            log.debug("Returning subject " + cert.getSubjectX500Principal());
+        }
+        Scriptable ret = cx.newObject(this);
+        ret.put("subject", ret, cert.getSubjectX500Principal().getName(X500Principal.RFC2253));
+        ret.put("issuer", ret, cert.getIssuerX500Principal().getName(X500Principal.RFC2253));
+        ret.put("valid_from", ret, X509_DATE.format(cert.getNotBefore()));
+        ret.put("valid_to", ret, X509_DATE.format(cert.getNotAfter()));
+        //ret.put("fingerprint", ret, null);
+
+        try {
+            addAltNames(cx, ret, "subject", "subjectAltNames", cert.getSubjectAlternativeNames());
+            addAltNames(cx, ret, "issuer", "issuerAltNames", cert.getIssuerAlternativeNames());
+        } catch (CertificateParsingException e) {
+            log.debug("Error getting all the cert names: {}", e);
+        }
+        return ret;
+    }
+
+    private void addAltNames(Context cx, Scriptable s, String attachment, String type, Collection<List<?>> altNames)
+    {
+        if (altNames == null) {
+            return;
+        }
+        // Create an object that contains the alt names
+        Scriptable o = cx.newObject(this);
+        s.put(type, s, o);
+        for (List<?> an : altNames) {
+            if ((an.size() >= 2) && (an.get(0) instanceof Integer) && (an.get(1) instanceof String)) {
+                int typeNum = (Integer)an.get(0);
+                String typeName;
+                switch (typeNum) {
+                case 1:
+                    typeName = "rfc822Name";
+                    break;
+                case 2:
+                    typeName = "dNSName";
+                    break;
+                case 6:
+                    typeName = "uniformResourceIdentifier";
+                    break;
+                default:
+                    return;
+                }
+                o.put(typeName, s, an.get(1));
+            }
+        }
+
+        Scriptable subject = (Scriptable)s.get(attachment, s);
+        subject.put(type, subject, o);
     }
 
     @JSFunction
     @SuppressWarnings("unused")
-    public static void getSession(Context cx, Scriptable thisObj, Object[] args, Function func)
+    public static Object getSession(Context cx, Scriptable thisObj, Object[] args, Function func)
     {
+        return Undefined.instance;
     }
 
     @JSFunction
@@ -446,14 +676,34 @@ public class ConnectionImpl
 
     @JSFunction
     @SuppressWarnings("unused")
-    public static void verifyError(Context cx, Scriptable thisObj, Object[] args, Function func)
+    public static Object verifyError(Context cx, Scriptable thisObj, Object[] args, Function func)
     {
+        ConnectionImpl self = (ConnectionImpl)thisObj;
+        if (self.verifyError == null) {
+            return Undefined.instance;
+        }
+        return self.verifyError;
     }
 
     @JSFunction
     @SuppressWarnings("unused")
-    public static void getCurrentCipher(Context cx, Scriptable thisObj, Object[] args, Function func)
+    public static Object getCurrentCipher(Context cx, Scriptable thisObj, Object[] args, Function func)
     {
+        ConnectionImpl self = (ConnectionImpl)thisObj;
+        if ((self.engine == null) || (self.engine.getSession() == null)) {
+            return Undefined.instance;
+        }
+
+        SSLCiphers.Ciph cipher =
+            SSLCiphers.get().getJavaCipher(self.engine.getSession().getCipherSuite());
+        if (cipher == null) {
+            return Undefined.instance;
+        }
+
+        Scriptable c = cx.newObject(self);
+        c.put("name", c, cipher.getSslName());
+        c.put("version", c, cipher.getProtocol());
+        return c;
     }
 
     // To add NPN support:

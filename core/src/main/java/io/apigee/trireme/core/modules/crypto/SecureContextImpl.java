@@ -143,6 +143,9 @@ public class SecureContextImpl
         // Get a context now to check the protocol name but re-do it later based on what certs were selected.
         try {
             SSLContext.getInstance(self.protocol);
+            if (log.isDebugEnabled()) {
+                log.debug("Creating secure context for {}", self.protocol);
+            }
         } catch (NoSuchAlgorithmException nse) {
             throw Utils.makeError(cx, thisObj, "Unsupported TLS/SSL protocol " + protocol);
         }
@@ -167,6 +170,7 @@ public class SecureContextImpl
         try {
             KeyPair kp = Crypto.getCryptoService().readKeyPair("RSA", key, passphrase);
             self.privateKey = kp.getPrivate();
+            log.debug("Set private key from an RSA key pair");
 
         } catch (CryptoException ce) {
             throw Utils.makeError(cx, thisObj, ce.toString());
@@ -192,7 +196,7 @@ public class SecureContextImpl
                 new ByteArrayInputStream(certStr.getBytes(Charsets.ASCII));
             X509Certificate cert = Crypto.getCryptoService().readCertificate(bis);
             if (log.isDebugEnabled()) {
-                log.debug("My SSL certificate is {}", cert.getSubjectDN());
+                log.debug("Set my certificate to: {}", cert.getSubjectDN());
             }
             // TODO need to read the whole chain here!...
             self.certChain = new X509Certificate[] { cert };
@@ -252,6 +256,7 @@ public class SecureContextImpl
                 self.crls = new ArrayList<X509CRL>();
             }
             self.crls.add(crl);
+            log.debug("Added CRL");
 
         } catch (CertificateException e) {
             throw Utils.makeError(Context.getCurrentContext(), thisObj, "Error reading CRL: " + e);
@@ -266,6 +271,7 @@ public class SecureContextImpl
     {
         SecureContextImpl self = (SecureContextImpl)thisObj;
         self.useDefaultRootCerts = true;
+        log.debug("Will be using default root certificates");
     }
 
     @JSFunction
@@ -277,11 +283,16 @@ public class SecureContextImpl
 
         ArrayList<String> finalList = new ArrayList<String>();
         for (String cipher : COLON.split(cipherList)) {
-            SSLCiphers.Ciph c = SSLCiphers.get().getSslCipher("TLS", cipher);
+            SSLCiphers.Ciph c = SSLCiphers.get().getSslCipher(self.mainProtocol, cipher);
             if (c == null) {
-                throw Utils.makeError(cx, thisObj, "Unsupported TLS/SSL cipher suite \"" + cipher + '\"');
+                // Tests are expecting us to not throw right now, so try and use the suite later
+                finalList.add(cipher);
+            } else {
+                finalList.add(c.getJavaName());
             }
-            finalList.add(c.getJavaName());
+        }
+        if (log.isDebugEnabled()) {
+            log.debug("Enabling cipher suites", finalList);
         }
         self.cipherSuites = finalList.toArray(new String[finalList.size()]);
     }
@@ -317,6 +328,7 @@ public class SecureContextImpl
             KeyManagerFactory keyFactory = KeyManagerFactory.getInstance("SunX509");
             keyFactory.init(keyStore, passphrase);
             self.keyManagers = keyFactory.getKeyManagers();
+            log.debug("Loaded SSL key from PKCS12");
 
         } catch (GeneralSecurityException gse) {
             throw Utils.makeError(cx, thisObj, "Error opening key store: " + gse);
@@ -327,6 +339,20 @@ public class SecureContextImpl
                 Arrays.fill(passphrase, '\0');
             }
         }
+    }
+
+    public void setTrustEverybody()
+    {
+        log.debug("Setting up trust manager to trust everybody");
+        trustManagers = new TrustManager[] { AllTrustingManager.INSTANCE };
+    }
+
+    public String[] getCipherSuites() {
+        return cipherSuites;
+    }
+
+    public String getProtocol() {
+        return protocol;
     }
 
     /**
@@ -348,6 +374,9 @@ public class SecureContextImpl
                 pemKs.load(null, null);
                 pemKs.setKeyEntry(DEFAULT_KEY_ENTRY, privateKey, null, certChain);
                 KeyManagerFactory keyFactory = KeyManagerFactory.getInstance("SunX509");
+                if (log.isDebugEnabled()) {
+                    log.debug("Setting up key manager factory {}", keyFactory);
+                }
                 keyFactory.init(pemKs, null);
                 keyManagers = keyFactory.getKeyManagers();
             } catch (GeneralSecurityException gse) {
@@ -364,6 +393,9 @@ public class SecureContextImpl
             // in this case, use SSLEngine to automatically reject unauthorized clients
             try {
                 TrustManagerFactory factory = TrustManagerFactory.getInstance("SunX509");
+                if (log.isDebugEnabled()) {
+                    log.debug("Setting up trust manager factory {}", factory);
+                }
                 factory.init(trustedCertStore);
                 trustManagers = factory.getTrustManagers();
                 trustStoreValidation = true;
@@ -375,6 +407,9 @@ public class SecureContextImpl
         TrustManager[] tms = trustManagers;
         if ((trustManagers != null) && (crls != null)) {
             tms[0] = new CompositeTrustManager((X509TrustManager)trustManagers[0], crls);
+            if (log.isDebugEnabled()) {
+                log.debug("Adding composite trust manager {}", tms[0]);
+            }
         }
 
         // On a client, we may want to use the default SSL context, which will automatically check
@@ -382,9 +417,11 @@ public class SecureContextImpl
         // and there is no client-side cert and no explicit set of CAs to trust
         try {
             if ((keyManagers == null) && (tms == null)) {
+                log.debug("Using default SSLContext");
                 context = SSLContext.getDefault();
                 trustStoreValidation = true;
             } else {
+                log.debug("Initializing our own SSLContext");
                 context = SSLContext.getInstance("TLS");
                 context.init(keyManagers, tms, null);
             }
@@ -405,11 +442,40 @@ public class SecureContextImpl
                 if (crls != null) {
                     trustedCertManager = new CompositeTrustManager(trustedCertManager, crls);
                 }
+                if (log.isDebugEnabled()) {
+                    log.debug("Setting up second trustedCertManager {}", trustedCertManager);
+                }
             } catch (GeneralSecurityException gse) {
                 throw Utils.makeError(cx, scope, gse.toString());
             }
         }
 
         return context;
+    }
+
+    private static final class AllTrustingManager
+        implements X509TrustManager
+    {
+        static final AllTrustingManager INSTANCE = new AllTrustingManager();
+
+        private AllTrustingManager()
+        {
+        }
+
+        @Override
+        public void checkClientTrusted(X509Certificate[] x509Certificates, String s)
+        {
+        }
+
+        @Override
+        public void checkServerTrusted(X509Certificate[] x509Certificates, String s)
+        {
+        }
+
+        @Override
+        public X509Certificate[] getAcceptedIssuers()
+        {
+            return new X509Certificate[0];
+        }
     }
 }

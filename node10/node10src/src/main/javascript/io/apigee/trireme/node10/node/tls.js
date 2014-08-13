@@ -491,6 +491,7 @@ CryptoStream.prototype._read = function read(size) {
     // EOF when cleartext has finished and we have nothing to read
     if (this._opposite._finished && this._internallyPendingBytes() === 0 ||
         this.pair.ssl && this.pair.ssl.receivedShutdown) {
+      debug('receivedShutdown');
       // Perform graceful shutdown
       this._done();
 
@@ -1130,13 +1131,14 @@ function Server(/* [options], listener */) {
     throw new Error('Missing PFX or certificate + private key.');
   }
 
+  // TRIREME: DEFAULT_CIPHERS screws everything up
   var sharedCreds = crypto.createCredentials({
     pfx: self.pfx,
     key: self.key,
     passphrase: self.passphrase,
     cert: self.cert,
     ca: self.ca,
-    ciphers: self.ciphers || DEFAULT_CIPHERS,
+    ciphers: self.ciphers,
     secureProtocol: self.secureProtocol,
     secureOptions: self.secureOptions,
     crl: self.crl,

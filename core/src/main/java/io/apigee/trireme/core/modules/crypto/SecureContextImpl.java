@@ -26,6 +26,7 @@ import io.apigee.trireme.core.internal.Charsets;
 import io.apigee.trireme.core.internal.CompositeTrustManager;
 import io.apigee.trireme.core.internal.CryptoException;
 import io.apigee.trireme.core.internal.SSLCiphers;
+import io.apigee.trireme.core.internal.ScriptRunner;
 import io.apigee.trireme.core.modules.Buffer;
 import io.apigee.trireme.core.modules.Crypto;
 import org.mozilla.javascript.Context;
@@ -44,6 +45,7 @@ import javax.net.ssl.TrustManagerFactory;
 import javax.net.ssl.X509TrustManager;
 
 import java.io.ByteArrayInputStream;
+import java.io.FileInputStream;
 import java.io.IOException;
 import java.security.GeneralSecurityException;
 import java.security.KeyManagementException;
@@ -334,6 +336,67 @@ public class SecureContextImpl
             throw Utils.makeError(cx, thisObj, "Error opening key store: " + gse);
         } catch (IOException ioe) {
             throw Utils.makeError(cx, thisObj, "I/O error reading key store: " + ioe);
+        } finally {
+            if (passphrase != null) {
+                Arrays.fill(passphrase, '\0');
+            }
+        }
+    }
+
+    @JSFunction
+    @SuppressWarnings("unused")
+    public static void setTrustStore(Context cx, Scriptable thisObj, Object[] args, Function func)
+    {
+        String name = stringArg(args, 0);
+        SecureContextImpl self = (SecureContextImpl)thisObj;
+        ScriptRunner runtime = (ScriptRunner)cx.getThreadLocal(ScriptRunner.RUNNER);
+
+        try {
+            FileInputStream keyIn = new FileInputStream(runtime.translatePath(name));
+            try {
+                KeyStore trustStore = KeyStore.getInstance("JKS");
+                trustStore.load(keyIn, null);
+                TrustManagerFactory trustFactory = TrustManagerFactory.getInstance("SunX509");
+                trustFactory.init(trustStore);
+                self.trustManagers = trustFactory.getTrustManagers();
+                self.trustStoreValidation = true;
+            } finally {
+                keyIn.close();
+            }
+
+        } catch (GeneralSecurityException gse) {
+            throw Utils.makeError(cx, self, "Error opening key store: " + gse);
+        } catch (IOException ioe) {
+            throw Utils.makeError(cx, self, "I/O error reading key store: " + ioe);
+        }
+    }
+
+    @JSFunction
+    @SuppressWarnings("unused")
+    public static void setKeyStore(Context cx, Scriptable thisObj, Object[] args, Function func)
+    {
+        String name = stringArg(args, 0);
+        String p = stringArg(args, 1);
+        SecureContextImpl self = (SecureContextImpl)thisObj;
+        ScriptRunner runtime = (ScriptRunner)cx.getThreadLocal(ScriptRunner.RUNNER);
+
+        char[] passphrase = p.toCharArray();
+        try {
+            FileInputStream keyIn = new FileInputStream(runtime.translatePath(name));
+            try {
+                KeyStore keyStore = KeyStore.getInstance("JKS");
+                keyStore.load(keyIn, passphrase);
+                KeyManagerFactory keyFactory = KeyManagerFactory.getInstance("SunX509");
+                keyFactory.init(keyStore, passphrase);
+                self.keyManagers = keyFactory.getKeyManagers();
+            } finally {
+                keyIn.close();
+            }
+
+        } catch (GeneralSecurityException gse) {
+            throw Utils.makeError(cx, self, "Error opening key store: " + gse);
+        } catch (IOException ioe) {
+            throw Utils.makeError(cx, self, "I/O error reading key store: " + ioe);
         } finally {
             if (passphrase != null) {
                 Arrays.fill(passphrase, '\0');

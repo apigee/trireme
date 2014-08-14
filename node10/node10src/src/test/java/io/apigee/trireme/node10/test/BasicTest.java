@@ -521,6 +521,13 @@ public class BasicTest
     }
 
     @Test
+    public void testSecurePair()
+        throws InterruptedException, ExecutionException, NodeException
+    {
+        runTest("securepairtest.js");
+    }
+
+    @Test
     public void testArgv()
         throws InterruptedException, ExecutionException, NodeException
     {

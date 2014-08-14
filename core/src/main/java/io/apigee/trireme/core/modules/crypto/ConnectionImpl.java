@@ -23,6 +23,7 @@ package io.apigee.trireme.core.modules.crypto;
 
 import io.apigee.trireme.core.Utils;
 import io.apigee.trireme.core.internal.SSLCiphers;
+import io.apigee.trireme.core.internal.ScriptRunner;
 import io.apigee.trireme.core.modules.Buffer;
 import org.mozilla.javascript.Context;
 import org.mozilla.javascript.Function;
@@ -50,8 +51,11 @@ import java.security.cert.CertificateParsingException;
 import java.security.cert.X509Certificate;
 import java.text.DateFormat;
 import java.text.SimpleDateFormat;
+import java.util.ArrayDeque;
 import java.util.Collection;
+import java.util.Deque;
 import java.util.List;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import static io.apigee.trireme.core.ArgUtils.*;
 
@@ -59,11 +63,18 @@ public class ConnectionImpl
     extends ScriptableObject
 {
     private static final Logger log = LoggerFactory.getLogger(ConnectionImpl.class.getName());
+    private static final AtomicInteger lastId = new AtomicInteger();
 
     public static final String CLASS_NAME = "Connection";
 
     protected static final ByteBuffer EMPTY = ByteBuffer.allocate(0);
     protected static final DateFormat X509_DATE = new SimpleDateFormat("MMM dd HH:mm:ss yyyy zzz");
+
+    private final ArrayDeque<QueuedChunk> outgoingChunks = new ArrayDeque<QueuedChunk>();
+    private final ArrayDeque<QueuedChunk> incomingChunks = new ArrayDeque<QueuedChunk>();
+    private final int id = lastId.incrementAndGet();
+
+    private ScriptRunner runtime;
 
     private boolean serverMode;
     private boolean requestCert;
@@ -82,6 +93,8 @@ public class ConnectionImpl
 
     private Function onHandshakeStart;
     private Function onHandshakeDone;
+    private Function onWrap;
+    private Function onUnwrap;
 
     private Scriptable verifyError;
     private Scriptable error;
@@ -142,9 +155,10 @@ public class ConnectionImpl
             }
         }
 
-        // TODO "applicationBufferSize" is too big!
-        conn.readBuf = ByteBuffer.allocate(conn.engine.getSession().getApplicationBufferSize());
+        conn.readBuf = ByteBuffer.allocate(conn.engine.getSession().getPacketBufferSize());
         conn.writeBuf = ByteBuffer.allocate(conn.engine.getSession().getPacketBufferSize());
+
+        conn.runtime = (ScriptRunner)cx.getThreadLocal(ScriptRunner.RUNNER);
 
         return conn;
     }
@@ -182,6 +196,30 @@ public class ConnectionImpl
         return onHandshakeDone;
     }
 
+    @JSSetter("onwrap")
+    @SuppressWarnings("unused")
+    public void setOnWrap(Function f) {
+        onWrap = f;
+    }
+
+    @JSGetter("onwrap")
+    @SuppressWarnings("unused")
+    public Function getOnWrap() {
+        return onWrap;
+    }
+
+    @JSSetter("onunwrap")
+    @SuppressWarnings("unused")
+    public void setOnUnwrap(Function f) {
+        onUnwrap = f;
+    }
+
+    @JSGetter("onunwrap")
+    @SuppressWarnings("unused")
+    public Function getOnUnwrap() {
+        return onUnwrap;
+    }
+
     @JSGetter("error")
     @SuppressWarnings("unused")
     public Scriptable getError() {
@@ -207,47 +245,10 @@ public class ConnectionImpl
         ConnectionImpl self = (ConnectionImpl)thisObj;
 
         if (self.engine.getUseClientMode()) {
-            // OpenSSL will start with the equivalent of a "wrap" call right away so we need to do that too
-            try {
-                SSLEngineResult result = self.engine.wrap(EMPTY, self.writeBuf);
-                if (log.isTraceEnabled()) {
-                    log.trace("start: wrapped to {}: {}", self.writeBuf, result);
-                }
-                self.checkHandshakeStatus(cx, result.getHandshakeStatus());
-                return 0;
-
-            } catch (SSLException ssle) {
-                self.handleError(cx, ssle);
-                return -1;
-            }
+            self.outgoingChunks.add(new QueuedChunk(null, null));
+            self.encodeLoop(cx);
         }
         return 0;
-    }
-
-    @JSFunction
-    @SuppressWarnings("unused")
-    public static int shutdown(Context cx, Scriptable thisObj, Object[] args, Function func)
-    {
-        ConnectionImpl self = (ConnectionImpl)thisObj;
-
-        if (log.isTraceEnabled()) {
-            log.trace("Shutting down SSL outbound");
-        }
-        self.sentShutdown = true;
-        self.engine.closeOutbound();
-        try {
-            SSLEngineResult result = self.engine.wrap(EMPTY, self.writeBuf);
-            if (log.isTraceEnabled()) {
-                log.trace("start: wrapped to {}: {}", self.writeBuf, result);
-            }
-            // Don't mark stuff based on handshake status here, since we want it to come from "read".
-
-        } catch (SSLException ssle) {
-            self.handleError(cx, ssle);
-            return -1;
-        }
-        // Like SSL_shutdown, return 1 if we got the bidirectional shutdown here.
-        return (self.receivedShutdown ? 1 : 0);
     }
 
     @JSFunction
@@ -257,225 +258,265 @@ public class ConnectionImpl
         // Nothing to do in Java
     }
 
-    /**
-     * Read as much as we can from the supplied buffer to the "read" buffer.
-     */
     @JSFunction
     @SuppressWarnings("unused")
-    public static int encIn(Context cx, Scriptable thisObj, Object[] args, Function func)
+    public static void wrap(Context cx, Scriptable thisObj, Object[] args, Function func)
     {
         Buffer.BufferImpl buf = objArg(args, 0, Buffer.BufferImpl.class, true);
-        int offset = intArg(args, 1);
-        int length = intArg(args, 2);
-        if ((offset + length) > buf.getLength()) {
-            throw Utils.makeError(cx, thisObj, "off + len > buffer.length");
-        }
+        Function cb = functionArg(args, 1, true);
         ConnectionImpl self = (ConnectionImpl)thisObj;
 
-        // Copy as much as we can into the buffer for pending incoming data
-        int toRead = Math.min(length, self.readBuf.remaining());
-
-        ByteBuffer readTmp = buf.getBuffer().duplicate();
-        readTmp.position(readTmp.position() + offset);
-        readTmp.limit(readTmp.position() + toRead);
-
-        self.readBuf.put(readTmp);
-
-        if (log.isTraceEnabled()) {
-            log.trace("encIn: read {} bytes into {}", toRead, self.readBuf);
-        }
-        return toRead;
+        ByteBuffer bb = buf.getBuffer();
+        self.outgoingChunks.add(new QueuedChunk(bb, cb));
+        self.encodeLoop(cx);
     }
 
-    /**
-     * Unwrap encrypted data from the "read" buffer and pass it back.
-     */
     @JSFunction
     @SuppressWarnings("unused")
-    public static int clearOut(Context cx, Scriptable thisObj, Object[] args, Function func)
+    public static void shutdownOutput(Context cx, Scriptable thisObj, Object[] args, Function func)
     {
-        Buffer.BufferImpl buf = objArg(args, 0, Buffer.BufferImpl.class, true);
-        int offset = intArg(args, 1);
-        int length = intArg(args, 2);
-        if ((offset + length) > buf.getLength()) {
-            throw Utils.makeError(cx, thisObj, "off + len > buffer.length");
-        }
+        Function cb = functionArg(args, 0, true);
         ConnectionImpl self = (ConnectionImpl)thisObj;
 
-        // Unwrap as much as we can into the buffer for pending outgoing data
-        self.readBuf.flip();
-        int oldPos = self.readBuf.position();
+        QueuedChunk qc = new QueuedChunk(null, cb);
+        qc.shutdown = true;
+        self.outgoingChunks.add(qc);
+        self.encodeLoop(cx);
+    }
 
-        ByteBuffer writeBuf = buf.getBuffer().duplicate();
-        writeBuf.position(writeBuf.position() + offset);
-        writeBuf.limit(writeBuf.position() + length);
 
-        try {
-            SSLEngineResult.HandshakeStatus status = SSLEngineResult.HandshakeStatus.NEED_UNWRAP;
-            SSLEngineResult.Status err;
-            do {
-                SSLEngineResult result;
-                if (status == SSLEngineResult.HandshakeStatus.NEED_WRAP) {
-                    log.trace("clearOut: Wrapping nothing into {}", self.writeBuf);
-                    do {
-                        result = self.engine.wrap(EMPTY, self.writeBuf);
-                        if (result.getStatus() == SSLEngineResult.Status.BUFFER_OVERFLOW) {
-                            self.writeBuf = Utils.doubleBuffer(self.writeBuf);
-                        }
-                    } while (result.getStatus() == SSLEngineResult.Status.BUFFER_OVERFLOW);
+    @JSFunction
+    @SuppressWarnings("unused")
+    public static void unwrap(Context cx, Scriptable thisObj, Object[] args, Function func)
+    {
+        Buffer.BufferImpl buf = objArg(args, 0, Buffer.BufferImpl.class, true);
+        Function cb = functionArg(args, 1, true);
+        ConnectionImpl self = (ConnectionImpl)thisObj;
 
-                } else {
-                    if (log.isTraceEnabled()) {
-                        log.trace("clearOut: Unwrapping {}", self.readBuf);
-                    }
-                    result = self.engine.unwrap(self.readBuf, writeBuf);
-                    if (result.getStatus() == SSLEngineResult.Status.CLOSED) {
-                        self.receivedShutdown = true;
-                    }
-                }
-                status = result.getHandshakeStatus();
-                err = result.getStatus();
+        ByteBuffer bb = buf.getBuffer();
+        self.incomingChunks.add(new QueuedChunk(bb, cb));
+        self.encodeLoop(cx);
+    }
 
-                if (log.isTraceEnabled()) {
-                    log.trace("clearOut: {}", result);
-                }
-                self.checkHandshakeStatus(cx, status);
-            } while ((err != SSLEngineResult.Status.BUFFER_UNDERFLOW) &&
-                     ((status == SSLEngineResult.HandshakeStatus.NEED_TASK) ||
-                      (status == SSLEngineResult.HandshakeStatus.NEED_UNWRAP) ||
-                      (status == SSLEngineResult.HandshakeStatus.NEED_WRAP)));
-
-            int bytesRead = self.readBuf.position() - oldPos;
-            if (self.readBuf.hasRemaining()) {
-                // Leftover stuff -- compact it a bit
-                self.readBuf.compact();
-            } else {
-                self.readBuf.clear();
-            }
+    protected void encodeLoop(Context cx)
+    {
+        while (true) {
             if (log.isTraceEnabled()) {
-                log.trace("clearOut: read buf is {}", self.readBuf);
+                log.trace("engine {} status: {} incoming: {} outgoing: {}", id, engine.getHandshakeStatus(),
+                          incomingChunks.size(), outgoingChunks.size());
             }
-            return bytesRead;
+            switch (engine.getHandshakeStatus()) {
+            case NEED_WRAP:
+                // Always wrap, even if we have nothing to wrap
+                processHandshaking(cx);
+                if (!doWrap(cx)) {
+                    return;
+                }
+                break;
+            case NEED_UNWRAP:
+                processHandshaking(cx);
+                if (!doUnwrap(cx)) {
+                    return;
+                }
+                break;
+            case NEED_TASK:
+                // TODO this will become async in the future
+                processTasks();
+                break;
+            case FINISHED:
+            case NOT_HANDSHAKING:
+                if (outgoingChunks.isEmpty() && incomingChunks.isEmpty()) {
+                    return;
+                }
 
-        } catch (SSLException ssle) {
-            self.handleError(cx, ssle);
-            return -1;
+                if (!outgoingChunks.isEmpty()) {
+                    if (!doWrap(cx)) {
+                        return;
+                    }
+                }
+                if (!incomingChunks.isEmpty()) {
+                    if (!doUnwrap(cx)) {
+                        return;
+                    }
+                }
+                break;
+            }
         }
     }
 
     /**
-     * Wrap clear data and write it to the "write" buffer.
+     * Wrap whatever is on the head of the outgoing queue, and return false if we should stop further processing.
      */
-    @JSFunction
-    @SuppressWarnings("unused")
-    public static int clearIn(Context cx, Scriptable thisObj, Object[] args, Function func)
+    private boolean doWrap(Context cx)
     {
-        Buffer.BufferImpl buf = objArg(args, 0, Buffer.BufferImpl.class, true);
-        int offset = intArg(args, 1);
-        int length = intArg(args, 2);
-        if ((offset + length) > buf.getLength()) {
-            throw Utils.makeError(cx, thisObj, "off + len > buffer.length");
+        QueuedChunk qc = outgoingChunks.peek();
+        ByteBuffer bb = (qc == null ? EMPTY : qc.buf);
+        if (bb == null) {
+            bb = EMPTY;
         }
-        ConnectionImpl self = (ConnectionImpl)thisObj;
 
-        ByteBuffer readBuf = buf.getBuffer().duplicate();
-        readBuf.position(readBuf.position() + offset);
-        readBuf.limit(readBuf.position() + length);
-        int oldPos = self.writeBuf.position();
+        boolean wasShutdown = false;
+        SSLEngineResult result;
+        do {
+            if ((qc != null) && qc.shutdown) {
+                log.trace("Sending closeOutbound");
+                engine.closeOutbound();
+                sentShutdown = true;
+                wasShutdown = true;
+            }
 
-        // Will probably fail because of buffer being too small. Probably need a double buffer.
-        try {
-            SSLEngineResult.HandshakeStatus status = SSLEngineResult.HandshakeStatus.NEED_WRAP;
-            SSLEngineResult.Status err;
-            do {
-                SSLEngineResult result;
-                if (status == SSLEngineResult.HandshakeStatus.NEED_UNWRAP) {
-                    log.trace("clearIn: Unwrapping nothing");
-                    do {
-                        result = self.engine.unwrap(EMPTY, self.readBuf);
-                        if (result.getStatus() == SSLEngineResult.Status.BUFFER_OVERFLOW) {
-                            self.readBuf = Utils.doubleBuffer(self.readBuf);
-                        }
-                    } while (result.getStatus() == SSLEngineResult.Status.BUFFER_OVERFLOW);
-                    if (result.getStatus() == SSLEngineResult.Status.CLOSED) {
-                        self.receivedShutdown = true;
-                    }
-
-                } else {
-                    if (log.isTraceEnabled()) {
-                        log.trace("clearIn: wrapping {}", readBuf);
-                    }
-                    do {
-                        result = self.engine.wrap(readBuf, self.writeBuf);
-                        if (result.getStatus() == SSLEngineResult.Status.BUFFER_OVERFLOW) {
-                            self.writeBuf = Utils.doubleBuffer(self.writeBuf);
-                        }
-                    } while (result.getStatus() == SSLEngineResult.Status.BUFFER_OVERFLOW);
-                }
-                status = result.getHandshakeStatus();
-                err = result.getStatus();
-                if (log.isTraceEnabled()) {
-                    log.trace("clearIn: {}", result);
-                }
-                self.checkHandshakeStatus(cx, status);
-            } while ((err != SSLEngineResult.Status.BUFFER_UNDERFLOW) &&
-                     ((status == SSLEngineResult.HandshakeStatus.NEED_TASK) ||
-                      (status == SSLEngineResult.HandshakeStatus.NEED_WRAP) ||
-                      (status == SSLEngineResult.HandshakeStatus.NEED_UNWRAP)));
-
-            int bytesWritten = self.writeBuf.position() - oldPos;
             if (log.isTraceEnabled()) {
-                log.trace("clearIn: write buf is {}", self.writeBuf);
+                log.trace("{} Wrapping {}", id, bb);
             }
-            return bytesWritten;
+            try {
+                result = engine.wrap(bb, writeBuf);
+            } catch (SSLException ssle) {
+                handleEncodingError(cx, qc, ssle);
+                return false;
+            }
 
-        } catch (SSLException ssle) {
-            self.handleError(cx, ssle);
-            return -1;
+            if (log.isTraceEnabled()) {
+                log.trace("wrap result: {}", result);
+            }
+            if (result.getStatus() == SSLEngineResult.Status.BUFFER_OVERFLOW) {
+                writeBuf = Utils.doubleBuffer(writeBuf);
+            }
+        } while (result.getStatus() == SSLEngineResult.Status.BUFFER_OVERFLOW);
+
+        if (result.getHandshakeStatus() == SSLEngineResult.HandshakeStatus.FINISHED) {
+            // This only gets delivered once, and we can't check for it later
+            processNotHandshaking(cx);
         }
+
+        if ((qc != null) && !bb.hasRemaining()) {
+            // Finished processing the current chunk
+            outgoingChunks.remove();
+            if (qc.callback != null) {
+                qc.callback.call(cx, this, this, ScriptRuntime.emptyArgs);
+            }
+        }
+
+        if (result.bytesProduced() > 0) {
+            deliverWriteBuffer(cx, wasShutdown);
+        }
+
+        return (result.getStatus() == SSLEngineResult.Status.OK);
     }
 
-    /**
-     * Copy as much as we can from the "writeBuffer" to the supplied buffer.
-     */
-    @JSFunction
-    @SuppressWarnings("unused")
-    public static int encOut(Context cx, Scriptable thisObj, Object[] args, Function func)
+    private void deliverWriteBuffer(Context cx, boolean shutdown)
     {
-        Buffer.BufferImpl buf = objArg(args, 0, Buffer.BufferImpl.class, true);
-        int offset = intArg(args, 1);
-        int length = intArg(args, 2);
-        if ((offset + length) > buf.getLength()) {
-            throw Utils.makeError(cx, thisObj, "off + len > buffer.length");
-        }
-        ConnectionImpl self = (ConnectionImpl)thisObj;
+        if (onWrap != null) {
+            writeBuf.flip();
+            ByteBuffer bb = ByteBuffer.allocate(writeBuf.remaining());
+            bb.put(writeBuf);
+            writeBuf.clear();
+            bb.flip();
+            if (log.isTraceEnabled()) {
+                log.trace("Delivering {} bytes to the onwrap callback. shutdown = {}",
+                          bb.remaining(), shutdown);
+            }
 
-        // Copy as much as we can into the buffer for pending incoming data
-        self.writeBuf.flip();
-        int toWrite = Math.min(length, self.writeBuf.remaining());
-
-        ByteBuffer writeTmp = buf.getBuffer().duplicate();
-        writeTmp.position(writeTmp.position() + offset);
-        writeTmp.limit(writeTmp.position() + toWrite);
-
-        ByteBuffer readTmp = self.writeBuf.duplicate();
-        readTmp.limit(readTmp.position() + toWrite);
-        if (log.isTraceEnabled()) {
-            log.trace("encOut: putting {} into {}", self.writeBuf, writeTmp);
-        }
-        writeTmp.put(readTmp);
-        self.writeBuf.position(self.writeBuf.position() + toWrite);
-
-        if (self.writeBuf.hasRemaining()) {
-            self.writeBuf.compact();
+            Buffer.BufferImpl buf = Buffer.BufferImpl.newBuffer(cx, this, bb, false);
+            runtime.enqueueCallback(onWrap, this, this, new Object[] { buf, shutdown });
         } else {
-            self.writeBuf.clear();
+            writeBuf.clear();
         }
-        return toWrite;
     }
 
-    private void checkHandshakeStatus(Context cx, SSLEngineResult.HandshakeStatus status)
+    private boolean doUnwrap(Context cx)
     {
+        QueuedChunk qc = incomingChunks.peek();
+        ByteBuffer bb = (qc == null ? EMPTY : qc.buf);
+
+        SSLEngineResult result;
+        do {
+            if (log.isTraceEnabled()) {
+                log.trace("{} Unwrapping {}", id, bb);
+            }
+
+            try {
+                result = engine.unwrap(bb, readBuf);
+            } catch (SSLException ssle) {
+                handleEncodingError(cx, qc, ssle);
+                return false;
+            }
+
+            if (log.isTraceEnabled()) {
+                log.trace("unwrap result: {}", result);
+            }
+            if (result.getStatus() == SSLEngineResult.Status.BUFFER_OVERFLOW) {
+                readBuf = Utils.doubleBuffer(readBuf);
+            }
+        } while (result.getStatus() == SSLEngineResult.Status.BUFFER_OVERFLOW);
+
+        if (result.getHandshakeStatus() == SSLEngineResult.HandshakeStatus.FINISHED) {
+            // This only gets delivered once, and we can't check for it later
+            processNotHandshaking(cx);
+        }
+
+        boolean deliverShutdown = false;
+        if ((result.getStatus() == SSLEngineResult.Status.CLOSED) && !receivedShutdown) {
+            receivedShutdown = true;
+            deliverShutdown = true;
+        }
+
+        if ((qc != null) && !bb.hasRemaining()) {
+            incomingChunks.remove();
+            if (qc.callback != null) {
+                qc.callback.call(cx, this, this, ScriptRuntime.emptyArgs);
+            }
+        }
+
+        if ((result.bytesProduced() > 0) || deliverShutdown) {
+            deliverReadBuffer(cx, deliverShutdown);
+        }
+
+        return (result.getStatus() == SSLEngineResult.Status.OK);
+    }
+
+    private void deliverReadBuffer(Context cx, boolean shutdown)
+    {
+        if (onUnwrap != null) {
+            readBuf.flip();
+            ByteBuffer bb = ByteBuffer.allocate(readBuf.remaining());
+            bb.put(readBuf);
+            bb.flip();
+            readBuf.clear();
+            if (log.isTraceEnabled()) {
+                log.trace("Delivering {} bytes to the onunwrap callback. shutdown = {}",
+                          bb.remaining(), shutdown);
+            }
+
+            Buffer.BufferImpl buf = Buffer.BufferImpl.newBuffer(cx, this, bb, false);
+            runtime.enqueueCallback(onUnwrap, this, this, new Object[] { buf, shutdown });
+        } else {
+            readBuf.clear();
+        }
+    }
+
+    private void handleEncodingError(Context cx, QueuedChunk qc, SSLException ssle)
+    {
+        if (log.isDebugEnabled()) {
+            log.debug("SSL exception: {}", ssle, ssle);
+        }
+        Throwable cause = ssle;
+        while (cause.getCause() != null) {
+            cause = cause.getCause();
+        }
+        Scriptable err = Utils.makeErrorObject(cx, this, cause.toString());
+        if (handshaking) {
+            verifyError = err;
+        }
+        error = err;
+
+        if ((qc != null) && (qc.callback != null)) {
+            qc.callback.call(cx, this, this, new Object[]{error});
+        }
+    }
+
+    private SSLEngineResult.HandshakeStatus checkHandshakeStatus(Context cx, SSLEngineResult.HandshakeStatus s)
+    {
+        SSLEngineResult.HandshakeStatus status = s;
         switch (status) {
         case NOT_HANDSHAKING:
         case FINISHED:
@@ -484,17 +525,19 @@ public class ConnectionImpl
         case NEED_TASK:
             processHandshaking(cx);
             processTasks();
+            status = engine.getHandshakeStatus();
             break;
         case NEED_WRAP:
         case NEED_UNWRAP:
             processHandshaking(cx);
             break;
         }
+        return status;
     }
 
     private void processHandshaking(Context cx)
     {
-        if (!handshaking) {
+        if (!handshaking && !sentShutdown && !receivedShutdown) {
             handshaking = true;
             if (onHandshakeStart != null) {
                 onHandshakeStart.call(cx, onHandshakeStart, this, ScriptRuntime.emptyArgs);
@@ -539,26 +582,6 @@ public class ConnectionImpl
             task.run();
             task = engine.getDelegatedTask();
         }
-    }
-
-    /**
-     * Tell us how many bytes are waiting to decrypt from the "read" buffer.
-     * (which sounds backwards to me!)
-     */
-    @JSFunction
-    @SuppressWarnings("unused")
-    public static int clearPending(Context cx, Scriptable thisObj, Object[] args, Function func)
-    {
-        ConnectionImpl self = (ConnectionImpl)thisObj;
-        return self.readBuf.position();
-    }
-
-    @JSFunction
-    @SuppressWarnings("unused")
-    public static int encPending(Context cx, Scriptable thisObj, Object[] args, Function func)
-    {
-        ConnectionImpl self = (ConnectionImpl)thisObj;
-        return self.writeBuf.position();
     }
 
     @JSFunction
@@ -713,4 +736,17 @@ public class ConnectionImpl
     // To add SNI support:
     // getServername
     // setSNICallback
+
+    static final class QueuedChunk
+    {
+        final ByteBuffer buf;
+        final Function callback;
+        boolean shutdown;
+
+        QueuedChunk(ByteBuffer buf, Function callback)
+        {
+            this.buf = buf;
+            this.callback = callback;
+        }
+    }
 }

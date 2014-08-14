@@ -22,6 +22,11 @@
 // Note: In 0.8 and before, crypto functions all defaulted to using
 // binary-encoded strings rather than buffers.
 
+/*
+ * This is essentially the "crypto" module from Node.js 10.25, but the "SecureContext"
+ * class has been extended to support Java key and trust stores.
+ */
+
 exports.DEFAULT_ENCODING = 'buffer';
 
 try {
@@ -93,29 +98,42 @@ exports.createCredentials = function(options, context) {
 
   if (context) return c;
 
-  if (options.key) {
-    if (options.passphrase) {
-      c.context.setKey(options.key, options.passphrase);
-    } else {
-      c.context.setKey(options.key);
+  if (options.keystore) {
+    if (!options.passphrase) {
+      throw new Error('Passphrase must be supplied along with Java key store');
+    }
+    // Use the Java key store instead of additional keys and certs from PEM
+    c.context.setKeyStore(options.keystore, options.passphrase);
+  } else {
+    if (options.key) {
+      if (options.passphrase) {
+        c.context.setKey(options.key, options.passphrase);
+      } else {
+        c.context.setKey(options.key);
+      }
     }
   }
 
-  if (options.cert) c.context.setCert(options.cert);
+  if (options.truststore) {
+    // Use the Java trust store instead
+    c.context.setTrustStore(options.truststore);
+  } else {
+    if (options.cert) c.context.setCert(options.cert);
 
-  if (options.ciphers) c.context.setCiphers(options.ciphers);
-
-  if (options.ca) {
-    if (Array.isArray(options.ca)) {
-      for (var i = 0, len = options.ca.length; i < len; i++) {
-        c.context.addCACert(options.ca[i]);
+    if (options.ca) {
+      if (Array.isArray(options.ca)) {
+        for (var i = 0, len = options.ca.length; i < len; i++) {
+          c.context.addCACert(options.ca[i]);
+        }
+      } else {
+        c.context.addCACert(options.ca);
       }
     } else {
-      c.context.addCACert(options.ca);
+      c.context.addRootCerts();
     }
-  } else {
-    c.context.addRootCerts();
   }
+
+  if (options.ciphers) c.context.setCiphers(options.ciphers);
 
   if (options.crl) {
     if (Array.isArray(options.crl)) {

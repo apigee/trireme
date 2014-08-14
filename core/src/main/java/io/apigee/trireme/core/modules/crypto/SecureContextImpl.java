@@ -77,7 +77,6 @@ public class SecureContextImpl
     private static final Pattern COLON = Pattern.compile(":");
     private static final String DEFAULT_KEY_ENTRY = "key";
 
-    private SSLContext context;
     private KeyManager[] keyManagers;
     private TrustManager[] trustManagers;
     private X509TrustManager trustedCertManager;
@@ -209,6 +208,15 @@ public class SecureContextImpl
         }
     }
 
+    private void createCertStore()
+        throws GeneralSecurityException, IOException
+    {
+        if (trustedCertStore == null) {
+            trustedCertStore = Crypto.getCryptoService().createPemKeyStore();
+            trustedCertStore.load(null, null);
+        }
+    }
+
     @JSFunction
     @SuppressWarnings("unused")
     public static void addCACert(Context cx, Scriptable thisObj, Object[] args, Function func)
@@ -218,11 +226,7 @@ public class SecureContextImpl
         SecureContextImpl self = (SecureContextImpl)thisObj;
 
         try {
-            if (self.trustedCertStore == null) {
-                self.trustedCertStore = Crypto.getCryptoService().createPemKeyStore();
-                self.trustedCertStore.load(null, null);
-            }
-
+            self.createCertStore();
             ByteArrayInputStream bis =
                 new ByteArrayInputStream(certStr.getBytes(Charsets.ASCII));
             Certificate cert = Crypto.getCryptoService().readCertificate(bis);
@@ -310,7 +314,7 @@ public class SecureContextImpl
     @SuppressWarnings("unused")
     public static void setSessionIdContext(Context cx, Scriptable thisObj, Object[] args, Function func)
     {
-        throw Utils.makeError(cx, thisObj, "Session ID Context is not supported in Trireme.");
+        // Ignore this in Trireme.
     }
 
     @JSFunction
@@ -359,7 +363,6 @@ public class SecureContextImpl
                 TrustManagerFactory trustFactory = TrustManagerFactory.getInstance("SunX509");
                 trustFactory.init(trustStore);
                 self.trustManagers = trustFactory.getTrustManagers();
-                self.trustStoreValidation = true;
             } finally {
                 keyIn.close();
             }
@@ -404,12 +407,6 @@ public class SecureContextImpl
         }
     }
 
-    public void setTrustEverybody()
-    {
-        log.debug("Setting up trust manager to trust everybody");
-        trustManagers = new TrustManager[] { AllTrustingManager.INSTANCE };
-    }
-
     public String[] getCipherSuites() {
         return cipherSuites;
     }
@@ -418,15 +415,19 @@ public class SecureContextImpl
         return protocol;
     }
 
+    public boolean isTrustStoreValidation() {
+        return trustStoreValidation;
+    }
+
+    public X509TrustManager getExplicitTrustManager() {
+        return trustedCertManager;
+    }
+
     /**
      * Once all that stuff on top has been all set, then this actually creates an SSLContext object.
      */
-    public SSLContext makeContext(Context cx, Scriptable scope)
+    public SSLContext makeContext(Context cx, Scriptable scope, boolean rejectUnauthorized)
     {
-        if (context != null) {
-            return context;
-        }
-
         // Set up the key managers, either to what was already set or create one using PEM
         if ((keyManagers == null) && (privateKey != null)) {
             // A Java key store was not already loaded
@@ -449,68 +450,82 @@ public class SecureContextImpl
             }
         }
 
-        // Set up the trust manager, either to what was already set or create one using the loaded CAs.
-        // The trust manager may have already been set to "all trusting" for instance
-        if ((trustedCertStore != null) && (trustManagers == null)) {
-            // CAs were added to validate the client, and "rejectUnauthorized" was also set --
-            // in this case, use SSLEngine to automatically reject unauthorized clients
+        // Set up the trust manager, whatever it is
+        TrustManager[] tms = trustManagers;
+
+        if (!useDefaultRootCerts) {
+            // Unless we were asked for root certs, we trust particular certs, or none
+            try {
+                createCertStore();
+            } catch (GeneralSecurityException gse) {
+                throw Utils.makeError(cx, this, gse.toString());
+            } catch (IOException ioe) {
+                throw Utils.makeError(cx, this, ioe.toString());
+            }
+        }
+
+        // Trusted certs were specified but there is no Java trust manager already
+        if ((trustedCertStore != null) && (tms == null)) {
+            // CAs were added to validate the client, so set them up here.
             try {
                 TrustManagerFactory factory = TrustManagerFactory.getInstance("SunX509");
                 if (log.isDebugEnabled()) {
                     log.debug("Setting up trust manager factory {}", factory);
                 }
                 factory.init(trustedCertStore);
-                trustManagers = factory.getTrustManagers();
-                trustStoreValidation = true;
+                tms = factory.getTrustManagers();
             } catch (GeneralSecurityException gse) {
                 throw Utils.makeError(cx, scope, gse.toString());
             }
         }
+
         // Add the CRL check if it was specified
-        TrustManager[] tms = trustManagers;
-        if ((trustManagers != null) && (crls != null)) {
-            tms[0] = new CompositeTrustManager((X509TrustManager)trustManagers[0], crls);
+        if ((tms != null) && (crls != null)) {
+            tms[0] = new CompositeTrustManager((X509TrustManager)tms[0], crls);
             if (log.isDebugEnabled()) {
                 log.debug("Adding composite trust manager {}", tms[0]);
+            }
+        }
+
+        TrustManager[] engineTms = null;
+        if (tms == null) {
+            if (!rejectUnauthorized) {
+                log.debug("Trusting everybody no matter what");
+                engineTms = new TrustManager[] { AllTrustingManager.INSTANCE };
+                trustStoreValidation = true;
+            }
+        } else {
+            if (rejectUnauthorized) {
+                // Actually check TLS certs in SSLEngine
+                log.debug("Using pre-set-up trust manager for SSLEngine");
+                engineTms = tms;
+                trustStoreValidation = true;
+            } else {
+                // Do it manually later
+                log.debug("Trusting everybody and checking manually later");
+                trustedCertManager = (X509TrustManager)tms[0];
+                engineTms = new TrustManager[] { AllTrustingManager.INSTANCE };
             }
         }
 
         // On a client, we may want to use the default SSL context, which will automatically check
         // servers against a built-in CA list. We should only get here if "rejectUnauthorized" is true
         // and there is no client-side cert and no explicit set of CAs to trust
+        SSLContext context;
         try {
-            if ((keyManagers == null) && (tms == null)) {
+            if ((keyManagers == null) && (engineTms == null)) {
                 log.debug("Using default SSLContext");
                 context = SSLContext.getDefault();
                 trustStoreValidation = true;
             } else {
                 log.debug("Initializing our own SSLContext");
                 context = SSLContext.getInstance("TLS");
-                context.init(keyManagers, tms, null);
+                context.init(keyManagers, engineTms, null);
             }
         } catch (NoSuchAlgorithmException nse) {
             throw new AssertionError(nse);
         } catch (KeyManagementException kme) {
             throw Utils.makeError(cx, scope, "Error initializing SSL context: " + kme);
-        }
-
-        // If "rejectUnauthorized" was set to false, and at the same time we have a bunch of CAs that
-        // were supplied, set up a second trust manager that we will check manually to set the
-        // "authorized" flag that Node.js insists on supporting.
-        if (trustedCertStore != null) {
-            try {
-                TrustManagerFactory factory = TrustManagerFactory.getInstance("SunX509");
-                factory.init(trustedCertStore);
-                trustedCertManager = (X509TrustManager)factory.getTrustManagers()[0];
-                if (crls != null) {
-                    trustedCertManager = new CompositeTrustManager(trustedCertManager, crls);
-                }
-                if (log.isDebugEnabled()) {
-                    log.debug("Setting up second trustedCertManager {}", trustedCertManager);
-                }
-            } catch (GeneralSecurityException gse) {
-                throw Utils.makeError(cx, scope, gse.toString());
-            }
         }
 
         return context;

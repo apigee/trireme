@@ -43,10 +43,12 @@ import javax.net.ssl.SSLEngine;
 import javax.net.ssl.SSLEngineResult;
 import javax.net.ssl.SSLException;
 import javax.net.ssl.SSLPeerUnverifiedException;
+import javax.net.ssl.X509TrustManager;
 import javax.security.auth.x500.X500Principal;
 
 import java.nio.ByteBuffer;
 import java.security.cert.Certificate;
+import java.security.cert.CertificateException;
 import java.security.cert.CertificateParsingException;
 import java.security.cert.X509Certificate;
 import java.text.DateFormat;
@@ -95,6 +97,7 @@ public class ConnectionImpl
     private Function onHandshakeDone;
     private Function onWrap;
     private Function onUnwrap;
+    private Function onError;
 
     private Scriptable verifyError;
     private Scriptable error;
@@ -131,20 +134,20 @@ public class ConnectionImpl
         ConnectionImpl conn = new ConnectionImpl(isServer, requestCert, rejectUnauthorized, serverName);
         conn.context = ctxImpl;
 
-        // TODO client at this point has set:
-        // onclienthello
-        // onnewsession
-        // lastHandshakeTime = 0
-        // handshakes = 0
-
-        if (!rejectUnauthorized) {
-            conn.context.setTrustEverybody();
+        if (log.isDebugEnabled()) {
+            log.debug("Initializing Connection {}: isServer = {} requestCert = {} rejectUnauthorized = {}",
+                      conn.id, isServer, requestCert, rejectUnauthorized);
         }
-        SSLContext ctx = conn.context.makeContext(cx, conn);
+
+        SSLContext ctx = conn.context.makeContext(cx, conn, rejectUnauthorized);
         conn.engine = ctx.createSSLEngine();
         conn.engine.setUseClientMode(!isServer);
         if (requestCert) {
-            conn.engine.setWantClientAuth(true);
+            if (rejectUnauthorized) {
+                conn.engine.setNeedClientAuth(true);
+            } else {
+                conn.engine.setWantClientAuth(true);
+            }
         }
         if (conn.context.getCipherSuites() != null) {
             try {
@@ -218,6 +221,18 @@ public class ConnectionImpl
     @SuppressWarnings("unused")
     public Function getOnUnwrap() {
         return onUnwrap;
+    }
+
+    @JSSetter("onerror")
+    @SuppressWarnings("unused")
+    public void setOnError(Function f) {
+        onError = f;
+    }
+
+    @JSGetter("onerror")
+    @SuppressWarnings("unused")
+    public Function getOnError() {
+        return onError;
     }
 
     @JSGetter("error")
@@ -372,6 +387,9 @@ public class ConnectionImpl
                 result = engine.wrap(bb, writeBuf);
             } catch (SSLException ssle) {
                 handleEncodingError(cx, qc, ssle);
+                if (qc != null) {
+                    outgoingChunks.remove();
+                }
                 return false;
             }
 
@@ -383,17 +401,17 @@ public class ConnectionImpl
             }
         } while (result.getStatus() == SSLEngineResult.Status.BUFFER_OVERFLOW);
 
-        if (result.getHandshakeStatus() == SSLEngineResult.HandshakeStatus.FINISHED) {
-            // This only gets delivered once, and we can't check for it later
-            processNotHandshaking(cx);
-        }
-
         if ((qc != null) && !bb.hasRemaining()) {
             // Finished processing the current chunk
             outgoingChunks.remove();
             if (qc.callback != null) {
                 qc.callback.call(cx, this, this, ScriptRuntime.emptyArgs);
             }
+        }
+
+        if (result.getHandshakeStatus() == SSLEngineResult.HandshakeStatus.FINISHED) {
+            // This only gets delivered once, and we can't check for it later
+            processNotHandshaking(cx);
         }
 
         if (result.bytesProduced() > 0) {
@@ -417,7 +435,7 @@ public class ConnectionImpl
             }
 
             Buffer.BufferImpl buf = Buffer.BufferImpl.newBuffer(cx, this, bb, false);
-            runtime.enqueueCallback(onWrap, this, this, new Object[] { buf, shutdown });
+            runtime.enqueueCallback(onWrap, this, this, new Object[]{buf, shutdown});
         } else {
             writeBuf.clear();
         }
@@ -438,6 +456,9 @@ public class ConnectionImpl
                 result = engine.unwrap(bb, readBuf);
             } catch (SSLException ssle) {
                 handleEncodingError(cx, qc, ssle);
+                if (qc != null) {
+                    incomingChunks.remove();
+                }
                 return false;
             }
 
@@ -448,11 +469,6 @@ public class ConnectionImpl
                 readBuf = Utils.doubleBuffer(readBuf);
             }
         } while (result.getStatus() == SSLEngineResult.Status.BUFFER_OVERFLOW);
-
-        if (result.getHandshakeStatus() == SSLEngineResult.HandshakeStatus.FINISHED) {
-            // This only gets delivered once, and we can't check for it later
-            processNotHandshaking(cx);
-        }
 
         boolean deliverShutdown = false;
         if ((result.getStatus() == SSLEngineResult.Status.CLOSED) && !receivedShutdown) {
@@ -465,6 +481,11 @@ public class ConnectionImpl
             if (qc.callback != null) {
                 qc.callback.call(cx, this, this, ScriptRuntime.emptyArgs);
             }
+        }
+
+        if (result.getHandshakeStatus() == SSLEngineResult.HandshakeStatus.FINISHED) {
+            // This only gets delivered once, and we can't check for it later
+            processNotHandshaking(cx);
         }
 
         if ((result.bytesProduced() > 0) || deliverShutdown) {
@@ -488,7 +509,7 @@ public class ConnectionImpl
             }
 
             Buffer.BufferImpl buf = Buffer.BufferImpl.newBuffer(cx, this, bb, false);
-            runtime.enqueueCallback(onUnwrap, this, this, new Object[] { buf, shutdown });
+            runtime.enqueueCallback(onUnwrap, this, this, new Object[]{buf, shutdown});
         } else {
             readBuf.clear();
         }
@@ -511,6 +532,8 @@ public class ConnectionImpl
 
         if ((qc != null) && (qc.callback != null)) {
             qc.callback.call(cx, this, this, new Object[]{error});
+        } else if (onError != null) {
+            onError.call(cx, this, this, new Object [] { error });
         }
     }
 
@@ -548,11 +571,72 @@ public class ConnectionImpl
     private void processNotHandshaking(Context cx)
     {
         if (handshaking) {
+            checkPeerAuthorization(cx);
             handshaking = false;
             initFinished = true;
             if (onHandshakeDone != null) {
                 onHandshakeDone.call(cx, onHandshakeDone, this, ScriptRuntime.emptyArgs);
             }
+        }
+    }
+
+    /**
+     * Check for various SSL peer verification errors, including those that require us to check manually
+     * and report back rather than just throwing...
+     */
+    private void checkPeerAuthorization(Context cx)
+    {
+        Certificate[] certChain;
+
+        try {
+            certChain = engine.getSession().getPeerCertificates();
+        } catch (SSLPeerUnverifiedException unver) {
+            if (log.isDebugEnabled()) {
+                log.debug("Peer is unverified");
+            }
+            if (engine.getUseClientMode() || requestCert) {
+                handleError(cx, unver);
+            }
+            return;
+        }
+
+        if (certChain == null) {
+            // No certs -- same thing
+            if (log.isDebugEnabled()) {
+                log.debug("Peer has no client- or server-side certs");
+            }
+            if (engine.getUseClientMode() || requestCert) {
+                handleError(cx, new SSLException("Peer has no certificates"));
+            }
+            return;
+        }
+
+        // If we got here, either the cert is valid (because SSLEngine didn't reject it right away)
+        // or because we have to check manually. Get the trust manager to check.
+
+        X509TrustManager trustManager = context.getExplicitTrustManager();
+        if (trustManager == null) {
+            if (!context.isTrustStoreValidation()) {
+                handleError(cx, new SSLException("No trust manager and not trusting anybody"));
+            }
+            return;
+        }
+
+        // Manually check trust
+        try {
+            if (engine.getUseClientMode()) {
+                trustManager.checkServerTrusted((X509Certificate[])certChain, "RSA");
+            } else {
+                trustManager.checkClientTrusted((X509Certificate[])certChain, "RSA");
+            }
+            if (log.isDebugEnabled()) {
+                log.debug("SSL peer is valid");
+            }
+        } catch (CertificateException e) {
+            if (log.isDebugEnabled()) {
+                log.debug("Error verifying SSL peer: {}", e);
+            }
+            handleError(cx, new SSLException(e));
         }
     }
 

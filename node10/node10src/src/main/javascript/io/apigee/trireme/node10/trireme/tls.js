@@ -651,6 +651,10 @@ CryptoStream.prototype.destroy = function(err) {
 
 CryptoStream.prototype._done = function() {
   this._doneFlag = true;
+  if (!this.pair) {
+    // Might get called after we are destroyed
+    return;
+  }
 
   debug('_done cleartext: ' + this.pair.cleartext._doneFlag + ' encrypted: ' + this.pair.encrypted._doneFlag);
 
@@ -739,6 +743,9 @@ function CleartextStream(pair, options) {
   this.pair.ssl.onwrap = function(chunk, shutdown) {
     self._onwrap(chunk, shutdown);
   };
+  this.once('end', function() {
+    self._onEnd();
+  });
 }
 util.inherits(CleartextStream, CryptoStream);
 
@@ -765,6 +772,10 @@ CleartextStream.prototype._write = function(chunk, encoding, cb) {
 
 // Data from SSLEngine.wrap will end up here
 CleartextStream.prototype._onwrap = function(chunk, shutdown) {
+  if (!this.pair.ssl) {
+    // Arrived late after close -- ignore
+    return;
+  }
   if (chunk) {
     debug('Received ' + chunk.length + ' wrapped bytes');
     this._opposite.push(chunk);
@@ -773,6 +784,12 @@ CleartextStream.prototype._onwrap = function(chunk, shutdown) {
     debug('Received completion of shutdown request');
     this._opposite.push(null);
   }
+};
+
+CleartextStream.prototype._onEnd = function() {
+  debug('CleartextStream end received');
+  this._ended = true;
+  this._done();
 };
 
 CleartextStream.prototype._read = function() {
@@ -864,6 +881,9 @@ EncryptedStream.prototype.init = function() {
   this.once('end', function() {
     self._onEnd();
   });
+  this.once('close', function() {
+    self._closed = true;
+  });
 };
 
 EncryptedStream.prototype._write = function(chunk, encoding, cb) {
@@ -884,6 +904,10 @@ EncryptedStream.prototype._write = function(chunk, encoding, cb) {
 };
 
 EncryptedStream.prototype._onunwrap = function(chunk, shutdown) {
+  if (!this.pair.ssl) {
+    // Arrived late after close -- ignore
+    return;
+  }
   if (chunk) {
     debug('Received ' + chunk.length + ' bytes of unwrapped data');
     this._opposite.push(chunk);
@@ -901,7 +925,10 @@ EncryptedStream.prototype._read = function() {
 
 EncryptedStream.prototype._onEnd = function() {
   debug('EncryptedStream end received');
-  this._done();
+  this._ended = true;
+  if (!this._closed) {
+    this._done();
+  }
 };
 
 function onhandshakestart() {
@@ -973,6 +1000,20 @@ function onnewsession(key, session) {
   this.server.emit('newSession', key, session);
 }
 
+// Catch errors that do not directly result from reads or writes.
+// Particularly, ones raised directly by SSLEngine when "rejectUnauthorized" is set.
+function onerror(err) {
+  debug('Got SSL error: ' + err.message);
+  if (this.ssl.verifyError()) {
+    // Handshaking error
+    this.cleartext.authorized = false;
+    this.cleartext.authorizationError = this.ssl.verifyError().message;
+    this.destroy();
+    this.emit('error', err);
+  } else {
+    this.cleartext.emit('error', err);
+  }
+}
 
 /**
  * Provides a pair of streams to do encrypted communication.
@@ -1032,6 +1073,7 @@ function SecurePair(credentials, isServer, requestCert, rejectUnauthorized,
   }
   // Trireme: Use this on both client and server
   this.ssl.onhandshakedone = onhandshakedone.bind(this);
+  this.ssl.onerror = onerror.bind(this);
 
   if (process.features.tls_sni) {
     if (this._isServer && options.SNICallback) {

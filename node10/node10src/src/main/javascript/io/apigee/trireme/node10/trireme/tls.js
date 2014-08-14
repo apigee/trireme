@@ -198,6 +198,8 @@ function checkServerIdentity(host, cert) {
       }
     }
 
+    debug(util.format('matching %s against %j', host, dnsNames));
+
     valid = dnsNames.some(function(re) {
       return re.test(host);
     });
@@ -778,7 +780,11 @@ CleartextStream.prototype._onwrap = function(chunk, shutdown) {
   }
   if (chunk) {
     debug('Received ' + chunk.length + ' wrapped bytes');
-    this._opposite.push(chunk);
+    if (this._opposite.ondata) {
+      this._opposite.ondata(chunk, 0, chunk.length);
+    } else {
+      this._opposite.push(chunk);
+    }
   }
   if (shutdown) {
     debug('Received completion of shutdown request');
@@ -790,6 +796,10 @@ CleartextStream.prototype._onEnd = function() {
   debug('CleartextStream end received');
   this._ended = true;
   this._done();
+  if (this.onend) {
+    debug('onend');
+    this.onend();
+  }
 };
 
 CleartextStream.prototype._read = function() {
@@ -810,13 +820,7 @@ CleartextStream.prototype.__defineGetter__('remotePort', function() {
 
 CleartextStream.prototype.getPeerCertificate = function() {
   if (this.pair.ssl) {
-    var c = this.pair.ssl.getPeerCertificate();
-
-    if (c) {
-      if (c.issuer) c.issuer = parseCertString(c.issuer);
-      if (c.subject) c.subject = parseCertString(c.subject);
-      return c;
-    }
+    return this.pair.ssl.getPeerCertificate();
   }
 
   return null;
@@ -910,8 +914,13 @@ EncryptedStream.prototype._onunwrap = function(chunk, shutdown) {
   }
   if (chunk) {
     debug('Received ' + chunk.length + ' bytes of unwrapped data');
-    this._opposite.push(chunk);
+    if (this._opposite.ondata) {
+      this._opposite.ondata(chunk, 0, chunk.length);
+    } else {
+      this._opposite.push(chunk);
+    }
   }
+
   if (shutdown) {
     debug('Got shutdown from the client');
     this._done();
@@ -928,6 +937,10 @@ EncryptedStream.prototype._onEnd = function() {
   this._ended = true;
   if (!this._closed) {
     this._done();
+  }
+  if (this.onend) {
+    debug('onend');
+    this.onend();
   }
 };
 
@@ -1536,6 +1549,7 @@ exports.connect = function(/* [port, host], options, cb */) {
       var validCert = checkServerIdentity(hostname,
                                           pair.cleartext.getPeerCertificate());
       if (!validCert) {
+        debug(util.format('Failed check for "%s" against %j', hostname, pair.cleartext.getPeerCertificate()));
         verifyError = new Error('Hostname/IP doesn\'t match certificate\'s ' +
                                 'altnames');
       }

@@ -60,6 +60,8 @@ import java.util.Deque;
 import java.util.Iterator;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 import static io.apigee.trireme.core.ArgUtils.*;
 
@@ -73,6 +75,9 @@ public class ConnectionImpl
 
     protected static final ByteBuffer EMPTY = ByteBuffer.allocate(0);
     protected static final DateFormat X509_DATE = new SimpleDateFormat("MMM dd HH:mm:ss yyyy zzz");
+
+    private static final Pattern COMMA = Pattern.compile(",");
+    private static final Pattern CERT_ENTRY = Pattern.compile("^(.+)=(.*)$");
 
     private final ArrayDeque<QueuedChunk> outgoingChunks = new ArrayDeque<QueuedChunk>();
     private final ArrayDeque<QueuedChunk> incomingChunks = new ArrayDeque<QueuedChunk>();
@@ -478,6 +483,7 @@ public class ConnectionImpl
                 if (nc == null) {
                     break;
                 }
+                // Coalesce the last chunk we were working on with the next one to get more inbound data
                 nc.buf = Utils.catBuffers(qc.buf, nc.buf);
                 qc = nc;
                 bb = qc.buf;
@@ -542,37 +548,21 @@ public class ConnectionImpl
             cause = cause.getCause();
         }
         Scriptable err = Utils.makeErrorObject(cx, this, cause.toString());
-        if (handshaking) {
-            verifyError = err;
-        }
         error = err;
-
-        if ((qc != null) && (qc.callback != null)) {
-            qc.callback.call(cx, this, this, new Object[]{error});
-        } else if (onError != null) {
-            onError.call(cx, this, this, new Object [] { error });
+        if (handshaking) {
+            // Always make this in to an "error" event
+            verifyError = err;
+            if (onError != null) {
+                onError.call(cx, this, this, new Object [] { err });
+            }
+        } else {
+            // Handshaking done, treat this as a legitimate write error
+            if (qc != null) {
+                qc.deliverCallback(cx, this, err);
+            } else if (onError != null) {
+                onError.call(cx, this, this, new Object [] { err });
+            }
         }
-    }
-
-    private SSLEngineResult.HandshakeStatus checkHandshakeStatus(Context cx, SSLEngineResult.HandshakeStatus s)
-    {
-        SSLEngineResult.HandshakeStatus status = s;
-        switch (status) {
-        case NOT_HANDSHAKING:
-        case FINISHED:
-            processNotHandshaking(cx);
-            break;
-        case NEED_TASK:
-            processHandshaking(cx);
-            processTasks();
-            status = engine.getHandshakeStatus();
-            break;
-        case NEED_WRAP:
-        case NEED_UNWRAP:
-            processHandshaking(cx);
-            break;
-        }
-        return status;
     }
 
     private void processHandshaking(Context cx)
@@ -715,8 +705,8 @@ public class ConnectionImpl
             log.debug("Returning subject " + cert.getSubjectX500Principal());
         }
         Scriptable ret = cx.newObject(this);
-        ret.put("subject", ret, cert.getSubjectX500Principal().getName(X500Principal.RFC2253));
-        ret.put("issuer", ret, cert.getIssuerX500Principal().getName(X500Principal.RFC2253));
+        ret.put("subject", ret, makePrincipal(cx, cert.getSubjectX500Principal()));
+        ret.put("issuer", ret, makePrincipal(cx, cert.getIssuerX500Principal()));
         ret.put("valid_from", ret, X509_DATE.format(cert.getNotBefore()));
         ret.put("valid_to", ret, X509_DATE.format(cert.getNotAfter()));
         //ret.put("fingerprint", ret, null);
@@ -728,6 +718,41 @@ public class ConnectionImpl
             log.debug("Error getting all the cert names: {}", e);
         }
         return ret;
+    }
+
+    private Scriptable makePrincipal(Context cx, X500Principal principal)
+    {
+        Scriptable p = cx.newObject(this);
+        String name = principal.getName(X500Principal.RFC2253);
+
+        // Split the name by commas, except that backslashes escape the commas, otherwise we'd use a regexp
+        int cp = 0;
+        int start = 0;
+        boolean wasSlash = false;
+        while (cp < name.length()) {
+            if (name.charAt(cp) == '\\') {
+                wasSlash = true;
+            } else if ((name.charAt(cp) == ',') && !wasSlash) {
+                wasSlash = false;
+                addCertEntry(p, name.substring(start, cp));
+                start = cp + 1;
+            } else {
+                wasSlash = false;
+            }
+            cp++;
+        }
+        if (cp > start) {
+            addCertEntry(p, name.substring(start));
+        }
+        return p;
+    }
+
+    private void addCertEntry(Scriptable s, String entry)
+    {
+        Matcher m = CERT_ENTRY.matcher(entry);
+        if (m.matches()) {
+            s.put(m.group(1), s, m.group(2));
+        }
     }
 
     private void addAltNames(Context cx, Scriptable s, String attachment, String type, Collection<List<?>> altNames)
@@ -854,6 +879,14 @@ public class ConnectionImpl
         {
             if (callback != null) {
                 callback.call(cx, scope, scope, ScriptRuntime.emptyArgs);
+                callback = null;
+            }
+        }
+
+        void deliverCallback(Context cx, Scriptable scope, Scriptable err)
+        {
+            if (callback != null) {
+                callback.call(cx, scope, scope, new Object[] { err });
                 callback = null;
             }
         }

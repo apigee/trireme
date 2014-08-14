@@ -54,8 +54,10 @@ import java.security.cert.X509Certificate;
 import java.text.DateFormat;
 import java.text.SimpleDateFormat;
 import java.util.ArrayDeque;
+import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Deque;
+import java.util.Iterator;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicInteger;
 
@@ -443,32 +445,46 @@ public class ConnectionImpl
 
     private boolean doUnwrap(Context cx)
     {
-        QueuedChunk qc = incomingChunks.peek();
+        QueuedChunk qc = incomingChunks.poll();
         ByteBuffer bb = (qc == null ? EMPTY : qc.buf);
 
         SSLEngineResult result;
         do {
-            if (log.isTraceEnabled()) {
-                log.trace("{} Unwrapping {}", id, bb);
-            }
-
-            try {
-                result = engine.unwrap(bb, readBuf);
-            } catch (SSLException ssle) {
-                handleEncodingError(cx, qc, ssle);
-                if (qc != null) {
-                    incomingChunks.remove();
+            do {
+                if (log.isTraceEnabled()) {
+                    log.trace("{} Unwrapping {}", id, bb);
                 }
-                return false;
-            }
 
-            if (log.isTraceEnabled()) {
-                log.trace("unwrap result: {}", result);
+                try {
+                    result = engine.unwrap(bb, readBuf);
+                } catch (SSLException ssle) {
+                    handleEncodingError(cx, qc, ssle);
+                    return false;
+                }
+
+                if (log.isTraceEnabled()) {
+                    log.trace("unwrap result: {}", result);
+                }
+                if (result.getStatus() == SSLEngineResult.Status.BUFFER_OVERFLOW) {
+                    // Retry with more space in the output buffer
+                    readBuf = Utils.doubleBuffer(readBuf);
+                }
+            } while (result.getStatus() == SSLEngineResult.Status.BUFFER_OVERFLOW);
+
+            if ((result.getStatus() == SSLEngineResult.Status.BUFFER_UNDERFLOW) && (qc != null)) {
+                // Deliver the write callback so that we get some more data
+                qc.deliverCallback(cx, this);
+                QueuedChunk nc = incomingChunks.poll();
+                if (nc == null) {
+                    break;
+                }
+                nc.buf = Utils.catBuffers(qc.buf, nc.buf);
+                qc = nc;
+                bb = qc.buf;
+            } else {
+                break;
             }
-            if (result.getStatus() == SSLEngineResult.Status.BUFFER_OVERFLOW) {
-                readBuf = Utils.doubleBuffer(readBuf);
-            }
-        } while (result.getStatus() == SSLEngineResult.Status.BUFFER_OVERFLOW);
+        } while (true);
 
         boolean deliverShutdown = false;
         if ((result.getStatus() == SSLEngineResult.Status.CLOSED) && !receivedShutdown) {
@@ -476,10 +492,11 @@ public class ConnectionImpl
             deliverShutdown = true;
         }
 
-        if ((qc != null) && !bb.hasRemaining()) {
-            incomingChunks.remove();
-            if (qc.callback != null) {
-                qc.callback.call(cx, this, this, ScriptRuntime.emptyArgs);
+        if (qc != null) {
+            if (qc.buf.hasRemaining()) {
+                incomingChunks.addFirst(qc);
+            } else {
+                qc.deliverCallback(cx, this);
             }
         }
 
@@ -823,14 +840,22 @@ public class ConnectionImpl
 
     static final class QueuedChunk
     {
-        final ByteBuffer buf;
-        final Function callback;
+        ByteBuffer buf;
+        Function callback;
         boolean shutdown;
 
         QueuedChunk(ByteBuffer buf, Function callback)
         {
             this.buf = buf;
             this.callback = callback;
+        }
+
+        void deliverCallback(Context cx, Scriptable scope)
+        {
+            if (callback != null) {
+                callback.call(cx, scope, scope, ScriptRuntime.emptyArgs);
+                callback = null;
+            }
         }
     }
 }

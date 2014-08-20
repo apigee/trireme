@@ -408,8 +408,9 @@ public class ConnectionImpl
             }
         } while (result.getStatus() == SSLEngineResult.Status.BUFFER_OVERFLOW);
 
-        if ((qc != null) && !bb.hasRemaining()) {
-            // Finished processing the current chunk
+        if ((qc != null) && !bb.hasRemaining() && initFinished) {
+            // Finished processing the current chunk, but don't deliver until
+            // handshake is done in case client ended before sending any data
             outgoingChunks.remove();
             if (qc.callback != null) {
                 qc.callback.call(cx, this, this, ScriptRuntime.emptyArgs);
@@ -549,7 +550,7 @@ public class ConnectionImpl
         }
         Scriptable err = Utils.makeErrorObject(cx, this, cause.toString());
         error = err;
-        if (handshaking) {
+        if (!initFinished) {
             // Always make this in to an "error" event
             verifyError = err;
             if (onError != null) {

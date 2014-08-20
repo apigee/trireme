@@ -774,7 +774,7 @@ CleartextStream.prototype._write = function(chunk, encoding, cb) {
 
 // Data from SSLEngine.wrap will end up here
 CleartextStream.prototype._onwrap = function(chunk, shutdown) {
-  if (!this.pair.ssl) {
+  if (this._destroyed || !this.pair.ssl) {
     // Arrived late after close -- ignore
     return;
   }
@@ -908,7 +908,7 @@ EncryptedStream.prototype._write = function(chunk, encoding, cb) {
 };
 
 EncryptedStream.prototype._onunwrap = function(chunk, shutdown) {
-  if (!this.pair.ssl) {
+  if (this._destroyed || !this.pair.ssl) {
     // Arrived late after close -- ignore
     return;
   }
@@ -935,12 +935,16 @@ EncryptedStream.prototype._read = function() {
 EncryptedStream.prototype._onEnd = function() {
   debug('EncryptedStream end received');
   this._ended = true;
-  if (!this._closed) {
-    this._done();
-  }
-  if (this.onend) {
-    debug('onend');
-    this.onend();
+  if (!this.pair._secureEstablished) {
+    this.pair.emit('error', new Error('Socket hung up'));
+  } else {
+    if (!this._closed) {
+      this._done();
+    }
+    if (this.onend) {
+      debug('onend');
+      this.onend();
+    }
   }
 };
 

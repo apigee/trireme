@@ -54,7 +54,7 @@ server.listen(common.PORT, function() {
     port: common.PORT,
     rejectUnauthorized: false
   }, function() {
-    console.log('connect1');
+    console.log('connect1. reused = %s', client1.isSessionReused());
     assert.ok(!client1.isSessionReused(), 'Session *should not* be reused.');
     session1 = client1.getSession();
   });

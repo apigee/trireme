@@ -80,16 +80,15 @@ public class SecureContextImpl
     private KeyManager[] keyManagers;
     private TrustManager[] trustManagers;
     private X509TrustManager trustedCertManager;
-    private PrivateKey privateKey;
     private X509Certificate[] certChain;
+    private PrivateKey privateKey;
     private KeyStore trustedCertStore;
     private int trustedCertSequence = 0;
     private List<X509CRL> crls;
-    private boolean useDefaultRootCerts;
     private String protocol;
     private String mainProtocol;
     private String[] cipherSuites;
-    private boolean trustStoreValidation;
+    private boolean initialized;
 
     @Override
     public String getClassName() {
@@ -158,6 +157,9 @@ public class SecureContextImpl
     {
     }
 
+    /**
+     * Read an RSA key pair from the PEM File. Turn it in to a proper Java key store later.
+     */
     @JSFunction
     @SuppressWarnings("unused")
     public static void setKey(Context cx, Scriptable thisObj, Object[] args, Function func)
@@ -167,6 +169,7 @@ public class SecureContextImpl
         String p = stringArg(args, 1, null);
         char[] passphrase = (p == null ? null : p.toCharArray());
         SecureContextImpl self = (SecureContextImpl)thisObj;
+        self.initialized = false;
 
         try {
             KeyPair kp = Crypto.getCryptoService().readKeyPair("RSA", key, passphrase);
@@ -184,6 +187,9 @@ public class SecureContextImpl
         }
     }
 
+    /**
+     * Set the server's certificate from a PEM file. Turn it in to a proper key store later.
+     */
     @JSFunction
     @SuppressWarnings("unused")
     public static void setCert(Context cx, Scriptable thisObj, Object[] args, Function func)
@@ -191,6 +197,7 @@ public class SecureContextImpl
         Crypto.ensureCryptoService(cx, thisObj);
         String certStr = stringArg(args, 0);
         SecureContextImpl self = (SecureContextImpl)thisObj;
+        self.initialized = false;
 
         try {
             ByteArrayInputStream bis =
@@ -208,7 +215,7 @@ public class SecureContextImpl
         }
     }
 
-    private void createCertStore()
+    private void ensureCertStore()
         throws GeneralSecurityException, IOException
     {
         if (trustedCertStore == null) {
@@ -217,6 +224,9 @@ public class SecureContextImpl
         }
     }
 
+    /**
+     * Add the certificate of a trusted CA from a PEM file. Turn it in to a proper trust store later.
+     */
     @JSFunction
     @SuppressWarnings("unused")
     public static void addCACert(Context cx, Scriptable thisObj, Object[] args, Function func)
@@ -224,9 +234,10 @@ public class SecureContextImpl
         Crypto.ensureCryptoService(cx, thisObj);
         String certStr = stringArg(args, 0);
         SecureContextImpl self = (SecureContextImpl)thisObj;
+        self.initialized = false;
 
         try {
-            self.createCertStore();
+            self.ensureCertStore();
             ByteArrayInputStream bis =
                 new ByteArrayInputStream(certStr.getBytes(Charsets.ASCII));
             Certificate cert = Crypto.getCryptoService().readCertificate(bis);
@@ -245,12 +256,16 @@ public class SecureContextImpl
         }
     }
 
+    /**
+     * Add a CRL to whatever trust store we are using.
+     */
     @JSFunction
     @SuppressWarnings("unused")
     public static void addCRL(Context cx, Scriptable thisObj, Object[] args, Function func)
     {
         String crlStr = stringArg(args, 0);
         SecureContextImpl self = (SecureContextImpl)thisObj;
+        self.initialized = false;
 
         ByteArrayInputStream bis =
             new ByteArrayInputStream(crlStr.getBytes(Charsets.ASCII));
@@ -265,18 +280,27 @@ public class SecureContextImpl
             log.debug("Added CRL");
 
         } catch (CertificateException e) {
-            throw Utils.makeError(Context.getCurrentContext(), thisObj, "Error reading CRL: " + e);
+            throw Utils.makeError(cx, thisObj, "Error reading CRL: " + e);
         } catch (CRLException e) {
-            throw Utils.makeError(Context.getCurrentContext(), thisObj, "Error reading CRL: " + e);
+            throw Utils.makeError(cx, thisObj, "Error reading CRL: " + e);
         }
     }
 
+    /**
+     * Set the trust store to the one that includes the built-in root CA certs on the Java platform.
+     */
     @JSFunction
     @SuppressWarnings("unused")
     public static void addRootCerts(Context cx, Scriptable thisObj, Object[] args, Function func)
     {
         SecureContextImpl self = (SecureContextImpl)thisObj;
-        self.useDefaultRootCerts = true;
+        self.initialized = false;
+
+        self.trustManagers = DefaultTrustStore.get().getTrustManagers();
+        if (self.trustManagers == null) {
+            throw Utils.makeError(cx, thisObj, "Cannot load default root CA certificates");
+        }
+
         log.debug("Will be using default root certificates");
     }
 
@@ -286,6 +310,7 @@ public class SecureContextImpl
     {
         String cipherList = stringArg(args, 0);
         SecureContextImpl self = (SecureContextImpl)thisObj;
+        self.initialized = false;
 
         ArrayList<String> finalList = new ArrayList<String>();
         for (String cipher : COLON.split(cipherList)) {
@@ -317,6 +342,9 @@ public class SecureContextImpl
         // Ignore this in Trireme.
     }
 
+    /**
+     * Load a PKCS12 key store.
+     */
     @JSFunction
     @SuppressWarnings("unused")
     public static void loadPKCS12(Context cx, Scriptable thisObj, Object[] args, Function func)
@@ -325,13 +353,14 @@ public class SecureContextImpl
         String p = stringArg(args, 1, null);
         char[] passphrase = (p == null ? null :p.toCharArray());
         SecureContextImpl self = (SecureContextImpl)thisObj;
+        self.initialized = false;
 
         try {
             ByteArrayInputStream bis = new ByteArrayInputStream(pfxBuf.getArray(),
                                                                 pfxBuf.getArrayOffset(), pfxBuf.getLength());
             KeyStore keyStore = KeyStore.getInstance("PKCS12");
             keyStore.load(bis, passphrase);
-            KeyManagerFactory keyFactory = KeyManagerFactory.getInstance("SunX509");
+            KeyManagerFactory keyFactory = KeyManagerFactory.getInstance(KeyManagerFactory.getDefaultAlgorithm());
             keyFactory.init(keyStore, passphrase);
             self.keyManagers = keyFactory.getKeyManagers();
             log.debug("Loaded SSL key from PKCS12");
@@ -347,20 +376,25 @@ public class SecureContextImpl
         }
     }
 
+    /**
+     * Specify an explicit Java trust store, as a file name. Read the file and use it to override
+     * any other settings.
+     */
     @JSFunction
     @SuppressWarnings("unused")
     public static void setTrustStore(Context cx, Scriptable thisObj, Object[] args, Function func)
     {
         String name = stringArg(args, 0);
         SecureContextImpl self = (SecureContextImpl)thisObj;
+        self.initialized = false;
         ScriptRunner runtime = (ScriptRunner)cx.getThreadLocal(ScriptRunner.RUNNER);
 
         try {
             FileInputStream keyIn = new FileInputStream(runtime.translatePath(name));
             try {
-                KeyStore trustStore = KeyStore.getInstance("JKS");
+                KeyStore trustStore = KeyStore.getInstance(KeyStore.getDefaultType());
                 trustStore.load(keyIn, null);
-                TrustManagerFactory trustFactory = TrustManagerFactory.getInstance("SunX509");
+                TrustManagerFactory trustFactory = TrustManagerFactory.getInstance(TrustManagerFactory.getDefaultAlgorithm());
                 trustFactory.init(trustStore);
                 self.trustManagers = trustFactory.getTrustManagers();
             } finally {
@@ -374,6 +408,10 @@ public class SecureContextImpl
         }
     }
 
+    /**
+     * Specify an explicit Java key store, as a file name. Read the file and use it to override
+     * any other settings.
+     */
     @JSFunction
     @SuppressWarnings("unused")
     public static void setKeyStore(Context cx, Scriptable thisObj, Object[] args, Function func)
@@ -381,18 +419,20 @@ public class SecureContextImpl
         String name = stringArg(args, 0);
         String p = stringArg(args, 1);
         SecureContextImpl self = (SecureContextImpl)thisObj;
+        self.initialized = false;
         ScriptRunner runtime = (ScriptRunner)cx.getThreadLocal(ScriptRunner.RUNNER);
 
         char[] passphrase = p.toCharArray();
         try {
             FileInputStream keyIn = new FileInputStream(runtime.translatePath(name));
             try {
-                KeyStore keyStore = KeyStore.getInstance("JKS");
+                KeyStore keyStore = KeyStore.getInstance(KeyStore.getDefaultType());
                 keyStore.load(keyIn, passphrase);
-                KeyManagerFactory keyFactory = KeyManagerFactory.getInstance("SunX509");
+                KeyManagerFactory keyFactory = KeyManagerFactory.getInstance(KeyManagerFactory.getDefaultAlgorithm());
                 keyFactory.init(keyStore, passphrase);
                 self.keyManagers = keyFactory.getKeyManagers();
             } finally {
+                keyIn.close();
                 keyIn.close();
             }
 
@@ -415,18 +455,11 @@ public class SecureContextImpl
         return protocol;
     }
 
-    public boolean isTrustStoreValidation() {
-        return trustStoreValidation;
-    }
-
-    public X509TrustManager getExplicitTrustManager() {
-        return trustedCertManager;
-    }
-
     /**
-     * Once all that stuff on top has been all set, then this actually creates an SSLContext object.
+     * Complete one-time initialization of the context which can only happen after all the various setters are
+     * called. Once that happens, we can re-use the same context over and over.
      */
-    public SSLContext makeContext(Context cx, Scriptable scope, boolean rejectUnauthorized)
+    private void initialize(Context cx, Scriptable scope)
     {
         // Set up the key managers, either to what was already set or create one using PEM
         if ((keyManagers == null) && (privateKey != null)) {
@@ -437,12 +470,16 @@ public class SecureContextImpl
             try {
                 pemKs.load(null, null);
                 pemKs.setKeyEntry(DEFAULT_KEY_ENTRY, privateKey, null, certChain);
-                KeyManagerFactory keyFactory = KeyManagerFactory.getInstance("SunX509");
+                KeyManagerFactory keyFactory = KeyManagerFactory.getInstance(KeyManagerFactory.getDefaultAlgorithm());
                 if (log.isDebugEnabled()) {
                     log.debug("Setting up key manager factory {}", keyFactory);
                 }
                 keyFactory.init(pemKs, null);
                 keyManagers = keyFactory.getKeyManagers();
+
+                assert(keyManagers != null);
+                assert(keyManagers.length == 1);
+
             } catch (GeneralSecurityException gse) {
                 throw Utils.makeError(cx, scope, gse.toString());
             } catch (IOException ioe) {
@@ -450,13 +487,19 @@ public class SecureContextImpl
             }
         }
 
-        // Set up the trust manager, whatever it is
-        TrustManager[] tms = trustManagers;
-
-        if (!useDefaultRootCerts) {
-            // Unless we were asked for root certs, we trust particular certs, or none
+        if ((trustManagers == null) && (trustedCertStore != null)) {
+            // Ensure that we created the PEM-based cert store if there is no explicit trust manager,
+            // because it might be empty (meaning that we trust nobody).
+            // After this, if we don't trust anybody, then there will be no trust manager.
             try {
-                createCertStore();
+                ensureCertStore();
+                TrustManagerFactory factory = TrustManagerFactory.getInstance(TrustManagerFactory.getDefaultAlgorithm());
+                if (log.isDebugEnabled()) {
+                    log.debug("Setting up trust manager factory {}", factory);
+                }
+                factory.init(trustedCertStore);
+                trustManagers = factory.getTrustManagers();
+
             } catch (GeneralSecurityException gse) {
                 throw Utils.makeError(cx, this, gse.toString());
             } catch (IOException ioe) {
@@ -464,73 +507,64 @@ public class SecureContextImpl
             }
         }
 
-        // Trusted certs were specified but there is no Java trust manager already
-        if ((trustedCertStore != null) && (tms == null)) {
-            // CAs were added to validate the client, so set them up here.
-            try {
-                TrustManagerFactory factory = TrustManagerFactory.getInstance("SunX509");
-                if (log.isDebugEnabled()) {
-                    log.debug("Setting up trust manager factory {}", factory);
-                }
-                factory.init(trustedCertStore);
-                tms = factory.getTrustManagers();
-            } catch (GeneralSecurityException gse) {
-                throw Utils.makeError(cx, scope, gse.toString());
-            }
+        if (trustManagers != null) {
+            assert(trustManagers.length == 1);
+            assert(trustManagers[0] instanceof X509TrustManager);
+            trustedCertManager = (X509TrustManager)trustManagers[0];
         }
 
         // Add the CRL check if it was specified
-        if ((tms != null) && (crls != null)) {
-            tms[0] = new CompositeTrustManager((X509TrustManager)tms[0], crls);
+        if ((crls != null) && (trustManagers != null)) {
+            trustedCertManager = new CompositeTrustManager((X509TrustManager)trustManagers[0], crls);
             if (log.isDebugEnabled()) {
-                log.debug("Adding composite trust manager {}", tms[0]);
+                log.debug("Adding composite trust manager {}", trustedCertManager);
             }
         }
 
-        TrustManager[] engineTms = null;
-        if (tms == null) {
-            if (!rejectUnauthorized) {
-                log.debug("Trusting everybody no matter what");
-                engineTms = new TrustManager[] { AllTrustingManager.INSTANCE };
-                trustStoreValidation = true;
-            }
-        } else {
-            if (rejectUnauthorized) {
-                // Actually check TLS certs in SSLEngine
-                log.debug("Using pre-set-up trust manager for SSLEngine");
-                engineTms = tms;
-                trustStoreValidation = true;
-            } else {
-                // Do it manually later
-                log.debug("Trusting everybody and checking manually later");
-                trustedCertManager = (X509TrustManager)tms[0];
-                engineTms = new TrustManager[] { AllTrustingManager.INSTANCE };
-            }
+        initialized = true;
+    }
+
+    /**
+     * Once all that stuff on top has been all set, then this actually creates an SSLContext object.
+     */
+    public SSLContext makeContext(Context cx, Scriptable scope)
+    {
+        if (!initialized) {
+            initialize(cx, scope);
         }
 
-        // On a client, we may want to use the default SSL context, which will automatically check
-        // servers against a built-in CA list. We should only get here if "rejectUnauthorized" is true
-        // and there is no client-side cert and no explicit set of CAs to trust
-        SSLContext context;
+        // Create an SSLContext that totally ignores the trust manager that we just spent all that time
+        // setting up, and instead accepts everything.
+        // Then we manually call the trust manager on every new handshake and report the result back
+        // to tls.js.
+        // This is the same thing that regular Node.js does as of 10.x
+
         try {
-            if ((keyManagers == null) && (engineTms == null)) {
-                log.debug("Using default SSLContext");
-                context = SSLContext.getDefault();
-                trustStoreValidation = true;
-            } else {
-                log.debug("Initializing our own SSLContext");
-                context = SSLContext.getInstance("TLS");
-                context.init(keyManagers, engineTms, null);
+            SSLContext context = SSLContext.getInstance(protocol);
+            context.init(keyManagers,
+                         new TrustManager[] { AllTrustingManager.INSTANCE },
+                         null);
+            if (log.isDebugEnabled()) {
+                log.debug("Created a new SSLContext {}", context);
             }
+            return context;
+
         } catch (NoSuchAlgorithmException nse) {
+            // We checked this long ago, back in "init"!
             throw new AssertionError(nse);
         } catch (KeyManagementException kme) {
             throw Utils.makeError(cx, scope, "Error initializing SSL context: " + kme);
         }
-
-        return context;
     }
 
+    public X509TrustManager getTrustManager() {
+        return trustedCertManager;
+    }
+
+    /**
+     * A dummy trust manager that trusts everything no matter what. We instead explicitly call the trust manager
+     * after handshake to report the status back to "tls.js" which then decides what to do.
+     */
     private static final class AllTrustingManager
         implements X509TrustManager
     {

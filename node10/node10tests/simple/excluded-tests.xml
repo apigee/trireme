@@ -159,12 +159,8 @@
         <Description>No pipes in TLS</Description>
     </Excluded>
     <Excluded>
-        <Name>test-tls-handshake-nohang.js</Name>
-        <Description>requires SecurePair</Description>
-    </Excluded>
-    <Excluded>
         <Name>test-tls-securepair.*\.js</Name>
-        <Description>No SecurePair</Description>
+        <Description>Relies on command-line tools that are flaky</Description>
     </Excluded>
     <Excluded>
         <Name>test-tls-session-cache.js</Name>
@@ -279,10 +275,6 @@
         <Description>Assumes that all data on the socket after the upgrade comes in in one chunk.</Description>
     </Excluded>
     <Excluded>
-        <Name>test-tls-client-reject.js</Name>
-        <Description>In Java, when "rejectUnauthorized" is true, the server never sees the client.</Description>
-    </Excluded>
-    <Excluded>
         <Name>test-tls-getcipher.js</Name>
         <Description>Java 7 has a different set of cipher suites than the OpenSSL ones in the test suite.</Description>
     </Excluded>
@@ -359,28 +351,16 @@
         <Description>Uses V8 "gc" method.</Description>
     </Excluded>
     <Excluded>
-        <Name>test-tls-set-encoding.js</Name>
-        <Description>Depends on "readyState"</Description>
-    </Excluded>
-    <Excluded>
         <Name>test-tls-server-slab.js</Name>
         <Description>Depends on internal "slab buffer size"</Description>
     </Excluded>
     <Excluded>
         <Name>test-tls-client-abort3.js</Name>
-        <Description>Assumes that there is something called "ssl" on the socket</Description>
-    </Excluded>
-    <Excluded>
-        <Name>test-https-timeout-server.js</Name>
-        <Description>Relies on internal fields.</Description>
+        <Description>Messes too much with the "ssl.shutdown" method.</Description>
     </Excluded>
     <Excluded>
         <Name>test-https-no-reader.js</Name>
         <Description>Relies on internal readableState</Description>
-    </Excluded>
-    <Excluded>
-        <Name>test-tls-close-notify.js</Name>
-        <Description>Assumes that "pair.ssl" is implemented, which it isn't.</Description>
     </Excluded>
     <Excluded>
         <Name>test-https-req-split.js</Name>
@@ -656,10 +636,6 @@
         <Description>Actually works but not always on the CI machine</Description>
     </Excluded>
     <Excluded>
-        <Name>test-tls-server-large-request.js</Name>
-        <Description>Some sort of timing related failures.</Description>
-    </Excluded>
-    <Excluded>
         <Name>test-exec-max-buffer.js</Name>
         <Description>Not sure</Description>
     </Excluded>
@@ -668,9 +644,6 @@
     </Excluded>
     <Excluded>
         <Name>test-tls-fast-writing.js</Name>
-    </Excluded>
-    <Excluded>
-        <Name>test-tls-stream2-readable-empty-buffer-no-eof.js</Name>
     </Excluded>
     <Excluded>
         <Name>test-http-client-timeout-agent.js</Name>
@@ -697,9 +670,6 @@
     </Excluded>
     <Excluded>
         <Name>test-https-connecting-to-http.js</Name>
-    </Excluded>
-    <Excluded>
-        <Name>test-tls-server-verify.js</Name>
     </Excluded>
     <Excluded>
         <Name>test-fs-error-messages.js</Name>

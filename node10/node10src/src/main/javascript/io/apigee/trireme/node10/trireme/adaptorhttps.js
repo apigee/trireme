@@ -36,6 +36,7 @@ if (process.env.NODE_DEBUG && /https/.test(process.env.NODE_DEBUG)) {
 
 if (HttpWrap.hasServerAdapter()) {
   debug('Using HTTP adapter for https');
+  var crypto = require('crypto');
   var http = require('http');
   var util = require('util');
   // This will pull in the Trireme version of the TLS module
@@ -45,13 +46,26 @@ if (HttpWrap.hasServerAdapter()) {
     if (!(this instanceof Server)) return new Server(opts, requestListener);
     http.Server.call(this, requestListener);
 
+    var sharedCreds = crypto.createCredentials({
+      pfx: opts.pfx,
+      key: opts.key,
+      passphrase: opts.passphrase,
+      cert: opts.cert,
+      ca: opts.ca,
+      ciphers: opts.ciphers,
+      secureProtocol: opts.secureProtocol,
+      secureOptions: opts.secureOptions,
+      crl: opts.crl,
+      sessionIdContext: opts.sessionIdContext
+    });
+
     this.rejectUnauthorized = opts.rejectUnauthorized;
     if (this.rejectUnauthorized === undefined) {
       this.rejectUnauthorized = tls.DEFAULT_REJECT_UNAUTHORIZED;
     }
+    this.requestCert = opts.requestCert ? opts.requestCert : false;
 
-    this.sslContext = tls._getServerContext(opts, this.rejectUnauthorized);
-    this.tlsParams = tls._getTlsParams(opts, this.rejectUnauthorized);
+    this.sslContext = sharedCreds.context;
   }
   util.inherits(Server, http.Server);
 

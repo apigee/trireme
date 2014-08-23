@@ -43,7 +43,6 @@ import javax.net.ssl.SSLEngine;
 import javax.net.ssl.SSLEngineResult;
 import javax.net.ssl.SSLException;
 import javax.net.ssl.SSLPeerUnverifiedException;
-import javax.net.ssl.X509TrustManager;
 import javax.security.auth.x500.X500Principal;
 
 import java.nio.ByteBuffer;
@@ -54,10 +53,7 @@ import java.security.cert.X509Certificate;
 import java.text.DateFormat;
 import java.text.SimpleDateFormat;
 import java.util.ArrayDeque;
-import java.util.ArrayList;
 import java.util.Collection;
-import java.util.Deque;
-import java.util.Iterator;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.regex.Matcher;
@@ -76,7 +72,6 @@ public class ConnectionImpl
     protected static final ByteBuffer EMPTY = ByteBuffer.allocate(0);
     protected static final DateFormat X509_DATE = new SimpleDateFormat("MMM dd HH:mm:ss yyyy zzz");
 
-    private static final Pattern COMMA = Pattern.compile(",");
     private static final Pattern CERT_ENTRY = Pattern.compile("^(.+)=(.*)$");
 
     private final ArrayDeque<QueuedChunk> outgoingChunks = new ArrayDeque<QueuedChunk>();
@@ -85,10 +80,11 @@ public class ConnectionImpl
 
     private ScriptRunner runtime;
 
-    private boolean serverMode;
+    private boolean isServer;
     private boolean requestCert;
     private boolean rejectUnauthorized;
     private String serverName;
+    private int serverPort;
 
     SecureContextImpl context;
     private SSLEngine engine;
@@ -109,6 +105,7 @@ public class ConnectionImpl
     private Scriptable verifyError;
     private Scriptable error;
 
+    @SuppressWarnings("unused")
     public ConnectionImpl()
     {
     }
@@ -117,6 +114,10 @@ public class ConnectionImpl
     public String getClassName() {
         return CLASS_NAME;
     }
+
+    /**
+     * Constructor -- set up all the params passed by "tls.js".
+     */
 
     @JSConstructor
     @SuppressWarnings("unused")
@@ -137,8 +138,9 @@ public class ConnectionImpl
             serverName = stringArg(args, 2, null);
         }
         boolean rejectUnauthorized = booleanArg(args, 3, false);
+        int port = intArg(args, 4, -1);
 
-        ConnectionImpl conn = new ConnectionImpl(isServer, requestCert, rejectUnauthorized, serverName);
+        ConnectionImpl conn = new ConnectionImpl(isServer, requestCert, rejectUnauthorized, serverName, port);
         conn.context = ctxImpl;
 
         if (log.isDebugEnabled()) {
@@ -146,40 +148,86 @@ public class ConnectionImpl
                       conn.id, isServer, requestCert, rejectUnauthorized);
         }
 
-        SSLContext ctx = conn.context.makeContext(cx, conn, rejectUnauthorized);
-        conn.engine = ctx.createSSLEngine();
-        conn.engine.setUseClientMode(!isServer);
-        if (requestCert) {
-            if (rejectUnauthorized) {
-                conn.engine.setNeedClientAuth(true);
-            } else {
-                conn.engine.setWantClientAuth(true);
-            }
-        }
-        if (conn.context.getCipherSuites() != null) {
-            try {
-                conn.engine.setEnabledCipherSuites(conn.context.getCipherSuites());
-            } catch (IllegalArgumentException iae) {
-                // throw a proper Error
-                throw Utils.makeError(cx, ctor, iae.toString());
-            }
-        }
-
-        conn.readBuf = ByteBuffer.allocate(conn.engine.getSession().getPacketBufferSize());
-        conn.writeBuf = ByteBuffer.allocate(conn.engine.getSession().getPacketBufferSize());
-
         conn.runtime = (ScriptRunner)cx.getThreadLocal(ScriptRunner.RUNNER);
 
         return conn;
     }
 
     private ConnectionImpl(boolean serverMode, boolean requestCert,
-                           boolean rejectUnauth, String serverName)
+                           boolean rejectUnauth, String serverName, int port)
     {
-        this.serverMode = serverMode;
+        this.isServer = serverMode;
         this.requestCert = requestCert;
         this.rejectUnauthorized = rejectUnauth;
         this.serverName = serverName;
+        this.serverPort = port;
+    }
+
+    /**
+     * Finish initialization by creating the SSLEngine, etc. It's important to do this after
+     * the constructor because a number of things like the error callback are set after the
+     * constructor.
+     */
+    @JSFunction
+    @SuppressWarnings("unused")
+    public static void init(Context cx, Scriptable thisObj, Object[] args, Function func)
+    {
+        ConnectionImpl self = (ConnectionImpl)thisObj;
+
+        SSLContext ctx = self.context.makeContext(cx, self);
+
+        if (!self.isServer && (self.serverName != null)) {
+            self.engine = ctx.createSSLEngine(self.serverName, self.serverPort);
+        } else {
+            self.engine = ctx.createSSLEngine();
+        }
+
+        self.engine.setUseClientMode(!self.isServer);
+        if (self.requestCert) {
+            if (self.rejectUnauthorized) {
+                self.engine.setNeedClientAuth(true);
+            } else {
+                self.engine.setWantClientAuth(true);
+            }
+        }
+        if (log.isDebugEnabled()) {
+            log.debug("Created SSLEngine {}", self.engine);
+        }
+
+        if (self.context.getCipherSuites() != null) {
+            try {
+                if (log.isDebugEnabled()) {
+                    log.debug("Setting cipher suites {}", self.context.getCipherSuites());
+                }
+                self.engine.setEnabledCipherSuites(self.context.getCipherSuites());
+            } catch (IllegalArgumentException iae) {
+                // Invalid cipher suites for some reason are not an SSLException
+                self.handleError(cx, new SSLException(iae));
+                // But keep on trucking to simplify later code
+            }
+        }
+
+        if (log.isDebugEnabled()) {
+            log.debug("Allocating read and write buffers of size {}", self.engine.getSession().getPacketBufferSize());
+        }
+        self.readBuf = ByteBuffer.allocate(self.engine.getSession().getPacketBufferSize());
+        self.writeBuf = ByteBuffer.allocate(self.engine.getSession().getPacketBufferSize());
+    }
+
+    /**
+     * Initialize the client side of an SSL conversation by pushing an artificial write record on the queue.
+     */
+    @JSFunction
+    @SuppressWarnings("unused")
+    public static int start(Context cx, Scriptable thisObj, Object[] args, Function func)
+    {
+        ConnectionImpl self = (ConnectionImpl)thisObj;
+
+        if (!self.isServer) {
+            self.outgoingChunks.add(new QueuedChunk(null, null));
+            self.encodeLoop(cx);
+        }
+        return 0;
     }
 
     @JSSetter("onhandshakestart")
@@ -262,19 +310,6 @@ public class ConnectionImpl
 
     @JSFunction
     @SuppressWarnings("unused")
-    public static int start(Context cx, Scriptable thisObj, Object[] args, Function func)
-    {
-        ConnectionImpl self = (ConnectionImpl)thisObj;
-
-        if (self.engine.getUseClientMode()) {
-            self.outgoingChunks.add(new QueuedChunk(null, null));
-            self.encodeLoop(cx);
-        }
-        return 0;
-    }
-
-    @JSFunction
-    @SuppressWarnings("unused")
     public static void close(Context cx, Scriptable thisObj, Object[] args, Function func)
     {
         // Nothing to do in Java
@@ -295,9 +330,9 @@ public class ConnectionImpl
 
     @JSFunction
     @SuppressWarnings("unused")
-    public static void shutdownOutput(Context cx, Scriptable thisObj, Object[] args, Function func)
+    public static void shutdown(Context cx, Scriptable thisObj, Object[] args, Function func)
     {
-        Function cb = functionArg(args, 0, true);
+        Function cb = functionArg(args, 0, false);
         ConnectionImpl self = (ConnectionImpl)thisObj;
 
         QueuedChunk qc = new QueuedChunk(null, cb);
@@ -602,7 +637,7 @@ public class ConnectionImpl
             if (log.isDebugEnabled()) {
                 log.debug("Peer is unverified");
             }
-            if (engine.getUseClientMode() || requestCert) {
+            if (!isServer || requestCert) {
                 handleError(cx, unver);
             }
             return;
@@ -613,36 +648,30 @@ public class ConnectionImpl
             if (log.isDebugEnabled()) {
                 log.debug("Peer has no client- or server-side certs");
             }
-            if (engine.getUseClientMode() || requestCert) {
+            if (!isServer || requestCert) {
                 handleError(cx, new SSLException("Peer has no certificates"));
             }
             return;
         }
 
-        // If we got here, either the cert is valid (because SSLEngine didn't reject it right away)
-        // or because we have to check manually. Get the trust manager to check.
-
-        X509TrustManager trustManager = context.getExplicitTrustManager();
-        if (trustManager == null) {
-            if (!context.isTrustStoreValidation()) {
-                handleError(cx, new SSLException("No trust manager and not trusting anybody"));
-            }
+        if (context.getTrustManager() == null) {
+            handleError(cx, new SSLException("No trusted CAs"));
             return;
         }
 
         // Manually check trust
         try {
-            if (engine.getUseClientMode()) {
-                trustManager.checkServerTrusted((X509Certificate[])certChain, "RSA");
+            if (isServer) {
+                context.getTrustManager().checkClientTrusted((X509Certificate[])certChain, "RSA");
             } else {
-                trustManager.checkClientTrusted((X509Certificate[])certChain, "RSA");
+                context.getTrustManager().checkServerTrusted((X509Certificate[])certChain, "RSA");
             }
             if (log.isDebugEnabled()) {
-                log.debug("SSL peer is valid");
+                log.debug("SSL peer {} is valid", engine.getSession());
             }
         } catch (CertificateException e) {
             if (log.isDebugEnabled()) {
-                log.debug("Error verifying SSL peer: {}", e);
+                log.debug("Error verifying SSL peer {}: {}", engine.getSession(), e);
             }
             handleError(cx, new SSLException(e));
         }
@@ -660,8 +689,9 @@ public class ConnectionImpl
         Scriptable err = Utils.makeErrorObject(cx, this, cause.toString());
         if (handshaking) {
             verifyError = err;
+        } else {
+            error = err;
         }
-        error = err;
     }
 
     private void processTasks()

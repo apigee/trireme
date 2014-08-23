@@ -26,6 +26,7 @@ import io.apigee.trireme.core.ScriptTask;
 import io.apigee.trireme.core.internal.Charsets;
 import io.apigee.trireme.core.InternalNodeModule;
 import io.apigee.trireme.core.Utils;
+import io.apigee.trireme.core.modules.crypto.SecureContextImpl;
 import io.apigee.trireme.net.spi.HttpDataAdapter;
 import io.apigee.trireme.net.spi.HttpFuture;
 import io.apigee.trireme.net.spi.HttpRequestAdapter;
@@ -175,10 +176,12 @@ public class HTTPWrap
         @SuppressWarnings("unused")
         public static void setSslContext(Context cx, Scriptable thisObj, Object[] args, Function func)
         {
-            SSLWrap.ContextImpl ctx = objArg(args, 0, SSLWrap.ContextImpl.class, true);
-            Scriptable params = objArg(args, 1, Scriptable.class, true);
+            SecureContextImpl ctx = objArg(args, 0, SecureContextImpl.class, true);
+            boolean rejectUnauthorized = booleanArg(args, 1, true);
+            boolean requestCerts = booleanArg(args, 2, false);
             ServerContainer self = (ServerContainer)thisObj;
-            self.tlsParams = self.makeTLSParams(ctx.getSslContext(), params);
+
+            self.tlsParams = self.makeTLSParams(cx, ctx, rejectUnauthorized, requestCerts);
         }
 
         @JSFunction
@@ -487,26 +490,25 @@ public class HTTPWrap
             this.onClose = oc;
         }
 
-        private TLSParams makeTLSParams(SSLContext ctx, Scriptable tlsParams)
+        private TLSParams makeTLSParams(Context cx, SecureContextImpl sc, boolean rejectUnauthorized,
+                                        boolean requestCert)
         {
+            SSLContext ctx = sc.makeContext(cx, this);
+
             TLSParams t = new TLSParams();
             t.setContext(ctx);
 
-            if (tlsParams.has("ciphers", tlsParams)) {
-                String ciphers = Context.toString(tlsParams.get("ciphers", tlsParams));
-                ArrayList<String> cl = new ArrayList<String>();
-                for (String c : ciphers.split(":")) {
-                    cl.add(c);
+            if (sc.getCipherSuites() != null) {
+                t.setCiphers(sc.getCipherSuites());
+            }
+            if (requestCert) {
+                if (rejectUnauthorized) {
+                    t.setClientAuthRequired(true);
+                } else {
+                    t.setClientAuthRequested(true);
                 }
-                t.setCiphers(cl.toArray(new String[0]));
             }
 
-            if (tlsParams.has("clientAuthRequired", tlsParams)) {
-                t.setClientAuthRequired(true);
-            }
-            if (tlsParams.has("clientAuthRequested", tlsParams)) {
-                t.setClientAuthRequested(true);
-            }
             return t;
         }
 

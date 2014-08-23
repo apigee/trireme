@@ -194,11 +194,11 @@ function checkServerIdentity(host, cert) {
           dnsNames.push(regexpify(commonNames[i], true));
         }
       } else {
-        dnsNames.push(regexpify(commonNames, true));
+        var reg = regexpify(commonNames, true);
+        debug(reg);
+        dnsNames.push(reg);
       }
     }
-
-    debug(util.format('matching %s against %j', host, dnsNames));
 
     valid = dnsNames.some(function(re) {
       return re.test(host);
@@ -209,76 +209,12 @@ function checkServerIdentity(host, cert) {
 }
 exports.checkServerIdentity = checkServerIdentity;
 
-
-function SlabBuffer() {
-  this.create();
-}
-
-
-SlabBuffer.prototype.create = function create() {
-  this.isFull = false;
-  this.pool = new Buffer(exports.SLAB_BUFFER_SIZE);
-  this.offset = 0;
-  this.remaining = this.pool.length;
-};
-
-
-SlabBuffer.prototype.use = function use(context, fn, size) {
-  if (this.remaining === 0) {
-    this.isFull = true;
-    return 0;
-  }
-
-  var actualSize = this.remaining;
-
-  if (size !== null) actualSize = Math.min(size, actualSize);
-
-  var bytes = fn.call(context, this.pool, this.offset, actualSize);
-  if (bytes > 0) {
-    this.offset += bytes;
-    this.remaining -= bytes;
-  }
-
-  assert(this.remaining >= 0);
-
-  return bytes;
-};
-
-
-var slabBuffer = null;
-
-
 // Base class of both CleartextStream and EncryptedStream
 function CryptoStream(pair, options) {
   stream.Duplex.call(this, options);
   this.pair = pair;
 
   this.once('finish', onCryptoStreamFinish);
-
-/*
-function CryptoStream(pair, options) {
-  stream.Duplex.call(this, options);
-
-  this.pair = pair;
-  this._pending = null;
-  this._pendingEncoding = '';
-  this._pendingCallback = null;
-  this._doneFlag = false;
-  this._retryAfterPartial = false;
-  this._halfRead = false;
-  this._sslOutCb = null;
-  this._resumingSession = false;
-  this._reading = true;
-  this._destroyed = false;
-  this._ended = false;
-  this._finished = false;
-  this._opposite = null;
-
-  if (slabBuffer === null) slabBuffer = new SlabBuffer();
-  this._buffer = slabBuffer;
-  // net.Socket calls .onend too
-  this.once('end', onCryptoStreamEnd);
-*/
 }
 util.inherits(CryptoStream, stream.Duplex);
 
@@ -289,7 +225,7 @@ function onCryptoStreamFinish() {
   if (this === this.pair.cleartext) {
     if (this.pair.ssl) {
       debug('Shutting down SSL output');
-      this.pair.ssl.shutdownOutput(function() {
+      this.pair.ssl.shutdown(function() {
         debug('Shutdown complete');
         self._done();
       });
@@ -299,6 +235,9 @@ function onCryptoStreamFinish() {
     }
   } else {
     debug('encrypted.onfinish');
+    if (!this.pair._secureEstablished && !this._destroyed) {
+      this.pair.emit('error', new Error('Socket hung up'));
+    }
   }
 
   // Try to read just to get sure that we won't miss EOF
@@ -311,291 +250,6 @@ function onCryptoStreamFinish() {
     if (this === this.pair.cleartext) this._opposite._done();
   }
 }
-
-/*
-function onCryptoStreamEnd() {
-  debug('onCryptoStreamEnd');
-  this._ended = true;
-  if (this === this.pair.cleartext) {
-    debug('cleartext.onend');
-  } else {
-    debug('encrypted.onend');
-  }
-
-  if (this.onend) this.onend();
-}
-
-// NOTE: Called once `this._opposite` is set.
-CryptoStream.prototype.init = function init() {
-  var self = this;
-  this._opposite.on('sslOutEnd', function() {
-    if (self._sslOutCb) {
-      var cb = self._sslOutCb;
-      self._sslOutCb = null;
-      cb(null);
-    }
-  });
-};
-
-
-CryptoStream.prototype._write = function write(data, encoding, cb) {
-  assert(this._pending === null);
-
-  // Black-hole data
-  if (!this.pair.ssl) return cb(null);
-
-  // When resuming session don't accept any new data.
-  // And do not put too much data into openssl, before writing it from encrypted
-  // side.
-  //
-  // TODO(indutny): Remove magic number, use watermark based limits
-  if (!this._resumingSession &&
-      this._opposite._internallyPendingBytes() < 128 * 1024) {
-    // Write current buffer now
-    var written;
-    if (this === this.pair.cleartext) {
-      debug('cleartext.write called with ' + data.length + ' bytes');
-      written = this.pair.ssl.clearIn(data, 0, data.length);
-    } else {
-      debug('encrypted.write called with ' + data.length + ' bytes');
-      written = this.pair.ssl.encIn(data, 0, data.length);
-    }
-    debug('written: ' + written);
-
-    // Handle and report errors
-    if (this.pair.ssl && this.pair.ssl.error) {
-      return cb(this.pair.error(true));
-    }
-
-    // Force SSL_read call to cycle some states/data inside OpenSSL
-    this.pair.cleartext.read(0);
-
-    // Cycle encrypted data
-    if (this.pair.encrypted._internallyPendingBytes())
-      this.pair.encrypted.read(0);
-
-    // Get NPN and Server name when ready
-    this.pair.maybeInitFinished();
-
-    // Whole buffer was written
-    if (written === data.length) {
-      if (this === this.pair.cleartext) {
-        debug('cleartext.write succeed with ' + written + ' bytes');
-      } else {
-        debug('encrypted.write succeed with ' + written + ' bytes');
-      }
-
-      // Invoke callback only when all data read from opposite stream
-      if (this._opposite._halfRead) {
-        assert(this._sslOutCb === null);
-        this._sslOutCb = cb;
-      } else {
-        cb(null);
-      }
-      return;
-    } else if (written !== 0 && written !== -1) {
-      // Trireme: Java might require a few more tries...
-      //assert(!this._retryAfterPartial);
-      this._retryAfterPartial = true;
-      debug('Retrying with ' + (data.length - written) + ' more bytes');
-      this._write(data.slice(written), encoding, cb);
-      this._retryAfterPartial = false;
-      return;
-    }
-  } else {
-    debug('cleartext.write queue is full');
-
-    // Force SSL_read call to cycle some states/data inside OpenSSL
-    this.pair.cleartext.read(0);
-  }
-
-  // No write has happened
-  this._pending = data;
-  this._pendingEncoding = encoding;
-  this._pendingCallback = cb;
-
-  if (this === this.pair.cleartext) {
-    debug('cleartext.write queued with ' + data.length + ' bytes');
-  } else {
-    debug('encrypted.write queued with ' + data.length + ' bytes');
-  }
-};
-
-
-CryptoStream.prototype._writePending = function writePending() {
-  var data = this._pending,
-      encoding = this._pendingEncoding,
-      cb = this._pendingCallback;
-
-  this._pending = null;
-  this._pendingEncoding = '';
-  this._pendingCallback = null;
-  this._write(data, encoding, cb);
-};
-
-
-CryptoStream.prototype._read = function read(size) {
-  // XXX: EOF?!
-  if (!this.pair.ssl) return this.push(null);
-
-  // Wait for session to be resumed
-  // Mark that we're done reading, but don't provide data or EOF
-  if (this._resumingSession || !this._reading) return this.push('');
-
-  var out;
-  if (this === this.pair.cleartext) {
-    debug('cleartext.read called with ' + size + ' bytes');
-    out = this.pair.ssl.clearOut;
-  } else {
-    debug('encrypted.read called with ' + size + ' bytes');
-    out = this.pair.ssl.encOut;
-  }
-
-  var bytesRead = 0,
-      start = this._buffer.offset,
-      last = start;
-  do {
-    assert(last === this._buffer.offset);
-    var read = this._buffer.use(this.pair.ssl, out, size - bytesRead);
-    if (read > 0) {
-      bytesRead += read;
-    }
-    last = this._buffer.offset;
-
-    // Handle and report errors
-    if (this.pair.ssl && this.pair.ssl.error) {
-      this.pair.error();
-      break;
-    }
-  } while (read > 0 &&
-           !this._buffer.isFull &&
-           bytesRead < size &&
-           this.pair.ssl !== null);
-
-  // Get NPN and Server name when ready
-  this.pair.maybeInitFinished();
-
-  // Create new buffer if previous was filled up
-  var pool = this._buffer.pool;
-  if (this._buffer.isFull) this._buffer.create();
-
-  assert(bytesRead >= 0);
-
-  if (this === this.pair.cleartext) {
-    debug('cleartext.read succeed with ' + bytesRead + ' bytes');
-  } else {
-    debug('encrypted.read succeed with ' + bytesRead + ' bytes');
-  }
-
-  // Try writing pending data
-  if (this._pending !== null) this._writePending();
-  if (this._opposite._pending !== null) this._opposite._writePending();
-
-  if (bytesRead === 0) {
-    // EOF when cleartext has finished and we have nothing to read
-    if (this._opposite._finished && this._internallyPendingBytes() === 0 ||
-        this.pair.ssl && this.pair.ssl.receivedShutdown) {
-      debug('receivedShutdown');
-      // Perform graceful shutdown
-      this._done();
-
-      // No half-open, sorry!
-      if (this === this.pair.cleartext) {
-        this._opposite._done();
-
-        // EOF
-        this.push(null);
-      } else if (!this.pair.ssl || !this.pair.ssl.receivedShutdown) {
-        // EOF
-        this.push(null);
-      }
-    } else {
-      // Bail out
-      this.push('');
-    }
-  } else {
-    // Give them requested data
-    if (this.ondata) {
-      this.ondata(pool, start, start + bytesRead);
-
-      // Deceive streams2
-      var self = this;
-
-      setImmediate(function() {
-        // Force state.reading to set to false
-        self.push('');
-
-        // Try reading more, we most likely have some data
-        self.read(0);
-      });
-    } else {
-      this.push(pool.slice(start, start + bytesRead));
-    }
-  }
-
-  // Let users know that we've some internal data to read
-  var halfRead = this._internallyPendingBytes() !== 0;
-
-  // Smart check to avoid invoking 'sslOutEnd' in the most of the cases
-  if (this._halfRead !== halfRead) {
-    this._halfRead = halfRead;
-
-    // Notify listeners about internal data end
-    if (!halfRead) {
-      if (this === this.pair.cleartext) {
-        debug('cleartext.sslOutEnd');
-      } else {
-        debug('encrypted.sslOutEnd');
-      }
-
-      this.emit('sslOutEnd');
-    }
-  }
-};
-
-*/
-
-// Example:
-// C=US\nST=CA\nL=SF\nO=Joyent\nOU=Node.js\nCN=ca1\nemailAddress=ry@clouds.org
-function parseCertString(s) {
-  var out = {};
-  var parts = s.split('\n');
-  for (var i = 0, len = parts.length; i < len; i++) {
-    var sepIndex = parts[i].indexOf('=');
-    if (sepIndex > 0) {
-      var key = parts[i].slice(0, sepIndex);
-      var value = parts[i].slice(sepIndex + 1);
-      if (key in out) {
-        if (!Array.isArray(out[key])) {
-          out[key] = [out[key]];
-        }
-        out[key].push(value);
-      } else {
-        out[key] = value;
-      }
-    }
-  }
-  return out;
-}
-
-
-/*
-CryptoStream.prototype.end = function(chunk, encoding) {
-  if (this === this.pair.cleartext) {
-    debug('cleartext.end');
-  } else {
-    debug('encrypted.end');
-  }
-
-  // Write pending data first
-  if (this._pending !== null) this._writePending();
-
-  this.writable = false;
-
-  stream.Duplex.prototype.end.call(this, chunk, encoding);
-};
-*/
-
 
 CryptoStream.prototype.destroySoon = function(err) {
   if (this === this.pair.cleartext) {
@@ -688,55 +342,6 @@ Object.defineProperty(CryptoStream.prototype, 'readyState', {
     }
   }
 });
-
-/*
-function CleartextStream(pair, options) {
-  CryptoStream.call(this, pair, options);
-
-  // This is a fake kludge to support how the http impl sits
-  // on top of net Sockets
-  var self = this;
-  this._handle = {
-    readStop: function() {
-      self._reading = false;
-    },
-    readStart: function() {
-      if (self._reading && self._readableState.length > 0) return;
-      self._reading = true;
-      self.read(0);
-      if (self._opposite.readable) self._opposite.read(0);
-    }
-  };
-}
-util.inherits(CleartextStream, CryptoStream);
-
-
-CleartextStream.prototype._internallyPendingBytes = function() {
-  if (this.pair.ssl) {
-    return this.pair.ssl.clearPending();
-  } else {
-    return 0;
-  }
-};
-
-
-
-
-function EncryptedStream(pair, options) {
-  CryptoStream.call(this, pair, options);
-}
-util.inherits(EncryptedStream, CryptoStream);
-
-
-EncryptedStream.prototype._internallyPendingBytes = function() {
-  if (this.pair.ssl) {
-    return this.pair.ssl.encPending();
-  } else {
-    return 0;
-  }
-};
-*/
-
 
 function CleartextStream(pair, options) {
   CryptoStream.call(this, pair, options);
@@ -935,7 +540,7 @@ EncryptedStream.prototype._read = function() {
 EncryptedStream.prototype._onEnd = function() {
   debug('EncryptedStream end received');
   this._ended = true;
-  if (!this.pair._secureEstablished) {
+  if (!this.pair._secureEstablished && !this._destroyed) {
     this.pair.emit('error', new Error('Socket hung up'));
   } else {
     if (!this._closed) {
@@ -1079,7 +684,8 @@ function SecurePair(credentials, isServer, requestCert, rejectUnauthorized,
                             this._isServer ? true : false,
                             this._isServer ? this._requestCert :
                                              options.servername,
-                            this._rejectUnauthorized);
+                            this._rejectUnauthorized,
+                            options.port);
 
   if (this._isServer) {
     this.ssl.onhandshakestart = onhandshakestart.bind(this);
@@ -1103,6 +709,9 @@ function SecurePair(credentials, isServer, requestCert, rejectUnauthorized,
     this.ssl.setNPNProtocols(options.NPNProtocols);
     this.npnProtocol = null;
   }
+
+  // Complete initialization of SSL engine
+  this.ssl.init();
 
   /* Acts as a r/w stream to the cleartext side of the stream. */
   this.cleartext = new CleartextStream(this, options.cleartext);
@@ -1507,6 +1116,7 @@ exports.connect = function(/* [port, host], options, cb */) {
   options = util._extend(defaults, options || {});
 
   var socket = options.socket ? options.socket : new net.Stream();
+  var port = options.port ? options.port : -1;
 
   var sslcontext = crypto.createCredentials(options);
 
@@ -1518,6 +1128,7 @@ exports.connect = function(/* [port, host], options, cb */) {
                             {
                               NPNProtocols: NPN.NPNProtocols,
                               servername: hostname,
+                              port: port,
                               cleartext: options.cleartext,
                               encrypted: options.encrypted
                             });
@@ -1545,6 +1156,7 @@ exports.connect = function(/* [port, host], options, cb */) {
 
   pair.on('secure', function() {
     var verifyError = pair.ssl.verifyError();
+    debug('on secure. Verify error = ' +  pair.ssl.verifyError());
 
     cleartext.npnProtocol = pair.npnProtocol;
 

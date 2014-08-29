@@ -58,8 +58,7 @@ public class BenchmarkTest
         "net/tcp-raw-s2c.js",
         // Uses recursive nextTick()
         //"tls/throughput.js",
-        "tls/tls-connect.js",
-        "iconv/iconv-performance.js"
+        "tls/tls-connect.js"
     };
 
     @BeforeClass

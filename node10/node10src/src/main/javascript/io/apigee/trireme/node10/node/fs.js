@@ -56,6 +56,15 @@ var isWindows = process.platform === 'win32';
 
 var DEBUG = process.env.NODE_DEBUG && /fs/.test(process.env.NODE_DEBUG);
 
+var debug;
+if (DEBUG) {
+  debug = function(x) {
+    console.log('FS: ' + x);
+  }
+} else {
+  debug = function() {};
+}
+
 function rethrow() {
   // Only enable in debug mode. A backtrace uses ~1000 bytes of heap space and
   // is fairly slow to generate.
@@ -1483,6 +1492,8 @@ function ReadStream(path, options) {
 
   this.on('end', function() {
     if (this.autoClose) {
+      debug('Destroy on end event');
+      this._endEvent = true;
       this.destroy();
     }
   });
@@ -1494,6 +1505,9 @@ ReadStream.prototype.open = function() {
   var self = this;
   fs.open(this.path, this.flags, this.mode, function(er, fd) {
     if (er) {
+      if (debugOn) {
+        debug('Open error: ' + er);
+      }
       if (self.autoClose) {
         self.destroy();
       }
@@ -1509,6 +1523,9 @@ ReadStream.prototype.open = function() {
 };
 
 ReadStream.prototype._read = function(n) {
+  if (DEBUG) {
+    debug('ReadStream.read ' + n + ' destroyed = ' + this.destroyed);
+  }
   if (typeof this.fd !== 'number')
     return this.once('open', function() {
       this._read(n);
@@ -1535,11 +1552,14 @@ ReadStream.prototype._read = function(n) {
 
   // already read everything we were supposed to read!
   // treat as EOF.
-  if (toRead <= 0)
+  if (toRead <= 0) {
+    debug('Pushing EOF');
     return this.push(null);
+  }
 
   // the actual read.
   var self = this;
+  debug('fs.read');
   fs.read(this.fd, pool, pool.used, toRead, this.pos, onread);
 
   // move the pool positions, and internal position for reading.
@@ -1548,7 +1568,13 @@ ReadStream.prototype._read = function(n) {
   pool.used += toRead;
 
   function onread(er, bytesRead) {
+    if (DEBUG) {
+      debug('fs.onread err = ' + er + ' bytesRead = ' + bytesRead);
+    }
     if (er) {
+      if (debugOn) {
+        debug('Read error: ' + er);
+      }
       if (self.autoClose) {
         self.destroy();
       }
@@ -1565,6 +1591,12 @@ ReadStream.prototype._read = function(n) {
 
 
 ReadStream.prototype.destroy = function() {
+  if (!this._endEvent) {
+    var e = new Error();
+    Error.captureStackTrace(e);
+    debug(e.stack);
+  }
+  debug('ReadStream.destroy');
   if (this.destroyed)
     return;
   this.destroyed = true;
@@ -1651,6 +1683,9 @@ fs.FileWriteStream = fs.WriteStream; // support the legacy name
 WriteStream.prototype.open = function() {
   fs.open(this.path, this.flags, this.mode, function(er, fd) {
     if (er) {
+      if (debugOn) {
+        debug('Open error. Destroying: ' + er);
+      }
       this.destroy();
       this.emit('error', er);
       return;

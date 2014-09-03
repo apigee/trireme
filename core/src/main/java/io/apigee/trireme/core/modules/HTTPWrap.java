@@ -40,6 +40,7 @@ import org.mozilla.javascript.RhinoException;
 import org.mozilla.javascript.Scriptable;
 import org.mozilla.javascript.ScriptableObject;
 import org.mozilla.javascript.ScriptRuntime;
+import org.mozilla.javascript.Undefined;
 import org.mozilla.javascript.annotations.JSFunction;
 import org.mozilla.javascript.annotations.JSGetter;
 import org.mozilla.javascript.annotations.JSSetter;
@@ -332,7 +333,7 @@ public class HTTPWrap
                 log.debug("Calling onComplete with {}", incoming);
             }
             onComplete.call(cx, onComplete, this,
-                            new Object[] { incoming });
+                            new Object[]{incoming});
         }
 
         private void callOnData(Context cx, Scriptable scope,
@@ -616,7 +617,6 @@ public class HTTPWrap
 
         private HttpResponseAdapter response;
         private ServerContainer server;
-        private Function onWriteComplete;
         private Function onChannelClosed;
 
         @Override
@@ -629,20 +629,6 @@ public class HTTPWrap
         {
             this.response = response;
             this.server = server;
-        }
-
-        @JSGetter("onwritecomplete")
-        @SuppressWarnings("unused")
-        public Function getOnWriteComplete()
-        {
-            return onWriteComplete;
-        }
-
-        @JSSetter("onwritecomplete")
-        @SuppressWarnings("unused")
-        public void setOnWriteComplete(Function onComplete)
-        {
-            this.onWriteComplete = onComplete;
         }
 
         @JSGetter("onchannelclosed")
@@ -686,18 +672,32 @@ public class HTTPWrap
             }
         }
 
+
         @JSFunction
         @SuppressWarnings("unused")
-        public boolean send(int statusCode, boolean sendDate, Scriptable headers,
-                            Object data, Object encoding, Scriptable trailers, boolean last)
+        public static boolean send(Context cx, Scriptable thisObj, Object[] args, Function func)
         {
+            int statusCode = intArg(args, 0);
+            boolean sendDate = booleanArg(args, 1);
+            Scriptable headers = objArg(args, 2, Scriptable.class, true);
+            ensureArg(args, 3);
+            Object data = args[3];
+            ensureArg(args, 4);
+            Object encoding = args[4];
+            ensureArg(args, 5);
+            Object trailers = args[5];
+            boolean last = booleanArg(args, 6);
+            Function onComplete = functionArg(args, 7, false);
+
+            ResponseAdapter self = (ResponseAdapter)thisObj;
+
             if (last) {
-                server.requestComplete(this);
+                self.server.requestComplete(self);
             }
 
-            ByteBuffer buf = gatherData(data, encoding);
+            ByteBuffer buf = self.gatherData(data, encoding);
 
-            response.setStatusCode(statusCode);
+            self.response.setStatusCode(statusCode);
 
             boolean hasDate = false;
             if (headers != null) {
@@ -712,54 +712,67 @@ public class HTTPWrap
                         if ("Date".equalsIgnoreCase(nameVal)) {
                             hasDate = true;
                         }
-                        response.addHeader(nameVal, Context.toString(value));
+                        self.response.addHeader(nameVal, Context.toString(value));
                     }
                 }
                 while ((name != Scriptable.NOT_FOUND) && (value != Scriptable.NOT_FOUND));
             }
 
             if (sendDate && !hasDate) {
-                addDateHeader(response);
+                self.addDateHeader(self.response);
             }
 
             HttpFuture future;
             if (last) {
                 // Send everything in one big message
-                addTrailers(trailers, response);
-                if (buf != null) {
-                    response.setData(buf);
+                if ((trailers != null) && !Undefined.instance.equals(trailers)) {
+                    self.addTrailers((Scriptable)trailers, self.response);
                 }
-                future = response.send(true);
-            } else {
-                future = response.send(false);
                 if (buf != null) {
-                    future = response.sendChunk(buf, false);
+                    self.response.setData(buf);
+                }
+                future = self.response.send(true);
+            } else {
+                future = self.response.send(false);
+                if (buf != null) {
+                    future = self.response.sendChunk(buf, false);
                 }
             }
 
-            setListener(future);
+            self.setListener(future, onComplete);
             return future.isDone();
         }
 
         @JSFunction
         @SuppressWarnings("unused")
-        public boolean sendChunk(Object data, Object encoding, Scriptable trailers, boolean last)
+        public static boolean sendChunk(Context cx, Scriptable thisObj, Object[] args, Function func)
         {
+            ensureArg(args, 0);
+            Object data = args[0];
+            ensureArg(args, 1);
+            Object encoding = args[1];
+            ensureArg(args, 2);
+            Object trailers = args[2];
+            boolean last = booleanArg(args, 3);
+            Function onComplete = functionArg(args, 4, false);
+
+            ResponseAdapter self = (ResponseAdapter)thisObj;
+
             if (last) {
-                server.requestComplete(this);
+                self.server.requestComplete(self);
             }
 
-            ByteBuffer buf = gatherData(data, encoding);
+            ByteBuffer buf = self.gatherData(data, encoding);
             if (last) {
-                addTrailers(trailers, response);
+                if ((trailers != null) && !Undefined.instance.equals(trailers)) {
+                    self.addTrailers((Scriptable)trailers, self.response);
+                }
             }
-            HttpFuture future = response.sendChunk(buf, last);
+            HttpFuture future = self.response.sendChunk(buf, last);
 
-            setListener(future);
+            self.setListener(future, onComplete);
             return future.isDone();
         }
-
-
 
         @JSFunction
         @SuppressWarnings("unused")
@@ -809,7 +822,7 @@ public class HTTPWrap
             response.addHeader("Date", headerVal);
         }
 
-        private void setListener(HttpFuture future)
+        private void setListener(HttpFuture future, final Function onComplete)
         {
             future.setListener(new HttpFuture.Listener() {
                 @Override
@@ -824,7 +837,7 @@ public class HTTPWrap
                         @Override
                         public void execute(Context cx, Scriptable scope)
                         {
-                            Scriptable err = null;
+                            Object err = Undefined.instance;
                             // on an HTTP response, no need to get all upset about a close
                             if (closed) {
                                 ResponseAdapter.this.onChannelClosed.call(cx, ResponseAdapter.this.onChannelClosed,
@@ -834,9 +847,9 @@ public class HTTPWrap
                                     err = Utils.makeErrorObject(cx, ResponseAdapter.this,
                                                                 (cause == null) ? null : cause.toString());
                                 }
-                                ResponseAdapter.this.onWriteComplete.call(cx, ResponseAdapter.this.onWriteComplete,
-                                                                          ResponseAdapter.this,
-                                                                          new Object[] { err });
+                                if (onComplete != null) {
+                                    onComplete.call(cx, onComplete, ResponseAdapter.this, new Object[] { err });
+                                }
                             }
                         }
                     }, domain);

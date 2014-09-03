@@ -27,6 +27,15 @@ var Stream = require('stream');
 var util = require('util');
 var StringDecoder;
 
+var debug, debugOn;
+if (process.env.NODE_DEBUG && /stream/.test(process.env.NODE_DEBUG)) {
+  debugOn = true;
+  debug = function(x) { console.error('Stream: %s', x); };
+} else {
+  debugOn = false;
+  debug = function() { };
+}
+
 util.inherits(Readable, Stream);
 
 function ReadableState(options, stream) {
@@ -480,6 +489,7 @@ Readable.prototype.pipe = function(dest, pipeOpts) {
   }
 
   function onend() {
+    debug('pipe.onend');
     dest.end();
   }
 
@@ -566,6 +576,7 @@ Readable.prototype.pipe = function(dest, pipeOpts) {
 
 function pipeOnDrain(src) {
   return function() {
+    debug('pipeOnDrain');
     var dest = this;
     var state = src._readableState;
     state.awaitDrain--;
@@ -579,15 +590,30 @@ function flow(src) {
   var chunk;
   state.awaitDrain = 0;
 
+  debug('pipe.flow');
+
   function write(dest, i, list) {
+    debug('Pipe writing');
     var written = dest.write(chunk);
+    if (debugOn) {
+      debug('Pipe write wrote ' + written);
+    }
     if (false === written) {
       state.awaitDrain++;
+      if (debugOn) {
+        debug('awaitDrain = ' + state.awaitDrain);
+      }
     }
   }
 
+  if (debugOn) {
+    debug('pipesCount = ' + state.pipesCount + ' awaitDrain = ' + state.awaitDrain);
+  }
   while (state.pipesCount && null !== (chunk = src.read())) {
 
+    if (debugOn) {
+      debug('Read chunk length ' + (chunk === null ? 0 : chunk.length));
+    }
     if (state.pipesCount === 1)
       write(state.pipes, 0, null);
     else
@@ -619,6 +645,7 @@ function flow(src) {
 }
 
 function pipeOnReadable() {
+  debug('pipeOnReadable');
   if (this._readableState.ranOut) {
     this._readableState.ranOut = false;
     flow(this);

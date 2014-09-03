@@ -75,6 +75,7 @@ if (HttpWrap.hasServerAdapter()) {
     events.EventEmitter.call(this);
     // Need to make this socket "readable" or HTTP will assume that we are always at EOF
     this.readable = true;
+    this.writable = true;
     this.remoteAddress = info.remoteAddress;
     this.remotePort = info.remotePort;
     this.localAddress = info.localAddress;
@@ -130,6 +131,8 @@ if (HttpWrap.hasServerAdapter()) {
     if (!this.closed) {
       timers.unenroll(this);
       this.closed = true;
+      this.readable = false;
+      this.writable = false;
     }
   };
 
@@ -162,6 +165,12 @@ if (HttpWrap.hasServerAdapter()) {
     this.connection = conn;
     this.socket = conn;
     this.attachment = adapter.attachment;
+    this.finished = false;
+
+    var self = this;
+    this.on('finish', function() {
+      onFinish(self);
+    });
   }
 
   util.inherits(ServerResponse, stream.Writable);
@@ -226,23 +235,51 @@ if (HttpWrap.hasServerAdapter()) {
              ' data = ' + (data ? data.length : 0));
       }
       // We should always get a buffer with no encoding in this case
-      this._adapter.send(this.statusCode, this.sendDate, this._savedHeaders, data, encoding, null, false);
+      this._adapter.send(this.statusCode, this.sendDate, this._savedHeaders, data, encoding, null, false,
+        function(err) {
+          if (cb) {
+            cb(err);
+          }
+        });
       this.headersSent = true;
     } else {
       if (debugOn) {
         debug('Sending data = ' + (data ? data.length : 0));
       }
-      this._adapter.sendChunk(data, encoding, false);
+      this._adapter.sendChunk(data, encoding, false,
+        function(err) {
+          if (cb) {
+            cb(err);
+          }
+        });
     }
-    // TODO register a future rather than accepting everything
-    cb();
   };
 
   ServerResponse.prototype._send = function() {
     // Nothing to do here -- included for test compatibility
   };
 
-  ServerResponse.prototype.end = function(data, encoding) {
+  function onFinish(self) {
+    debug('onFinish');
+    self.finished = true;
+    if (!self._savedHeaders) {
+      self.writeHead(this.statusCode);
+    }
+
+    self.connection.close();
+    if (self.headersSent) {
+      debug('Sending end of response');
+      self._adapter.sendChunk(null, null, self._trailers, true);
+    } else {
+      // We will only get here if we are sending an empty response
+      self._adapter.send(self.statusCode, self.sendDate, self._savedHeaders,
+        null, null, self._trailers, true);
+    }
+    self.ended = true;
+  }
+
+  /*
+  ServerResponse.prototype.end = function(data, encoding, cb) {
     debug('end');
     if (!this._savedHeaders) {
       this.writeHead(this.statusCode);
@@ -254,14 +291,25 @@ if (HttpWrap.hasServerAdapter()) {
       self.connection.close();
       if (self.headersSent) {
         debug('Sending end of response');
-        self._adapter.sendChunk(null, null, self._trailers, true);
+        self._adapter.sendChunk(null, null, self._trailers, true,
+          function(err) {
+            if (cb) {
+              cb(err);
+            }
+          });
       } else {
         // We will only get here if we are sending an empty response
         self._adapter.send(self.statusCode, self.sendDate, self._savedHeaders,
-                           null, null, self._trailers, true);
+                           null, null, self._trailers, true,
+          function(err) {
+            if (cb) {
+              cb(err);
+            }
+          });
       }
     });
   };
+  */
 
   ServerResponse.prototype._saveHeaders = function(headers) {
     this._savedHeaders = [];
@@ -348,6 +396,7 @@ if (HttpWrap.hasServerAdapter()) {
     this.httpVersion = adapter.requestMajorVersion + '.' + adapter.requestMinorVersion;
     this.url = adapter.requestUrl;
     this.attachment = adapter.attachment;
+    this.complete = false;
   }
 
   util.inherits(ServerRequest, NodeHttp.IncomingMessage);
@@ -492,15 +541,6 @@ if (HttpWrap.hasServerAdapter()) {
       }
     };
 
-    response._adapter.onwritecomplete = function(err) {
-      if (debugOn) {
-        debug('write complete: ' + err + ' outstanding: ' + response._outstanding);
-      }
-      if (err) {
-        response.emit('error', err);
-      }
-    };
-
     request._adapter.domain = domain.create();
     request._adapter.domain.on('error', function(err) {
       handleError(err, response);
@@ -526,6 +566,7 @@ if (HttpWrap.hasServerAdapter()) {
    */
   function onMessageComplete(request) {
     debug('onMessageComplete');
+    request.complete = true;
     request.connection.active();
     if (!request.upgrade) {
       request._adapter.domain.run(function() {

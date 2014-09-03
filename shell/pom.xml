@@ -32,6 +32,11 @@
       <artifactId>trireme-node10src</artifactId>
       <version>0.8.1-SNAPSHOT</version>
     </dependency>
+    <dependency>
+      <groupId>io.apigee.trireme</groupId>
+      <artifactId>trireme-net</artifactId>
+      <version>0.8.1-SNAPSHOT</version>
+    </dependency>
 
     <dependency>
       <groupId>org.slf4j</groupId>

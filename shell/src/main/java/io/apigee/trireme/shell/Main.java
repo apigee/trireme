@@ -21,6 +21,7 @@
  */
 package io.apigee.trireme.shell;
 
+import io.apigee.trireme.container.netty.NettyHttpContainer;
 import io.apigee.trireme.core.NodeEnvironment;
 import io.apigee.trireme.core.NodeException;
 import io.apigee.trireme.core.NodeScript;
@@ -108,6 +109,14 @@ public class Main
     private int run()
     {
         NodeEnvironment env = new NodeEnvironment();
+
+        String adapter = System.getProperty("TRIREME_ADAPTER");
+        if (adapter == null) {
+            adapter = System.getenv("TRIREME_ADAPTER");
+        }
+        if ((adapter != null) && "netty".equals(adapter)) {
+            env.setHttpContainer(new NettyHttpContainer());
+        }
 
         try {
             NodeScript ns;

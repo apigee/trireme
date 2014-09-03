@@ -75,6 +75,7 @@ if (HttpWrap.hasServerAdapter()) {
     events.EventEmitter.call(this);
     // Need to make this socket "readable" or HTTP will assume that we are always at EOF
     this.readable = true;
+    this.writable = true;
     this.remoteAddress = info.remoteAddress;
     this.remotePort = info.remotePort;
     this.localAddress = info.localAddress;
@@ -130,6 +131,8 @@ if (HttpWrap.hasServerAdapter()) {
     if (!this.closed) {
       timers.unenroll(this);
       this.closed = true;
+      this.readable = false;
+      this.writable = false;
     }
   };
 
@@ -162,6 +165,7 @@ if (HttpWrap.hasServerAdapter()) {
     this.connection = conn;
     this.socket = conn;
     this.attachment = adapter.attachment;
+    this.finished = false;
   }
 
   util.inherits(ServerResponse, stream.Writable);
@@ -260,6 +264,7 @@ if (HttpWrap.hasServerAdapter()) {
         self._adapter.send(self.statusCode, self.sendDate, self._savedHeaders,
                            null, null, self._trailers, true);
       }
+      this.finished = true;
     });
   };
 
@@ -348,6 +353,7 @@ if (HttpWrap.hasServerAdapter()) {
     this.httpVersion = adapter.requestMajorVersion + '.' + adapter.requestMinorVersion;
     this.url = adapter.requestUrl;
     this.attachment = adapter.attachment;
+    this.complete = false;
   }
 
   util.inherits(ServerRequest, NodeHttp.IncomingMessage);
@@ -527,6 +533,7 @@ if (HttpWrap.hasServerAdapter()) {
   function onMessageComplete(request) {
     debug('onMessageComplete');
     request.connection.active();
+    request.complete = true;
     if (!request.upgrade) {
       request._adapter.domain.run(function() {
         addPending(request, END_OF_FILE);

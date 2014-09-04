@@ -1,3 +1,28 @@
+# 0.8.1 09-Sep-2014:
+
+* [Issue 66](https://github.com/apigee/trireme/issues/66) Use NIO to implement the datagram (aka UDP)
+module for better performance.
+* [Issue 81](https://github.com/apigee/trireme/issues/81) Remove Trireme's Java implementation of
+"iconv-lite," which was not compatible with the version on NPM. The standard "iconv-lite" module now
+works, although it is very slow for unusual character sets like "big5" because those are now implemented
+in JavaScript rather than using native Java character sets. (ASCII, UTF8, and other standards still
+use the Java platform and are as fast or faster than native Node.) This also fixes a bug with
+recent versions of the Express / connect "body parser" middleware.
+* [Issue 82](https://github.com/apigee/trireme/issues/82) Add fields to the HTTP adapter to prevent a race
+condition when recent versions of Connect "send-static" middleware try to use undocumented internal
+fields. (This only affects the "HTTP adapter" which is not used by all users of Trireme.)
+
+Other issues:
+
+* Upgrade to version 1.50 of Bouncy Castle.
+* Fix path translation for filesystems mounted outside root (t-beckmann)
+* Fix SSL support to always emit Error objects on error (t-beckmann)
+* Fix /?/ UNC path prefix (t-beckmann)
+* Unwrap Rhino "Wrapper" objects (t-beckmann)
+* Fix "binary" character set to handle unsigned values properly (t-beckmann)
+* A number of other small but important fixes from Thomas Beckmann. Thanks!
+
+
 # 0.8.0 17-Jul-2014:
 
 This release fixes many compatibility issues with standard Node. The most significant is that we have switched

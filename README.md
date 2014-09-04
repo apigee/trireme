@@ -60,7 +60,7 @@ although it may not necessarily pass all the node.js tests.
   <tr><td>console</td><td>Complete</td><td>node.js</td></tr>
   <tr><td>crypto</td><td>Complete</td><td>node.js + Trireme</td></tr>
   <tr><td>debugger</td><td>Not Supported</td><td><NA/td></tr>
-  <tr><td>dgram</td><td>Partial</td><td>node.js + Trireme</td></tr>
+  <tr><td>dgram</td><td>Complete</td><td>node.js + Trireme</td></tr>
   <tr><td>dns</td><td>Partial</td><td>Trireme</td></tr>
   <tr><td>domain</td><td>Complete</td><td>node.js + Trireme</td></tr>
   <tr><td>events</td><td>Complete</td><td>node.js</td></tr>
@@ -370,8 +370,8 @@ This table will help keep them straight:
   certain crypto operations (notably PEM file support for TLS and HTTPS) will not work. Nonetheless, this is a separate
   package in case some implementations are wary of distributing Bouncy Castle.</td></tr>
 <tr><td>trireme-util</td><td/><td>X</td>
-  <td>Native Trireme / Java implementations of a few Node.js modules, notably "iconv" and "iconv-lite". These are
-  faster and more complete than the usual packages from NPM. If in the classpath, these modules will be used instead
+  <td>Native Trireme / Java implementations of a few Node.js modules, notably "iconv". These are
+  faster than the usual packages from NPM. If in the classpath, these modules will be used instead
   of searching the module path for a regular module.</td></tr>
 <tr><td>trireme-net</td><td/><td/><td>An HttpAdaptor implementation that uses Netty. Mainly useful as an example
   to show how to write an HTTP adaptor for embedding into another container.</td></tr>

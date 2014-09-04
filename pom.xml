@@ -276,5 +276,9 @@
         <name>Christopher Hunt</name>
         <id>huntc</id>
     </developer>
+    <developer>
+        <name>Thomas Beckmann</name>
+        <id>t-beckmann</id>
+    </developer>
   </developers>
 </project>

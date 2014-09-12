@@ -908,7 +908,7 @@ function Server(/* [options], listener */) {
   // Handle option defaults:
   this.setOptions(options);
 
-  if (!self.pfx && (!self.cert || !self.key)) {
+  if (!self.pfx && (!self.cert || !self.key) && !self.keystore) {
     throw new Error('Missing PFX or certificate + private key.');
   }
 
@@ -923,7 +923,10 @@ function Server(/* [options], listener */) {
     secureProtocol: self.secureProtocol,
     secureOptions: self.secureOptions,
     crl: self.crl,
-    sessionIdContext: self.sessionIdContext
+    sessionIdContext: self.sessionIdContext,
+    keystore: self.keystore,
+    passphrase: self.passphrase,
+    truststore: self.truststore
   });
 
   var timeout = options.handshakeTimeout || (120 * 1000);
@@ -1048,6 +1051,9 @@ Server.prototype.setOptions = function(options) {
   }
   if (options.cleartext) this.cleartext = options.cleartext;
   if (options.encrypted) this.encrypted = options.encrypted;
+  if (options.keystore) this.keystore = options.keystore;
+  if (options.passphrase) this.passphrase = options.passphrase;
+  if (options.truststore) this.truststore = options.truststore;
 };
 
 // SNI Contexts High-Level API

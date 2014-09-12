@@ -56,7 +56,10 @@ if (HttpWrap.hasServerAdapter()) {
       secureProtocol: opts.secureProtocol,
       secureOptions: opts.secureOptions,
       crl: opts.crl,
-      sessionIdContext: opts.sessionIdContext
+      sessionIdContext: opts.sessionIdContext,
+      keystore: opts.keystore,
+      passphrase: opts.passphrase,
+      truststore: opts.truststore
     });
 
     this.rejectUnauthorized = opts.rejectUnauthorized;

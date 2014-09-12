@@ -22,6 +22,7 @@
 package io.apigee.trireme.core.modules.crypto;
 
 import io.apigee.trireme.core.Utils;
+import io.apigee.trireme.core.internal.CertificateParser;
 import io.apigee.trireme.core.internal.SSLCiphers;
 import io.apigee.trireme.core.internal.ScriptRunner;
 import io.apigee.trireme.core.modules.Buffer;
@@ -43,21 +44,13 @@ import javax.net.ssl.SSLEngine;
 import javax.net.ssl.SSLEngineResult;
 import javax.net.ssl.SSLException;
 import javax.net.ssl.SSLPeerUnverifiedException;
-import javax.security.auth.x500.X500Principal;
 
 import java.nio.ByteBuffer;
 import java.security.cert.Certificate;
 import java.security.cert.CertificateException;
-import java.security.cert.CertificateParsingException;
 import java.security.cert.X509Certificate;
-import java.text.DateFormat;
-import java.text.SimpleDateFormat;
 import java.util.ArrayDeque;
-import java.util.Collection;
-import java.util.List;
 import java.util.concurrent.atomic.AtomicInteger;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
 
 import static io.apigee.trireme.core.ArgUtils.*;
 
@@ -70,9 +63,6 @@ public class ConnectionImpl
     public static final String CLASS_NAME = "Connection";
 
     protected static final ByteBuffer EMPTY = ByteBuffer.allocate(0);
-    protected static final DateFormat X509_DATE = new SimpleDateFormat("MMM dd HH:mm:ss yyyy zzz");
-
-    private static final Pattern CERT_ENTRY = Pattern.compile("^(.+)=(.*)$");
 
     private final ArrayDeque<QueuedChunk> outgoingChunks = new ArrayDeque<QueuedChunk>();
     private final ArrayDeque<QueuedChunk> incomingChunks = new ArrayDeque<QueuedChunk>();
@@ -727,96 +717,7 @@ public class ConnectionImpl
             log.debug("Peer certificate is not an X.509 cert");
             return Undefined.instance;
         }
-        return self.makeCertificate(cx, (X509Certificate) cert);
-    }
-
-    private Object makeCertificate(Context cx, X509Certificate cert)
-    {
-        if (log.isDebugEnabled()) {
-            log.debug("Returning subject " + cert.getSubjectX500Principal());
-        }
-        Scriptable ret = cx.newObject(this);
-        ret.put("subject", ret, makePrincipal(cx, cert.getSubjectX500Principal()));
-        ret.put("issuer", ret, makePrincipal(cx, cert.getIssuerX500Principal()));
-        ret.put("valid_from", ret, X509_DATE.format(cert.getNotBefore()));
-        ret.put("valid_to", ret, X509_DATE.format(cert.getNotAfter()));
-        //ret.put("fingerprint", ret, null);
-
-        try {
-            addAltNames(cx, ret, "subject", "subjectAltNames", cert.getSubjectAlternativeNames());
-            addAltNames(cx, ret, "issuer", "issuerAltNames", cert.getIssuerAlternativeNames());
-        } catch (CertificateParsingException e) {
-            log.debug("Error getting all the cert names: {}", e);
-        }
-        return ret;
-    }
-
-    private Scriptable makePrincipal(Context cx, X500Principal principal)
-    {
-        Scriptable p = cx.newObject(this);
-        String name = principal.getName(X500Principal.RFC2253);
-
-        // Split the name by commas, except that backslashes escape the commas, otherwise we'd use a regexp
-        int cp = 0;
-        int start = 0;
-        boolean wasSlash = false;
-        while (cp < name.length()) {
-            if (name.charAt(cp) == '\\') {
-                wasSlash = true;
-            } else if ((name.charAt(cp) == ',') && !wasSlash) {
-                wasSlash = false;
-                addCertEntry(p, name.substring(start, cp));
-                start = cp + 1;
-            } else {
-                wasSlash = false;
-            }
-            cp++;
-        }
-        if (cp > start) {
-            addCertEntry(p, name.substring(start));
-        }
-        return p;
-    }
-
-    private void addCertEntry(Scriptable s, String entry)
-    {
-        Matcher m = CERT_ENTRY.matcher(entry);
-        if (m.matches()) {
-            s.put(m.group(1), s, m.group(2));
-        }
-    }
-
-    private void addAltNames(Context cx, Scriptable s, String attachment, String type, Collection<List<?>> altNames)
-    {
-        if (altNames == null) {
-            return;
-        }
-        // Create an object that contains the alt names
-        Scriptable o = cx.newObject(this);
-        s.put(type, s, o);
-        for (List<?> an : altNames) {
-            if ((an.size() >= 2) && (an.get(0) instanceof Integer) && (an.get(1) instanceof String)) {
-                int typeNum = (Integer)an.get(0);
-                String typeName;
-                switch (typeNum) {
-                case 1:
-                    typeName = "rfc822Name";
-                    break;
-                case 2:
-                    typeName = "dNSName";
-                    break;
-                case 6:
-                    typeName = "uniformResourceIdentifier";
-                    break;
-                default:
-                    return;
-                }
-                o.put(typeName, s, an.get(1));
-            }
-        }
-
-        Scriptable subject = (Scriptable)s.get(attachment, s);
-        subject.put(type, subject, o);
+        return CertificateParser.get().parse(cx, self, (X509Certificate) cert);
     }
 
     @JSFunction

@@ -230,13 +230,20 @@ function onCryptoStreamFinish() {
         self._done();
       });
 
-      if (this.pair.ssl && this.pair.ssl.error)
+      if (this.pair.ssl && this.pair.ssl.error) {
         return this.pair.error();
+      }
     }
+
   } else {
     debug('encrypted.onfinish');
     if (!this.pair._secureEstablished && !this._destroyed) {
       this.pair.emit('error', new Error('Socket hung up'));
+    } else {
+      if (this.pair.ssl) {
+        debug('Shutting down SSL input in response to a connection close');
+        this.pair.ssl.shutdownInbound();
+      }
     }
   }
 
@@ -404,6 +411,7 @@ CleartextStream.prototype._onwrap = function(chunk, shutdown) {
   }
   if (shutdown) {
     debug('Received completion of shutdown request');
+    this._shuttingDown = true;
     this._opposite.push(null);
   }
 };
@@ -539,6 +547,7 @@ EncryptedStream.prototype._onunwrap = function(chunk, shutdown) {
 
   if (shutdown) {
     debug('Got shutdown from the client');
+    this._shuttingDown = true;
     this._done();
     this._opposite.push(null);
   }

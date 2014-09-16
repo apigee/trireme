@@ -21,6 +21,7 @@
  */
 package io.apigee.trireme.core.modules.crypto;
 
+import io.apigee.trireme.core.ScriptTask;
 import io.apigee.trireme.core.Utils;
 import io.apigee.trireme.core.internal.CertificateParser;
 import io.apigee.trireme.core.internal.SSLCiphers;
@@ -53,6 +54,11 @@ import java.util.ArrayDeque;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import static io.apigee.trireme.core.ArgUtils.*;
+
+/**
+ * This is the implementation of a TLS connection. It is used by securepair, which in turn is used by the
+ * "tls" module.
+ */
 
 public class ConnectionImpl
     extends ScriptableObject
@@ -331,6 +337,28 @@ public class ConnectionImpl
         self.encodeLoop(cx);
     }
 
+    @JSFunction
+    @SuppressWarnings("unused")
+    public static void shutdownInbound(Context cx, Scriptable thisObj, Object[] args, Function func)
+    {
+        Function cb = functionArg(args, 0, false);
+        ConnectionImpl self = (ConnectionImpl)thisObj;
+
+        try {
+            self.engine.closeInbound();
+        } catch (SSLException ssle) {
+            if (log.isDebugEnabled()) {
+                log.debug("Error closing inbound SSLEngine: {}", ssle);
+            }
+        }
+        if (cb != null) {
+            cb.call(cx, thisObj, thisObj, ScriptRuntime.emptyArgs);
+        }
+        // Force the "unwrap" callback to deliver EOF to the other side in Node.js land
+        self.doUnwrap(cx);
+        // And run the regular encode loop because we still want to (futily) wrap in this case.
+        self.encodeLoop(cx);
+    }
 
     @JSFunction
     @SuppressWarnings("unused")
@@ -367,9 +395,8 @@ public class ConnectionImpl
                 }
                 break;
             case NEED_TASK:
-                // TODO this will become async in the future
                 processTasks();
-                break;
+                return;
             case FINISHED:
             case NOT_HANDSHAKING:
                 if (outgoingChunks.isEmpty() && incomingChunks.isEmpty()) {
@@ -684,16 +711,35 @@ public class ConnectionImpl
         }
     }
 
+    /**
+     * Run tasks that will block SSLEngine in the thread pool, so that the script thread can
+     * keep on trucking. Then return back to the real world.
+     */
     private void processTasks()
     {
-        Runnable task = engine.getDelegatedTask();
-        while (task != null) {
-            if (log.isTraceEnabled()) {
-                log.trace("Running SSLEngine task {}", task);
+        runtime.getAsyncPool().submit(new Runnable() {
+            @Override
+            public void run()
+            {
+                Runnable task = engine.getDelegatedTask();
+                while (task != null) {
+                    if (log.isTraceEnabled()) {
+                        log.trace("Running SSLEngine task {}", task);
+                    }
+                    task.run();
+                    task = engine.getDelegatedTask();
+                }
+
+                // Now back to the script thread in order to keep running with the result.
+                runtime.enqueueTask(new ScriptTask() {
+                    @Override
+                    public void execute(Context cx, Scriptable scope)
+                    {
+                        encodeLoop(cx);
+                    }
+                });
             }
-            task.run();
-            task = engine.getDelegatedTask();
-        }
+        });
     }
 
     @JSFunction

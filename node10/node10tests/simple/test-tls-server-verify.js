@@ -131,7 +131,8 @@ function runClient(options, cb) {
   // - Certificate, but not signed by CA.
   // - Certificate signed by CA.
 
-  var args = ['s_client', '-connect', '127.0.0.1:' + common.PORT];
+  var args = ['s_client', '-connect', '127.0.0.1:' + common.PORT,
+              '-tls1'];
 
 
   console.log('  connecting with', options.name);

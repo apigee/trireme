@@ -549,22 +549,7 @@
         <Description>Some sort of SSL problem with the Netty adapter.</Description>
     </Excluded>
     <Excluded>
-        <Name>test-https-client-resume.js</Name>
-        <Adapter>netty</Adapter>
-        <Description>Some sort of SSL problem with the Netty adapter.</Description>
-    </Excluded>
-    <Excluded>
         <Name>test-https-timeout-server-2.js</Name>
-        <Adapter>netty</Adapter>
-        <Description>Some sort of SSL problem with the Netty adapter.</Description>
-    </Excluded>
-    <Excluded>
-        <Name>test-https-connecting-to-http.js</Name>
-        <Adapter>netty</Adapter>
-        <Description>Some sort of SSL problem with the Netty adapter.</Description>
-    </Excluded>
-    <Excluded>
-        <Name>test-http-url.parse-https.request.js</Name>
         <Adapter>netty</Adapter>
         <Description>Some sort of SSL problem with the Netty adapter.</Description>
     </Excluded>
@@ -617,6 +602,11 @@
         <Name>test-http-mutable-headers.js</Name>
         <Adapter>netty</Adapter>
         <Description>Doesn't support that kind of notification</Description>
+    </Excluded>
+    <Excluded>
+        <Name>test-https-timeout-server.js</Name>
+        <Adapter>netty</Adapter>
+        <Description>Doesn't support the same kind of notification as the default adapter</Description>
     </Excluded>
 
     <!-- DEPRECATION

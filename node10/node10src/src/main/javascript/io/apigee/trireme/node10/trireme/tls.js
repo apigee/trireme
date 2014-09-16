@@ -251,6 +251,17 @@ function onCryptoStreamFinish() {
   }
 }
 
+CryptoStream.prototype.end = function(chunk, encoding) {
+  if (this === this.pair.cleartext) {
+    debug('cleartext.end');
+  } else {
+    debug('encrypted.end');
+  }
+
+  this.writable = false;
+  stream.Duplex.prototype.end.call(this, chunk, encoding);
+};
+
 CryptoStream.prototype.destroySoon = function(err) {
   if (this === this.pair.cleartext) {
     debug('cleartext.destroySoon');
@@ -916,7 +927,6 @@ function Server(/* [options], listener */) {
   var sharedCreds = crypto.createCredentials({
     pfx: self.pfx,
     key: self.key,
-    passphrase: self.passphrase,
     cert: self.cert,
     ca: self.ca,
     ciphers: self.ciphers,

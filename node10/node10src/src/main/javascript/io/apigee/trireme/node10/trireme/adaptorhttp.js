@@ -438,6 +438,9 @@ if (HttpWrap.hasServerAdapter()) {
   Server.prototype._makeSocket = function(info) {
     var self = this;
     var conn = new DummySocket(info);
+    if (this.sslContext) {
+      conn.encrypted = true;
+    }
     if (this.timeout && (this.timeout > 0)) {
       conn.setTimeout(this.timeout, function() {
         self.timeoutCallback(conn);

@@ -839,7 +839,8 @@ public class ConnectionImpl
 
         Scriptable c = cx.newObject(self);
         c.put("name", c, cipher.getSslName());
-        c.put("version", c, cipher.getProtocol());
+        c.put("version", c, self.engine.getSession().getProtocol());
+        c.put("javaCipher", c, self.engine.getSession().getCipherSuite());
         return c;
     }
 

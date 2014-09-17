@@ -19,53 +19,18 @@
 // OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE
 // USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-if (!process.versions.openssl) {
-  console.error('Skipping because node compiled without OpenSSL.');
-  process.exit(0);
-}
 
-var common = require('../common');
+// Make sure the domain stack doesn't get clobbered by un-matched .exit()
+
 var assert = require('assert');
-var fs = require('fs');
-var tls = require('tls');
-var path = require('path');
+var domain = require('domain');
 
-var cert = fs.readFileSync(path.join(common.fixturesDir, 'test_cert.pem'));
-var key = fs.readFileSync(path.join(common.fixturesDir, 'test_key.pem'));
+var a = domain.create();
+var b = domain.create();
 
-var errorEmitted = false;
+a.enter(); // push
+b.enter(); // push
+assert.deepEqual(domain._stack, [a, b], 'b not pushed');
 
-var server = tls.createServer({
-  cert: cert,
-  key: key
-}, function(c) {
-  // Nop
-  setTimeout(function() {
-    c.destroy();
-    server.close();
-  }, 20);
-}).listen(common.PORT, function() {
-  var conn = tls.connect({
-    cert: cert,
-    key: key,
-    rejectUnauthorized: false,
-    port: common.PORT
-  }, function() {
-    setTimeout(function() {
-      conn.destroy();
-    }, 20);
-  });
-
-  // SSL_write() call's return value, when called 0 bytes, should not be
-  // treated as error.
-  conn.end('');
-
-  conn.on('error', function(err) {
-    console.log(err);
-    errorEmitted = true;
-  });
-});
-
-process.on('exit', function() {
-  assert.ok(!errorEmitted);
-});
+domain.create().exit(); // no-op
+assert.deepEqual(domain._stack, [a, b], 'stack mangled!');

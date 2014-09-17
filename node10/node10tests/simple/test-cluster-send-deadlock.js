@@ -19,53 +19,47 @@
 // OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE
 // USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-if (!process.versions.openssl) {
-  console.error('Skipping because node compiled without OpenSSL.');
-  process.exit(0);
-}
+// Testing mutual send of handles: from master to worker, and from worker to
+// master.
 
 var common = require('../common');
 var assert = require('assert');
-var fs = require('fs');
-var tls = require('tls');
-var path = require('path');
+var cluster = require('cluster');
+var net = require('net');
 
-var cert = fs.readFileSync(path.join(common.fixturesDir, 'test_cert.pem'));
-var key = fs.readFileSync(path.join(common.fixturesDir, 'test_key.pem'));
-
-var errorEmitted = false;
-
-var server = tls.createServer({
-  cert: cert,
-  key: key
-}, function(c) {
-  // Nop
-  setTimeout(function() {
-    c.destroy();
+if (cluster.isMaster) {
+  var worker = cluster.fork();
+  worker.on('exit', function(code, signal) {
+    assert.equal(code, 0, 'Worker exited with an error code');
+    assert(!signal, 'Worker exited by a signal');
     server.close();
-  }, 20);
-}).listen(common.PORT, function() {
-  var conn = tls.connect({
-    cert: cert,
-    key: key,
-    rejectUnauthorized: false,
-    port: common.PORT
-  }, function() {
-    setTimeout(function() {
-      conn.destroy();
-    }, 20);
   });
 
-  // SSL_write() call's return value, when called 0 bytes, should not be
-  // treated as error.
-  conn.end('');
-
-  conn.on('error', function(err) {
-    console.log(err);
-    errorEmitted = true;
+  var server = net.createServer(function(socket) {
+    worker.send('handle', socket);
   });
-});
 
-process.on('exit', function() {
-  assert.ok(!errorEmitted);
-});
+  server.listen(common.PORT, function() {
+    worker.send('listen');
+  });
+} else {
+  process.on('message', function(msg, handle) {
+    if (msg === 'listen') {
+      var client1 = net.connect({ host: 'localhost', port: common.PORT });
+      var client2 = net.connect({ host: 'localhost', port: common.PORT });
+      var waiting = 2;
+      client1.on('close', onclose);
+      client2.on('close', onclose);
+      function onclose() {
+        if (--waiting === 0)
+          cluster.worker.disconnect();
+      }
+      setTimeout(function() {
+        client1.end();
+        client2.end();
+      }, 50);
+    } else {
+      process.send('reply', handle);
+    }
+  });
+}

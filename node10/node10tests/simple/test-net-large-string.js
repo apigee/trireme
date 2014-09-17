@@ -34,25 +34,19 @@ var encoding = 'UTF-8';
 var server = net.createServer(function(socket) {
   socket.setEncoding(encoding);
   socket.on('data', function(data) {
-    console.log('Server received %d data', data.length);
     receivedSize += data.length;
   });
   socket.on('end', function() {
-    console.log('Server received socket end');
     socket.end();
-    console.log('Server ended socket');
   });
 });
 
 server.listen(common.PORT, function() {
   var client = net.createConnection(common.PORT);
   client.on('end', function() {
-    console.log('Client received socket end');
     server.close();
   });
-  console.log('Client writing %d', data.length);
   client.write(data, encoding);
-  console.log('Client ending');
   client.end();
 });
 

@@ -19,53 +19,44 @@
 // OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE
 // USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-if (!process.versions.openssl) {
-  console.error('Skipping because node compiled without OpenSSL.');
-  process.exit(0);
-}
 
 var common = require('../common');
 var assert = require('assert');
-var fs = require('fs');
-var tls = require('tls');
+var cluster = require('cluster');
 var path = require('path');
+var fs = require('fs');
+var net = require('net');
 
-var cert = fs.readFileSync(path.join(common.fixturesDir, 'test_cert.pem'));
-var key = fs.readFileSync(path.join(common.fixturesDir, 'test_key.pem'));
+var socketPath = path.join(common.fixturesDir, 'socket-path');
 
-var errorEmitted = false;
-
-var server = tls.createServer({
-  cert: cert,
-  key: key
-}, function(c) {
-  // Nop
-  setTimeout(function() {
-    c.destroy();
-    server.close();
-  }, 20);
-}).listen(common.PORT, function() {
-  var conn = tls.connect({
-    cert: cert,
-    key: key,
-    rejectUnauthorized: false,
-    port: common.PORT
-  }, function() {
-    setTimeout(function() {
-      conn.destroy();
-    }, 20);
-  });
-
-  // SSL_write() call's return value, when called 0 bytes, should not be
-  // treated as error.
-  conn.end('');
-
-  conn.on('error', function(err) {
+if (cluster.isMaster) {
+  var worker = cluster.fork();
+  var gotError = 0;
+  worker.on('message', function(err) {
+    gotError++;
     console.log(err);
-    errorEmitted = true;
+    if (process.platform === 'win32')
+      assert.strictEqual('EACCES', err.code);
+    else
+      assert.strictEqual('EADDRINUSE', err.code);
+    worker.disconnect();
   });
-});
+  process.on('exit', function() {
+    console.log('master exited');
+    try {
+      fs.unlinkSync(socketPath);
+    } catch (e) {
+    }
+    assert.equal(gotError, 1);
+  });
+} else {
+  fs.writeFileSync(socketPath, 'some contents');
 
-process.on('exit', function() {
-  assert.ok(!errorEmitted);
-});
+  var server = net.createServer().listen(socketPath, function() {
+    console.log('here');
+  });
+
+  server.on('error', function(err) {
+    process.send(err);
+  });
+}

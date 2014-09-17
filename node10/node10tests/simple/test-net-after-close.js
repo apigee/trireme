@@ -33,7 +33,7 @@ server.listen(common.PORT, function() {
   var c = net.createConnection(common.PORT);
   c.on('close', function() {
     console.error('connection closed');
-//    assert.strictEqual(c._handle, null);
+    assert.strictEqual(c._handle, null);
     closed = true;
     assert.doesNotThrow(function() {
       c.setNoDelay();

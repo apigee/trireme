@@ -19,53 +19,38 @@
 // OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE
 // USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-if (!process.versions.openssl) {
-  console.error('Skipping because node compiled without OpenSSL.');
-  process.exit(0);
-}
+// Testing to send an handle twice to the parent process.
 
 var common = require('../common');
 var assert = require('assert');
-var fs = require('fs');
-var tls = require('tls');
-var path = require('path');
+var cluster = require('cluster');
+var net = require('net');
 
-var cert = fs.readFileSync(path.join(common.fixturesDir, 'test_cert.pem'));
-var key = fs.readFileSync(path.join(common.fixturesDir, 'test_key.pem'));
+var workers = {
+  toStart: 1
+};
 
-var errorEmitted = false;
-
-var server = tls.createServer({
-  cert: cert,
-  key: key
-}, function(c) {
-  // Nop
-  setTimeout(function() {
-    c.destroy();
-    server.close();
-  }, 20);
-}).listen(common.PORT, function() {
-  var conn = tls.connect({
-    cert: cert,
-    key: key,
-    rejectUnauthorized: false,
-    port: common.PORT
-  }, function() {
-    setTimeout(function() {
-      conn.destroy();
-    }, 20);
+if (cluster.isMaster) {
+  for (var i = 0; i < workers.toStart; ++i) {
+    var worker = cluster.fork();
+    worker.on('exit', function(code, signal) {
+      assert.equal(code, 0, 'Worker exited with an error code');
+      assert(!signal, 'Worker exited by a signal');
+    });
+  }
+} else {
+  var server = net.createServer(function(socket) {
+    process.send('send-handle-1', socket);
+    process.send('send-handle-2', socket);
   });
 
-  // SSL_write() call's return value, when called 0 bytes, should not be
-  // treated as error.
-  conn.end('');
-
-  conn.on('error', function(err) {
-    console.log(err);
-    errorEmitted = true;
+  server.listen(common.PORT, function() {
+    var client = net.connect({ host: 'localhost', port: common.PORT });
+    client.on('close', function() { cluster.worker.disconnect(); });
+    setTimeout(function() { client.end(); }, 50);
+  }).on('error', function(e) {
+    console.error(e);
+    assert(false, 'server.listen failed');
+    cluster.worker.disconnect();
   });
-});
-
-process.on('exit', function() {
-  assert.ok(!errorEmitted);
-});
+}

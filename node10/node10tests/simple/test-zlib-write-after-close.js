@@ -19,53 +19,22 @@
 // OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE
 // USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-if (!process.versions.openssl) {
-  console.error('Skipping because node compiled without OpenSSL.');
-  process.exit(0);
-}
-
-var common = require('../common');
+var common = require('../common.js');
 var assert = require('assert');
-var fs = require('fs');
-var tls = require('tls');
-var path = require('path');
+var zlib = require('zlib');
 
-var cert = fs.readFileSync(path.join(common.fixturesDir, 'test_cert.pem'));
-var key = fs.readFileSync(path.join(common.fixturesDir, 'test_key.pem'));
+var closed = false;
 
-var errorEmitted = false;
-
-var server = tls.createServer({
-  cert: cert,
-  key: key
-}, function(c) {
-  // Nop
-  setTimeout(function() {
-    c.destroy();
-    server.close();
-  }, 20);
-}).listen(common.PORT, function() {
-  var conn = tls.connect({
-    cert: cert,
-    key: key,
-    rejectUnauthorized: false,
-    port: common.PORT
-  }, function() {
-    setTimeout(function() {
-      conn.destroy();
-    }, 20);
+zlib.gzip('hello', function(err, out) {
+  var unzip = zlib.createGunzip();
+  unzip.close(function() {
+    closed = true;
   });
-
-  // SSL_write() call's return value, when called 0 bytes, should not be
-  // treated as error.
-  conn.end('');
-
-  conn.on('error', function(err) {
-    console.log(err);
-    errorEmitted = true;
+  assert.throws(function() {
+    unzip.write(out);
   });
 });
 
 process.on('exit', function() {
-  assert.ok(!errorEmitted);
+  assert(closed);
 });

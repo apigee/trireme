@@ -19,53 +19,24 @@
 // OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE
 // USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-if (!process.versions.openssl) {
-  console.error('Skipping because node compiled without OpenSSL.');
-  process.exit(0);
+var spawn = require('child_process').spawn,
+  assert = require('assert'),
+  windows = (process.platform === 'win32'),
+  cmd = (windows) ? 'ls' : 'dir',
+  errors = 0;
+
+try {
+  // Ensure this throws a TypeError
+  var child = spawn(cmd, 'this is not an array');
+
+  child.on('error', function (err) {
+    errors++;
+  });
+
+} catch (e) {
+  assert.equal(e instanceof TypeError, true);
 }
 
-var common = require('../common');
-var assert = require('assert');
-var fs = require('fs');
-var tls = require('tls');
-var path = require('path');
-
-var cert = fs.readFileSync(path.join(common.fixturesDir, 'test_cert.pem'));
-var key = fs.readFileSync(path.join(common.fixturesDir, 'test_key.pem'));
-
-var errorEmitted = false;
-
-var server = tls.createServer({
-  cert: cert,
-  key: key
-}, function(c) {
-  // Nop
-  setTimeout(function() {
-    c.destroy();
-    server.close();
-  }, 20);
-}).listen(common.PORT, function() {
-  var conn = tls.connect({
-    cert: cert,
-    key: key,
-    rejectUnauthorized: false,
-    port: common.PORT
-  }, function() {
-    setTimeout(function() {
-      conn.destroy();
-    }, 20);
-  });
-
-  // SSL_write() call's return value, when called 0 bytes, should not be
-  // treated as error.
-  conn.end('');
-
-  conn.on('error', function(err) {
-    console.log(err);
-    errorEmitted = true;
-  });
-});
-
 process.on('exit', function() {
-  assert.ok(!errorEmitted);
+  assert.equal(errors, 0);
 });

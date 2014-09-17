@@ -76,7 +76,6 @@ echoServer.on('listening', function() {
       console.error('CLIENT ending');
       c.end();
     }
-    console.log('Adding %d to recv', chunk.length);
     recv += chunk;
   });
 

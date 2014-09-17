@@ -19,53 +19,40 @@
 // OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE
 // USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-if (!process.versions.openssl) {
-  console.error('Skipping because node compiled without OpenSSL.');
-  process.exit(0);
-}
 
-var common = require('../common');
+var common = require('../common.js');
+var R = require('_stream_readable');
+var W = require('_stream_writable');
 var assert = require('assert');
-var fs = require('fs');
-var tls = require('tls');
-var path = require('path');
 
-var cert = fs.readFileSync(path.join(common.fixturesDir, 'test_cert.pem'));
-var key = fs.readFileSync(path.join(common.fixturesDir, 'test_key.pem'));
+var src = new R({encoding: 'base64'});
+var dst = new W();
+var hasRead = false;
+var accum = [];
+var timeout;
 
-var errorEmitted = false;
+src._read = function(n) {
+  if(!hasRead) {
+    hasRead = true;
+    process.nextTick(function() {
+      src.push(new Buffer('1'));
+      src.push(null);
+    });
+  };
+};
 
-var server = tls.createServer({
-  cert: cert,
-  key: key
-}, function(c) {
-  // Nop
-  setTimeout(function() {
-    c.destroy();
-    server.close();
-  }, 20);
-}).listen(common.PORT, function() {
-  var conn = tls.connect({
-    cert: cert,
-    key: key,
-    rejectUnauthorized: false,
-    port: common.PORT
-  }, function() {
-    setTimeout(function() {
-      conn.destroy();
-    }, 20);
-  });
+dst._write = function(chunk, enc, cb) {
+  accum.push(chunk);
+  cb();
+};
 
-  // SSL_write() call's return value, when called 0 bytes, should not be
-  // treated as error.
-  conn.end('');
+src.on('end', function() {
+  assert.equal(Buffer.concat(accum) + '', 'MQ==');
+  clearTimeout(timeout);
+})
 
-  conn.on('error', function(err) {
-    console.log(err);
-    errorEmitted = true;
-  });
-});
+src.pipe(dst);
 
-process.on('exit', function() {
-  assert.ok(!errorEmitted);
-});
+timeout = setTimeout(function() {
+  assert.fail('timed out waiting for _write');
+}, 100);

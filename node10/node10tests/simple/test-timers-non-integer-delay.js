@@ -19,53 +19,32 @@
 // OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE
 // USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-if (!process.versions.openssl) {
-  console.error('Skipping because node compiled without OpenSSL.');
-  process.exit(0);
-}
+/*
+ * This test makes sure that non-integer timer delays do not make the process
+ * hang. See https://github.com/joyent/node/issues/8065 and
+ * https://github.com/joyent/node/issues/8068 which have been fixed by
+ * https://github.com/joyent/node/pull/8073.
+ *
+ * If the process hangs, this test will make the tests suite timeout,
+ * otherwise it will exit very quickly (after 50 timers with a short delay
+ * fire).
+ *
+ * We have to set at least several timers with a non-integer delay to
+ * reproduce the issue. Sometimes, a timer with a non-integer delay will
+ * expire correctly. 50 timers has always been more than enough to reproduce
+ * it 100%.
+ */
 
-var common = require('../common');
 var assert = require('assert');
-var fs = require('fs');
-var tls = require('tls');
-var path = require('path');
 
-var cert = fs.readFileSync(path.join(common.fixturesDir, 'test_cert.pem'));
-var key = fs.readFileSync(path.join(common.fixturesDir, 'test_key.pem'));
+var TIMEOUT_DELAY = 1.1;
+var NB_TIMEOUTS_FIRED = 50;
 
-var errorEmitted = false;
-
-var server = tls.createServer({
-  cert: cert,
-  key: key
-}, function(c) {
-  // Nop
-  setTimeout(function() {
-    c.destroy();
-    server.close();
-  }, 20);
-}).listen(common.PORT, function() {
-  var conn = tls.connect({
-    cert: cert,
-    key: key,
-    rejectUnauthorized: false,
-    port: common.PORT
-  }, function() {
-    setTimeout(function() {
-      conn.destroy();
-    }, 20);
-  });
-
-  // SSL_write() call's return value, when called 0 bytes, should not be
-  // treated as error.
-  conn.end('');
-
-  conn.on('error', function(err) {
-    console.log(err);
-    errorEmitted = true;
-  });
-});
-
-process.on('exit', function() {
-  assert.ok(!errorEmitted);
-});
+var nbTimeoutFired = 0;
+var interval = setInterval(function() {
+  ++nbTimeoutFired;
+  if (nbTimeoutFired === NB_TIMEOUTS_FIRED) {
+    clearInterval(interval);
+    process.exit(0);
+  }
+}, TIMEOUT_DELAY);

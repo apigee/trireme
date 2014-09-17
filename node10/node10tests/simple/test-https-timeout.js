@@ -38,8 +38,7 @@ var options = {
 // a server that never replies
 var server = https.createServer(options, function() {
   console.log('Got request.  Doing nothing.');
-});
-server.listen(common.PORT, function() {
+}).listen(common.PORT, function() {
   var req = https.request({
     host: 'localhost',
     port: common.PORT,

@@ -228,13 +228,18 @@ if (cluster.isMaster) {
 
     if (serverHandlers.hasOwnProperty(key)) {
       handler = serverHandlers[key];
-    } else if (message.addressType === 'udp4' ||
-               message.addressType === 'udp6') {
-      var dgram = require('dgram');
-      handler = dgram._createSocketHandle.apply(net, args);
-      serverHandlers[key] = handler;
     } else {
-      handler = net._createServerHandle.apply(net, args);
+      if (message.addressType === 'udp4' ||
+          message.addressType === 'udp6') {
+        var dgram = require('dgram');
+        handler = dgram._createSocketHandle.apply(net, args);
+      } else {
+        handler = net._createServerHandle.apply(net, args);
+      }
+      if (!handler) {
+        send({ content: { error: process._errno } }, null);
+        return;
+      }
       serverHandlers[key] = handler;
     }
 
@@ -528,8 +533,10 @@ cluster.disconnect = function(callback) {
     worker.disconnect();
   });
 
-  // in case there weren't any workers
-  progress.check();
+  process.nextTick(function() {
+    // in case there weren't any workers
+    progress.check();
+  });
 };
 
 // Internal function. Called from src/node.js when worker process starts.
@@ -584,7 +591,7 @@ cluster._getServer = function(tcpSelf, address, port, addressType, fd, cb) {
 
   // The callback will be stored until the master has responded
   sendInternalMessage(cluster.worker, message, function(msg, handle) {
-    cb(handle);
+    cb(handle, msg && msg.error);
   });
 
 };

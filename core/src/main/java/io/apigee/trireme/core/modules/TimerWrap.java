@@ -34,6 +34,7 @@ import org.mozilla.javascript.annotations.JSConstructor;
 import org.mozilla.javascript.annotations.JSFunction;
 import org.mozilla.javascript.annotations.JSGetter;
 import org.mozilla.javascript.annotations.JSSetter;
+import org.mozilla.javascript.annotations.JSStaticFunction;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -91,6 +92,17 @@ public class TimerWrap
             TimerImpl t = new TimerImpl();
             t.requestPin();
             return t;
+        }
+
+        /**
+         * This is called by the "timer" module to get a timestamp efficiently that won't change until
+         * the next time that we go through the loop.
+         */
+        @JSStaticFunction
+        @SuppressWarnings("unused")
+        public static long now(Context cx, Scriptable thisObj, Object[] args, Function fun)
+        {
+            return getRunner().getLoopTimestamp();
         }
 
         @JSGetter("ontimeout")

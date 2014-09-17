@@ -44,8 +44,7 @@ assert.AssertionError = function AssertionError(options) {
   this.operator = options.operator;
   this.message = options.message || getMessage(this);
   var stackStartFunction = options.stackStartFunction || fail;
-  // TODO Noderunner not supported in Rhino yet.
-  //Error.captureStackTrace(this, stackStartFunction);
+  Error.captureStackTrace(this, stackStartFunction);
 };
 
 // assert.AssertionError instanceof Error
@@ -55,15 +54,12 @@ function replacer(key, value) {
   if (value === undefined) {
     return '' + value;
   }
-  if (typeof value === 'number' && (isNaN(value) || !isFinite(value))) {
+  if (typeof value === 'number' && !isFinite(value)) {
     return value.toString();
   }
-  if (typeof value === 'function') {
-    // NODERUNNER: HACK to make Rhino's function toString() kind of like v8's so we don't need to change the test
-    return value.toString().trim().replace('{\n}', '{}');
-  }
-  if (value instanceof RegExp) {
-    return value.toString();
+  if (typeof value === 'function' || value instanceof RegExp) {
+     // NODERUNNER: HACK to make Rhino's function toString() kind of like v8's so we don't need to change the test
+     return value.toString().trim().replace('{\n}', '{}');
   }
   return value;
 }
@@ -204,10 +200,11 @@ function objEquiv(a, b) {
   if (a.prototype !== b.prototype) return false;
   //~~~I've managed to break Object.keys through screwy arguments passing.
   //   Converting to array solves the problem.
-  if (isArguments(a)) {
-    if (!isArguments(b)) {
-      return false;
-    }
+  var aIsArgs = isArguments(a),
+      bIsArgs = isArguments(b);
+  if ((aIsArgs && !bIsArgs) || (!aIsArgs && bIsArgs))
+    return false;
+  if (aIsArgs) {
     a = pSlice.call(a);
     b = pSlice.call(b);
     return _deepEqual(a, b);

@@ -91,9 +91,8 @@ Console.prototype.trace = function() {
   var err = new Error;
   err.name = 'Trace';
   err.message = util.format.apply(this, arguments);
-  // TODO Noderunner not supported in Rhino yet
-  //Error.captureStackTrace(err, arguments.callee);
-  this.error('Trace: ' + err.message + '\n' + err.stack);
+  Error.captureStackTrace(err, arguments.callee);
+  this.error(err.stack);
 };
 
 

@@ -88,6 +88,7 @@ public class ScriptRunner
     public static final String TIMEOUT_TIMESTAMP_KEY = "_tickTimeout";
 
     private final  NodeEnvironment env;
+    private        long            now;
     private        ModuleRegistry  registry;
     private        File            scriptFile;
     private        String          script;
@@ -214,6 +215,10 @@ public class ScriptRunner
 
     public NodeEnvironment getEnvironment() {
         return env;
+    }
+
+    public long getLoopTimestamp() {
+        return now;
     }
 
     public ModuleRegistry getRegistry() {
@@ -631,6 +636,7 @@ public class ScriptRunner
         ScriptStatus status;
 
         cx.putThreadLocal(RUNNER, this);
+        now = System.currentTimeMillis();
 
         try {
             // All scripts get their own global scope. This is a lot safer than sharing them in case a script wants
@@ -781,7 +787,7 @@ public class ScriptRunner
 
                 // Calculate how long we will wait in the call to select, taking into consideration
                 // what is on the timer queue and if there are pending ticks or immediate tasks.
-                long now = System.currentTimeMillis();
+                now = System.currentTimeMillis();
                 long pollTimeout;
                 if (!tickFunctions.isEmpty() || process.isCallbacksRequired() || (pinCount.get() == 0)) {
                     // Immediate work -- need to keep spinning

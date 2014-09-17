@@ -107,6 +107,12 @@ Url.prototype.parse = function(url, parseQueryString, slashesDenoteHost) {
     throw new TypeError("Parameter 'url' must be a string, not " + typeof url);
   }
 
+  // Copy chrome, IE, opera backslash-handling behavior.
+  // See: https://code.google.com/p/chromium/issues/detail?id=25916
+  var hashSplit = url.split('#');
+  hashSplit[0] = hashSplit[0].replace(/\\/g, '/');
+  url = hashSplit.join('#');
+
   var rest = url;
 
   // trim before proceeding.
@@ -250,18 +256,11 @@ Url.prototype.parse = function(url, parseQueryString, slashesDenoteHost) {
     }
 
     if (!ipv6Hostname) {
-      // IDNA Support: Returns a puny coded representation of "domain".
-      // It only converts the part of the domain name that
-      // has non ASCII characters. I.e. it dosent matter if
-      // you call it with a domain that already is in ASCII.
-      var domainArray = this.hostname.split('.');
-      var newOut = [];
-      for (var i = 0; i < domainArray.length; ++i) {
-        var s = domainArray[i];
-        newOut.push(s.match(/[^A-Za-z0-9_-]/) ?
-            'xn--' + punycode.encode(s) : s);
-      }
-      this.hostname = newOut.join('.');
+      // IDNA Support: Returns a punycoded representation of "domain".
+      // It only converts parts of the domain name that
+      // have non-ASCII characters, i.e. it doesn't matter if
+      // you call it with a domain that already is ASCII-only.
+      this.hostname = punycode.toASCII(this.hostname);
     }
 
     var p = this.port ? ':' + this.port : '';

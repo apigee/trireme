@@ -55,10 +55,13 @@ exports.getCiphers = function() {
 
 
 var debug;
+var debugEnabled;
 if (process.env.NODE_DEBUG && /tls/.test(process.env.NODE_DEBUG)) {
   debug = function(a) { console.error('TLS:', a); };
+  debugEnabled = true;
 } else {
   debug = function() { };
+  debugEnabled = false;
 }
 
 
@@ -213,6 +216,7 @@ exports.checkServerIdentity = checkServerIdentity;
 function CryptoStream(pair, options) {
   stream.Duplex.call(this, options);
   this.pair = pair;
+  this.callbacks = [];
 
   this.once('finish', onCryptoStreamFinish);
 }
@@ -304,6 +308,8 @@ CryptoStream.prototype.destroy = function(err) {
   this._destroyed = true;
   this.readable = this.writable = false;
 
+  this._deliverCallbacks();
+
   // Destroy both ends
   if (this === this.pair.cleartext) {
     debug('cleartext.destroy');
@@ -322,6 +328,18 @@ CryptoStream.prototype.destroy = function(err) {
   });
 };
 
+CryptoStream.prototype._read = function() {
+  // It's OK to read now so pop any write callbacks that we queued
+  this._deliverCallbacks();
+};
+
+CryptoStream.prototype._deliverCallbacks = function() {
+    while (this.callbacks.length > 0) {
+    debug('Delivering a deferred callback');
+    var cb = this.callbacks.shift();
+    cb();
+  }
+}
 
 CryptoStream.prototype._done = function() {
   this._doneFlag = true;
@@ -330,7 +348,9 @@ CryptoStream.prototype._done = function() {
     return;
   }
 
-  debug('_done cleartext: ' + this.pair.cleartext._doneFlag + ' encrypted: ' + this.pair.encrypted._doneFlag);
+  if (debugEnabled) {
+    debug('_done cleartext: ' + this.pair.cleartext._doneFlag + ' encrypted: ' + this.pair.encrypted._doneFlag);
+  }
 
   if (this === this.pair.encrypted && !this.pair._secureEstablished)
     return this.pair.error();
@@ -365,8 +385,8 @@ function CleartextStream(pair, options) {
   CryptoStream.call(this, pair, options);
 
   var self = this;
-  this.pair.ssl.onwrap = function(chunk, shutdown) {
-    self._onwrap(chunk, shutdown);
+  this.pair.ssl.onwrap = function(chunk, shutdown, cb) {
+    self._onwrap(chunk, shutdown, cb);
   };
   this.once('end', function() {
     self._onEnd();
@@ -386,7 +406,9 @@ CleartextStream.prototype._write = function(chunk, encoding, cb) {
     return;
   }
 
-  debug('Going to wrap ' + chunk.length);
+  if (debugEnabled) {
+    debug('Going to wrap ' + chunk.length);
+  }
   this.pair.ssl.wrap(chunk, function(err) {
     debug('Wrapping complete');
     if (cb) {
@@ -395,23 +417,34 @@ CleartextStream.prototype._write = function(chunk, encoding, cb) {
   });
 };
 
-// Data from SSLEngine.wrap will end up here
-CleartextStream.prototype._onwrap = function(chunk, shutdown) {
+// Data from SSLEngine.wrap will end up here. It will pass
+// us the callback used to
+CleartextStream.prototype._onwrap = function(chunk, shutdown, writeCallback) {
   if (this._destroyed || !this.pair.ssl) {
     // Arrived late after close -- ignore
     return;
   }
   if (chunk) {
-    debug('Received ' + chunk.length + ' wrapped bytes');
+    if (debugEnabled) {
+      debug('Received ' + chunk.length + ' wrapped bytes');
+    }
     if (this._opposite.ondata) {
       this._opposite.ondata(chunk, 0, chunk.length);
     } else {
-      this._opposite.push(chunk);
+      var pushed = this._opposite.push(chunk);
+      if (writeCallback) {
+        if (pushed) {
+          debug('Delivering write callback now');
+          writeCallback();
+        } else {
+          debug('Deferring write callback');
+          this._opposite.callbacks.push(writeCallback);
+        }
+      }
     }
   }
   if (shutdown) {
     debug('Received completion of shutdown request');
-    this._shuttingDown = true;
     this._opposite.push(null);
   }
 };
@@ -424,10 +457,6 @@ CleartextStream.prototype._onEnd = function() {
     debug('onend');
     this.onend();
   }
-};
-
-CleartextStream.prototype._read = function() {
-  // Nothing to do at this point
 };
 
 CleartextStream.prototype.address = function() {
@@ -497,8 +526,8 @@ function EncryptedStream(pair, options) {
   CryptoStream.call(this, pair, options);
 
   var self = this;
-  this.pair.ssl.onunwrap = function(chunk, shutdown) {
-    self._onunwrap(chunk, shutdown);
+  this.pair.ssl.onunwrap = function(chunk, shutdown, cb) {
+    self._onunwrap(chunk, shutdown, cb);
   };
 }
 util.inherits(EncryptedStream, CryptoStream);
@@ -522,7 +551,9 @@ EncryptedStream.prototype._write = function(chunk, encoding, cb) {
     return;
   }
 
-  debug('Going to unwrap ' + chunk.length);
+  if (debugEnabled) {
+    debug('Going to unwrap ' + chunk.length);
+  }
   this.pair.ssl.unwrap(chunk, function(err) {
     debug('Unwrap complete');
     if (cb) {
@@ -531,30 +562,36 @@ EncryptedStream.prototype._write = function(chunk, encoding, cb) {
   });
 };
 
-EncryptedStream.prototype._onunwrap = function(chunk, shutdown) {
+EncryptedStream.prototype._onunwrap = function(chunk, shutdown, readCallback) {
   if (this._destroyed || !this.pair.ssl) {
     // Arrived late after close -- ignore
     return;
   }
   if (chunk) {
-    debug('Received ' + chunk.length + ' bytes of unwrapped data');
+    if (debugEnabled) {
+      debug('Received ' + chunk.length + ' bytes of unwrapped data');
+    }
     if (this._opposite.ondata) {
       this._opposite.ondata(chunk, 0, chunk.length);
     } else {
-      this._opposite.push(chunk);
+      var pushed = this._opposite.push(chunk);
+      if (readCallback) {
+        if (pushed) {
+          debug('Delivering read callback now');
+          readCallback();
+        } else {
+          debug('Deferring read callback');
+          this._opposite.callbacks.push(readCallback);
+        }
+      }
     }
   }
 
   if (shutdown) {
     debug('Got shutdown from the client');
-    this._shuttingDown = true;
     this._done();
     this._opposite.push(null);
   }
-};
-
-EncryptedStream.prototype._read = function() {
-  // Nothing to do as we don't really have a way to "pause"
 };
 
 EncryptedStream.prototype._onEnd = function() {
@@ -645,7 +682,9 @@ function onnewsession(key, session) {
 // Catch errors that do not directly result from reads or writes.
 // Particularly, ones raised directly by SSLEngine when "rejectUnauthorized" is set.
 function onerror(err) {
-  debug('Got SSL error: ' + err.message);
+  if (debugEnabled) {
+    debug('Got SSL error: ' + err.message);
+  }
   if (this.ssl.verifyError()) {
     // Handshaking error
     this.cleartext.authorized = false;
@@ -1181,7 +1220,9 @@ exports.connect = function(/* [port, host], options, cb */) {
 
   pair.on('secure', function() {
     var verifyError = pair.ssl.verifyError();
-    debug('on secure. Verify error = ' +  pair.ssl.verifyError());
+    if (debugEnabled) {
+      debug('on secure. Verify error = ' +  pair.ssl.verifyError());
+    }
 
     cleartext.npnProtocol = pair.npnProtocol;
 
@@ -1190,7 +1231,9 @@ exports.connect = function(/* [port, host], options, cb */) {
       var validCert = checkServerIdentity(hostname,
                                           pair.cleartext.getPeerCertificate());
       if (!validCert) {
-        debug(util.format('Failed check for "%s" against %j', hostname, pair.cleartext.getPeerCertificate()));
+        if (debugEnabled) {
+          debug(util.format('Failed check for "%s" against %j', hostname, pair.cleartext.getPeerCertificate()));
+        }
         verifyError = new Error('Hostname/IP doesn\'t match certificate\'s ' +
                                 'altnames');
       }

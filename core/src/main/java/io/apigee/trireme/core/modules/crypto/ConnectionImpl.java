@@ -460,12 +460,13 @@ public class ConnectionImpl
             }
         } while (result.getStatus() == SSLEngineResult.Status.BUFFER_OVERFLOW);
 
+        Function writeCallback = null;
         if ((qc != null) && !bb.hasRemaining() && initFinished) {
-            // Finished processing the current chunk, but don't deliver until
+            // Finished processing the current chunk, but don't deliver the callback until
             // handshake is done in case client ended before sending any data
             outgoingChunks.remove();
             if (qc.callback != null) {
-                qc.callback.call(cx, this, this, ScriptRuntime.emptyArgs);
+                writeCallback = qc.callback;
             }
         }
 
@@ -475,13 +476,16 @@ public class ConnectionImpl
         }
 
         if (result.bytesProduced() > 0) {
-            deliverWriteBuffer(cx, wasShutdown);
+            // Deliver write callback in JavaScript after we are happy with reading
+            deliverWriteBuffer(cx, wasShutdown, writeCallback);
+        } else if (writeCallback != null) {
+            writeCallback.call(cx, this, this, ScriptRuntime.emptyArgs);
         }
 
         return (result.getStatus() == SSLEngineResult.Status.OK);
     }
 
-    private void deliverWriteBuffer(Context cx, boolean shutdown)
+    private void deliverWriteBuffer(Context cx, boolean shutdown, Function writeCallback)
     {
         if (onWrap != null) {
             writeBuf.flip();
@@ -495,9 +499,13 @@ public class ConnectionImpl
             }
 
             Buffer.BufferImpl buf = Buffer.BufferImpl.newBuffer(cx, this, bb, false);
-            runtime.enqueueCallback(onWrap, this, this, new Object[]{buf, shutdown});
+            runtime.enqueueCallback(onWrap, this, this, new Object[]{buf, shutdown, writeCallback});
+
         } else {
             writeBuf.clear();
+            if (writeCallback != null) {
+                writeCallback.call(cx, this, this, ScriptRuntime.emptyArgs);
+            }
         }
     }
 
@@ -555,6 +563,7 @@ public class ConnectionImpl
             if (qc.buf.hasRemaining()) {
                 incomingChunks.addFirst(qc);
             } else {
+                // Deliver the callback right now, because we are ready to consume more data right now
                 qc.deliverCallback(cx, this);
             }
         }
@@ -586,6 +595,7 @@ public class ConnectionImpl
 
             Buffer.BufferImpl buf = Buffer.BufferImpl.newBuffer(cx, this, bb, false);
             runtime.enqueueCallback(onUnwrap, this, this, new Object[]{buf, shutdown});
+
         } else {
             readBuf.clear();
         }

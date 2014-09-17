@@ -71,13 +71,19 @@ var clientData = '';
 var clientGotAck = false;
 var clientGotEnd = false;
 var clientSecure = false;
+var clientEnded = false;
 
 clientPair.cleartext.on('data', function(chunk) {
   console.log('Client got "%s"', chunk);
   clientData += chunk;
   if (/ACKACKACK/.test(clientData)) {
-    console.log('Client sending end');
-    clientPair.cleartext.end('Goodbye');
+    if (clientEnded) {
+      console.log('Client got data again: %s', clientData);
+    } else {
+      console.log('Client sending end');
+      clientEnded = true;
+      clientPair.cleartext.end('Goodbye');
+    }
   } else {
     clientGotAck = true;
     clientPair.cleartext.write('Hello');

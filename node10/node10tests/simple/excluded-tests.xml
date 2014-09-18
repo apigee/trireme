@@ -613,6 +613,11 @@
         <Adapter>netty</Adapter>
         <Description>Doesn't look at agent on the server side</Description>
     </Excluded>
+    <Excluded>
+        <Name>test-http-byteswritten-header.js</Name>
+        <Adapter>netty</Adapter>
+        <Description>Netty doesn't count the way that node wants.</Description>
+    </Excluded>
 
     <!-- DEPRECATION
          These tests depend on the "&amp;&amp;throw-deprecation" feature of Node, not implemented here.

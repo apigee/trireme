@@ -421,6 +421,10 @@ Zlib.prototype._transform = function(chunk, encoding, cb) {
     }
   }
 
+  if (this._closed) {
+    return cb(new Error('zlib binding closed'));
+  }
+
   // Add this input once for consumption.
   // The binding will call us back once or more times to produce output
   if (debugEnabled) {

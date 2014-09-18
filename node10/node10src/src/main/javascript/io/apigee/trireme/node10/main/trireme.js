@@ -831,7 +831,7 @@
     // Called by the "domain" module when switching to domains -- we replace a few functions
     // with others that are domain-aware.
     function usingDomains() {
-      process._currenTickHandler = process._nextDomainTick;
+      process._currentTickHandler = process._nextDomainTick;
       process._tickCallback = process._tickDomainCallback;
       process._submitTick = submitDomainTick;
     }

@@ -188,12 +188,7 @@ public class HTTPParsingMachine
      */
     private boolean processStart(ByteBuffer buf, Result r)
     {
-        if ((buf.remaining() >= 2) &&
-            (buf.get(buf.position()) == '\r') && (buf.get(buf.position() + 1) == '\n')) {
-            // Special handling for pipelined requests that contain an extra newline at the end
-            buf.position(buf.position() + 2);
-        }
-
+        skipBlankLine(buf);
         String startLine = readLine(buf);
         if (startLine == null) {
             // We don't have a complete start line yet
@@ -584,6 +579,36 @@ public class HTTPParsingMachine
             p++;
         }
         return null;
+    }
+
+    /**
+     * Skip the first two characters in the buffer or in the "odd data" buffer if and only if
+     * they are an empty CRLF. We use this to skip extra lines in pipelined requests.
+     */
+    private void skipBlankLine(ByteBuffer buf)
+    {
+        // Tricky because we have to look in two different buffers.
+        if (oddData == null) {
+            if (buf.remaining() >= 2) {
+                if ((buf.get(buf.position()) == '\r') && (buf.get(buf.position() + 1) == '\n')) {
+                    buf.position(buf.position() + 2);
+                }
+            }
+        } else if (oddData.remaining() == 1) {
+            if (buf.remaining() >= 1) {
+                if ((oddData.get(0) == '\r') && (buf.get(buf.position()) == '\n')) {
+                    oddData = null;
+                    buf.position(buf.position() + 1);
+                }
+            }
+        } else if (oddData.remaining() >= 2) {
+            if ((oddData.get(0) == '\r') && (oddData.get(1) == '\n')) {
+                oddData.position(2);
+                if (!oddData.hasRemaining()) {
+                    oddData = null;
+                }
+            }
+        }
     }
 
     /**

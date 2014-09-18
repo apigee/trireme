@@ -100,9 +100,10 @@ public class TimerWrap
          */
         @JSStaticFunction
         @SuppressWarnings("unused")
-        public static long now(Context cx, Scriptable thisObj, Object[] args, Function fun)
+        public static Object now(Context cx, Scriptable thisObj, Object[] args, Function fun)
         {
-            return getRunner().getLoopTimestamp();
+            // Rhino is not smart enough to turn a Long literal into a Number so do it here
+            return Long.valueOf(getRunner().getLoopTimestamp());
         }
 
         @JSGetter("ontimeout")

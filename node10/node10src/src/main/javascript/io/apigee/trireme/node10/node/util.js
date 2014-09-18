@@ -226,6 +226,11 @@ function formatValue(ctx, value, recurseTimes) {
     keys = Object.getOwnPropertyNames(value);
   }
 
+  // Trireme: Rhino makes Error.message an enumerable property...
+  if (isError(value) && (keys.length === 1)) {
+    keys = [];
+  }
+
   // Some type of object without properties can be shortcutted.
   if (keys.length === 0) {
     if (typeof value === 'function') {

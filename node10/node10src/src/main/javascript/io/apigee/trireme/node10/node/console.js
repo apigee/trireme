@@ -92,7 +92,9 @@ Console.prototype.trace = function() {
   err.name = 'Trace';
   err.message = util.format.apply(this, arguments);
   Error.captureStackTrace(err, arguments.callee);
-  this.error(err.stack);
+  // Trireme: This is still not quite formatted the same in Rhino, so fix it here
+  //this.error(err.stack);
+  this.error('Trace: %s\n%s', err.message, err.stack);
 };
 
 

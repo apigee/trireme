@@ -408,10 +408,6 @@
         <Description>This is a complicated console-based test. Figure it out later.</Description>
     </Excluded>
     <Excluded>
-        <Name>test-http-byteswritten.js</Name>
-        <Description>Doesn't work exactly the same as Node yet.</Description>
-    </Excluded>
-    <Excluded>
         <Name>test-http-full-response.js</Name>
         <Description>Relies on ab which is hard to make portable.</Description>
     </Excluded>
@@ -446,10 +442,6 @@
     <Excluded>
         <Name>test-error-reporting.js</Name>
         <Description>Depends on specific errors.</Description>
-    </Excluded>
-    <Excluded>
-        <Name>test-sys.js</Name>
-        <Description>Depends on fix to Rhino date parsing limitations.</Description>
     </Excluded>
     <Excluded>
         <Name>test-string-decoder.js</Name>
@@ -510,6 +502,10 @@
     <Excluded>
         <Name>test-stream-pipe-multi.js</Name>
         <Description>Recursive nextTick -- doesn't work in node either.</Description>
+    </Excluded>
+    <Excluded>
+        <Name>test-crypto-dh-odd-key.js</Name>
+        <Description>Not a supported use case in Java.</Description>
     </Excluded>
 
     <!-- NETTY ADAPTER
@@ -660,9 +656,6 @@
     </Excluded>
     <Excluded>
         <Name>test-net-throttle.js</Name>
-    </Excluded>
-    <Excluded>
-        <Name>test-net-bytes-stats.js</Name>
     </Excluded>
     <Excluded>
         <Name>test-http-set-timeout-server.js</Name>

@@ -95,6 +95,66 @@ public class HTTPParserTest
     }
 
     @Test
+    public void testCompleteRequestNoLengthPipelined()
+    {
+        pipelineTest(COMPLETE_REQUEST_NOLENGTH  + COMPLETE_REQUEST_NOLENGTH + COMPLETE_REQUEST_NOLENGTH);
+    }
+
+    @Test
+    public void testCompleteRequestNoLengthPipelinedExtraLine()
+    {
+        pipelineTest(COMPLETE_REQUEST_NOLENGTH  + "\r\n" + COMPLETE_REQUEST_NOLENGTH + "\r\n" + COMPLETE_REQUEST_NOLENGTH);
+    }
+
+    private void pipelineTest(String requests)
+    {
+        HTTPParsingMachine parser = new HTTPParsingMachine(HTTPParsingMachine.ParsingMode.REQUEST);
+        ByteBuffer buf = Utils.stringToBuffer(requests, Charsets.ASCII);
+        HTTPParsingMachine.Result r = parser.parse(buf);
+        assertFalse(r.isError());
+        assertTrue(r.isComplete());
+        assertTrue(r.isHeadersComplete());
+        assertTrue(r.hasHeaders());
+        assertFalse(r.hasBody());
+        assertEquals(1, r.getMajor());
+        assertEquals(1, r.getMinor());
+        assertEquals("GET", r.getMethod());
+        assertEquals("/foo/bar/baz", r.getUri());
+        assertEquals("Myself", getFirstHeader(r, "User-Agent"));
+
+        assertTrue(buf.hasRemaining());
+        parser.reset();
+        r = parser.parse(buf);
+        assertFalse(r.isError());
+        assertTrue(r.isComplete());
+        assertTrue(r.isHeadersComplete());
+        assertTrue(r.hasHeaders());
+        assertFalse(r.hasBody());
+        assertEquals(1, r.getMajor());
+        assertEquals(1, r.getMinor());
+        assertEquals("GET", r.getMethod());
+        assertEquals("/foo/bar/baz", r.getUri());
+        assertEquals("Myself", getFirstHeader(r, "User-Agent"));
+
+        assertTrue(buf.hasRemaining());
+        parser.reset();
+        r = parser.parse(buf);
+        assertFalse(r.isError());
+        assertTrue(r.isComplete());
+        assertTrue(r.isHeadersComplete());
+        assertTrue(r.hasHeaders());
+        assertFalse(r.hasBody());
+        assertEquals(1, r.getMajor());
+        assertEquals(1, r.getMinor());
+        assertEquals("GET", r.getMethod());
+        assertEquals("/foo/bar/baz", r.getUri());
+        assertEquals("Myself", getFirstHeader(r, "User-Agent"));
+
+        assertFalse(buf.hasRemaining());
+        parser.parse(null);
+    }
+
+    @Test
     public void testCompleteResponseLength()
     {
         HTTPParsingMachine parser = new HTTPParsingMachine(HTTPParsingMachine.ParsingMode.RESPONSE);

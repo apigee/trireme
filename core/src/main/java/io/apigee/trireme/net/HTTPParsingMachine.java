@@ -169,8 +169,16 @@ public class HTTPParsingMachine
      */
     public void setIgnoreBody(boolean ignore)
     {
-        if (ignore && (state == Status.BODY)) {
-            state = Status.COMPLETE;
+        if (ignore) {
+            switch (state) {
+            case BODY:
+            case CHUNK_HEADER:
+            case CHUNK_BODY:
+                state = Status.COMPLETE;
+                break;
+            default:
+                break;
+            }
         }
     }
 
@@ -180,6 +188,12 @@ public class HTTPParsingMachine
      */
     private boolean processStart(ByteBuffer buf, Result r)
     {
+        if ((buf.remaining() >= 2) &&
+            (buf.get(buf.position()) == '\r') && (buf.get(buf.position() + 1) == '\n')) {
+            // Special handling for pipelined requests that contain an extra newline at the end
+            buf.position(buf.position() + 2);
+        }
+
         String startLine = readLine(buf);
         if (startLine == null) {
             // We don't have a complete start line yet

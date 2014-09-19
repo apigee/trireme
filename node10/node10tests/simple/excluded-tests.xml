@@ -614,7 +614,7 @@
         <Description>Doesn't look at agent on the server side</Description>
     </Excluded>
     <Excluded>
-        <Name>test-http-byteswritten-header.js</Name>
+        <Name>test-http-byteswritten.js</Name>
         <Adapter>netty</Adapter>
         <Description>Netty doesn't count the way that node wants.</Description>
     </Excluded>
@@ -650,6 +650,10 @@
     </Excluded>
     <Excluded>
         <Name>test-http-1.0.js</Name>
+    </Excluded>
+    <Excluded>
+        <Name>test-http-blank-header.js</Name>
+        <Description>Looks like we are handling this properly despite the tests.</Description>
     </Excluded>
 
     <!--

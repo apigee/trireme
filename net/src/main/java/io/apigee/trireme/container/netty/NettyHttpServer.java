@@ -48,6 +48,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import javax.net.ssl.SSLEngine;
+import java.util.concurrent.TimeUnit;
 
 
 public class NettyHttpServer
@@ -69,6 +70,12 @@ public class NettyHttpServer
 
         // This is for testing the "attachment" feature
         injectedAttachment = System.getProperty("TriremeInjectedAttachment");
+
+        String timeoutOpt = System.getProperty("TriremeHttpTimeout");
+        if (timeoutOpt != null) {
+            stub.setDefaultTimeout(Integer.parseInt(timeoutOpt), TimeUnit.SECONDS,
+                                   500, "text/plain", "Request timed out");
+        }
     }
 
     @Override

@@ -2,11 +2,16 @@ var https = require('https');
 var assert = require('assert');
 var path = require('path');
 
+var finished = false;
+
 var svr = https.createServer({
     keystore: path.normalize(path.join(__dirname, '../agent1.jks')),
     passphrase: 'secure'
   }, function(req, resp) {
   console.log('Got an HTTPS request');
+  resp.on('finish', function() {
+    finished = true;
+  });
   req.on('data', function(chunk) {
     console.log('Server got data: ' + chunk);
   });
@@ -35,6 +40,7 @@ svr.listen(33333, function() {
       console.log('Got the whole response');
       svr.close();
       assert.equal('Hello, World!', received);
+      assert(finished);
     });
   });
 });

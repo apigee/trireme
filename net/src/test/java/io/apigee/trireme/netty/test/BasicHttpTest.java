@@ -78,6 +78,34 @@ public class BasicHttpTest
         runTest("responsecodetest.js");
     }
 
+    @Test
+    public void testBlackHole()
+        throws InterruptedException, ExecutionException, NodeException
+    {
+        runTest("blackholeresponsetest.js");
+    }
+
+    @Test
+    public void testBlackHole2()
+        throws InterruptedException, ExecutionException, NodeException
+    {
+        runTest("blackholeresponsetest2.js");
+    }
+
+    @Test
+    public void testSlowRequest()
+        throws InterruptedException, ExecutionException, NodeException
+    {
+        runTest("slowrequest.js");
+    }
+
+    @Test
+    public void testSlowResponse()
+        throws InterruptedException, ExecutionException, NodeException
+    {
+        runTest("slowresponse.js");
+    }
+
     private void runTest(String name)
         throws InterruptedException, ExecutionException, NodeException
     {

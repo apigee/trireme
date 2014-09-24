@@ -58,6 +58,7 @@ import java.util.Date;
 import java.util.IdentityHashMap;
 import java.util.Map;
 import java.util.TimeZone;
+import java.util.concurrent.TimeUnit;
 
 /**
  * This is a special module that wraps the generic HTTP adapter so that it may be accessed from
@@ -147,6 +148,7 @@ public class HTTPWrap
         private Function onComplete;
         private Function onClose;
         private TLSParams tlsParams;
+        private Scriptable timeoutOpts;
 
         private final IdentityHashMap<ResponseAdapter, ResponseAdapter> pendingRequests =
             new IdentityHashMap<ResponseAdapter, ResponseAdapter>();
@@ -266,7 +268,7 @@ public class HTTPWrap
                     Scriptable requestObj = (Scriptable)makeRequest.call(cx, makeRequest, null,
                                                                          new Object[] { reqAdapter, socketObj });
                     Scriptable responseObj = (Scriptable)makeResponse.call(cx, makeResponse, null,
-                                                                           new Object[] { respAdapter, socketObj });
+                                                                           new Object[] { respAdapter, socketObj, timeoutOpts });
 
                     request.setScriptObject(requestObj);
                     response.setScriptObject(responseObj);
@@ -390,6 +392,27 @@ public class HTTPWrap
                 throw Utils.makeError(Context.getCurrentContext(), this, message, (RhinoException)cause);
             }
             throw Utils.makeError(Context.getCurrentContext(), this, cause.getMessage());
+        }
+
+        @Override
+        public void setDefaultTimeout(long timeout, TimeUnit unit,
+                                      int statusCode, String contentType, String message)
+        {
+            if (timeout <= 0L) {
+                timeoutOpts = null;
+                return;
+            }
+
+            Context cx = Context.enter();
+            try {
+                timeoutOpts = cx.newObject(this);
+                timeoutOpts.put("timeout", timeoutOpts, Double.valueOf(unit.toMillis(timeout)));
+                timeoutOpts.put("statusCode", timeoutOpts, statusCode);
+                timeoutOpts.put("contentType", timeoutOpts, contentType);
+                timeoutOpts.put("message", timeoutOpts, message);
+            } finally {
+                Context.exit();
+            }
         }
 
         @JSGetter("makeSocket")

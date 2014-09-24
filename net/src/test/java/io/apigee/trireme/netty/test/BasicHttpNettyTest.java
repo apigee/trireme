@@ -104,12 +104,46 @@ public class BasicHttpNettyTest
         runTest("cpulooptest.js");
     }
 
+    @Test
+    public void testBlackHole()
+        throws InterruptedException, ExecutionException, NodeException
+    {
+        runTest("blackholeresponsetest.js");
+    }
+
+    @Test
+    public void testBlackHole2()
+        throws InterruptedException, ExecutionException, NodeException
+    {
+        runTest("blackholeresponsetest2.js");
+    }
+
+    @Test
+    public void testSlowRequest()
+        throws InterruptedException, ExecutionException, NodeException
+    {
+        runTest("slowrequest.js");
+    }
+
+    @Test
+    public void testSlowResponse()
+        throws InterruptedException, ExecutionException, NodeException
+    {
+        runTest("slowresponse.js");
+    }
+
     private void runTest(String name)
         throws InterruptedException, ExecutionException, NodeException
     {
         System.setProperty("TriremeInjectedAttachment", ATTACHMENT_VAL);
         HashMap<String, String> scriptEnv = new HashMap<String, String>();
         scriptEnv.put("ATTACHMENT", ATTACHMENT_VAL);
+        if (System.getenv("NODE_DEBUG") != null) {
+            scriptEnv.put("NODE_DEBUG", System.getenv("NODE_DEBUG"));
+        }
+        if (System.getenv("LOGLEVEL") != null) {
+            scriptEnv.put("LOGLEVEL", System.getenv("LOGLEVEL"));
+        }
         NodeScript script = env.createScript(name,
                                              new File("./target/test-classes/tests/" + name),
                                              null);

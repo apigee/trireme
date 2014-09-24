@@ -21,6 +21,8 @@
  */
 package io.apigee.trireme.net.spi;
 
+import java.util.concurrent.TimeUnit;
+
 /**
  * This is the "southbound" interface in between the HTTP container and the JavaScript runtime. The runtime
  * must call the appropriate methods on this interface.
@@ -53,4 +55,8 @@ public interface HttpServerStub
      * This method is called when the server is finally shut down.
      */
     void onClose(HttpRequestAdapter request, HttpResponseAdapter response);
+
+    /** Set a default timeout that will be used for all HTTP requests unless overridden. */
+    void setDefaultTimeout(long timeout, TimeUnit unit,
+                           int statusCode, String contentType, String message);
 }

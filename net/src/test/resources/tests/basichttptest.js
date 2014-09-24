@@ -2,6 +2,7 @@ var http = require('http');
 var assert = require('assert');
 
 var socketsMatch = false;
+var gotFinish = false;
 
 var svr = http.createServer(function(req, resp) {
   if (process.env.ATTACHMENT) {
@@ -25,6 +26,9 @@ var svr = http.createServer(function(req, resp) {
       remotePort: req.socket.remotePort
     };
 
+    resp.on('finish', function() {
+      gotFinish = true;
+    });
     resp.end(JSON.stringify(msg));
   });
 });
@@ -58,5 +62,6 @@ svr.listen(33333, function() {
 
 process.on('exit', function() {
   assert(socketsMatch);
+  assert(gotFinish);
 });
 

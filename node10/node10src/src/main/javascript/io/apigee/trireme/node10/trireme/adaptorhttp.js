@@ -153,7 +153,7 @@ if (HttpWrap.hasServerAdapter()) {
    */
 
   function ServerResponse(adapter, conn) {
-    if (!(this instanceof ServerResponse)) return new ServerResponse();
+    if (!(this instanceof ServerResponse)) return new ServerResponse(adapter, conn);
     stream.Writable.call(this, {decodeStrings: true});
 
     this.statusCode = 200;
@@ -330,7 +330,7 @@ if (HttpWrap.hasServerAdapter()) {
   };
 
   ServerResponse.prototype.clearTimeout = function(cb) {
-    this.connectio.clearTimeout(cb);
+    this.connection.clearTimeout(cb);
   };
 
   ServerResponse.prototype.setHeader = NodeHttp.OutgoingMessage.prototype.setHeader;
@@ -344,7 +344,7 @@ if (HttpWrap.hasServerAdapter()) {
    */
 
   function ServerRequest(adapter, conn) {
-    if (!(this instanceof ServerRequest)) return new ServerRequest(adapter);
+    if (!(this instanceof ServerRequest)) return new ServerRequest(adapter, conn);
     NodeHttp.IncomingMessage.call(this, conn);
 
     this._adapter = adapter;
@@ -477,10 +477,28 @@ if (HttpWrap.hasServerAdapter()) {
   };
 
   // Make the JavaScript "response" object based on the same adapter
-  Server.prototype._makeResponse = function(respAdapter, conn) {
+  Server.prototype._makeResponse = function(respAdapter, conn, timeoutOpts) {
     debug('_makeResponse');
     var ret = new ServerResponse(respAdapter, conn);
     conn._outgoing = ret;
+
+    if (timeoutOpts && (timeoutOpts.timeout > 0)) {
+      ret.setTimeout(timeoutOpts.timeout, function() {
+        var timeoutCode = (timeoutOpts.statusCode ? timeoutOpts.statusCode : 503);
+        if (debugOn) {
+          debug('Sending automatic response timeout of ' + timeoutCode);
+        }
+        if (ret.headersSent) {
+          ret.end();
+        } else {
+          ret.writeHead(timeoutCode, {
+            'content-type': (timeoutOpts.contentType ? timeoutOpts.contentType : 'text/plain')
+          });
+          ret.end(timeoutOpts.message ? timeoutOpts.message : undefined);
+        }
+      });
+    }
+
     return ret;
   };
 
@@ -578,8 +596,8 @@ if (HttpWrap.hasServerAdapter()) {
     self._adapter.makeRequest = function(req, conn) {
       return self._makeRequest(req, conn);
     };
-    self._adapter.makeResponse = function(resp, conn) {
-      return self._makeResponse(resp, conn);
+    self._adapter.makeResponse = function(resp, conn, timeoutOpts) {
+      return self._makeResponse(resp, conn, timeoutOpts);
     };
     self._adapter.makeSocket = function(info) {
       return self._makeSocket(info);

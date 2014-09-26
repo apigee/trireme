@@ -1,7 +1,9 @@
 var http = require('http');
 var assert = require('assert');
 
-var TIMEOUT = 2000;
+var TIMEOUT = 5000;
+
+console.log('blackholeresponsetest2...');
 
 var svr = http.createServer(function(req, resp) {
   // writeHead but never send any content

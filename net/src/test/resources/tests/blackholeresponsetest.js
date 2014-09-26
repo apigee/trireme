@@ -1,7 +1,9 @@
 var http = require('http');
 var assert = require('assert');
 
-var TIMEOUT = 2000;
+var TIMEOUT = 5000;
+
+console.log('blackholeresponsetest...');
 
 var svr = http.createServer(function(req, resp) {
   // Don't ever return anything

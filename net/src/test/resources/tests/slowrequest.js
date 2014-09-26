@@ -2,7 +2,9 @@ var http = require('http');
 var assert = require('assert');
 var url = require('url');
 
-var TIMEOUT = 2000;
+var TIMEOUT = 5000;
+
+console.log('slowrequest test...');
 
 var svr = http.createServer(function(req, resp) {
   // Send content quickly but only after getting everything

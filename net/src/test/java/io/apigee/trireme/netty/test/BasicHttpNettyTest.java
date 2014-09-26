@@ -104,6 +104,7 @@ public class BasicHttpNettyTest
         runTest("cpulooptest.js");
     }
 
+    /* Doesn't work reliably on CI
     @Test
     public void testBlackHole()
         throws InterruptedException, ExecutionException, NodeException
@@ -111,7 +112,7 @@ public class BasicHttpNettyTest
         runTest("blackholeresponsetest.js");
     }
 
-    /* Doesn't work reliably on CI
+
     @Test
     public void testBlackHole2()
         throws InterruptedException, ExecutionException, NodeException

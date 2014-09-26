@@ -85,7 +85,9 @@ public class JdbcConnection
                     log.debug("Closing {}", self.conn);
                 }
                 try {
-                    self.conn.close();
+                    synchronized (self) {
+                        self.conn.close();
+                    }
                 } catch (SQLException e) {
                     if (log.isDebugEnabled()) {
                         log.debug("Error on JDBC close. Ignoring it: {}", e);
@@ -116,7 +118,9 @@ public class JdbcConnection
             log.debug("Resetting {} to be re-pooled", self.conn);
         }
         try {
-            self.conn.setAutoCommit(true);
+            synchronized (self) {
+                self.conn.setAutoCommit(true);
+            }
         } catch (SQLException sqle) {
             if (log.isDebugEnabled()) {
                 log.debug("Error on reset -- ignoring! {}", sqle);
@@ -132,7 +136,9 @@ public class JdbcConnection
         JdbcConnection self = (JdbcConnection)thisObj;
 
         try {
-            self.conn.setAutoCommit(auto);
+            synchronized (self) {
+                self.conn.setAutoCommit(auto);
+            }
         } catch (SQLException sqle) {
             if (log.isDebugEnabled()) {
                 log.debug("Error on setAutoCommit -- ignoring! {}", sqle);
@@ -153,7 +159,9 @@ public class JdbcConnection
             public void run()
             {
                 try {
-                    self.conn.commit();
+                    synchronized (self) {
+                        self.conn.commit();
+                    }
                     self.runtime.enqueueCallback(cb, cb, self, ScriptRuntime.emptyArgs);
                 } catch (SQLException sqle) {
                     self.returnError(cb, domain, sqle);
@@ -175,7 +183,9 @@ public class JdbcConnection
             public void run()
             {
                 try {
-                    self.conn.rollback();
+                    synchronized (self) {
+                        self.conn.rollback();
+                    }
                     self.runtime.enqueueCallback(cb, cb, self, ScriptRuntime.emptyArgs);
                 } catch (SQLException sqle) {
                     self.returnError(cb, domain, sqle);
@@ -206,40 +216,42 @@ public class JdbcConnection
                         log.trace("Executing {}", sql);
                     }
 
-                    Context cx = Context.enter();
-                    PreparedStatement st = self.conn.prepareCall(sql);
-                    try {
-                        if (params != null) {
-                            self.setParams(params, st, cx);
-                        }
-
-                        // Execute the result and retrieve all the rows right here, and return in one big object
-                        boolean isResultSet = st.execute();
-
-                        Scriptable result = cx.newObject(self);
-                        Object rows = Undefined.instance;
-
-                        if (isResultSet) {
-                            ResultSet rs = st.getResultSet();
-                            try {
-                                rows = self.retrieveRows(cx, rs);
-                            } finally {
-                                rs.close();
+                    synchronized (self) {
+                        Context cx = Context.enter();
+                        PreparedStatement st = self.conn.prepareCall(sql);
+                        try {
+                            if (params != null) {
+                                self.setParams(params, st, cx);
                             }
-                        } else {
-                            int updateCount = st.getUpdateCount();
-                            if (updateCount >= 0) {
-                                result.put("updateCount", result, updateCount);
+
+                            // Execute the result and retrieve all the rows right here, and return in one big object
+                            boolean isResultSet = st.execute();
+
+                            Scriptable result = cx.newObject(self);
+                            Object rows = Undefined.instance;
+
+                            if (isResultSet) {
+                                ResultSet rs = st.getResultSet();
+                                try {
+                                    rows = self.retrieveRows(cx, rs);
+                                } finally {
+                                    rs.close();
+                                }
+                            } else {
+                                int updateCount = st.getUpdateCount();
+                                if (updateCount >= 0) {
+                                    result.put("updateCount", result, updateCount);
+                                }
                             }
+
+                            // We should have a "result" object and maybe some "rows". Call back.
+                            self.runtime.enqueueCallback(cb, cb, self, domain,
+                                                         new Object[] { Undefined.instance, result, rows});
+
+                        } finally {
+                            Context.exit();
+                            st.close();
                         }
-
-                        // We should have a "result" object and maybe some "rows". Call back.
-                        self.runtime.enqueueCallback(cb, cb, self, domain,
-                                                     new Object[] { Undefined.instance, result, rows});
-
-                    } finally {
-                        Context.exit();
-                        st.close();
                     }
 
                 } catch (SQLException se) {
@@ -271,37 +283,39 @@ public class JdbcConnection
                         log.trace("Executing {}", sql);
                     }
 
-                    Context cx = Context.enter();
-                    PreparedStatement st = self.conn.prepareCall(sql);
-                    try {
-                        if (params != null) {
-                            self.setParams(params, st, cx);
-                        }
-
-                        // Execute the result and return an object to retrieve the rows
-                        boolean isResultSet = st.execute();
-
-                        Scriptable result = cx.newObject(self);
-                        Object resultHandle = Undefined.instance;
-
-                        if (isResultSet) {
-                            ResultSet rs = st.getResultSet();
-                            JdbcResultHandle handle = (JdbcResultHandle)cx.newObject(self, JdbcResultHandle.CLASS_NAME);
-                            handle.init(self.runtime, rs, st);
-                            resultHandle = handle;
-                        } else {
-                            int updateCount = st.getUpdateCount();
-                            if (updateCount >= 0) {
-                                result.put("updateCount", result, updateCount);
+                    synchronized (self) {
+                        Context cx = Context.enter();
+                        PreparedStatement st = self.conn.prepareCall(sql);
+                        try {
+                            if (params != null) {
+                                self.setParams(params, st, cx);
                             }
+
+                            // Execute the result and return an object to retrieve the rows
+                            boolean isResultSet = st.execute();
+
+                            Scriptable result = cx.newObject(self);
+                            Object resultHandle = Undefined.instance;
+
+                            if (isResultSet) {
+                                ResultSet rs = st.getResultSet();
+                                JdbcResultHandle handle = (JdbcResultHandle)cx.newObject(self, JdbcResultHandle.CLASS_NAME);
+                                handle.init(self.runtime, rs, st);
+                                resultHandle = handle;
+                            } else {
+                                int updateCount = st.getUpdateCount();
+                                if (updateCount >= 0) {
+                                    result.put("updateCount", result, updateCount);
+                                }
+                            }
+
+                            // We should have a "result" object and maybe some "rows". Call back.
+                            self.runtime.enqueueCallback(cb, cb, self, domain,
+                                                         new Object[] { Undefined.instance, result, resultHandle});
+
+                        } finally {
+                            Context.exit();
                         }
-
-                        // We should have a "result" object and maybe some "rows". Call back.
-                        self.runtime.enqueueCallback(cb, cb, self, domain,
-                                                     new Object[] { Undefined.instance, result, resultHandle});
-
-                    } finally {
-                        Context.exit();
                     }
 
                 } catch (SQLException se) {
@@ -341,8 +355,10 @@ public class JdbcConnection
                 st.setString(i + 1, (String) p);
             } else if (p instanceof Boolean) {
                 st.setBoolean(i + 1, ((Boolean)p).booleanValue());
+            } else if (p instanceof Integer) {
+                st.setInt(i + 1, ((Integer)p).intValue());
             } else if (p instanceof Number) {
-                st.setDouble(i + 1, ((Number) p).doubleValue());
+                st.setDouble(i + 1, ((Number)p).doubleValue());
 
             } else if (p instanceof Buffer.BufferImpl) {
                 ByteBuffer bb = ((Buffer.BufferImpl)p).getBuffer();

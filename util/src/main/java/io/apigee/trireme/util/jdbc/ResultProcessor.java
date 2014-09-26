@@ -112,7 +112,7 @@ public class ResultProcessor
             return Double.valueOf(rs.getDouble(i));
         case Types.TIMESTAMP:
             Timestamp ts = rs.getTimestamp(i);
-            return cx.newObject(scope, "Date", new Object[] { Long.valueOf(ts.getTime()) });
+            return cx.newObject(scope, "Date", new Object[] { Double.valueOf(ts.getTime()) });
         case Types.BINARY:
         case Types.BLOB:
         case Types.VARBINARY:

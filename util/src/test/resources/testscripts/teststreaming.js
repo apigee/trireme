@@ -59,15 +59,24 @@ function populateRows(done) {
     insertRow(0, done);
 }
 
-function handleRow(count, handle, done) {
-  handle.fetchRow(function(err, row, eof) {
+function handleRows(count, handle, done) {
+  var cumCount = count;
+  handle.fetchRows(10, function(err, rows, eof) {
     assert(!err);
+    assert(rows);
+    assert(rows.length <= 10);
+    if (rows) {
+      rows.forEach(function(row) {
+        assert.equal(row['ID'], cumCount);
+        cumCount++;
+      });
+    }
+
     if (eof) {
-      assert.equal(count, numRows);
+      assert.equal(cumCount, numRows);
       done();
     } else {
-      assert.equal(row['ID'], count);
-      handleRow(count + 1, handle, done);
+      handleRows(cumCount, handle, done);
     }
   });
 }
@@ -77,7 +86,7 @@ function queryAllRows(done) {
     undefined,
     function(err, result, handle) {
       assert(!err);
-      handleRow(0, handle, done);
+      handleRows(0, handle, done);
     });
 }
 

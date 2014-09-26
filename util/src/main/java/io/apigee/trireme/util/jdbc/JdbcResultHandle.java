@@ -36,6 +36,7 @@ import org.slf4j.LoggerFactory;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
+import java.util.ArrayList;
 
 import static io.apigee.trireme.core.ArgUtils.*;
 
@@ -68,9 +69,10 @@ public class JdbcResultHandle
 
     @JSFunction
     @SuppressWarnings("unused")
-    public static void fetchRow(Context cx, Scriptable thisObj, Object[] args, Function func)
+    public static void fetchRows(Context cx, Scriptable thisObj, Object[] args, Function func)
     {
-        final Function cb = functionArg(args, 0, true);
+        final int maxRows = intArg(args, 0);
+        final Function cb = functionArg(args, 1, true);
         final JdbcResultHandle self = (JdbcResultHandle)thisObj;
 
         final Scriptable domain = self.runtime.getDomain();
@@ -78,34 +80,42 @@ public class JdbcResultHandle
             @Override
             public void run()
             {
-                if (self.closed) {
-                    return;
-                }
-                Context cx = Context.enter();
-
-                try {
-                    if (self.results.next()) {
-                        self.runtime.enqueueCallback(cb, cb, self, domain, new Object[] {
-                            Undefined.instance, self.processor.makeRow(cx, self), false
-                        });
-                    } else {
-                        self.runtime.enqueueCallback(cb, cb, self, domain, new Object[] {
-                            Undefined.instance, Undefined.instance, true
-                        });
+                // Since this runs in another thread, the user might be trying to close at the same time.
+                // So, this should be a mostly-uncontended lock.
+                synchronized (self) {
+                    if (self.closed) {
+                        return;
                     }
+                    Context cx = Context.enter();
 
-                } catch (final SQLException sqle) {
-                    self.runtime.enqueueTask(new ScriptTask() {
-                        @Override
-                        public void execute(Context cx, Scriptable scope)
-                        {
-                            cb.call(cx, cb, self, new Object[] {
-                                JdbcWrap.makeSqlError(cx, scope, sqle)
-                            });
+                    int rowCount = 0;
+                    ArrayList<Object> rows = new ArrayList<Object>(Math.min(maxRows, 10));
+                    try {
+                        // Fetch an array of rows
+                        while ((rowCount < maxRows) && self.results.next()) {
+                            rows.add(self.processor.makeRow(cx, self));
+                            rowCount++;
                         }
-                    }, domain);
-                } finally {
-                    Context.exit();
+
+                        // Return as an array, possibly empty
+                        Object[] rowArray = rows.toArray(new Object[rows.size()]);
+                        self.runtime.enqueueCallback(cb, cb, self, domain, new Object[] {
+                            Undefined.instance, cx.newArray(self, rowArray), (rowCount < maxRows)
+                        });
+
+                    } catch (final SQLException sqle) {
+                        self.runtime.enqueueTask(new ScriptTask() {
+                            @Override
+                            public void execute(Context cx, Scriptable scope)
+                            {
+                                cb.call(cx, cb, self, new Object[] {
+                                    JdbcWrap.makeSqlError(cx, scope, sqle)
+                                });
+                            }
+                        }, domain);
+                    } finally {
+                        Context.exit();
+                    }
                 }
             }
         });
@@ -117,17 +127,19 @@ public class JdbcResultHandle
     {
         JdbcResultHandle self = (JdbcResultHandle)thisObj;
 
-        if (self.closed) {
-            throw Utils.makeError(cx, self, "Already closed");
-        }
+        synchronized (self) {
+            if (self.closed) {
+                throw Utils.makeError(cx, self, "Already closed");
+            }
 
-        try {
-            self.closed = true;
-            self.results.close();
-            self.statement.close();
-        } catch (SQLException se) {
-            if (log.isDebugEnabled()) {
-                log.debug("Error closing result set: {}", se);
+            try {
+                self.closed = true;
+                self.results.close();
+                self.statement.close();
+            } catch (SQLException se) {
+                if (log.isDebugEnabled()) {
+                    log.debug("Error closing result set: {}", se);
+                }
             }
         }
     }

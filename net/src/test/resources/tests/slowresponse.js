@@ -19,8 +19,8 @@ var svr = http.createServer(function(req, resp) {
   });
 });
 
-svr.listen(33340, function() {
-  http.get('http://localhost:33340/', function(resp) {
+svr.listen(33343, function() {
+  http.get('http://localhost:33343/', function(resp) {
     var received = '';
     resp.setEncoding('utf8');
     assert.equal(resp.statusCode, 200);

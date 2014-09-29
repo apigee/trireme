@@ -467,6 +467,7 @@ public class ConnectionImpl
             outgoingChunks.remove();
             if (qc.callback != null) {
                 writeCallback = qc.callback;
+                qc.callback = null;
             }
         }
 
@@ -549,6 +550,8 @@ public class ConnectionImpl
                     qc.buf = Utils.catBuffers(c1.buf, qc.buf);
                     bb = qc.buf;
                 } else {
+                    qc = incomingChunks.peek();
+                    bb = (qc == null ? EMPTY : qc.buf);
                     break;
                 }
             } else {
@@ -734,7 +737,7 @@ public class ConnectionImpl
                 Runnable task = engine.getDelegatedTask();
                 while (task != null) {
                     if (log.isTraceEnabled()) {
-                        log.trace("Running SSLEngine task {}", task);
+                        log.trace(id + ": Running SSLEngine task {}", task);
                     }
                     task.run();
                     task = engine.getDelegatedTask();
@@ -867,16 +870,18 @@ public class ConnectionImpl
         void deliverCallback(Context cx, Scriptable scope)
         {
             if (callback != null) {
-                callback.call(cx, scope, scope, ScriptRuntime.emptyArgs);
+                Function cb = callback;
                 callback = null;
+                cb.call(cx, cb, scope, ScriptRuntime.emptyArgs);
             }
         }
 
         void deliverCallback(Context cx, Scriptable scope, Scriptable err)
         {
             if (callback != null) {
-                callback.call(cx, scope, scope, new Object[] { err });
+                Function cb = callback;
                 callback = null;
+                cb.call(cx, cb, scope, new Object[] { err });
             }
         }
     }

@@ -511,7 +511,7 @@ public class ConnectionImpl
 
     private boolean doUnwrap(Context cx)
     {
-        QueuedChunk qc = incomingChunks.poll();
+        QueuedChunk qc = incomingChunks.peek();
         ByteBuffer bb = (qc == null ? EMPTY : qc.buf);
 
         SSLEngineResult result;
@@ -539,15 +539,18 @@ public class ConnectionImpl
 
             if ((result.getStatus() == SSLEngineResult.Status.BUFFER_UNDERFLOW) && (qc != null)) {
                 // Deliver the write callback so that we get some more data
+                // We might get called again ourselves when we do this
                 qc.deliverCallback(cx, this);
-                QueuedChunk nc = incomingChunks.poll();
-                if (nc == null) {
+
+                // Now combine the first two chunks on the queue if they exist
+                if (incomingChunks.size() >= 2) {
+                    QueuedChunk c1 = incomingChunks.poll();
+                    qc = incomingChunks.peek();
+                    qc.buf = Utils.catBuffers(c1.buf, qc.buf);
+                    bb = qc.buf;
+                } else {
                     break;
                 }
-                // Coalesce the last chunk we were working on with the next one to get more inbound data
-                nc.buf = Utils.catBuffers(qc.buf, nc.buf);
-                qc = nc;
-                bb = qc.buf;
             } else {
                 break;
             }
@@ -559,13 +562,10 @@ public class ConnectionImpl
             deliverShutdown = true;
         }
 
-        if (qc != null) {
-            if (qc.buf.hasRemaining()) {
-                incomingChunks.addFirst(qc);
-            } else {
-                // Deliver the callback right now, because we are ready to consume more data right now
-                qc.deliverCallback(cx, this);
-            }
+        if ((qc != null) && (!qc.buf.hasRemaining())) {
+            incomingChunks.poll();
+            // Deliver the callback right now, because we are ready to consume more data right now
+            qc.deliverCallback(cx, this);
         }
 
         if (result.getHandshakeStatus() == SSLEngineResult.HandshakeStatus.FINISHED) {

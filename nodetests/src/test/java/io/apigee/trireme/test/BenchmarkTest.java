@@ -36,7 +36,8 @@ public class BenchmarkTest
         "crypto/hash-stream-creation.js",
         "crypto/hash-stream-throughput.js",
         "fs/read-stream-throughput.js",
-        "fs/readfile.js",
+        // This takes forever in the cloud
+        //"fs/readfile.js",
         "fs/write-stream-throughput.js",
         "http/client-request-body.js",
         // Not working, not sure

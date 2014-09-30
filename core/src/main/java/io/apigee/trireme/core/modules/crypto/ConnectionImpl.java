@@ -551,7 +551,6 @@ public class ConnectionImpl
                     bb = qc.buf;
                 } else {
                     qc = incomingChunks.peek();
-                    bb = (qc == null ? EMPTY : qc.buf);
                     break;
                 }
             } else {
@@ -847,14 +846,6 @@ public class ConnectionImpl
         return c;
     }
 
-    // To add NPN support:
-    // getNegotiatedProtocol
-    // setNPNProtocols
-
-    // To add SNI support:
-    // getServername
-    // setSNICallback
-
     static final class QueuedChunk
     {
         ByteBuffer buf;
@@ -870,6 +861,7 @@ public class ConnectionImpl
         void deliverCallback(Context cx, Scriptable scope)
         {
             if (callback != null) {
+                // Set to null first because the callback might end up right back here...
                 Function cb = callback;
                 callback = null;
                 cb.call(cx, cb, scope, ScriptRuntime.emptyArgs);

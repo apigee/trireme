@@ -1,0 +1,24 @@
+{
+  "name": "trireme",
+  "version": "${project.version}",
+  "description": "A runtime for Node.js that uses the Java Virtual Machine",
+  "bin": {
+    "trireme": "bin/trireme"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/apigee/trireme.git"
+  },
+  "keywords": [
+    "Trireme",
+    "Java",
+    "JVM",
+    "Node"
+  ],
+  "author": "Greg Brail <greg@apigee.com>",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/apigee/trireme/issues"
+  },
+  "homepage": "https://github.com/apigee/trireme"
+}

@@ -1,0 +1,112 @@
+#!/usr/bin/env node
+
+var child = require('child_process');
+var fs = require('fs');
+var path = require('path');
+var util = require('util');
+
+function findPath(p) {
+  if (fs.existsSync(p)) {
+    return p;
+  }
+  return null;
+}
+
+function findJava() {
+  if (!process.env.JAVA_HOME) {
+    console.error('JAVA_HOME is not set. Please set it so that we can locate Java.');
+    process.exit(2);
+  }
+
+  var j = findPath(path.join(process.env.JAVA_HOME, 'bin/java'));
+  if (!j) {
+    j = findPath(path.join(process.env.JAVA_HOME, 'jre/bin/java'));
+  }
+
+  if (j) {
+    return j;
+  }
+  console.error('Java cannot be found in JAVA_HOME. Is it installed?');
+  process.exit(3);
+}
+
+function getNpmPrefix(cb) {
+  var cp = child.exec('npm config get prefix');
+
+  var result = '';
+
+  cp.on('error', function(err) {
+    console.error('Error spawning npm: %s', err);
+  });
+
+  cp.on('exit', function(code) {
+    if (code !== 0) {
+      cb(new Error(util.format('Error running NPM: %d', code)));
+    } else {
+      cb(undefined, result.trim());
+    }
+  });
+
+  cp.stdout.setEncoding('utf8');
+  cp.stdout.on('data', function(d) {
+    result += d;
+  });
+
+  cp.stderr.setEncoding('utf8');
+  cp.stderr.on('data', function(d) {
+    console.error(d);
+  });
+}
+
+function findTrireme(prefix) {
+  var t = findPath(path.join(prefix, 'lib/node_modules/trireme/lib'));
+  if (!t) {
+    t = findPath('./node_modules/trireme/lib');
+  }
+
+  if (t) {
+    return t;
+  }
+  console.error('trireme cannot be found. Was it installed using -g?');
+  process.exit(5);
+}
+
+var JavaExec = findJava();
+
+getNpmPrefix(function(err, prefix) {
+  if (err) {
+    process.exit(4);
+  } else {
+    var TriremeDir = findTrireme(prefix);
+
+    var dirs = fs.readdirSync(TriremeDir);
+    dirs.push('.');
+    for (i in dirs) {
+      dirs[i] = path.join(TriremeDir, dirs[i]);
+    }
+    var classpath = dirs.join(':');
+
+    var args = [];
+    args.push('io.apigee.trireme.shell.Main');
+    for (var i = 2; i < process.argv.length; i++) {
+      args.push(process.argv[i]);
+    }
+
+    var env = process.env;
+    env.CLASSPATH = classpath;
+
+    var trireme = child.spawn(JavaExec, args, {
+      stdio: 'inherit',
+      env: env
+    });
+
+    trireme.on('exit', function(code) {
+      process.exit(code);
+    });
+  }
+});
+
+
+
+
+

@@ -42,6 +42,7 @@
     <module>net</module>
     <module>node10</module>
     <module>nodetests</module>
+    <module>npm</module>
     <module>samples</module>
     <module>shell</module>
     <module>util</module>

@@ -65,6 +65,19 @@ public class BasicTest
     }
 
     @Test
+    public void testModuleLoadAndSetName()
+        throws InterruptedException, ExecutionException, NodeException
+    {
+        NodeScript script = env.createScript("moduletest",
+                                             new File("./target/test-classes/tests/moduletest.js"),
+                                             null);
+        script.setDisplayName("ModuleLoadDisplayNameTest");
+        ScriptStatus status = script.execute().get();
+        assertEquals(0, status.getExitCode());
+        script.close();
+    }
+
+    @Test
     public void testModuleLoadFromString()
         throws InterruptedException, ExecutionException, NodeException, IOException
     {

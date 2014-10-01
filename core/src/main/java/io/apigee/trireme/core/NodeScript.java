@@ -43,6 +43,7 @@ public class NodeScript
     private File scriptFile;
     private String script;
     private String scriptName;
+    private String displayName;
     private final String[] args;
     private ScriptRunner runner;
     private Object attachment;
@@ -302,6 +303,21 @@ public class NodeScript
     public String getNodeVersion()
     {
         return nodeVersion;
+    }
+
+    /**
+     * Set a name that is used in diagnostics information from the script. The main thing that this name
+     * will be used for is naming the main script thread. If unset, it is named "Trireme Script Thread."
+     * Otherwise, it will be renamed to include this display name.
+     */
+    public void setDisplayName(String dn)
+    {
+        this.displayName = dn;
+    }
+
+    public String getDisplayName()
+    {
+        return displayName;
     }
 
     /**

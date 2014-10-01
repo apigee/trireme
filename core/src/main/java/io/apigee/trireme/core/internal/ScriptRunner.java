@@ -635,6 +635,13 @@ public class ScriptRunner
     {
         ScriptStatus status;
 
+        if (scriptObject.getDisplayName() != null) {
+            try {
+                Thread.currentThread().setName("Trireme: " + scriptObject.getDisplayName());
+            } catch (SecurityException ignore) {
+            }
+        }
+
         cx.putThreadLocal(RUNNER, this);
         now = System.currentTimeMillis();
 

@@ -26,19 +26,42 @@ For a more detailed introduction, see our intro presentation:
 
 * [Introduction to Trireme](./docs/trireme-intro.pdf)
 
+## So, again, why would I use Trireme?
+
+* To embed Node.js apps inside an existing Java application
+* To run Node.js apps that take advantage of Java libraries you can't live without, like JDBC drivers and XML parsers
+
+If neither of those reasons apply to you, then stick with "regular node!"
+
 ## How do I get it?
+
+### From NPM
+
+    sudo npm install -g trireme
+    trireme -h
+    trireme <your script name here>
+
+The NPM package for Trireme lets you run it on the command line just like "node".
+
+Unfortunately, Trireme does not support the "repl" yet (and it's hard since Java gives us limited control over
+the TTY) so just running "trireme" with no arguments produces an error right now.
+
+### From Maven Central
+
+The best reason to use Trireme is because it's important to embed Node.js code inside an existing Java application.
+In that case you will use the modules under "io.apigee.trireme" on Maven Central:
+
+[io.apigee.trireme](http://search.maven.org/#search%7Cga%7C1%7Cg%3A%22io.apigee.trireme%22)
+
+The "module map" later in this document shows which modules to use in which cases.
+
+### From GitHub
 
 See [the releases page](https://github.com/apigee/trireme/releases) to download the latest release files.
 
 "trireme-x.y.z.jar" is always a stand-alone jar that you can run just like "node":
 
     java -jar trireme-x.y.z.jar script.js
-
-To embed Trireme, you'll need the other jars in your classpath, as described in the "Package Map" below.
-
-Trireme is also available on [Maven Central](http://search.maven.org/#search%7Cga%7C1%7Cio.apigee.trireme).
-
-Finally, there is a [CI server](http://ci.apigee.io/job/Trireme/).
 
 ## What version of Node.js does Trireme Support?
 
@@ -134,9 +157,6 @@ Trireme handles this disparity by using the "Bouncy Castle" crypto framework to 
 keys and certificates that SSLEngine can understand. In addition, you can also use regular Java keystore files,
 as described below.
 
-5) "securepair" isn't implemented yet -- the vast majority of TLS code we have seen just uses the regular
-"cleartext stream." If you really want to see "securepair," it's probably not too difficult.
-
 In order to support TLS and HTTPS using PEM files, the "trireme-crypto" module and its dependencies
 (Bouncy Castle) must be in the class path. If they are not present, then TLS is still available, but it will
 only work with Java keystore files (see below) or without using any keys at all. Trireme checks for this
@@ -183,9 +203,6 @@ Like TLS, certain features (Sign/Verify in particular) only work if the "trireme
 dependencies are in the class path. If they are not present then these methods will throw an exception.
 This is primarily because the trireme-crypto module uses Bouncy Castle to implement PEM file reading
 and decryption.
-
-Also, the "Context" feature of the Crypto module is not implemented. This module is really used inside Node.js
-to implement TLS, and Trireme does TLS a different way, as explained above.
 
 ### Child Process
 
@@ -238,7 +255,11 @@ In general, we have seen simple HTTP benchmarks run at about one-half the speed 
 standard Node.js. Some things are slower than that, and others are faster -- it all depends, as it does with
 all benchmarks.
 
-We would love to be able to use a faster JavaScript implementation, which would speed up all of Trireme.
+Furthermore, Java is notoriously slow to start up, and this especially hurts Trireme when it's used to run
+command-line tools. So please try it as a long-running server (which is Java's strong suit) before dismissing the
+whole thing because "trireme /tmp/hello-world.js" runs 40 times slower than node. Thanks!
+
+Finally, we would love to be able to use a faster JavaScript implementation, which would speed up all of Trireme.
 However, for many programs, Trireme on Rhino will be just fine, and the ability to embed Trireme inside
 another container is especially helpful.
 
@@ -313,6 +334,20 @@ totally isolated environment in a multi-tenant server.
 
 ## Running Trireme
 
+### Using NPM
+
+If you installed Trireme using NPM, just run:
+
+    trireme <script name>
+
+Trireme will execute your script just like Node.
+
+In addition, the environment variable TRIREME_CLASSPATH may be used to add extra JARs or directories to the
+classpath used to run Trireme. Anything on this path will be appended to the classpath used to
+launch Trireme. This allows you to add JDBC drivers, etc.
+
+### Using Java
+
 The "jar" module builds a self-contained JAR that may be used to launch Trireme on the command
 line just like regular Node.js:
 
@@ -382,4 +417,3 @@ Used in the build process or "node10src" and others.</td></tr>
 </table>
 
 Additional modules in this directory are used only for testing.
-

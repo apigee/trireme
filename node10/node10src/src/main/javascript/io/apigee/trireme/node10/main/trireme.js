@@ -147,6 +147,10 @@
 
       // If -i or --interactive were passed, or stdin is a TTY.
       if (process._forceRepl || NativeModule.require('tty').isatty(0)) {
+        console.error('Trireme does not support the REPL yet.');
+        console.error('Use "trireme -h" for usage.');
+        process.exit(1);
+        /*
         // REPL
         var opts = {
           useGlobal: true,
@@ -162,6 +166,7 @@
         repl.on('exit', function() {
           process.exit();
         });
+        */
 
       } else {
         // Read all of stdin - execute it.

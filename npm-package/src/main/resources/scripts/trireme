@@ -86,6 +86,10 @@ getNpmPrefix(function(err, prefix) {
     }
     var classpath = dirs.join(':');
 
+    if (process.env.TRIREME_CLASSPATH) {
+      classpath = classpath + ':' + TRIREME_CLASSPATH;
+    }
+
     var args = [];
     args.push('io.apigee.trireme.shell.Main');
     for (var i = 2; i < process.argv.length; i++) {

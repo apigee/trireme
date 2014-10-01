@@ -464,7 +464,7 @@ public class BasicTest
             System.out.println("Mount is currently not supported on Windows");
             return;
         }
-        
+
         Sandbox sb = new Sandbox();
         NodeScript script = env.createScript("globalmoduletest.js",
                                              new File("./target/test-classes/tests/globalmoduletest.js"), null);
@@ -487,7 +487,7 @@ public class BasicTest
             System.out.println("Mount is currently not supported on Windows");
             return;
         }
-        
+
         Sandbox sb = new Sandbox();
         sb.setFilesystemRoot("./target/test-classes");
         sb.mount("/node_modules", "./target/test-classes/global");
@@ -545,7 +545,7 @@ public class BasicTest
         throws InterruptedException, ExecutionException, NodeException
     {
         NodeScript script = env.createScript("argvtest.js",
-                                             new File("./target/test-classes/tests/argvtest.js"),
+                                             new File("target/test-classes/tests/argvtest.js"),
                                              new String[] { "One", "Two", "Three" });
         ScriptStatus status = script.execute().get();
         assertEquals(0, status.getExitCode());
@@ -556,11 +556,15 @@ public class BasicTest
     public void testHiddenOs()
         throws InterruptedException, ExecutionException, NodeException
     {
+        if (System.getProperty("os.name").matches(".*Windows.*")) {
+          // Fails on Windows because hidden OS causes path module to not work
+          return;
+        }
         NodeEnvironment testEnv = new NodeEnvironment();
         Sandbox sb = new Sandbox().setHideOSDetails(true);
         testEnv.setSandbox(sb);
-        NodeScript script = testEnv.createScript("hideenostest.js",
-                                             new File("./target/test-classes/tests/hiddenostest.js"),
+        NodeScript script = testEnv.createScript("hiddenostest.js",
+                                             new File("target/test-classes/tests/hiddenostest.js"),
                                              null);
         ScriptStatus status = script.execute().get();
         assertEquals(0, status.getExitCode());
@@ -621,7 +625,7 @@ public class BasicTest
         throws InterruptedException, ExecutionException, NodeException
     {
         NodeScript script = env.createScript(name,
-                                             new File("./target/test-classes/tests/" + name),
+                                             new File("target/test-classes/tests/" + name),
                                              null);
         ScriptStatus status = script.execute().get();
         assertEquals(0, status.getExitCode());

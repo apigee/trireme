@@ -2,8 +2,11 @@
 
 var child = require('child_process');
 var fs = require('fs');
+var os = require('os');
 var path = require('path');
 var util = require('util');
+
+var CP_SEP = (/win[32|64]/.test(os.platform()) ? ';' : ':');
 
 function findPath(p) {
   if (fs.existsSync(p)) {
@@ -13,21 +16,18 @@ function findPath(p) {
 }
 
 function findJava() {
-  if (!process.env.JAVA_HOME) {
-    console.error('JAVA_HOME is not set. Please set it so that we can locate Java.');
-    process.exit(2);
+  if (process.env.JAVA_HOME) {
+    j = findPath(path.join(process.env.JAVA_HOME, 'bin/java'));
+    if (!j) {
+      j = findPath(path.join(process.env.JAVA_HOME, 'jre/bin/java'));
+    }
+    if (j) {
+      return j;
+    }
   }
 
-  var j = findPath(path.join(process.env.JAVA_HOME, 'bin/java'));
-  if (!j) {
-    j = findPath(path.join(process.env.JAVA_HOME, 'jre/bin/java'));
-  }
-
-  if (j) {
-    return j;
-  }
-  console.error('Java cannot be found in JAVA_HOME. Is it installed?');
-  process.exit(3);
+  // Assume that "java" is in the PATH
+  return 'java';
 }
 
 function getNpmPrefix(cb) {
@@ -61,6 +61,9 @@ function getNpmPrefix(cb) {
 function findTrireme(prefix) {
   var t = findPath(path.join(prefix, 'lib/node_modules/trireme/lib'));
   if (!t) {
+    t = findPath(path.join(prefix, 'node_modules/trireme/lib'));
+  }
+  if (!t) {
     t = findPath('./node_modules/trireme/lib');
   }
 
@@ -84,10 +87,10 @@ getNpmPrefix(function(err, prefix) {
     for (i in dirs) {
       dirs[i] = path.join(TriremeDir, dirs[i]);
     }
-    var classpath = dirs.join(':');
+    var classpath = dirs.join(CP_SEP);
 
     if (process.env.TRIREME_CLASSPATH) {
-      classpath = classpath + ':' + TRIREME_CLASSPATH;
+      classpath = classpath + CP_SEP + TRIREME_CLASSPATH;
     }
 
     var args = [];
@@ -109,8 +112,3 @@ getNpmPrefix(function(err, prefix) {
     });
   }
 });
-
-
-
-
-

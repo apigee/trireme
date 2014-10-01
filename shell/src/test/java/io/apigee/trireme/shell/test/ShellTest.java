@@ -42,7 +42,7 @@ public class ShellTest
     {
         String out = launcher.execute(new String[] { "-v" });
         assertFalse(out.isEmpty());
-        assertEquals('v' + env.getDefaultNodeVersion() + '\n', out);
+        assertEquals('v' + env.getDefaultNodeVersion(), out.trim());
     }
 
     @Test
@@ -51,7 +51,7 @@ public class ShellTest
     {
         String out = launcher.execute(new String[] { "--version" });
         assertFalse(out.isEmpty());
-        assertEquals('v' + env.getDefaultNodeVersion() + '\n', out);
+        assertEquals('v' + env.getDefaultNodeVersion(), out.trim());
     }
 
     @Test

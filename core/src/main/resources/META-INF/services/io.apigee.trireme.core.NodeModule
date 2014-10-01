@@ -9,6 +9,7 @@ io.apigee.trireme.core.modules.HTTPParser
 io.apigee.trireme.core.modules.HTTPWrap
 io.apigee.trireme.core.modules.ModuleLoader
 io.apigee.trireme.core.modules.NativeModule
+io.apigee.trireme.core.modules.Natives
 io.apigee.trireme.core.modules.OS
 io.apigee.trireme.core.modules.Process
 io.apigee.trireme.core.modules.ProcessWrap

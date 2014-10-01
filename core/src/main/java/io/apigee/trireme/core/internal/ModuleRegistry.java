@@ -31,8 +31,10 @@ import org.mozilla.javascript.Script;
 
 import java.io.IOException;
 import java.io.InputStream;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.ServiceLoader;
+import java.util.Set;
 
 /**
  * <p>
@@ -225,6 +227,11 @@ public class ModuleRegistry
     public Script getCompiledModule(String name)
     {
         return compiledModules.get(name);
+    }
+
+    public Set<String> getCompiledModuleNames()
+    {
+        return Collections.unmodifiableSet(compiledModules.keySet());
     }
 
     public Script getMainScript()

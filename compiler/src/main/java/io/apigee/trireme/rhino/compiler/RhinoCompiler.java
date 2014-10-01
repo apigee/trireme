@@ -38,6 +38,7 @@ import java.io.FileInputStream;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStreamReader;
+import java.io.OutputStreamWriter;
 
 /**
  * Compile the JavaScript source in a given directory to .class files that may be loaded and executed as
@@ -73,7 +74,7 @@ public class RhinoCompiler
     private String codePostfix;
 
     @Parameter
-    private boolean generateSource;
+    private boolean generateSource = true;
 
     @Parameter
     private int optimizationLevel = 1;
@@ -120,6 +121,7 @@ public class RhinoCompiler
                 String baseName = getBaseName(fn);
                 String className = baseName.replaceAll("[/\\\\]", ".");
                 File output = new File(targetDirFile, baseName + ".class");
+                File srcOutput = new File(targetDirFile, baseName + ".js");
 
                 if (input.lastModified() >= output.lastModified()) {
                     if (output.getParentFile() != null) {
@@ -129,9 +131,11 @@ public class RhinoCompiler
                     log.info("Compiling " + fn + " to " + output.getPath());
 
                     try {
+                        String source = loadSource(input);
+
                         Object[] bytes;
                         try {
-                            bytes = compiler.compileToClassFiles(loadSource(input), input.getName(),
+                            bytes = compiler.compileToClassFiles(addPrefixes(source), input.getName(),
                                                                  1, className);
                         } catch (RhinoException re) {
                             throw new MojoExecutionException(
@@ -142,6 +146,7 @@ public class RhinoCompiler
                         }
 
                         writeFromArray((byte[])bytes[1], output);
+                        writeFromString(source, srcOutput);
                     } catch (IOException ioe) {
                         throw new MojoExecutionException("Error reading or writing file: " + ioe, ioe);
                     }
@@ -169,9 +174,6 @@ public class RhinoCompiler
         char[] buf = new char[4096];
         int cr;
 
-        if (codePrefix != null) {
-            str.append(codePrefix);
-        }
         try {
             do {
                 cr = rdr.read(buf);
@@ -182,10 +184,21 @@ public class RhinoCompiler
         } finally {
             rdr.close();
         }
-        if (codePostfix != null) {
-            str.append(codePostfix);
-        }
+
         return str.toString();
+    }
+
+    private String addPrefixes(String s)
+    {
+        StringBuilder p = new StringBuilder(s.length());
+        if (codePrefix != null) {
+            p.append(codePrefix);
+        }
+        p.append(s);
+        if (codePostfix != null) {
+            p.append(codePostfix);
+        }
+        return p.toString();
     }
 
     private void writeFromArray(byte[] bytes, File out)
@@ -200,6 +213,22 @@ public class RhinoCompiler
             of.write(bytes);
         } finally {
             of.close();
+        }
+    }
+
+    private void writeFromString(String str, File out)
+        throws IOException
+    {
+        if (out.exists()) {
+            out.delete();
+        }
+
+        FileOutputStream of = new FileOutputStream(out);
+        OutputStreamWriter ofr = new OutputStreamWriter(of);
+        try {
+            ofr.write(str);
+        } finally {
+            ofr.close();
         }
     }
 }

@@ -563,6 +563,13 @@ public class BasicTest
     }
 
     @Test
+    public void testNatives()
+        throws InterruptedException, ExecutionException, NodeException
+    {
+        runTest("nativestest.js");
+    }
+
+    @Test
     public void testDefaultVersion()
     {
         String defaultVer = env.getDefaultNodeVersion();

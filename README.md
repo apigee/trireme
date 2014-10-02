@@ -68,6 +68,65 @@ See [the releases page](https://github.com/apigee/trireme/releases) to download 
 Trireme is currently based on Node.js 0.10. We are also working on ways to support multiple versions of the Node.js
 runtime inside the same JVM.
 
+## Running Trireme
+
+### Using NPM
+
+If you installed Trireme using NPM, just run:
+
+    trireme <script name>
+
+Trireme will execute your script just like Node.
+
+In addition, the environment variable TRIREME_CLASSPATH may be used to add extra JARs or directories to the
+classpath used to run Trireme. Anything on this path will be appended to the classpath used to
+launch Trireme. This allows you to add JDBC drivers, etc.
+
+### Using Java
+
+The "jar" module builds a self-contained JAR that may be used to launch Trireme on the command
+line just like regular Node.js:
+
+    mvn install
+    java -jar jar/target/trireme.X.Y.Z.jar <script name>
+
+(and with no arguments it will launch the "repl" but that implementation is not complete)
+
+## Embedding Trireme
+
+There is JavaDoc for the "NodeEnvironment" and "NodeScript" classes, and many other features.
+Here are the basics:
+
+    import org.apigee.trireme.core.NodeEnvironment;
+    import org.apigee.trireme.core.NodeScript;
+
+    // The NodeEnvironment controls the environment for many scripts
+    NodeEnvironment env = new NodeEnvironment();
+
+    // Pass in the script file name, a File pointing to the actual script, and an Object[] containg "argv"
+    NodeScript script = env.createScript("my-test-script.js",
+                                         new File("my-test-script.js"), null);
+
+    // Wait for the script to complete
+    ScriptStatus status = script.execute().get();
+
+    // Check the exit code
+    System.exit(status.getExitCode());
+
+## Trireme Extensions
+
+There are a few NPM modules that only work in Trireme. These allow access to
+features of the Java platform that are normally accessed via native code in regular
+Node.js. These modules are as follows:
+
+* [trireme-jdbc](https://www.npmjs.org/package/trireme-jdbc): This module provides
+access to JDBC drivers from inside Node.js code. This makes it possible to use
+databases that have excellent JDBC drivers (such as Oracle) without compiling
+any native code.
+* [trireme-xslt](https://www.npmjs.org/package/trireme-xslt): This module provides
+access to the XSLT processor inside your Java platform, which is faster and
+can support more of the XSLT standard than libxslt.
+
 ## How Complete is Trireme?
 
 Trireme supports most of the Node.js APIs and passes much of the Node.js test suite.
@@ -263,6 +322,47 @@ Finally, we would love to be able to use a faster JavaScript implementation, whi
 However, for many programs, Trireme on Rhino will be just fine, and the ability to embed Trireme inside
 another container is especially helpful.
 
+## Package Map
+
+Trireme today consists of several modules. A typical application will wish to include the following in
+CLASSPATH:
+
+* trireme-core
+* trireme-node10src
+* trireme-crypto
+* trireme-util
+
+The last two packages are optional for environments that are constrained by space or strong aversion to third-
+party dependencies.
+
+"trireme-node10src" is the module that contains the code from Node.js that runs the modules. Both it and "trireme-core"
+are required in order to actually run Trireme inside a larger container. If only "trireme-core" is on the
+classpath, then all scripts will fail with the message, "No available Node.js implementation."
+
+This table will help keep them straight:
+
+<table>
+<tr><td><b>module</b></td><td><b>Required?</b></td><td><b>Recommended?</b></td><td><b>Description</b></td></tr>
+<tr><td>trireme-core</td><td>X</td><td>X</td><td>The core module containing the guts of Trireme</td></tr>
+<tr><td>trireme-node10src</td><td>X</td><td>X</td><td>JavaScript code that makes Trireme implement Node.js 0.10</td></tr>
+<tr><td>trireme-crypto</td><td/><td>X</td>
+  <td>Support code for reading PEM files and some other crypto operations. Uses Bouncy Castle. If not in the classpath,
+  certain crypto operations (notably PEM file support for TLS and HTTPS) will not work. Nonetheless, this is a separate
+  package in case some implementations are wary of distributing Bouncy Castle.</td></tr>
+<tr><td>trireme-util</td><td/><td>X</td>
+  <td>Native Trireme / Java implementations of a few Node.js modules, notably "iconv". These are
+  faster than the usual packages from NPM. If in the classpath, these modules will be used instead
+  of searching the module path for a regular module.</td></tr>
+<tr><td>trireme-net</td><td/><td/><td>An HttpAdaptor implementation that uses Netty. Mainly useful as an example
+  to show how to write an HTTP adaptor for embedding into another container.</td></tr>
+<tr><td>trireme-shell</td><td/><td/><td>A command-line shell for Trireme that mimics "node"</td></tr>
+<tr><td>trireme-jar</td><td/><td/><td>A package that builds an all-in-one jar that contains all of the above.</td></tr>
+<tr><td>rhino-compiler</td><td/><td/><td>A Maven plugin that compiles JavaScript into .class files for use in Rhino.
+Used in the build process or "node10src" and others.</td></tr>
+</table>
+
+Additional modules in this directory are used only for testing.
+
 ## What Are the Dependencies?
 
 Since Trireme is supposed to be highly embeddable, we try to minimize the dependencies.
@@ -331,89 +431,3 @@ The sandbox is an interface that a server may implement that allows control over
 allowed to do. It allows a script to accept or reject requests to access the filesystem, access
 the network, and execute programs. Using the sandbox, it is possible to run Node.js scripts in a
 totally isolated environment in a multi-tenant server.
-
-## Running Trireme
-
-### Using NPM
-
-If you installed Trireme using NPM, just run:
-
-    trireme <script name>
-
-Trireme will execute your script just like Node.
-
-In addition, the environment variable TRIREME_CLASSPATH may be used to add extra JARs or directories to the
-classpath used to run Trireme. Anything on this path will be appended to the classpath used to
-launch Trireme. This allows you to add JDBC drivers, etc.
-
-### Using Java
-
-The "jar" module builds a self-contained JAR that may be used to launch Trireme on the command
-line just like regular Node.js:
-
-    mvn install
-    java -jar jar/target/trireme.X.Y.Z.jar <script name>
-
-(and with no arguments it will launch the "repl" but that implementation is not complete)
-
-## Embedding Trireme
-
-There is JavaDoc for the "NodeEnvironment" and "NodeScript" classes, and many other features.
-Here are the basics:
-
-    import org.apigee.trireme.core.NodeEnvironment;
-    import org.apigee.trireme.core.NodeScript;
-
-    // The NodeEnvironment controls the environment for many scripts
-    NodeEnvironment env = new NodeEnvironment();
-
-    // Pass in the script file name, a File pointing to the actual script, and an Object[] containg "argv"
-    NodeScript script = env.createScript("my-test-script.js",
-                                         new File("my-test-script.js"), null);
-
-    // Wait for the script to complete
-    ScriptStatus status = script.execute().get();
-
-    // Check the exit code
-    System.exit(status.getExitCode());
-
-## Package Map
-
-Trireme today consists of several modules. A typical application will wish to include the following in
-CLASSPATH:
-
-* trireme-core
-* trireme-node10src
-* trireme-crypto
-* trireme-util
-
-The last two packages are optional for environments that are constrained by space or strong aversion to third-
-party dependencies.
-
-"trireme-node10src" is the module that contains the code from Node.js that runs the modules. Both it and "trireme-core"
-are required in order to actually run Trireme inside a larger container. If only "trireme-core" is on the
-classpath, then all scripts will fail with the message, "No available Node.js implementation."
-
-This table will help keep them straight:
-
-<table>
-<tr><td><b>module</b></td><td><b>Required?</b></td><td><b>Recommended?</b></td><td><b>Description</b></td></tr>
-<tr><td>trireme-core</td><td>X</td><td>X</td><td>The core module containing the guts of Trireme</td></tr>
-<tr><td>trireme-node10src</td><td>X</td><td>X</td><td>JavaScript code that makes Trireme implement Node.js 0.10</td></tr>
-<tr><td>trireme-crypto</td><td/><td>X</td>
-  <td>Support code for reading PEM files and some other crypto operations. Uses Bouncy Castle. If not in the classpath,
-  certain crypto operations (notably PEM file support for TLS and HTTPS) will not work. Nonetheless, this is a separate
-  package in case some implementations are wary of distributing Bouncy Castle.</td></tr>
-<tr><td>trireme-util</td><td/><td>X</td>
-  <td>Native Trireme / Java implementations of a few Node.js modules, notably "iconv". These are
-  faster than the usual packages from NPM. If in the classpath, these modules will be used instead
-  of searching the module path for a regular module.</td></tr>
-<tr><td>trireme-net</td><td/><td/><td>An HttpAdaptor implementation that uses Netty. Mainly useful as an example
-  to show how to write an HTTP adaptor for embedding into another container.</td></tr>
-<tr><td>trireme-shell</td><td/><td/><td>A command-line shell for Trireme that mimics "node"</td></tr>
-<tr><td>trireme-jar</td><td/><td/><td>A package that builds an all-in-one jar that contains all of the above.</td></tr>
-<tr><td>rhino-compiler</td><td/><td/><td>A Maven plugin that compiles JavaScript into .class files for use in Rhino.
-Used in the build process or "node10src" and others.</td></tr>
-</table>
-
-Additional modules in this directory are used only for testing.

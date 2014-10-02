@@ -1,3 +1,24 @@
+# 0.8.2 01-Oct-2014:
+
+* Take JavaScript code patches from Node.js 10.32.
+* [Issue 59](https://github.com/apigee/trireme/issues/59) Add an internal module
+to support the [trireme-jdbc](https://www.npmjs.org/package/trireme-jdbc)
+module. This lets apps built on Trireme access databases using JDBC drivers.
+* [Issue 79](https://github.com/apigee/trireme/issues/79) Re-factor the TLS
+implementation to be based on the "Context" and "Connection" interfaces that
+standard Node.js supports. This makes the TLS code much more compatible with
+Node.js modules that depend on internal details of TLS.
+* [Issue 86](https://github.com/apigee/trireme/issues/86): Support the internal
+"natives" module so that modules that do horrible things like monkey-patch internal
+Node.js source code can work on Trireme. This affects NPM 2.0.
+
+* Add "setDisplayName()" to the NodeScript interface, making it possible to give
+each Trireme script thread a unique name.
+* Add "setDefaultTimeout()" to the HttpServerStub interface. This lets code
+that embeds Trireme using the HTTP adapter can have HTTP requests time out even
+if the user does not specify an explicit timeout.
+
+
 # 0.8.1 09-Sep-2014:
 
 * [Issue 66](https://github.com/apigee/trireme/issues/66) Use NIO to implement the datagram (aka UDP)

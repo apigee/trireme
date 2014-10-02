@@ -90,7 +90,7 @@ getNpmPrefix(function(err, prefix) {
     var classpath = dirs.join(CP_SEP);
 
     if (process.env.TRIREME_CLASSPATH) {
-      classpath = classpath + CP_SEP + TRIREME_CLASSPATH;
+      classpath = classpath + CP_SEP + process.env.TRIREME_CLASSPATH;
     }
 
     var args = [];

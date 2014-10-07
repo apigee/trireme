@@ -39,6 +39,7 @@ import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.sql.Types;
 import java.util.ArrayList;
 
 import static io.apigee.trireme.core.ArgUtils.*;
@@ -351,12 +352,14 @@ public class JdbcConnection
         int length = ((Number)params.get("length", params)).intValue();
         for (int i = 0; i < length; i++) {
             Object p = params.get(i, params);
-            if (p instanceof String) {
+            if ((p == null) || Undefined.instance.equals(p)) {
+                st.setNull(i + 1, Types.NULL);
+            } else if (p instanceof String) {
                 st.setString(i + 1, (String) p);
             } else if (p instanceof Boolean) {
-                st.setBoolean(i + 1, ((Boolean)p).booleanValue());
+                st.setBoolean(i + 1, ((Boolean) p).booleanValue());
             } else if (p instanceof Integer) {
-                st.setInt(i + 1, ((Integer)p).intValue());
+                st.setInt(i + 1, ((Integer) p).intValue());
             } else if (p instanceof Number) {
                 st.setDouble(i + 1, ((Number)p).doubleValue());
 

@@ -97,27 +97,47 @@ public class ResultProcessor
         case Types.CLOB:
         case Types.NCLOB:
             return rs.getString(i);
+
         case Types.BOOLEAN:
-            return Boolean.valueOf(rs.getBoolean(i));
+            boolean bv = rs.getBoolean(i);
+            return (rs.wasNull() ? null : Boolean.valueOf(bv));
+
         case Types.SMALLINT:
         case Types.TINYINT:
-            return Short.valueOf(rs.getShort(i));
+            short sv = rs.getShort(i);
+            return (rs.wasNull() ? null : Short.valueOf(sv));
+
         case Types.INTEGER:
-            return Integer.valueOf(rs.getInt(i));
+            int iv = rs.getInt(i);
+            return (rs.wasNull() ? null : Integer.valueOf(iv));
+
         case Types.FLOAT:
-            return Float.valueOf(rs.getFloat(i));
+            float fv = rs.getFloat(i);
+            return (rs.wasNull() ? null : Float.valueOf(fv));
+
         case Types.DOUBLE:
         case Types.NUMERIC:
         case Types.REAL:
-            return Double.valueOf(rs.getDouble(i));
+            double dv = rs.getDouble(i);
+            return (rs.wasNull() ? null : Double.valueOf(dv));
+
         case Types.TIMESTAMP:
             Timestamp ts = rs.getTimestamp(i);
+            if (rs.wasNull()) {
+                return null;
+            }
             return cx.newObject(scope, "Date", new Object[] { Double.valueOf(ts.getTime()) });
+
         case Types.BINARY:
         case Types.BLOB:
         case Types.VARBINARY:
         case Types.LONGVARBINARY:
-            return Buffer.BufferImpl.newBuffer(cx, scope, rs.getBytes(i));
+            byte[] byv = rs.getBytes(i);
+            if (rs.wasNull()) {
+                return null;
+            }
+            return Buffer.BufferImpl.newBuffer(cx, scope, byv);
+
         case Types.NULL:
             return null;
         default:

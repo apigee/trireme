@@ -25,6 +25,7 @@ import io.apigee.trireme.core.NodeEnvironment;
 import io.apigee.trireme.core.NodeException;
 import io.apigee.trireme.core.NodeScript;
 import io.apigee.trireme.core.ScriptStatus;
+import io.apigee.trireme.core.internal.Version;
 import org.mozilla.javascript.Context;
 import org.mozilla.javascript.JavaScriptException;
 import org.mozilla.javascript.RhinoException;
@@ -57,7 +58,8 @@ public class Main
     private static void printVersion()
     {
         NodeEnvironment env = new NodeEnvironment();
-        System.err.println('v' + env.getDefaultNodeVersion());
+        System.err.println("Trireme " + Version.TRIREME_VERSION +
+                           " node v" + env.getDefaultNodeVersion());
     }
 
     public static void main(String[] args)

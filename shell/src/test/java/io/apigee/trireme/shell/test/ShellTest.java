@@ -1,6 +1,7 @@
 package io.apigee.trireme.shell.test;
 
 import io.apigee.trireme.core.NodeEnvironment;
+import io.apigee.trireme.core.internal.Version;
 import org.junit.BeforeClass;
 import org.junit.Test;
 
@@ -42,7 +43,8 @@ public class ShellTest
     {
         String out = launcher.execute(new String[] { "-v" });
         assertFalse(out.isEmpty());
-        assertEquals('v' + env.getDefaultNodeVersion(), out.trim());
+        assertTrue(out.contains('v' + env.getDefaultNodeVersion()));
+        assertTrue(out.contains(Version.TRIREME_VERSION));
     }
 
     @Test
@@ -51,7 +53,8 @@ public class ShellTest
     {
         String out = launcher.execute(new String[] { "--version" });
         assertFalse(out.isEmpty());
-        assertEquals('v' + env.getDefaultNodeVersion(), out.trim());
+        assertTrue(out.contains('v' + env.getDefaultNodeVersion()));
+        assertTrue(out.contains(Version.TRIREME_VERSION));
     }
 
     @Test

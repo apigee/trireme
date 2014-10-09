@@ -53,7 +53,8 @@ public class SSLCiphers
     {
         try {
             BufferedReader rdr =
-                new BufferedReader(new InputStreamReader(SSLCiphers.class.getResourceAsStream("/ssl-ciphers.txt")));
+                new BufferedReader(new InputStreamReader(SSLCiphers.class.getResourceAsStream("/ssl-ciphers.txt"),
+                                                         Charsets.UTF8));
             try {
                 String line;
                 do {

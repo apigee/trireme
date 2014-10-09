@@ -57,7 +57,8 @@ public class CryptoAlgorithms
         // Read the file of the ciphers that we'd like to support
         try {
             BufferedReader rdr =
-                new BufferedReader(new InputStreamReader(CryptoAlgorithms.class.getResourceAsStream("/ciphers.txt")));
+                new BufferedReader(new InputStreamReader(CryptoAlgorithms.class.getResourceAsStream("/ciphers.txt"),
+                                                         Charsets.UTF8));
             try {
                 String line;
                 do {

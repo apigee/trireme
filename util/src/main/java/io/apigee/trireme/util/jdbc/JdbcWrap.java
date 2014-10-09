@@ -162,7 +162,7 @@ public class JdbcWrap
                 String key = (String)id;
                 Object prop = s.get(key, s);
                 if ((prop == null) || Undefined.instance.equals(prop)) {
-                    p.setProperty(key, null);
+                    p.setProperty(key, "");
                 } else {
                     p.setProperty(key, Context.toString(prop));
                 }

@@ -21,14 +21,18 @@
  */
 package io.apigee.trireme.core.internal;
 
+import javax.net.ssl.SSLContext;
 import java.io.IOException;
 import java.io.InputStream;
+import java.security.NoSuchAlgorithmException;
 import java.util.Properties;
 
 public class Version {
     private static final String POM_PROPERTIES = "/META-INF/maven/io.apigee.trireme/trireme-core/pom.properties";
 
     public static final String TRIREME_VERSION;
+    public static final String SSL_VERSION;
+
     static {
         String version = null;
 
@@ -62,10 +66,13 @@ public class Version {
         }
 
         TRIREME_VERSION = version;
+
+        String sslVersion;
+        try {
+            sslVersion = SSLContext.getDefault().getProvider().toString();
+        } catch (NoSuchAlgorithmException nse) {
+            sslVersion = null;
+        }
+        SSL_VERSION = sslVersion;
     }
-
-    /* Node.js API version that is implemented */
-    public static final String NODE_VERSION = "0.10.24";
-
-    public static final String SSL_VERSION = "java";
 }

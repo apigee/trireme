@@ -191,7 +191,7 @@ public class ScriptFuture
         }
     }
 
-    public ScriptStatusListener getListener()
+    public synchronized ScriptStatusListener getListener()
     {
         return listener;
     }

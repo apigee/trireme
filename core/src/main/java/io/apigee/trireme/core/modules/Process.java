@@ -404,7 +404,7 @@ public class Process
         @SuppressWarnings("unused")
         public String getVersion()
         {
-            return "v" + Version.NODE_VERSION;
+            return "v" + runner.getRegistry().getImplementation().getVersion();
         }
 
         @JSGetter("versions")
@@ -413,8 +413,11 @@ public class Process
         {
             Scriptable env = Context.getCurrentContext().newObject(this);
             env.put("trireme", env, Version.TRIREME_VERSION);
-            env.put("node", env, Version.NODE_VERSION);
-            env.put("openssl", env, Version.SSL_VERSION);
+            env.put("node", env, runner.getRegistry().getImplementation().getVersion());
+            if (Version.SSL_VERSION != null) {
+                env.put("ssl", env, Version.SSL_VERSION);
+            }
+            env.put("java", env, System.getProperty("java.version"));
             return env;
         }
 
@@ -424,7 +427,6 @@ public class Process
         {
             Scriptable c = Context.getCurrentContext().newObject(this);
             Scriptable vars = Context.getCurrentContext().newObject(this);
-            // TODO fill it in
             c.put("variables", c, vars);
             return c;
         }
@@ -756,6 +758,13 @@ public class Process
             ret[0] = (int)(nanos / NANO);
             ret[1] = (int)(nanos % NANO);
             return cx.newArray(thisObj, ret);
+        }
+
+        @JSFunction
+        @SuppressWarnings("unused")
+        public static void dlopen(Context cx, Scriptable thisObj, Object[] args, Function func)
+        {
+            throw Utils.makeError(cx, thisObj, "native modules are not supported in Trireme.");
         }
 
         @JSGetter("features")

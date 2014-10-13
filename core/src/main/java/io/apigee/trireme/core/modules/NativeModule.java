@@ -23,6 +23,7 @@ package io.apigee.trireme.core.modules;
 
 import io.apigee.trireme.core.NodeModule;
 import io.apigee.trireme.core.NodeRuntime;
+import io.apigee.trireme.core.internal.ModuleRegistry;
 import io.apigee.trireme.core.internal.ScriptRunner;
 import io.apigee.trireme.core.Utils;
 import org.mozilla.javascript.Context;
@@ -167,7 +168,7 @@ public class NativeModule
             }
 
             // First try to find a native Java module
-            Object exp = runner.initializeModule(name, false, cx, runner.getScriptScope());
+            Object exp = runner.initializeModule(name, ModuleRegistry.ModuleType.PUBLIC, cx, runner.getScriptScope());
             if (exp != null) {
                 if (log.isTraceEnabled()) {
                     log.trace("Loaded {} from Java object {}", name, exp);

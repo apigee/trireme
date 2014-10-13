@@ -23,6 +23,7 @@ package io.apigee.trireme.core.modules;
 
 import io.apigee.trireme.core.NodeModule;
 import io.apigee.trireme.core.NodeRuntime;
+import io.apigee.trireme.core.internal.ModuleRegistry;
 import io.apigee.trireme.core.internal.NodeExitException;
 import io.apigee.trireme.core.internal.ScriptRunner;
 import io.apigee.trireme.core.Utils;
@@ -50,6 +51,8 @@ import static io.apigee.trireme.core.ArgUtils.*;
 import java.io.IOException;
 import java.lang.reflect.InvocationTargetException;
 import java.util.Map;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 /**
  * The Node process module done on top of the VM.
@@ -65,6 +68,9 @@ public class Process
 
     private static final   long NANO = 1000000000L;
     protected static final Logger log  = LoggerFactory.getLogger(Process.class);
+
+    private static final Pattern FILE_NAME_PATTERN =
+        Pattern.compile("^((.*[/\\\\])|([^/\\\\]*))(.+)\\.node$");
 
     @Override
     public String getModuleName()
@@ -226,7 +232,7 @@ public class Process
             Object mod = runner.getCachedInternalModule(name);
             if (mod == null) {
                 try {
-                    mod = runner.initializeModule(name, true, cx, runner.getScriptScope());
+                    mod = runner.initializeModule(name, ModuleRegistry.ModuleType.INTERNAL, cx, runner.getScriptScope());
                     if (log.isTraceEnabled()) {
                         log.trace("Creating new instance {} of internal module {}",
                                   System.identityHashCode(mod), name);
@@ -253,6 +259,49 @@ public class Process
                           System.identityHashCode(mod), name);
             }
             return mod;
+        }
+
+        @JSFunction
+        @SuppressWarnings("unused")
+        public static Object dlopen(Context cx, Scriptable thisObj, Object[] args, Function func)
+        {
+            ensureArg(args, 0);
+            String fileName = stringArg(args, 1);
+
+            // This method is called anonymously by "module.js"
+            ScriptRunner runner = getRunner(cx);
+
+            Matcher m = FILE_NAME_PATTERN.matcher(fileName);
+            if (!m.matches()) {
+                throw Utils.makeError(cx, thisObj, "dlopen(" + fileName + "): Native module not supported");
+            }
+
+            String name = m.group(4);
+
+            try {
+                Object mod = runner.initializeModule(name, ModuleRegistry.ModuleType.NATIVE, cx,
+                                                     runner.getScriptScope());
+                if (log.isTraceEnabled()) {
+                    log.trace("Creating new instance {} of native module {}",
+                              System.identityHashCode(mod), name);
+                }
+
+                if (mod == null) {
+                    throw Utils.makeError(cx, thisObj, "dlopen(" + fileName + "): Native module not supported");
+                }
+                return mod;
+
+            } catch (InvocationTargetException e) {
+                Throwable targetException = e.getTargetException();
+                throw new EvaluatorException("Error initializing module: " +
+                                                 ((targetException != null) ?
+                                                     e.toString() + ": " + targetException.toString() :
+                                                     e.toString()));
+            } catch (InstantiationException e) {
+                throw new EvaluatorException("Error initializing module: " + e.toString());
+            } catch (IllegalAccessException e) {
+                throw new EvaluatorException("Error initializing module: " + e.toString());
+            }
         }
 
         private Scriptable createStreamHandle(Context cx, AbstractHandle handle)
@@ -772,13 +821,6 @@ public class Process
             return cx.newArray(thisObj, ret);
         }
 
-        @JSFunction
-        @SuppressWarnings("unused")
-        public static void dlopen(Context cx, Scriptable thisObj, Object[] args, Function func)
-        {
-            throw Utils.makeError(cx, thisObj, "native modules are not supported in Trireme.");
-        }
-
         @JSGetter("features")
         @SuppressWarnings("unused")
         public Object getFeatures()
@@ -837,6 +879,11 @@ public class Process
         @SuppressWarnings("unused")
         public boolean isTraceDeprecation() {
             return traceDeprecation;
+        }
+
+        private static ScriptRunner getRunner(Context cx)
+        {
+            return (ScriptRunner) cx.getThreadLocal(ScriptRunner.RUNNER);
         }
     }
 

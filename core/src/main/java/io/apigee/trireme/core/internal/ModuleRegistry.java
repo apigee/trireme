@@ -22,6 +22,7 @@
 package io.apigee.trireme.core.internal;
 
 import io.apigee.trireme.core.InternalNodeModule;
+import io.apigee.trireme.core.NativeNodeModule;
 import io.apigee.trireme.core.NodeModule;
 import io.apigee.trireme.core.NodeScriptModule;
 import io.apigee.trireme.core.Utils;
@@ -63,6 +64,8 @@ import java.util.Set;
  */
 public class ModuleRegistry
 {
+    public enum ModuleType { PUBLIC, INTERNAL, NATIVE }
+
     /**
      * Add this prefix to internal module code before compiling -- it makes them behave as they expect and as
      * internal modules from "normal" Node behave. This same code must also be included by the Rhino
@@ -75,6 +78,7 @@ public class ModuleRegistry
     private final HashMap<String, NodeModule>         modules         = new HashMap<String, NodeModule>();
     private final HashMap<String, InternalNodeModule> internalModules = new HashMap<String, InternalNodeModule>();
     private final HashMap<String, Script>             compiledModules = new HashMap<String, Script>();
+    private final HashMap<String, NativeNodeModule>   nativeModules = new HashMap<String, NativeNodeModule>();
     private final NodeImplementation                  implementation;
 
     private Script mainScript;
@@ -158,6 +162,8 @@ public class ModuleRegistry
     {
         if (mod instanceof InternalNodeModule) {
             internalModules.put(mod.getModuleName(), (InternalNodeModule) mod);
+        } else if (mod instanceof NativeNodeModule) {
+            nativeModules.put(mod.getModuleName(), (NativeNodeModule)mod);
         } else {
             modules.put(mod.getModuleName(), mod);
         }
@@ -222,6 +228,11 @@ public class ModuleRegistry
     public NodeModule getInternal(String name)
     {
         return internalModules.get(name);
+    }
+
+    public NodeModule getNative(String name)
+    {
+        return nativeModules.get(name);
     }
 
     public Script getCompiledModule(String name)

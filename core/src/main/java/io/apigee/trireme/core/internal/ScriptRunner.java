@@ -1040,7 +1040,7 @@ public class ScriptRunner
         try {
             // Need to bootstrap the "native module" before we can do anything
             NativeModule.NativeImpl nativeMod =
-              (NativeModule.NativeImpl)initializeModule(NativeModule.MODULE_NAME, false, cx, scope);
+              (NativeModule.NativeImpl)initializeModule(NativeModule.MODULE_NAME, ModuleRegistry.ModuleType.PUBLIC, cx, scope);
             this.nativeModule = nativeMod;
             NativeModule.ModuleImpl nativeModMod = NativeModule.ModuleImpl.newModule(cx, scope,
                                                                                      NativeModule.MODULE_NAME, NativeModule.MODULE_NAME);
@@ -1089,15 +1089,23 @@ public class ScriptRunner
     /**
      * Initialize a native module implemented in Java code.
      */
-    public Object initializeModule(String modName, boolean internal,
+    public Object initializeModule(String modName, ModuleRegistry.ModuleType type,
                                    Context cx, Scriptable scope)
         throws InvocationTargetException, InstantiationException, IllegalAccessException
     {
         NodeModule mod;
-        if (internal) {
-            mod = registry.getInternal(modName);
-        } else {
+        switch (type) {
+        case PUBLIC:
             mod = registry.get(modName);
+            break;
+        case INTERNAL:
+            mod = registry.getInternal(modName);
+            break;
+        case NATIVE:
+            mod = registry.getNative(modName);
+            break;
+        default:
+            throw new AssertionError();
         }
         if (mod == null) {
             return null;

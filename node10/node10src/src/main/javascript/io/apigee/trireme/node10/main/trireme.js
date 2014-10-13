@@ -596,10 +596,12 @@
       }
 
       stdout.fd = 1;
-      stdout.destroy = stdout.destroySoon = function(er) {
-        er = er || new Error('process.stdout cannot be closed.');
-        stdout.emit('error', er);
-      };
+      if (!process._childProcess) {
+        stdout.destroy = stdout.destroySoon = function(er) {
+          er = er || new Error('process.stdout cannot be closed.');
+          stdout.emit('error', er);
+        };
+      }
       if (stdout.isTTY) {
         process.on('SIGWINCH', function() {
           stdout._refreshSize();
@@ -619,10 +621,12 @@
       });
 
       stderr.fd = 2;
-      stderr.destroy = stderr.destroySoon = function(er) {
-        er = er || new Error('process.stderr cannot be closed.');
-        stderr.emit('error', er);
-      };
+      if (!process._childProcess) {
+        stderr.destroy = stderr.destroySoon = function(er) {
+          er = er || new Error('process.stderr cannot be closed.');
+          stderr.emit('error', er);
+        };
+      }
       return stderr;
     });
 

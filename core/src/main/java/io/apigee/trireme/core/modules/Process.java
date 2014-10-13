@@ -195,6 +195,18 @@ public class Process
             this.connected = c;
         }
 
+        @JSGetter("_childProcess")
+        @SuppressWarnings("undefined")
+        public boolean isChildProcess() {
+            return runner.getScriptObject()._isChildProcess();
+        }
+
+        @JSSetter("_childProcess")
+        @SuppressWarnings("undefined")
+        public void setChildProcess(boolean child) {
+            runner.getScriptObject()._setChildProcess(child);
+        }
+
         /**
          * Implement process.binding. This works like the rest of the module loading but uses a different
          * namespace and a different cache.

@@ -65,8 +65,6 @@ import java.nio.file.attribute.BasicFileAttributes;
 import java.nio.file.attribute.FileAttribute;
 import java.nio.file.attribute.FileTime;
 import java.nio.file.attribute.GroupPrincipal;
-import java.nio.file.attribute.PosixFileAttributes;
-import java.nio.file.attribute.PosixFileAttributeView;
 import java.nio.file.attribute.PosixFilePermission;
 import java.nio.file.attribute.PosixFilePermissions;
 import java.nio.file.attribute.UserPrincipal;
@@ -195,7 +193,7 @@ public class AsyncFilesystem
                 public void run()
                 {
                     if (log.isDebugEnabled()) {
-                        log.debug("Executing async action {}", action);
+                        log.debug("Executing async action {}", action.getName());
                     }
                     try {
                         Object[] args = action.execute();
@@ -205,7 +203,7 @@ public class AsyncFilesystem
                         runner.enqueueCallback(callback, callback, null, domain, args);
                     } catch (NodeOSException e) {
                         if (log.isDebugEnabled()) {
-                            log.debug("Async action {} failed: {}: {}", action, e.getCode(), e);
+                            log.debug("Async action {} failed: {}: {}", action.getName(), e.getCode(), e);
                         }
                         runner.enqueueCallback(callback, callback, null, domain,
                                                action.mapException(cx, self, e));
@@ -305,7 +303,7 @@ public class AsyncFilesystem
             Function callback = functionArg(args, 3, false);
             final FSImpl fs = (FSImpl)thisObj;
 
-            return fs.runAction(cx, callback, new AsyncAction()
+            return fs.runAction(cx, callback, new AsyncAction("open")
             {
                 @Override
                 public Object[] execute() throws NodeOSException
@@ -410,7 +408,7 @@ public class AsyncFilesystem
             final int fd = intArg(args, 0);
             Function callback = functionArg(args, 1, false);
 
-            fs.runAction(cx, callback, new AsyncAction()
+            fs.runAction(cx, callback, new AsyncAction("close")
             {
                 @Override
                 public Object[] execute()
@@ -656,7 +654,7 @@ public class AsyncFilesystem
             final int fd = intArg(args, 0);
             Function callback = functionArg(args, 1, false);
 
-            fs.runAction(cx, callback, new AsyncAction()
+            fs.runAction(cx, callback, new AsyncAction("fsync")
             {
                 @Override
                 public Object[] execute() throws NodeOSException
@@ -675,7 +673,7 @@ public class AsyncFilesystem
             final int fd = intArg(args, 0);
             Function callback = functionArg(args, 1, false);
 
-            fs.runAction(cx, callback, new AsyncAction()
+            fs.runAction(cx, callback, new AsyncAction("fdatasync")
             {
                 @Override
                 public Object[] execute() throws NodeOSException
@@ -709,7 +707,7 @@ public class AsyncFilesystem
             Function callback = functionArg(args, 2, false);
             final FSImpl fs = (FSImpl)thisObj;
 
-            fs.runAction(cx, callback, new AsyncAction()
+            fs.runAction(cx, callback, new AsyncAction("rename")
             {
                 @Override
                 public Object[] execute() throws NodeOSException
@@ -743,7 +741,7 @@ public class AsyncFilesystem
             final long len = longArgOnly(cx, fs, args, 1, 0);
             Function callback = functionArg(args, 2, false);
 
-            fs.runAction(cx, callback, new AsyncAction()
+            fs.runAction(cx, callback, new AsyncAction("fruncate")
             {
                 @Override
                 public Object[] execute()
@@ -787,7 +785,7 @@ public class AsyncFilesystem
             final String path = stringArg(args, 0);
             Function callback = functionArg(args, 1, false);
 
-            fs.runAction(cx, callback, new AsyncAction()
+            fs.runAction(cx, callback, new AsyncAction("rmdir")
             {
                 @Override
                 public Object[] execute() throws NodeOSException
@@ -824,7 +822,7 @@ public class AsyncFilesystem
             Function callback = functionArg(args, 1, false);
             final FSImpl fs = (FSImpl)thisObj;
 
-            fs.runAction(cx, callback, new AsyncAction()
+            fs.runAction(cx, callback, new AsyncAction("unlink")
             {
                 @Override
                 public Object[] execute() throws NodeOSException
@@ -863,7 +861,7 @@ public class AsyncFilesystem
             Function callback = functionArg(args, 2, false);
             final FSImpl fs = (FSImpl)thisObj;
 
-            fs.runAction(cx, callback, new AsyncAction()
+            fs.runAction(cx, callback, new AsyncAction("mkdir")
             {
                 @Override
                 public Object[] execute()
@@ -906,7 +904,7 @@ public class AsyncFilesystem
             Function callback = functionArg(args, 1, false);
             final FSImpl fs = (FSImpl)thisObj;
 
-            return fs.runAction(cx, callback, new AsyncAction()
+            return fs.runAction(cx, callback, new AsyncAction("readdir")
             {
                 @Override
                 public Object[] execute()
@@ -965,7 +963,7 @@ public class AsyncFilesystem
             Function callback = functionArg(args, 1, false);
             final FSImpl fs = (FSImpl)thisObj;
 
-            return fs.runAction(cx, callback, new AsyncAction()
+            return fs.runAction(cx, callback, new AsyncAction("stat")
             {
                 @Override
                 public Object[] execute()
@@ -1033,7 +1031,7 @@ public class AsyncFilesystem
             Function callback = functionArg(args, 1, false);
             final FSImpl fs = (FSImpl)thisObj;
 
-            return fs.runAction(cx, callback, new AsyncAction()
+            return fs.runAction(cx, callback, new AsyncAction("lstat")
             {
                 @Override
                 public Object[] execute()
@@ -1053,7 +1051,7 @@ public class AsyncFilesystem
             final int fd = intArg(args, 0);
             Function callback = functionArg(args, 1, false);
 
-            return fs.runAction(cx, callback, new AsyncAction()
+            return fs.runAction(cx, callback, new AsyncAction("fstat")
             {
                 @Override
                 public Object[] execute()
@@ -1075,7 +1073,7 @@ public class AsyncFilesystem
             Function callback = functionArg(args, 3, false);
             final FSImpl self = (FSImpl)thisObj;
 
-            self.runAction(cx, callback, new AsyncAction() {
+            self.runAction(cx, callback, new AsyncAction("utimes") {
                 @Override
                 public Object[] execute()
                     throws NodeOSException
@@ -1096,7 +1094,7 @@ public class AsyncFilesystem
             Function callback = functionArg(args, 3, false);
             final FSImpl self = (FSImpl)thisObj;
 
-            self.runAction(cx, callback, new AsyncAction() {
+            self.runAction(cx, callback, new AsyncAction("futimes") {
                 @Override
                 public Object[] execute()
                     throws NodeOSException
@@ -1139,7 +1137,7 @@ public class AsyncFilesystem
             Function callback = functionArg(args, 2, false);
             final FSImpl self = (FSImpl)thisObj;
 
-            self.runAction(cx, callback, new AsyncAction() {
+            self.runAction(cx, callback, new AsyncAction("chmod") {
                 @Override
                 public Object[] execute() throws NodeOSException
                 {
@@ -1263,7 +1261,7 @@ public class AsyncFilesystem
             Function callback = functionArg(args, 2, false);
             final FSImpl self = (FSImpl)thisObj;
 
-            self.runAction(cx, callback, new AsyncAction() {
+            self.runAction(cx, callback, new AsyncAction("fchmod") {
                 @Override
                 public Object[] execute() throws NodeOSException
                 {
@@ -1321,7 +1319,7 @@ public class AsyncFilesystem
             Function callback = functionArg(args, 3, false);
             final FSImpl self = (FSImpl)thisObj;
 
-            self.runAction(cx, callback, new AsyncAction() {
+            self.runAction(cx, callback, new AsyncAction("chown") {
                 @Override
                 public Object[] execute()
                     throws NodeOSException
@@ -1342,7 +1340,7 @@ public class AsyncFilesystem
             Function callback = functionArg(args, 3, false);
             final FSImpl self = (FSImpl)thisObj;
 
-            self.runAction(cx, callback, new AsyncAction() {
+            self.runAction(cx, callback, new AsyncAction("fchown") {
                 @Override
                 public Object[] execute()
                     throws NodeOSException
@@ -1362,7 +1360,7 @@ public class AsyncFilesystem
             Function callback = functionArg(args, 2, false);
             final FSImpl self = (FSImpl)thisObj;
 
-            return self.runAction(cx, callback, new AsyncAction() {
+            return self.runAction(cx, callback, new AsyncAction("link") {
                 @Override
                 public Object[] execute()
                    throws NodeOSException
@@ -1402,7 +1400,7 @@ public class AsyncFilesystem
             final FSImpl self = (FSImpl)thisObj;
 
             // Ignore "type" parameter -- has meaning only on Windows.
-            return self.runAction(cx, callback, new AsyncAction() {
+            return self.runAction(cx, callback, new AsyncAction("symlink") {
                 @Override
                 public Object[] execute()
                    throws NodeOSException
@@ -1451,7 +1449,7 @@ public class AsyncFilesystem
             Function callback = functionArg(args, 1, false);
             final FSImpl self = (FSImpl)thisObj;
 
-             return self.runAction(cx, callback, new AsyncAction() {
+             return self.runAction(cx, callback, new AsyncAction("readlink") {
                @Override
                public Object[] execute()
                    throws NodeOSException
@@ -1627,6 +1625,17 @@ public class AsyncFilesystem
 
     private abstract static class AsyncAction
     {
+        private final String name;
+
+        protected AsyncAction(String name)
+        {
+            this.name = name;
+        }
+
+        public String getName() {
+            return name;
+        }
+
         public abstract Object[] execute()
             throws NodeOSException;
 

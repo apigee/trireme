@@ -49,6 +49,7 @@ public class NodeScript
     private Object attachment;
     private Sandbox sandbox;
     private Object parentProcess;
+    private boolean childProcess;
     private boolean pin;
     private boolean forceRepl;
     private boolean printEval;
@@ -349,6 +350,19 @@ public class NodeScript
     {
         ScriptRunner runner = _getRuntime();
         return (runner == null ? null : runner.getProcess());
+    }
+
+    /**
+     * An internal method to denote that this script was spawned by another Trireme script.
+     */
+    public void _setChildProcess(boolean child)
+    {
+        this.childProcess = child;
+    }
+
+    public boolean _isChildProcess()
+    {
+        return childProcess;
     }
 
     /**

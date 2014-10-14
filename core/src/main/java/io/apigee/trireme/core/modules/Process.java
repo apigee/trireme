@@ -263,9 +263,9 @@ public class Process
 
         @JSFunction
         @SuppressWarnings("unused")
-        public static Object dlopen(Context cx, Scriptable thisObj, Object[] args, Function func)
+        public static void dlopen(Context cx, Scriptable thisObj, Object[] args, Function func)
         {
-            ensureArg(args, 0);
+            Scriptable module = objArg(args, 0, Scriptable.class, true);
             String fileName = stringArg(args, 1);
 
             // This method is called anonymously by "module.js"
@@ -279,17 +279,20 @@ public class Process
             String name = m.group(4);
 
             try {
-                Object mod = runner.initializeModule(name, ModuleRegistry.ModuleType.NATIVE, cx,
-                                                     runner.getScriptScope());
+                Object nativeMod = runner.initializeModule(name, ModuleRegistry.ModuleType.NATIVE, cx,
+                                                           runner.getScriptScope());
                 if (log.isTraceEnabled()) {
                     log.trace("Creating new instance {} of native module {}",
-                              System.identityHashCode(mod), name);
+                              System.identityHashCode(nativeMod), name);
                 }
 
-                if (mod == null) {
+                if (nativeMod == null) {
                     throw Utils.makeError(cx, thisObj, "dlopen(" + fileName + "): Native module not supported");
                 }
-                return mod;
+
+                // We got passed a "module". Make the new native stuff the "exports"
+                // on that module.
+                module.put("exports", module, nativeMod);
 
             } catch (InvocationTargetException e) {
                 Throwable targetException = e.getTargetException();

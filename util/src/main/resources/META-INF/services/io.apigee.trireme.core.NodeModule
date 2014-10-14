@@ -1,3 +1,4 @@
+io.apigee.trireme.util.Contextify
 io.apigee.trireme.util.IconvWrap
 io.apigee.trireme.util.XmlWrap
 io.apigee.trireme.util.jdbc.JdbcWrap

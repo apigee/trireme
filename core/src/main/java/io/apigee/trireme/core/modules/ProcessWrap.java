@@ -828,8 +828,12 @@ public class ProcessWrap
                 } else if (!cwdFile.isDirectory()) {
                     return Utils.makeErrorObject(cx, parent, Constants.ENOTDIR, Constants.ENOTDIR);
                 }
-                // Re-do script path to be relative to cwd
-                scriptPath = new File(cwdFile, scriptPath).getPath();
+
+                File scriptPathFile = new File(scriptPath);
+                if (!scriptPathFile.isAbsolute()) {
+                    // Re-do script path to be relative to cwd
+                    scriptPath = new File(cwdFile, scriptPath).getPath();
+                }
             }
 
             HashMap<String, String> env = null;

@@ -1,3 +1,21 @@
+* 0.8.3 15-Oct-2014:
+
+* Fix the error that happens when "dlopen" cannot find load a native code module. This bug was causing
+recent versions of the "mongodb" module to fail -- now it will work.
+* [Trireme JDBC Issue 1](https://github.com/apigee/trireme-jdbc/issues/1) Fix handling of NULL columns in
+SQL parameters and in SQL results so that they actually return "null" when a column value is "SQL NULL"
+set "SQL NULL" when a null parameter is passed.
+* [Issue 80](https://github.com/apigee/trireme/issues/80) Implement a Java version of the "contextify"
+native module. This makes it possible to use "jsdom," which would formerly not work because there
+was no "contextify" available. This solution requires that "contextify" still be installed via NPM --
+it only replaces the native code, not the JS code.
+* Upgrade to Rhino 1.7R5pre4. This fixes an error caused when "util.format" tries to introspect on
+an Error object.
+* Add a generic way to write classes that will be loaded when specific native modules (with the ".node")
+extension would be loaded by standard Node.js.
+* Fix path and output handling for Trireme scripts spawned by Trireme. This allows "nodeunit" and "tap" to
+work normally with Trireme.
+
 # 0.8.2 01-Oct-2014:
 
 * Take JavaScript code patches from Node.js 10.32.

@@ -14,7 +14,7 @@
   <dependencies>
     <dependency>
       <groupId>io.apigee.trireme</groupId>
-      <artifactId>trireme-core</artifactId>
+      <artifactId>trireme-kernel</artifactId>
       <version>0.8.4-SNAPSHOT</version>
     </dependency>
     <dependency>

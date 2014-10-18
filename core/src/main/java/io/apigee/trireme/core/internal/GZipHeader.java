@@ -23,6 +23,7 @@ package io.apigee.trireme.core.internal;
 
 import io.apigee.trireme.core.Utils;
 import io.apigee.trireme.core.modules.ZLib;
+import io.apigee.trireme.kernel.Charsets;
 
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;

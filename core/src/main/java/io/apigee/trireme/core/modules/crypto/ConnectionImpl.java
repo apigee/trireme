@@ -24,7 +24,7 @@ package io.apigee.trireme.core.modules.crypto;
 import io.apigee.trireme.core.ScriptTask;
 import io.apigee.trireme.core.Utils;
 import io.apigee.trireme.core.internal.CertificateParser;
-import io.apigee.trireme.core.internal.SSLCiphers;
+import io.apigee.trireme.kernel.crypto.SSLCiphers;
 import io.apigee.trireme.core.internal.ScriptRunner;
 import io.apigee.trireme.core.modules.Buffer;
 import org.mozilla.javascript.Context;

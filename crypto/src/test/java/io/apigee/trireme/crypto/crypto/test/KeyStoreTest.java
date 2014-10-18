@@ -1,10 +1,10 @@
 package io.apigee.trireme.crypto.crypto.test;
 
-import io.apigee.trireme.core.internal.CryptoException;
-import io.apigee.trireme.core.internal.CryptoService;
 import io.apigee.trireme.crypto.CryptoServiceImpl;
 import io.apigee.trireme.crypto.TriremeProvider;
 import io.apigee.trireme.crypto.ProviderLoader;
+import io.apigee.trireme.kernel.crypto.CryptoException;
+import io.apigee.trireme.kernel.crypto.CryptoService;
 import org.junit.BeforeClass;
 import org.junit.Test;
 

@@ -22,10 +22,10 @@
 package io.apigee.trireme.core.modules.crypto;
 
 import io.apigee.trireme.core.Utils;
-import io.apigee.trireme.core.internal.Charsets;
-import io.apigee.trireme.core.internal.CompositeTrustManager;
-import io.apigee.trireme.core.internal.CryptoException;
-import io.apigee.trireme.core.internal.SSLCiphers;
+import io.apigee.trireme.kernel.Charsets;
+import io.apigee.trireme.kernel.CompositeTrustManager;
+import io.apigee.trireme.kernel.crypto.CryptoException;
+import io.apigee.trireme.kernel.crypto.SSLCiphers;
 import io.apigee.trireme.core.internal.ScriptRunner;
 import io.apigee.trireme.core.modules.Buffer;
 import io.apigee.trireme.core.modules.Crypto;

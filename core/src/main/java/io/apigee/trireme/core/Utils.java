@@ -21,7 +21,7 @@
  */
 package io.apigee.trireme.core;
 
-import io.apigee.trireme.core.internal.Charsets;
+import io.apigee.trireme.kernel.Charsets;
 import io.apigee.trireme.core.internal.NodeOSException;
 import io.apigee.trireme.core.modules.Constants;
 import org.mozilla.javascript.Context;

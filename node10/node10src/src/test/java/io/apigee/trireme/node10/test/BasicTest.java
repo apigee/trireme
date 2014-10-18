@@ -10,7 +10,7 @@ import io.apigee.trireme.core.ScriptStatus;
 import io.apigee.trireme.core.ScriptStatusListener;
 import io.apigee.trireme.core.SubprocessPolicy;
 import io.apigee.trireme.core.Utils;
-import io.apigee.trireme.core.internal.Platform;
+import io.apigee.trireme.kernel.Platform;
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;

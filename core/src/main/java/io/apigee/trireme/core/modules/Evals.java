@@ -25,7 +25,7 @@ import io.apigee.trireme.core.ClassCache;
 import io.apigee.trireme.core.NodeRuntime;
 import io.apigee.trireme.core.InternalNodeModule;
 import io.apigee.trireme.core.Utils;
-import io.apigee.trireme.core.internal.Charsets;
+import io.apigee.trireme.kernel.Charsets;
 import io.apigee.trireme.core.internal.ScriptRunner;
 import org.mozilla.javascript.Context;
 import org.mozilla.javascript.EvaluatorException;
@@ -41,7 +41,6 @@ import static io.apigee.trireme.core.ArgUtils.*;
 
 import java.lang.reflect.InvocationTargetException;
 import java.nio.ByteBuffer;
-import java.nio.charset.Charset;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.util.regex.Pattern;

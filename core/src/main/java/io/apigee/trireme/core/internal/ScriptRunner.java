@@ -37,6 +37,7 @@ import io.apigee.trireme.core.modules.Buffer;
 import io.apigee.trireme.core.modules.NativeModule;
 import io.apigee.trireme.core.modules.Process;
 import io.apigee.trireme.core.modules.ProcessWrap;
+import io.apigee.trireme.kernel.PathTranslator;
 import io.apigee.trireme.net.SelectorHandler;
 import org.mozilla.javascript.Context;
 import org.mozilla.javascript.ContextAction;
@@ -99,7 +100,7 @@ public class ScriptRunner
     private        ScriptFuture    future;
     private final  CountDownLatch          initialized = new CountDownLatch(1);
     private final  Sandbox                 sandbox;
-    private final  PathTranslator          pathTranslator;
+    private final PathTranslator pathTranslator;
     private final  ExecutorService         asyncPool;
     private final IdentityHashMap<Closeable, Closeable> openHandles =
         new IdentityHashMap<Closeable, Closeable>();

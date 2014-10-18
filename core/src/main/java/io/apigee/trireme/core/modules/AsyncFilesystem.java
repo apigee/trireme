@@ -24,7 +24,7 @@ package io.apigee.trireme.core.modules;
 import io.apigee.trireme.core.NodeRuntime;
 import io.apigee.trireme.core.InternalNodeModule;
 import io.apigee.trireme.core.internal.NodeOSException;
-import io.apigee.trireme.core.internal.Platform;
+import io.apigee.trireme.kernel.Platform;
 import io.apigee.trireme.core.internal.ScriptRunner;
 import io.apigee.trireme.core.Utils;
 import org.mozilla.javascript.Context;

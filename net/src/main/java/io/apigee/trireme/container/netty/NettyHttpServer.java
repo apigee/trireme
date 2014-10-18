@@ -21,7 +21,7 @@
  */
 package io.apigee.trireme.container.netty;
 
-import io.apigee.trireme.core.internal.CompositeTrustManager;
+import io.apigee.trireme.kernel.CompositeTrustManager;
 import io.apigee.trireme.net.spi.HttpServerAdapter;
 import io.apigee.trireme.net.spi.HttpServerStub;
 import io.apigee.trireme.net.spi.TLSParams;

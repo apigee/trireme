@@ -1,7 +1,7 @@
 package io.apigee.trireme.core.test;
 
 import io.apigee.trireme.core.Utils;
-import io.apigee.trireme.core.internal.Charsets;
+import io.apigee.trireme.kernel.Charsets;
 import org.junit.Test;
 
 import java.nio.ByteBuffer;

@@ -23,7 +23,7 @@ package io.apigee.trireme.core.modules;
 
 import io.apigee.trireme.core.NodeModule;
 import io.apigee.trireme.core.NodeRuntime;
-import io.apigee.trireme.core.internal.Charsets;
+import io.apigee.trireme.kernel.Charsets;
 import io.apigee.trireme.core.internal.ScriptRunner;
 import io.apigee.trireme.core.Utils;
 import org.mozilla.javascript.Context;

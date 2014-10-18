@@ -27,7 +27,7 @@ import io.apigee.trireme.core.internal.ModuleRegistry;
 import io.apigee.trireme.core.internal.NodeExitException;
 import io.apigee.trireme.core.internal.ScriptRunner;
 import io.apigee.trireme.core.Utils;
-import io.apigee.trireme.core.internal.Platform;
+import io.apigee.trireme.kernel.Platform;
 import io.apigee.trireme.core.internal.Version;
 import io.apigee.trireme.core.internal.handles.AbstractHandle;
 import io.apigee.trireme.core.internal.handles.ConsoleHandle;

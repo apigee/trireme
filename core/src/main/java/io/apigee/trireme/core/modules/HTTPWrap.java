@@ -23,7 +23,7 @@ package io.apigee.trireme.core.modules;
 
 import io.apigee.trireme.core.NodeRuntime;
 import io.apigee.trireme.core.ScriptTask;
-import io.apigee.trireme.core.internal.Charsets;
+import io.apigee.trireme.kernel.Charsets;
 import io.apigee.trireme.core.InternalNodeModule;
 import io.apigee.trireme.core.Utils;
 import io.apigee.trireme.core.modules.crypto.SecureContextImpl;

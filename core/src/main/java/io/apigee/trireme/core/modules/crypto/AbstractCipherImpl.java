@@ -22,9 +22,9 @@
 package io.apigee.trireme.core.modules.crypto;
 
 import io.apigee.trireme.core.Utils;
-import io.apigee.trireme.core.internal.Charsets;
-import io.apigee.trireme.core.internal.CryptoAlgorithms;
-import io.apigee.trireme.core.internal.KeyGenerator;
+import io.apigee.trireme.kernel.Charsets;
+import io.apigee.trireme.kernel.crypto.CryptoAlgorithms;
+import io.apigee.trireme.kernel.crypto.KeyGenerator;
 import io.apigee.trireme.core.modules.Buffer;
 import org.mozilla.javascript.Context;
 import org.mozilla.javascript.ScriptableObject;

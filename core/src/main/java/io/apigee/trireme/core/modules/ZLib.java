@@ -21,7 +21,7 @@
  */
 package io.apigee.trireme.core.modules;
 
-import io.apigee.trireme.core.CircularOutputStream;
+import io.apigee.trireme.kernel.streams.CircularOutputStream;
 import io.apigee.trireme.core.NodeRuntime;
 import io.apigee.trireme.core.internal.GZipHeader;
 import io.apigee.trireme.core.InternalNodeModule;

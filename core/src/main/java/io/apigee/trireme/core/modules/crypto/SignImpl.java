@@ -22,8 +22,8 @@
 package io.apigee.trireme.core.modules.crypto;
 
 import io.apigee.trireme.core.Utils;
-import io.apigee.trireme.core.internal.CryptoException;
-import io.apigee.trireme.core.internal.SignatureAlgorithms;
+import io.apigee.trireme.kernel.crypto.CryptoException;
+import io.apigee.trireme.kernel.crypto.SignatureAlgorithms;
 import io.apigee.trireme.core.modules.Buffer;
 import io.apigee.trireme.core.modules.Crypto;
 import org.mozilla.javascript.Context;

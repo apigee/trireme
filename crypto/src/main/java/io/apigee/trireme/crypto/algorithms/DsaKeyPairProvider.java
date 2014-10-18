@@ -21,7 +21,7 @@
  */
 package io.apigee.trireme.crypto.algorithms;
 
-import io.apigee.trireme.core.internal.CryptoException;
+import io.apigee.trireme.kernel.crypto.CryptoException;
 import org.bouncycastle.asn1.ASN1InputStream;
 import org.bouncycastle.asn1.ASN1Integer;
 import org.bouncycastle.asn1.ASN1Primitive;

@@ -22,7 +22,7 @@
 package io.apigee.trireme.core.modules.crypto;
 
 import io.apigee.trireme.core.Utils;
-import io.apigee.trireme.core.internal.DiffieHellmanGroups;
+import io.apigee.trireme.kernel.crypto.DiffieHellmanGroups;
 import io.apigee.trireme.core.modules.Buffer;
 import org.mozilla.javascript.Context;
 import org.mozilla.javascript.Function;

@@ -21,7 +21,7 @@
  */
 package io.apigee.trireme.util;
 
-import io.apigee.trireme.core.internal.Charsets;
+import io.apigee.trireme.kernel.Charsets;
 import io.apigee.trireme.core.Utils;
 
 import java.nio.ByteBuffer;

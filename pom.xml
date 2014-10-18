@@ -39,6 +39,7 @@
     <module>compiler</module>
     <module>crypto</module>
     <module>jar</module>
+    <module>kernel</module>
     <module>net</module>
     <module>node10</module>
     <module>nodetests</module>

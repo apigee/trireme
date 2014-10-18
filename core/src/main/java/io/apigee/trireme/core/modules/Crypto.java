@@ -21,9 +21,9 @@
  */
 package io.apigee.trireme.core.modules;
 
-import io.apigee.trireme.core.internal.Charsets;
-import io.apigee.trireme.core.internal.CryptoAlgorithms;
-import io.apigee.trireme.core.internal.CryptoService;
+import io.apigee.trireme.kernel.Charsets;
+import io.apigee.trireme.kernel.crypto.CryptoAlgorithms;
+import io.apigee.trireme.kernel.crypto.CryptoService;
 import io.apigee.trireme.core.InternalNodeModule;
 import io.apigee.trireme.core.Utils;
 import io.apigee.trireme.core.NodeRuntime;
@@ -43,7 +43,6 @@ import org.mozilla.javascript.FunctionObject;
 import org.mozilla.javascript.Scriptable;
 import org.mozilla.javascript.ScriptableObject;
 import org.mozilla.javascript.Undefined;
-import org.mozilla.javascript.annotations.JSConstructor;
 import org.mozilla.javascript.annotations.JSFunction;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;

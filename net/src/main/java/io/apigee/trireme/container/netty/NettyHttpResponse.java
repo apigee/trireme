@@ -21,7 +21,7 @@
  */
 package io.apigee.trireme.container.netty;
 
-import io.apigee.trireme.core.internal.Charsets;
+import io.apigee.trireme.kernel.Charsets;
 import io.apigee.trireme.net.spi.HttpFuture;
 import io.apigee.trireme.net.spi.HttpResponseAdapter;
 import io.netty.buffer.ByteBuf;

@@ -21,7 +21,7 @@
  */
 package io.apigee.trireme.crypto.algorithms;
 
-import io.apigee.trireme.core.internal.CryptoException;
+import io.apigee.trireme.kernel.crypto.CryptoException;
 import org.bouncycastle.asn1.pkcs.RSAPrivateKey;
 import org.bouncycastle.asn1.pkcs.RSAPublicKey;
 import org.bouncycastle.asn1.x509.SubjectPublicKeyInfo;

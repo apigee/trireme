@@ -22,7 +22,7 @@
 package io.apigee.trireme.util;
 
 import io.apigee.trireme.core.NodeRuntime;
-import io.apigee.trireme.core.internal.Charsets;
+import io.apigee.trireme.kernel.Charsets;
 import io.apigee.trireme.core.InternalNodeModule;
 import io.apigee.trireme.core.Utils;
 import io.apigee.trireme.core.modules.Buffer;

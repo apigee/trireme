@@ -21,7 +21,7 @@
  */
 package io.apigee.trireme.crypto.algorithms;
 
-import io.apigee.trireme.core.internal.CryptoException;
+import io.apigee.trireme.kernel.crypto.CryptoException;
 
 import java.io.IOException;
 import java.io.Reader;

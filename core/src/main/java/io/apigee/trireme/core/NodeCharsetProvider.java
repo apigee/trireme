@@ -21,9 +21,9 @@
  */
 package io.apigee.trireme.core;
 
-import io.apigee.trireme.core.internal.charsets.Base64Charset;
-import io.apigee.trireme.core.internal.charsets.BinaryCharset;
-import io.apigee.trireme.core.internal.charsets.HexCharset;
+import io.apigee.trireme.kernel.charsets.Base64Charset;
+import io.apigee.trireme.kernel.charsets.BinaryCharset;
+import io.apigee.trireme.kernel.charsets.HexCharset;
 
 import java.nio.charset.Charset;
 import java.nio.charset.spi.CharsetProvider;

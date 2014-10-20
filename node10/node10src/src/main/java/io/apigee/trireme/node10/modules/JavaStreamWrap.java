@@ -26,8 +26,9 @@ import io.apigee.trireme.core.NodeRuntime;
 import io.apigee.trireme.core.ScriptTask;
 import io.apigee.trireme.kernel.Charsets;
 import io.apigee.trireme.core.internal.ScriptRunner;
-import io.apigee.trireme.core.internal.handles.AbstractHandle;
-import io.apigee.trireme.core.internal.handles.HandleListener;
+import io.apigee.trireme.kernel.ErrorCodes;
+import io.apigee.trireme.kernel.handles.AbstractHandle;
+import io.apigee.trireme.kernel.handles.HandleListener;
 import io.apigee.trireme.core.modules.Buffer;
 import io.apigee.trireme.core.modules.Referenceable;
 import org.mozilla.javascript.Context;
@@ -212,13 +213,14 @@ public class JavaStreamWrap
             return req;
         }
 
-        private void deliverWriteCallback(Context cx, Scriptable req, String err)
+        private void deliverWriteCallback(Context cx, Scriptable req, Integer err)
         {
             Object onComplete = ScriptableObject.getProperty(req, "oncomplete");
             if ((onComplete != null) && !Undefined.instance.equals(onComplete)) {
                 Function afterWrite = (Function)onComplete;
+                Object errStr = (err == null ? Undefined.instance : ErrorCodes.get().toString(err));
                 afterWrite.call(cx, afterWrite, this,
-                                new Object[] { (err == null ? Undefined.instance : err), this, req });
+                                new Object[] { errStr, this, req });
             }
         }
 
@@ -238,7 +240,7 @@ public class JavaStreamWrap
         }
 
         @Override
-        public void onWriteError(final String err, boolean inScriptThread, Object context)
+        public void onWriteError(final int err, boolean inScriptThread, Object context)
         {
             final Scriptable req = (Scriptable)context;
             runtime.enqueueTask(new ScriptTask() {
@@ -270,14 +272,14 @@ public class JavaStreamWrap
             }
         }
 
-        private void deliverReadCallback(Context cx, ByteBuffer buf, String err)
+        private void deliverReadCallback(Context cx, ByteBuffer buf, Integer err)
         {
             if (onRead != null) {
                 Buffer.BufferImpl jBuf = (buf == null ? null : Buffer.BufferImpl.newBuffer(cx, this, buf, false));
                 if (err == null) {
                     runtime.clearErrno();
                 } else {
-                    runtime.setErrno(err);
+                    runtime.setErrno(ErrorCodes.get().toString(err));
                 }
                 onRead.call(cx, onRead, this, new Object[] { jBuf, 0, (buf == null ? 0 : buf.remaining()) });
             }
@@ -300,7 +302,7 @@ public class JavaStreamWrap
         }
 
         @Override
-        public void onReadError(final String err, boolean inScriptThread, Object context)
+        public void onReadError(final int err, boolean inScriptThread, Object context)
         {
             if (inScriptThread) {
                 deliverReadCallback(Context.getCurrentContext(), null, err);

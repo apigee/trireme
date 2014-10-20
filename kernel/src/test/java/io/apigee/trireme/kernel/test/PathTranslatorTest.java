@@ -16,8 +16,8 @@ public class PathTranslatorTest
         throws IOException
     {
         PathTranslator trans = new PathTranslator();
-        File xl = trans.translate("./target/test-classes/io/apigee/trireme/core/test/PathTranslatorTest.class");
-        File realFile = new File("./target/test-classes/io/apigee/trireme/core/test/PathTranslatorTest.class");
+        File xl = trans.translate("./target/test-classes/io/apigee/trireme/kernel/test/PathTranslatorTest.class");
+        File realFile = new File("./target/test-classes/io/apigee/trireme/kernel/test/PathTranslatorTest.class");
         assertTrue(realFile.exists());
         assertEquals(realFile.getCanonicalPath(), xl.getCanonicalPath());
     }
@@ -27,8 +27,8 @@ public class PathTranslatorTest
         throws IOException
     {
         PathTranslator trans = new PathTranslator("./target/test-classes");
-        File xl = trans.translate("/io/apigee/trireme/core/test/PathTranslatorTest.class");
-        File realFile = new File("./target/test-classes/io/apigee/trireme/core/test/PathTranslatorTest.class");
+        File xl = trans.translate("/io/apigee/trireme/kernel/test/PathTranslatorTest.class");
+        File realFile = new File("./target/test-classes/io/apigee/trireme/kernel/test/PathTranslatorTest.class");
         assertTrue(realFile.exists());
         assertEquals(realFile.getCanonicalPath(), xl.getCanonicalPath());
     }
@@ -83,8 +83,8 @@ public class PathTranslatorTest
         throws IOException
     {
         PathTranslator trans = new PathTranslator("./target/test-classes");
-        File xl = trans.translate("/io/apigee/trireme/corecore/test/PathTranslatorTest.foobar");
-        File realFile = new File("./target/test-classes/io/apigee/trireme/corecore/test/PathTranslatorTest.foobar");
+        File xl = trans.translate("/io/apigee/trireme/kernel/test/PathTranslatorTest.foobar");
+        File realFile = new File("./target/test-classes/io/apigee/trireme/kernel/test/PathTranslatorTest.foobar");
         assertFalse(realFile.exists());
         assertEquals(realFile.getCanonicalPath(), xl.getCanonicalPath());
     }
@@ -94,8 +94,8 @@ public class PathTranslatorTest
         throws IOException
     {
         PathTranslator trans = new PathTranslator("./target/test-classes");
-        File xl = trans.translate("/io/apigee/trireme/../../apigee/trireme/core/../core/test/PathTranslatorTest.class");
-        File realFile = new File("./target/test-classes/io/apigee/trireme/core/test/PathTranslatorTest.class");
+        File xl = trans.translate("/io/apigee/trireme/../../apigee/trireme/kernel/../kernel/test/PathTranslatorTest.class");
+        File realFile = new File("./target/test-classes/io/apigee/trireme/kernel/test/PathTranslatorTest.class");
         assertTrue(realFile.exists());
         assertEquals(realFile.getCanonicalPath(), xl.getCanonicalPath());
     }
@@ -105,7 +105,7 @@ public class PathTranslatorTest
         throws IOException
     {
         PathTranslator trans = new PathTranslator("./target/test-classes");
-        File xl = trans.translate("/io/apigee/trireme/core/../../../..");
+        File xl = trans.translate("/io/apigee/trireme/kernel/../../../..");
         File realFile = new File("./target/test-classes");
         assertTrue(realFile.exists());
         assertEquals(realFile.getCanonicalPath(), xl.getCanonicalPath());
@@ -116,7 +116,7 @@ public class PathTranslatorTest
         throws IOException
     {
         PathTranslator trans = new PathTranslator("./target/test-classes");
-        File xl = trans.translate("/io/apigee/trireme/core/../../../../..");
+        File xl = trans.translate("/io/apigee/trireme/kernel/../../../../..");
         assertNull(xl);
     }
 

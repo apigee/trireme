@@ -1,5 +1,5 @@
 /**
- * Copyright 2013 Apigee Corporation.
+ * Copyright 2014 Apigee Corporation.
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -19,11 +19,16 @@
  * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
  * SOFTWARE.
  */
-package io.apigee.trireme.net;
+package io.apigee.trireme.kernel.handles;
 
-import java.nio.channels.SelectionKey;
+/**
+ * Specialization of HandleListener for network events.s
+ */
 
-public interface SelectorHandler
+public interface NetworkHandleListener
+    extends HandleListener
 {
-    void selected(SelectionKey key);
+    void onConnection(boolean inScriptThread, AbstractHandle handle, Object context);
+    void onConnectComplete(boolean inScriptThread, Object context);
+    void onConnectError(int err, boolean inScriptThread, Object context);
 }

@@ -22,6 +22,7 @@
 package io.apigee.trireme.core.modules;
 
 import io.apigee.trireme.core.internal.ScriptRunner;
+import io.apigee.trireme.kernel.ErrorCodes;
 import org.mozilla.javascript.Context;
 import org.mozilla.javascript.ScriptableObject;
 import org.mozilla.javascript.annotations.JSFunction;
@@ -97,14 +98,19 @@ public class Referenceable
         clearPin();
     }
 
+    protected static void setErrno(int err)
+    {
+        getRunner().setErrno(ErrorCodes.get().toString(err));
+    }
+
     protected static void setErrno(String err)
     {
-        ((ScriptRunner)getRunner()).setErrno(err);
+        getRunner().setErrno(err);
     }
 
     protected static void clearErrno()
     {
-        ((ScriptRunner)getRunner()).clearErrno();
+        getRunner().clearErrno();
     }
 
     protected static ScriptRunner getRunner(Context cx)

@@ -21,6 +21,7 @@
  */
 package io.apigee.trireme.core;
 
+import io.apigee.trireme.kernel.net.NetworkPolicy;
 import org.mozilla.javascript.ClassShutter;
 import org.mozilla.javascript.Scriptable;
 
@@ -48,7 +49,7 @@ public class Sandbox
     private String          filesystemRoot;
     private String          workingDirectory;
     private ExecutorService asyncPool;
-    private NetworkPolicy   networkPolicy;
+    private NetworkPolicy networkPolicy;
     private SubprocessPolicy processPolicy;
     private List<Map.Entry<String, String>> mounts;
     private boolean         hideOsDetails;

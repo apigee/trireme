@@ -19,15 +19,13 @@
  * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
  * SOFTWARE.
  */
-package io.apigee.trireme.core.internal.handles;
+package io.apigee.trireme.kernel.handles;
 
-import io.apigee.trireme.core.Utils;
-import io.apigee.trireme.core.modules.Constants;
+import io.apigee.trireme.kernel.ErrorCodes;
 
 import java.io.IOException;
 import java.io.OutputStream;
 import java.nio.ByteBuffer;
-import java.nio.charset.Charset;
 
 /**
  * This class implements the generic "handle" pattern with a Java input or output stream. Different Node
@@ -62,7 +60,7 @@ public class JavaOutputStreamHandle
             return len;
 
         } catch (IOException ioe) {
-            listener.onWriteError(Constants.EIO, true, context);
+            listener.onWriteError(ErrorCodes.EIO, true, context);
             return 0;
         }
     }

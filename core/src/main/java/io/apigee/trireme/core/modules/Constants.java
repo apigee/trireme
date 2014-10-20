@@ -27,7 +27,6 @@ import org.mozilla.javascript.Context;
 import org.mozilla.javascript.Scriptable;
 
 import java.lang.reflect.InvocationTargetException;
-import java.util.HashMap;
 
 /**
  * Includes all the constants from the built-in "constants" module in Node.
@@ -94,30 +93,6 @@ public class Constants
     public static final int S_IWOTH = 0000002;    /* W for other */
     public static final int S_IXOTH = 0000001;    /* X for other */
 
-    private static final HashMap<String, Integer> errnos = new HashMap<String, Integer>();
-
-    static {
-        errnos.put(EACCES, 13);
-        errnos.put(EADDRINUSE, 48);
-        errnos.put(EBADF, 9);
-        errnos.put(ECONNREFUSED, 61);
-        errnos.put(EINTR, 4);
-        errnos.put(EEXIST, 17);
-        errnos.put(EINVAL, 22);
-        errnos.put(EIO, 5);
-        errnos.put(EILSEQ, 92);
-        errnos.put(EISDIR, 21);
-        // TODO this isn't quite right -- not defined on my Mac at least
-        errnos.put(ENOTFOUND, 2);
-        errnos.put(ENOTEMPTY, 66);
-        errnos.put(ENOENT, 2);
-        errnos.put(ENOTDIR, 20);
-        errnos.put(EPERM, 1);
-        errnos.put(EPIPE, 32);
-        errnos.put(ESRCH, 3);
-    }
-
-
     @Override
     public String getModuleName()
     {
@@ -165,18 +140,5 @@ public class Constants
         exports.put("SIGQUIT", exports, SIGQUIT);
 
         return exports;
-    }
-
-    /**
-     * Given an error code string, return the numerical error code that would have been returned on
-     * a standard Unix system, or -1 if the specified error code isn't found or isn't an error code
-     */
-    public static int getErrno(String code)
-    {
-        Integer errno = errnos.get(code);
-        if (errno == null) {
-            return -1;
-        }
-        return errno;
     }
 }

@@ -19,72 +19,39 @@
  * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
  * SOFTWARE.
  */
-package io.apigee.trireme.core.internal.handles;
+package io.apigee.trireme.kernel.handles;
 
-import io.apigee.trireme.core.NodeRuntime;
-import io.apigee.trireme.core.Utils;
-import io.apigee.trireme.kernel.Charsets;
-import io.apigee.trireme.core.modules.Constants;
+import io.apigee.trireme.kernel.ErrorCodes;
+import io.apigee.trireme.kernel.GenericNodeRuntime;
 
-import java.io.Console;
 import java.io.EOFException;
 import java.io.IOException;
+import java.io.InputStream;
 import java.io.InterruptedIOException;
-import java.io.PrintWriter;
-import java.io.Reader;
 import java.nio.ByteBuffer;
-import java.nio.charset.Charset;
 import java.util.concurrent.Future;
 
 /**
- * This class implements the generic "handle" pattern with the system console. Different Node
+ * This class implements the generic "handle" pattern with a Java input or output stream. Different Node
  * versions wire it up to a specific handle type depending on the specific JavaScript contract required.
  * This class basically does the async I/O on the handle.
  */
 
-public class ConsoleHandle
+public class JavaInputStreamHandle
     extends AbstractHandle
 {
-    private static final int READ_BUFFER_SIZE = 8192;
+    private static final int READ_BUFFER_SIZE = 16392;
 
-    private final Console console = System.console();
-    private final PrintWriter writer = console.writer();
-    private final Reader reader = console.reader();
-    private final NodeRuntime runtime;
+    private final InputStream in;
+    private final GenericNodeRuntime runtime;
 
-    private volatile boolean reading;
     private Future<?> readTask;
+    private volatile boolean reading;
 
-    public static boolean isConsoleSupported()
+    public JavaInputStreamHandle(InputStream in, GenericNodeRuntime runtime)
     {
-        return (System.console() != null);
-    }
-
-    public ConsoleHandle(NodeRuntime runtime)
-    {
+        this.in = in;
         this.runtime = runtime;
-    }
-
-    @Override
-    public int write(ByteBuffer buf, HandleListener listener, Object context)
-    {
-        int len = buf.remaining();
-        String str = Utils.bufferToString(buf, Charsets.UTF8);
-        writer.print(str);
-        writer.flush();
-        listener.onWriteComplete(len, true, context);
-        return len;
-    }
-
-    @Override
-    public int write(String s, Charset cs, HandleListener listener, Object context)
-    {
-        // Not strictly correct but enough for now
-        int len = s.length();
-        writer.print(s);
-        writer.flush();
-        listener.onWriteComplete(len, true, context);
-        return len;
     }
 
     @Override
@@ -94,6 +61,9 @@ public class ConsoleHandle
             return;
         }
 
+        // Pin explicitly before starting to read -- these handles don't necessarily keep the server open,
+        // but when we are reading many problems are averted when we do. Note that we don't do this for
+        // network handles, but instead "pin" when the socket is first created.
         reading = true;
         runtime.pin();
         readTask = runtime.getUnboundedPool().submit(new Runnable()
@@ -108,28 +78,29 @@ public class ConsoleHandle
 
     protected void readLoop(HandleListener listener, Object context)
     {
-        char[] readBuf = new char[READ_BUFFER_SIZE];
+        byte[] readBuf = new byte[READ_BUFFER_SIZE];
         try {
             int count = 0;
             while (reading && (count >= 0)) {
-                count = reader.read(readBuf);
+                count = in.read(readBuf);
                 if (count > 0) {
-                    String rs = new String(readBuf, 0, count);
-                    ByteBuffer buf = Utils.stringToBuffer(rs, Charsets.UTF8);
+                    ByteBuffer buf = ByteBuffer.allocate(count);
+                    buf.put(readBuf, 0, count);
+                    buf.flip();
                     listener.onReadComplete(buf, false, context);
                 }
             }
             if (count < 0) {
-                listener.onReadError(Constants.EOF, false, context);
+                listener.onReadError(ErrorCodes.EOF, false, context);
             }
 
         } catch (InterruptedIOException iee) {
             // Nothing special to do, since we were asked to stop reading
         } catch (EOFException eofe) {
-            listener.onReadError(Constants.EOF, false, context);
+            listener.onReadError(ErrorCodes.EOF, false, context);
         } catch (IOException ioe) {
-            String err =
-                ("Stream Closed".equalsIgnoreCase(ioe.getMessage()) ? Constants.EOF : Constants.EIO);
+            int err =
+                ("Stream Closed".equalsIgnoreCase(ioe.getMessage()) ? ErrorCodes.EOF : ErrorCodes.EIO);
             listener.onReadError(err, false, context);
         }
     }
@@ -149,6 +120,10 @@ public class ConsoleHandle
     @Override
     public void close()
     {
-        // Nothing to do!
+        stopReading();
+        try {
+            in.close();
+        } catch (IOException ignore) {
+        }
     }
 }

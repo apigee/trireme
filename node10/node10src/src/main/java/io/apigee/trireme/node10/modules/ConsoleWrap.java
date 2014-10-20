@@ -25,7 +25,7 @@ import io.apigee.trireme.core.InternalNodeModule;
 import io.apigee.trireme.core.NodeRuntime;
 import io.apigee.trireme.core.Utils;
 import io.apigee.trireme.core.internal.ScriptRunner;
-import io.apigee.trireme.core.internal.handles.AbstractHandle;
+import io.apigee.trireme.kernel.handles.AbstractHandle;
 import org.mozilla.javascript.Context;
 import org.mozilla.javascript.Function;
 import org.mozilla.javascript.Scriptable;

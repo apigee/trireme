@@ -19,16 +19,55 @@
  * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
  * SOFTWARE.
  */
-package io.apigee.trireme.core.internal.handles;
+package io.apigee.trireme.kernel;
 
-/**
- * Specialization of HandleListener for network events.
- */
-
-public interface NetworkHandleListener
-    extends HandleListener
+public class OSException
+    extends Exception
 {
-    void onConnection(boolean inScriptThread, AbstractHandle handle, Object context);
-    void onConnectComplete(boolean inScriptThread, Object context);
-    void onConnectError(String err, boolean inScriptThread, Object context);
+    private final int code;
+    private String path;
+
+    public OSException(int code)
+    {
+        super(ErrorCodes.get().toString(code));
+        this.code = code;
+    }
+
+    public OSException(int code, String path)
+    {
+        super(ErrorCodes.get().toString(code) + ':' + path);
+        this.code = code;
+        this.path = path;
+    }
+
+    public OSException(int code, Throwable cause)
+    {
+        super(ErrorCodes.get().toString(code));
+        this.code = code;
+        initCause(cause);
+    }
+
+    public OSException(int code, Throwable cause, String path)
+    {
+        super(ErrorCodes.get().toString(code) + ':' + path);
+        this.code = code;
+        this.path = path;
+        initCause(cause);
+    }
+
+    public int getCode() {
+        return code;
+    }
+
+    public String getStringCode() {
+        return ErrorCodes.get().toString(code);
+    }
+
+    public String getPath() {
+        return path;
+    }
+
+    public void setPath(String path) {
+        this.path = path;
+    }
 }

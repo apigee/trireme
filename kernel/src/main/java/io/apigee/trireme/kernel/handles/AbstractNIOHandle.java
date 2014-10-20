@@ -1,7 +1,28 @@
-package io.apigee.trireme.core.internal.handles;
+/**
+ * Copyright 2014 Apigee Corporation.
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining a copy
+ * of this software and associated documentation files (the "Software"), to deal
+ * in the Software without restriction, including without limitation the rights
+ * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+ * copies of the Software, and to permit persons to whom the Software is
+ * furnished to do so, subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice shall be included in
+ * all copies or substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+ * SOFTWARE.
+ */
+package io.apigee.trireme.kernel.handles;
 
-import io.apigee.trireme.core.NetworkPolicy;
-import io.apigee.trireme.core.NodeRuntime;
+import io.apigee.trireme.kernel.GenericNodeRuntime;
+import io.apigee.trireme.kernel.net.NetworkPolicy;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -15,24 +36,21 @@ public abstract class AbstractNIOHandle
 {
     private static final Logger log = LoggerFactory.getLogger(AbstractNIOHandle.class);
 
-    protected final NodeRuntime runtime;
+    protected final GenericNodeRuntime runtime;
 
     protected SelectionKey            selKey;
     protected boolean                 writeReady;
     protected final  ArrayDeque<QueuedWrite> writeQueue = new ArrayDeque<QueuedWrite>();
     protected int                     queuedBytes;
 
-    protected AbstractNIOHandle(NodeRuntime runtime)
+    protected AbstractNIOHandle(GenericNodeRuntime runtime)
     {
         this.runtime = runtime;
     }
 
     protected NetworkPolicy getNetworkPolicy()
     {
-        if (runtime.getSandbox() == null) {
-            return null;
-        }
-        return runtime.getSandbox().getNetworkPolicy();
+        return runtime.getNetworkPolicy();
     }
 
     protected void addInterest(int i)

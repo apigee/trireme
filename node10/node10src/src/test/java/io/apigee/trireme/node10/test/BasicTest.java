@@ -1,6 +1,6 @@
 package io.apigee.trireme.node10.test;
 
-import io.apigee.trireme.core.NetworkPolicy;
+import io.apigee.trireme.kernel.net.NetworkPolicy;
 import io.apigee.trireme.core.NodeEnvironment;
 import io.apigee.trireme.core.NodeException;
 import io.apigee.trireme.core.NodeScript;

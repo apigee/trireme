@@ -19,9 +19,9 @@
  * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
  * SOFTWARE.
  */
-package io.apigee.trireme.core.internal.handles;
+package io.apigee.trireme.kernel.handles;
 
-import io.apigee.trireme.core.Utils;
+import io.apigee.trireme.kernel.util.StringUtils;
 
 import java.nio.ByteBuffer;
 import java.nio.charset.Charset;
@@ -44,7 +44,7 @@ public abstract class AbstractHandle
         // An alternative would be to use CharsetEncoder directly here and call "write" for every
         // chunk of data that it produces. This would optimize for allocating and copying ByteBuffers
         // but it would result in more "write" calls to the socket.
-        ByteBuffer buf = Utils.stringToBuffer(s, cs);
+        ByteBuffer buf = StringUtils.stringToBuffer(s, cs);
         return write(buf, listener, context);
     }
 

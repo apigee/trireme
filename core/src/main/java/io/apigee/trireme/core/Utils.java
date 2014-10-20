@@ -24,6 +24,9 @@ package io.apigee.trireme.core;
 import io.apigee.trireme.kernel.Charsets;
 import io.apigee.trireme.core.internal.NodeOSException;
 import io.apigee.trireme.core.modules.Constants;
+import io.apigee.trireme.kernel.ErrorCodes;
+import io.apigee.trireme.kernel.util.BufferUtils;
+import io.apigee.trireme.kernel.util.StringUtils;
 import org.mozilla.javascript.Context;
 import org.mozilla.javascript.JavaScriptException;
 import org.mozilla.javascript.RhinoException;
@@ -51,11 +54,6 @@ import java.util.regex.Pattern;
  */
 public class Utils
 {
-    private static final Pattern DOUBLE_QUOTED =
-        Pattern.compile("^[\\s]*\"(.*)\"[\\s]*$");
-    private static final Pattern SINGLE_QUOTED =
-        Pattern.compile("^[\\s]*\'(.*)\'[\\s]*$");
-
     /**
      * Read an entire input stream into a single string, and interpret it as UTF-8.
      */
@@ -108,25 +106,7 @@ public class Utils
      */
     public static String bufferToString(ByteBuffer buf, Charset cs)
     {
-        CharsetDecoder decoder = Charsets.get().getDecoder(cs);
-        int bufLen = (int)(buf.limit() * decoder.averageCharsPerByte());
-        CharBuffer cBuf = CharBuffer.allocate(bufLen);
-        CoderResult result;
-        do {
-            result = decoder.decode(buf, cBuf, true);
-            if (result.isOverflow()) {
-                cBuf = doubleBuffer(cBuf);
-            }
-        } while (result.isOverflow());
-        do {
-            result = decoder.flush(cBuf);
-            if (result.isOverflow()) {
-                cBuf = doubleBuffer(cBuf);
-            }
-        } while (result.isOverflow());
-
-        cBuf.flip();
-        return cBuf.toString();
+        return StringUtils.bufferToString(buf, cs);
     }
 
     /**
@@ -134,31 +114,7 @@ public class Utils
      */
     public static String bufferToString(ByteBuffer[] bufs, Charset cs)
     {
-        CharsetDecoder decoder = Charsets.get().getDecoder(cs);
-        int totalBytes = 0;
-        for (int i = 0; i < bufs.length; i++) {
-            totalBytes += (bufs[i] == null ? 0 : bufs[i].remaining());
-        }
-        int bufLen = (int)(totalBytes * decoder.averageCharsPerByte());
-        CharBuffer cBuf = CharBuffer.allocate(bufLen);
-        CoderResult result;
-        for (int i = 0; i < bufs.length; i++) {
-            do {
-                result = decoder.decode(bufs[i], cBuf, (i == (bufs.length - 1)));
-                if (result.isOverflow()) {
-                    cBuf = doubleBuffer(cBuf);
-                }
-            } while (result.isOverflow());
-        }
-        do {
-            result = decoder.flush(cBuf);
-            if (result.isOverflow()) {
-                cBuf = doubleBuffer(cBuf);
-            }
-        } while (result.isOverflow());
-
-        cBuf.flip();
-        return cBuf.toString();
+        return StringUtils.bufferToString(bufs, cs);
     }
 
     /**
@@ -167,27 +123,7 @@ public class Utils
      */
     public static ByteBuffer stringToBuffer(String str, Charset cs)
     {
-        CharsetEncoder enc = Charsets.get().getEncoder(cs);
-        CharBuffer chars = CharBuffer.wrap(str);
-        int bufLen = (int)(chars.remaining() * enc.averageBytesPerChar());
-        ByteBuffer writeBuf =  ByteBuffer.allocate(bufLen);
-
-        CoderResult result;
-        do {
-            result = enc.encode(chars, writeBuf, true);
-            if (result.isOverflow()) {
-                writeBuf = doubleBuffer(writeBuf);
-            }
-        } while (result.isOverflow());
-        do {
-            result = enc.flush(writeBuf);
-            if (result.isOverflow()) {
-                writeBuf = doubleBuffer(writeBuf);
-            }
-        } while (result.isOverflow());
-
-        writeBuf.flip();
-        return writeBuf;
+        return StringUtils.stringToBuffer(str, cs);
     }
 
     /**
@@ -245,7 +181,7 @@ public class Utils
     {
         Scriptable err = cx.newObject(scope, "Error", new Object[] { message });
         err.put("code", err, code);
-        int errno = Constants.getErrno(code);
+        int errno = ErrorCodes.get().toInt(code);
         if (errno >= 0) {
             err.put("errno", err, errno);
         }
@@ -324,28 +260,7 @@ public class Utils
      */
     public static ByteBuffer catBuffers(ByteBuffer b1, ByteBuffer b2)
     {
-        if ((b1 != null) && (b2 == null)) {
-            return b1;
-        }
-        if ((b1 == null) && (b2 != null)) {
-            return b2;
-        }
-
-        int len = (b1 == null ? 0 : b1.remaining()) +
-                  (b2 == null ? 0 : b2.remaining());
-        if (len == 0) {
-            return null;
-        }
-
-        ByteBuffer r = ByteBuffer.allocate(len);
-        if (b1 != null) {
-            r.put(b1);
-        }
-        if (b2 != null) {
-            r.put(b2);
-        }
-        r.flip();
-        return r;
+        return BufferUtils.catBuffers(b1, b2);
     }
 
     /**
@@ -353,11 +268,7 @@ public class Utils
      */
     public static CharBuffer doubleBuffer(CharBuffer b)
     {
-        int newCap = Math.max(b.capacity() * 2, 1);
-        CharBuffer d = CharBuffer.allocate(newCap);
-        b.flip();
-        d.put(b);
-        return d;
+        return BufferUtils.doubleBuffer(b);
     }
 
     /**
@@ -365,11 +276,7 @@ public class Utils
      */
     public static ByteBuffer doubleBuffer(ByteBuffer b)
     {
-        int newCap = Math.max(b.capacity() * 2, 1);
-        ByteBuffer d = ByteBuffer.allocate(newCap);
-        b.flip();
-        d.put(b);
-        return d;
+        return BufferUtils.doubleBuffer(b);
     }
 
     /**
@@ -377,11 +284,7 @@ public class Utils
      */
     public static void zeroBuffer(ByteBuffer b)
     {
-        b.clear();
-        while (b.hasRemaining()) {
-            b.put((byte)0);
-        }
-        b.clear();
+        BufferUtils.zeroBuffer(b);
     }
 
     /**
@@ -389,11 +292,7 @@ public class Utils
      */
     public static ByteBuffer duplicateBuffer(ByteBuffer b)
     {
-        ByteBuffer ret = ByteBuffer.allocate(b.remaining());
-        ByteBuffer tmp = b.duplicate();
-        ret.put(tmp);
-        ret.flip();
-        return ret;
+        return BufferUtils.duplicateBuffer(b);
     }
 
     /**
@@ -401,14 +300,6 @@ public class Utils
      */
     public static String unquote(String s)
     {
-        Matcher m = DOUBLE_QUOTED.matcher(s);
-        if (m.matches()) {
-            return m.group(1);
-        }
-        Matcher m2 = SINGLE_QUOTED.matcher(s);
-        if (m2.matches()) {
-            return m2.group(1);
-        }
-        return s;
+        return StringUtils.unquote(s);
     }
 }

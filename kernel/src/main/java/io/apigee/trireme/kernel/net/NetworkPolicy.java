@@ -1,5 +1,5 @@
 /**
- * Copyright 2014 Apigee Corporation.
+ * Copyright 2013 Apigee Corporation.
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -19,18 +19,24 @@
  * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
  * SOFTWARE.
  */
-package io.apigee.trireme.core.internal.handles;
+package io.apigee.trireme.kernel.net;
 
-import java.nio.ByteBuffer;
+import java.net.InetSocketAddress;
 
 /**
- * Classes that rely on being notified when handle tasks complete implement this interface.
+ * This interface may be implemented and attached to the "sandbox" by an embedder of noderunner who
+ * wishes to restrict network access.
  */
 
-public interface HandleListener
+public interface NetworkPolicy
 {
-    void onWriteComplete(int bytesWritten, boolean inScriptThread, Object context);
-    void onWriteError(String err, boolean inScriptThread, Object context);
-    void onReadComplete(ByteBuffer buf, boolean inScriptThread, Object context);
-    void onReadError(String err, boolean inScriptThread, Object context);
+    /**
+     * Return true if an outgoing connection is allowed to the specified address and port.
+     */
+    boolean allowConnection(InetSocketAddress addr);
+
+    /**
+     * Return true if the server is allowed to listen for connections on the specified address and port.
+     */
+    boolean allowListening(InetSocketAddress addrPort);
 }

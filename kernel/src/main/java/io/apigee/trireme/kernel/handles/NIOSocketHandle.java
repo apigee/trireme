@@ -19,13 +19,13 @@
  * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
  * SOFTWARE.
  */
-package io.apigee.trireme.core.internal.handles;
+package io.apigee.trireme.kernel.handles;
 
-import io.apigee.trireme.core.NetworkPolicy;
-import io.apigee.trireme.core.NodeRuntime;
-import io.apigee.trireme.core.internal.NodeOSException;
-import io.apigee.trireme.core.modules.Constants;
-import io.apigee.trireme.net.SelectorHandler;
+import io.apigee.trireme.kernel.ErrorCodes;
+import io.apigee.trireme.kernel.GenericNodeRuntime;
+import io.apigee.trireme.kernel.OSException;
+import io.apigee.trireme.kernel.net.NetworkPolicy;
+import io.apigee.trireme.kernel.net.SelectorHandler;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -39,7 +39,6 @@ import java.nio.channels.ClosedChannelException;
 import java.nio.channels.SelectionKey;
 import java.nio.channels.ServerSocketChannel;
 import java.nio.channels.SocketChannel;
-import java.util.ArrayDeque;
 
 /**
  * Node's own script modules use this internal module to implement the guts of async TCP.
@@ -59,13 +58,13 @@ public class NIOSocketHandle
     private NetworkHandleListener   listener;
     private Object                  listenerCtx;
 
-    public NIOSocketHandle(NodeRuntime runtime)
+    public NIOSocketHandle(GenericNodeRuntime runtime)
     {
         super(runtime);
     }
 
-    public NIOSocketHandle(NodeRuntime runtime, SocketChannel clientChannel)
-        throws IOException
+    public NIOSocketHandle(GenericNodeRuntime runtime, SocketChannel clientChannel)
+        throws IOException, OSException
     {
         super(runtime);
         this.clientChannel = clientChannel;
@@ -82,7 +81,7 @@ public class NIOSocketHandle
     }
 
     private void clientInit()
-        throws IOException
+        throws IOException, OSException
     {
         readBuffer = ByteBuffer.allocate(READ_BUFFER_SIZE);
         clientChannel.configureBlocking(false);
@@ -113,24 +112,24 @@ public class NIOSocketHandle
     }
 
     public void bind(String address, int port)
-        throws NodeOSException
+        throws OSException
     {
         boundAddress = new InetSocketAddress(address, port);
         if (boundAddress.isUnresolved()) {
-            throw new NodeOSException(Constants.ENOENT);
+            throw new OSException(ErrorCodes.ENOENT);
         }
     }
 
     public void listen(int backlog, NetworkHandleListener listener, Object context)
-        throws NodeOSException
+        throws OSException
     {
         if (boundAddress == null) {
-            throw new NodeOSException(Constants.EINVAL);
+            throw new OSException(ErrorCodes.EINVAL);
         }
         NetworkPolicy netPolicy = getNetworkPolicy();
         if ((netPolicy != null) && !netPolicy.allowListening(boundAddress)) {
             log.debug("Address {} not allowed by network policy", boundAddress);
-            throw new NodeOSException(Constants.EINVAL);
+            throw new OSException(ErrorCodes.EINVAL);
         }
 
         this.listener = listener;
@@ -160,10 +159,10 @@ public class NIOSocketHandle
 
         } catch (BindException be) {
             log.debug("Error listening: {}", be);
-            throw new NodeOSException(Constants.EADDRINUSE);
+            throw new OSException(ErrorCodes.EADDRINUSE);
         } catch (IOException ioe) {
             log.debug("Error listening: {}", ioe);
-            throw new NodeOSException(Constants.EIO);
+            throw new OSException(ErrorCodes.EIO);
         } finally {
             if (!success && (svrChannel != null)) {
                 runtime.unregisterCloseable(svrChannel);
@@ -217,6 +216,8 @@ public class NIOSocketHandle
                     break;
                 } catch (IOException ioe) {
                     log.error("Error accepting a new socket: {}", ioe);
+                } catch (OSException ose) {
+                    log.error("Error accepting a new socket: {}", ose);
                 }
             } while (child != null);
         }
@@ -291,7 +292,7 @@ public class NIOSocketHandle
     }
 
     public void connect(String host, int port, NetworkHandleListener listener, Object context)
-        throws NodeOSException
+        throws OSException
     {
         boolean success = false;
         SocketChannel newChannel = null;
@@ -300,7 +301,7 @@ public class NIOSocketHandle
             NetworkPolicy netPolicy = getNetworkPolicy();
             if ((netPolicy != null) && !netPolicy.allowConnection(targetAddress)) {
                 log.debug("Disallowed connection to {} due to network policy", targetAddress);
-                throw new NodeOSException(Constants.EINVAL);
+                throw new OSException(ErrorCodes.EINVAL);
             }
 
             if (log.isDebugEnabled()) {
@@ -333,7 +334,7 @@ public class NIOSocketHandle
 
         } catch (IOException ioe) {
             log.debug("Error on connect: {}", ioe);
-            throw new NodeOSException(Constants.EIO);
+            throw new OSException(ErrorCodes.EIO);
         } finally {
             if (!success && (newChannel != null)) {
                 runtime.unregisterCloseable(newChannel);
@@ -362,14 +363,14 @@ public class NIOSocketHandle
             if (log.isDebugEnabled()) {
                 log.debug("Error completing connect: {}", ce);
             }
-            listener.onConnectError(Constants.ECONNREFUSED, true, listenerCtx);
+            listener.onConnectError(ErrorCodes.ECONNREFUSED, true, listenerCtx);
 
 
         } catch (IOException ioe) {
             if (log.isDebugEnabled()) {
                 log.debug("Error completing connect: {}", ioe);
             }
-            listener.onConnectError(Constants.EIO, true, listenerCtx);
+            listener.onConnectError(ErrorCodes.EIO, true, listenerCtx);
         }
     }
 
@@ -414,12 +415,12 @@ public class NIOSocketHandle
                 if (log.isDebugEnabled()) {
                     log.debug("Channel is closed");
                 }
-                listener.onWriteError(Constants.EOF, true, qw.getContext());
+                listener.onWriteError(ErrorCodes.EOF, true, qw.getContext());
             } catch (IOException ioe) {
                 if (log.isDebugEnabled()) {
                     log.debug("Error on write: {}", ioe);
                 }
-                listener.onWriteError(Constants.EIO, true, qw.getContext());
+                listener.onWriteError(ErrorCodes.EIO, true, qw.getContext());
             }
         }
     }
@@ -453,7 +454,7 @@ public class NIOSocketHandle
 
             } else if (read < 0) {
                 removeInterest(SelectionKey.OP_READ);
-                listener.onReadError(Constants.EOF, true, listenerCtx);
+                listener.onReadError(ErrorCodes.EOF, true, listenerCtx);
             }
         } while (readStarted && (read > 0));
     }
@@ -475,27 +476,27 @@ public class NIOSocketHandle
     }
 
     public void setNoDelay(boolean nd)
-        throws NodeOSException
+        throws OSException
     {
         if (clientChannel != null) {
             try {
                 clientChannel.socket().setTcpNoDelay(nd);
             } catch (SocketException e) {
                 log.error("Error setting TCP no delay on {}: {}", this, e);
-                throw new NodeOSException(Constants.EIO);
+                throw new OSException(ErrorCodes.EIO);
             }
         }
     }
 
     public void setKeepAlive(boolean nd)
-        throws NodeOSException
+        throws OSException
     {
         if (clientChannel != null) {
             try {
                 clientChannel.socket().setKeepAlive(nd);
             } catch (SocketException e) {
                 log.error("Error setting TCP keep alive on {}: {}", this, e);
-                throw new NodeOSException(Constants.EIO);
+                throw new OSException(ErrorCodes.EIO);
             }
         }
     }

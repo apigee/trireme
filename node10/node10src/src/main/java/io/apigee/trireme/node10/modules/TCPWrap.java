@@ -24,17 +24,19 @@ package io.apigee.trireme.node10.modules;
 import io.apigee.trireme.core.NodeRuntime;
 import io.apigee.trireme.core.ScriptTask;
 import io.apigee.trireme.core.InternalNodeModule;
-import io.apigee.trireme.core.internal.NodeOSException;
 import io.apigee.trireme.core.internal.ScriptRunner;
-import io.apigee.trireme.core.internal.handles.AbstractHandle;
-import io.apigee.trireme.core.internal.handles.NIOSocketHandle;
-import io.apigee.trireme.core.internal.handles.NetworkHandleListener;
+import io.apigee.trireme.kernel.ErrorCodes;
+import io.apigee.trireme.kernel.OSException;
+import io.apigee.trireme.kernel.handles.AbstractHandle;
+import io.apigee.trireme.kernel.handles.NIOSocketHandle;
+import io.apigee.trireme.kernel.handles.NetworkHandleListener;
 import io.apigee.trireme.core.modules.Referenceable;
 import io.apigee.trireme.net.NetUtils;
 import org.mozilla.javascript.Context;
 import org.mozilla.javascript.Function;
 import org.mozilla.javascript.Scriptable;
 import org.mozilla.javascript.ScriptableObject;
+import org.mozilla.javascript.Undefined;
 import org.mozilla.javascript.annotations.JSConstructor;
 import org.mozilla.javascript.annotations.JSFunction;
 import org.mozilla.javascript.annotations.JSGetter;
@@ -141,9 +143,9 @@ public class TCPWrap
             try {
                 sockHandle.bind(address, port);
                 clearErrno();
-            } catch (NodeOSException ose) {
+            } catch (OSException ose) {
                 setErrno(ose.getCode());
-                return ose.getCode();
+                return ose.getStringCode();
             }
             return null;
         }
@@ -164,9 +166,9 @@ public class TCPWrap
                 sockHandle.listen(backlog, this, null);
                 clearErrno();
                 return null;
-            } catch (NodeOSException ose) {
+            } catch (OSException ose) {
                 setErrno(ose.getCode());
-                return ose.getCode();
+                return ose.getStringCode();
             }
         }
 
@@ -207,7 +209,7 @@ public class TCPWrap
             Scriptable pending = cx.newObject(thisObj);
             try {
                 tcp.sockHandle.connect(host, port, tcp, pending);
-            } catch (NodeOSException ose) {
+            } catch (OSException ose) {
                 setErrno(ose.getCode());
                 return null;
             }
@@ -225,20 +227,20 @@ public class TCPWrap
         public void onConnectComplete(boolean inScriptThread, final Object context)
         {
             if (inScriptThread) {
-                sendOnConnectComplete(Context.getCurrentContext(), context, 0, true, true);
+                sendOnConnectComplete(Context.getCurrentContext(), context, null, true, true);
             } else {
                 runtime.enqueueTask(new ScriptTask() {
                     @Override
                     public void execute(Context cx, Scriptable scope)
                     {
-                        sendOnConnectComplete(cx, context, 0, true, true);
+                        sendOnConnectComplete(cx, context, null, true, true);
                     }
                 });
             }
         }
 
         @Override
-        public void onConnectError(final String err, boolean inScriptThread, final Object context)
+        public void onConnectError(final int err, boolean inScriptThread, final Object context)
         {
             if (inScriptThread) {
                 sendOnConnectComplete(Context.getCurrentContext(), context, err, false, false);
@@ -253,7 +255,7 @@ public class TCPWrap
             }
         }
 
-        private void sendOnConnectComplete(Context cx, Object context, Object status,
+        private void sendOnConnectComplete(Context cx, Object context, Integer err,
                                            boolean readable, boolean writable)
         {
             Scriptable s = (Scriptable)context;
@@ -261,13 +263,17 @@ public class TCPWrap
             if (onComplete != null) {
                 Function ocf = (Function)onComplete;
 
-                if (status instanceof String) {
-                    setErrno(status.toString());
-                } else {
+                Object errStr;
+                if (err == null) {
                     clearErrno();
+                    // Yes, the code in net.js specifically checks for a value of zero
+                    errStr = Integer.valueOf(0);
+                } else {
+                    setErrno(err);
+                    errStr = ErrorCodes.get().toString(err);
                 }
                 ocf.call(cx, ocf, this,
-                         new Object[]{status, this, s, readable, writable});
+                         new Object[]{errStr, this, s, readable, writable});
             }
         }
 
@@ -320,7 +326,7 @@ public class TCPWrap
             try {
                 sockHandle.setNoDelay(nd);
                 clearErrno();
-            } catch (NodeOSException ose) {
+            } catch (OSException ose) {
                 setErrno(ose.getCode());
             }
         }
@@ -332,7 +338,7 @@ public class TCPWrap
             try {
                 sockHandle.setKeepAlive(nd);
                 clearErrno();
-            } catch (NodeOSException ose) {
+            } catch (OSException ose) {
                 setErrno(ose.getCode());
             }
         }

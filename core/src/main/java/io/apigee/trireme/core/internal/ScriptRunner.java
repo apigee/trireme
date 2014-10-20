@@ -38,7 +38,8 @@ import io.apigee.trireme.core.modules.NativeModule;
 import io.apigee.trireme.core.modules.Process;
 import io.apigee.trireme.core.modules.ProcessWrap;
 import io.apigee.trireme.kernel.PathTranslator;
-import io.apigee.trireme.net.SelectorHandler;
+import io.apigee.trireme.kernel.net.NetworkPolicy;
+import io.apigee.trireme.kernel.net.SelectorHandler;
 import org.mozilla.javascript.Context;
 import org.mozilla.javascript.ContextAction;
 import org.mozilla.javascript.EcmaError;
@@ -233,6 +234,11 @@ public class ScriptRunner
     @Override
     public Sandbox getSandbox() {
         return sandbox;
+    }
+
+    @Override
+    public NetworkPolicy getNetworkPolicy() {
+        return (sandbox == null ? null : sandbox.getNetworkPolicy());
     }
 
     @Override

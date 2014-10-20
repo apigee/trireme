@@ -18,9 +18,14 @@
       <version>0.8.4-SNAPSHOT</version>
       <scope>provided</scope>
     </dependency>
-      <dependency>
+    <dependency>
       <groupId>io.apigee.trireme</groupId>
       <artifactId>trireme-core</artifactId>
+      <version>0.8.4-SNAPSHOT</version>
+    </dependency>
+    <dependency>
+      <groupId>io.apigee.trireme</groupId>
+      <artifactId>trireme-kernel</artifactId>
       <version>0.8.4-SNAPSHOT</version>
     </dependency>
     <dependency>

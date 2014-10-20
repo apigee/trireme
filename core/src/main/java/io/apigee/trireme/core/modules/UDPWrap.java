@@ -21,14 +21,14 @@
  */
 package io.apigee.trireme.core.modules;
 
-import io.apigee.trireme.core.NetworkPolicy;
 import io.apigee.trireme.core.NodeRuntime;
 import io.apigee.trireme.core.ScriptTask;
 import io.apigee.trireme.core.InternalNodeModule;
-import io.apigee.trireme.core.internal.NodeOSException;
 import io.apigee.trireme.core.internal.ScriptRunner;
-import io.apigee.trireme.core.internal.handles.HandleListener;
-import io.apigee.trireme.core.internal.handles.NIODatagramHandle;
+import io.apigee.trireme.kernel.ErrorCodes;
+import io.apigee.trireme.kernel.OSException;
+import io.apigee.trireme.kernel.handles.HandleListener;
+import io.apigee.trireme.kernel.handles.NIODatagramHandle;
 import io.apigee.trireme.net.NetUtils;
 import org.mozilla.javascript.Context;
 import org.mozilla.javascript.Function;
@@ -124,7 +124,7 @@ public class UDPWrap
                 self.handle.bind(address, port);
                 clearErrno();
                 return 0;
-            } catch (NodeOSException nse) {
+            } catch (OSException nse) {
                 setErrno(nse.getCode());
                 return -1;
             }
@@ -167,14 +167,14 @@ public class UDPWrap
             ByteBuffer bbuf = buf.getBuffer();
             try {
                 self.handle.send(host, port, bbuf, self, qw);
-            } catch (final NodeOSException nse) {
+            } catch (final OSException nse) {
                 self.runner.enqueueTask(new ScriptTask() {
                     @Override
                     public void execute(Context cx, Scriptable scope)
                     {
                         if (qw.onComplete != null) {
                             qw.onComplete.call(cx, scope, null,
-                              new Object[] { nse.getCode(), self, qw, buf });
+                              new Object[] { ErrorCodes.get().toString(nse.getCode()), self, qw, buf });
                         }
                     }
                 });
@@ -255,7 +255,7 @@ public class UDPWrap
                 self.handle.setMulticastTtl(ttl);
                 clearErrno();
                 return 0;
-            } catch (NodeOSException nse) {
+            } catch (OSException nse) {
                 setErrno(nse.getCode());
                 return -1;
             }
@@ -272,7 +272,7 @@ public class UDPWrap
                 self.handle.setMulticastLoopback(loop != 0);
                 clearErrno();
                 return 0;
-            } catch (NodeOSException nse) {
+            } catch (OSException nse) {
                 setErrno(nse.getCode());
                 return -1;
             }
@@ -289,7 +289,7 @@ public class UDPWrap
                 self.handle.setBroadcast(broadcastOn != 0);
                 clearErrno();
                 return 0;
-            } catch (NodeOSException nse) {
+            } catch (OSException nse) {
                 setErrno(nse.getCode());
                 return -1;
             }
@@ -320,7 +320,7 @@ public class UDPWrap
         }
 
         @Override
-        public void onWriteError(String err, boolean inScriptThread, Object context)
+        public void onWriteError(int err, boolean inScriptThread, Object context)
         {
             final QueuedWrite qw = (QueuedWrite)context;
             runner.enqueueTask(new ScriptTask() {
@@ -357,7 +357,7 @@ public class UDPWrap
         }
 
         @Override
-        public void onReadError(String err, boolean inScriptThread, Object context)
+        public void onReadError(int err, boolean inScriptThread, Object context)
         {
             runner.enqueueTask(new ScriptTask() {
                 @Override

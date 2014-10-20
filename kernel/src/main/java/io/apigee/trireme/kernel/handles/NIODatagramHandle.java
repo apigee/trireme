@@ -19,13 +19,13 @@
  * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
  * SOFTWARE.
  */
-package io.apigee.trireme.core.internal.handles;
+package io.apigee.trireme.kernel.handles;
 
-import io.apigee.trireme.core.NetworkPolicy;
-import io.apigee.trireme.core.NodeRuntime;
-import io.apigee.trireme.core.internal.NodeOSException;
-import io.apigee.trireme.core.modules.Constants;
-import io.apigee.trireme.net.SelectorHandler;
+import io.apigee.trireme.kernel.ErrorCodes;
+import io.apigee.trireme.kernel.GenericNodeRuntime;
+import io.apigee.trireme.kernel.OSException;
+import io.apigee.trireme.kernel.net.NetworkPolicy;
+import io.apigee.trireme.kernel.net.SelectorHandler;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -53,17 +53,17 @@ public class NIODatagramHandle
     private HandleListener listener;
     private ByteBuffer receiveBuffer;
 
-    public NIODatagramHandle(NodeRuntime runtime)
+    public NIODatagramHandle(GenericNodeRuntime runtime)
     {
         super(runtime);
     }
 
     public void bind(String address, int port)
-        throws NodeOSException
+        throws OSException
     {
         InetSocketAddress bound = new InetSocketAddress(address, port);
         if (bound.isUnresolved()) {
-            throw new NodeOSException(Constants.ENOENT);
+            throw new OSException(ErrorCodes.ENOENT);
         }
 
         boolean success = false;
@@ -84,10 +84,10 @@ public class NIODatagramHandle
             success = true;
         } catch (BindException be) {
             log.debug("Error binding: {}", be);
-            throw new NodeOSException(Constants.EADDRINUSE);
+            throw new OSException(ErrorCodes.EADDRINUSE);
         } catch (IOException ioe) {
             log.debug("Error binding: {}", ioe);
-            throw new NodeOSException(Constants.EIO);
+            throw new OSException(ErrorCodes.EIO);
         } finally {
             if (!success) {
                 runtime.unregisterCloseable(channel);
@@ -114,13 +114,13 @@ public class NIODatagramHandle
     }
 
     public int send(String host, int port, ByteBuffer buf, HandleListener listener, Object context)
-        throws NodeOSException
+        throws OSException
     {
         InetSocketAddress addr = new InetSocketAddress(host, port);
         NetworkPolicy netPolicy = getNetworkPolicy();
         if ((netPolicy != null) && !netPolicy.allowListening(addr)) {
             log.debug("Address {} not allowed by network policy", addr);
-            throw new NodeOSException(Constants.EINVAL);
+            throw new OSException(ErrorCodes.EINVAL);
         }
 
         QueuedWrite qw = new QueuedWrite(buf, listener, context);
@@ -189,12 +189,12 @@ public class NIODatagramHandle
                 if (log.isDebugEnabled()) {
                     log.debug("Channel is closed");
                 }
-                listener.onWriteError(Constants.EOF, true, qw.getContext());
+                listener.onWriteError(ErrorCodes.EOF, true, qw.getContext());
             } catch (IOException ioe) {
                 if (log.isDebugEnabled()) {
                     log.debug("Error on write: {}", ioe);
                 }
-                listener.onWriteError(Constants.EIO, true, qw.getContext());
+                listener.onWriteError(ErrorCodes.EIO, true, qw.getContext());
             }
         }
     }
@@ -273,38 +273,38 @@ public class NIODatagramHandle
     }
 
     public void setBroadcast(boolean on)
-        throws NodeOSException
+        throws OSException
     {
         try {
             channel.socket().setBroadcast(true);
         } catch (IOException e) {
-            throw new NodeOSException(Constants.EIO, e);
+            throw new OSException(ErrorCodes.EIO, e);
         }
     }
 
     public void setMulticastTtl(int ttl)
-        throws NodeOSException
+        throws OSException
     {
         try {
             channel.setOption(StandardSocketOptions.IP_MULTICAST_TTL, ttl);
         } catch (IOException e) {
-            throw new NodeOSException(Constants.EIO, e);
+            throw new OSException(ErrorCodes.EIO, e);
         } catch (NoClassDefFoundError cnfe) {
             // This happens on Java 6
-            throw new NodeOSException(Constants.ESRCH, "Multicast not available on Java 6");
+            throw new OSException(ErrorCodes.ESRCH, "Multicast not available on Java 6");
         }
     }
 
     public void setMulticastLoopback(boolean on)
-        throws NodeOSException
+        throws OSException
     {
         try {
             channel.setOption(StandardSocketOptions.IP_MULTICAST_LOOP, on);
         } catch (IOException e) {
-            throw new NodeOSException(Constants.EIO, e);
+            throw new OSException(ErrorCodes.EIO, e);
         } catch (NoClassDefFoundError cnfe) {
             // This happens on Java 6
-            throw new NodeOSException(Constants.ESRCH, "Multicast not available on Java 6");
+            throw new OSException(ErrorCodes.ESRCH, "Multicast not available on Java 6");
         }
     }
 }

@@ -55,8 +55,9 @@ public class NIOSocketHandle
     private SocketChannel           clientChannel;
     private boolean                 readStarted;
     private ByteBuffer              readBuffer;
-    private NetworkHandleListener   listener;
-    private Object                  listenerCtx;
+    private IOCompletionHandler<AbstractHandle> serverConnectionHandler;
+    private IOCompletionHandler<Integer>        clientConnectionHandler;
+    private IOCompletionHandler<ByteBuffer>     readHandler;
 
     public NIOSocketHandle(GenericNodeRuntime runtime)
     {
@@ -120,7 +121,7 @@ public class NIOSocketHandle
         }
     }
 
-    public void listen(int backlog, NetworkHandleListener listener, Object context)
+    public void listen(int backlog, IOCompletionHandler<AbstractHandle> handler)
         throws OSException
     {
         if (boundAddress == null) {
@@ -132,8 +133,7 @@ public class NIOSocketHandle
             throw new OSException(ErrorCodes.EINVAL);
         }
 
-        this.listener = listener;
-        this.listenerCtx = context;
+        this.serverConnectionHandler = handler;
         if (log.isDebugEnabled()) {
             log.debug("Server listening on {} with backlog {}",
                       boundAddress, backlog);
@@ -198,7 +198,7 @@ public class NIOSocketHandle
                         try {
                             runtime.registerCloseable(child);
                             NIOSocketHandle sock = new NIOSocketHandle(runtime, child);
-                            listener.onConnection(true, sock, listenerCtx);
+                            serverConnectionHandler.ioComplete(0, sock);
                             success = true;
                         } finally {
                             if (!success) {
@@ -224,16 +224,16 @@ public class NIOSocketHandle
     }
 
     @Override
-    public int write(ByteBuffer buf, HandleListener listener, Object context)
+    public int write(ByteBuffer buf, IOCompletionHandler<Integer> handler)
     {
-        QueuedWrite qw = new QueuedWrite(buf, listener, context);
+        QueuedWrite qw = new QueuedWrite(buf, handler);
         offerWrite(qw);
         return qw.length;
     }
 
-    public void shutdown(HandleListener listener, Object context)
+    public void shutdown(IOCompletionHandler<Integer> handler)
     {
-        QueuedWrite qw = new QueuedWrite(null, listener, context);
+        QueuedWrite qw = new QueuedWrite(null, handler);
         qw.setShutdown(true);
         offerWrite(qw);
     }
@@ -258,7 +258,7 @@ public class NIOSocketHandle
                 writeReady = false;
                 queueWrite(qw);
             } else {
-                qw.getListener().onWriteComplete(qw.getLength(), true, qw.getContext());
+                qw.getHandler().ioComplete(0, qw.getLength());
             }
         } else {
             queueWrite(qw);
@@ -272,11 +272,10 @@ public class NIOSocketHandle
     }
 
     @Override
-    public void startReading(HandleListener listener, Object context)
+    public void startReading(IOCompletionHandler<ByteBuffer> handler)
     {
         if (!readStarted) {
-            this.listener = (NetworkHandleListener)listener;
-            this.listenerCtx = context;
+            this.readHandler = handler;
             addInterest(SelectionKey.OP_READ);
             readStarted = true;
         }
@@ -291,7 +290,7 @@ public class NIOSocketHandle
         }
     }
 
-    public void connect(String host, int port, NetworkHandleListener listener, Object context)
+    public void connect(String host, int port, IOCompletionHandler<Integer> handler)
         throws OSException
     {
         boolean success = false;
@@ -316,8 +315,7 @@ public class NIOSocketHandle
             runtime.registerCloseable(newChannel);
             clientChannel = newChannel;
             clientInit();
-            this.listener = listener;
-            this.listenerCtx = context;
+            this.clientConnectionHandler = handler;
             newChannel.connect(targetAddress);
             selKey = newChannel.register(runtime.getSelector(),
                                                     SelectionKey.OP_CONNECT,
@@ -357,20 +355,20 @@ public class NIOSocketHandle
             if (log.isDebugEnabled()) {
                 log.debug("Client {} connected", clientChannel);
             }
-            listener.onConnectComplete(true, listenerCtx);
+            clientConnectionHandler.ioComplete(0, 0);
 
         } catch (ConnectException ce) {
             if (log.isDebugEnabled()) {
                 log.debug("Error completing connect: {}", ce);
             }
-            listener.onConnectError(ErrorCodes.ECONNREFUSED, true, listenerCtx);
+            clientConnectionHandler.ioComplete(ErrorCodes.ECONNREFUSED, 0);
 
 
         } catch (IOException ioe) {
             if (log.isDebugEnabled()) {
                 log.debug("Error completing connect: {}", ioe);
             }
-            listener.onConnectError(ErrorCodes.EIO, true, listenerCtx);
+            clientConnectionHandler.ioComplete(ErrorCodes.EIO, 0);
         }
     }
 
@@ -393,7 +391,7 @@ public class NIOSocketHandle
                         log.debug("Sending shutdown for {}", clientChannel);
                     }
                     clientChannel.socket().shutdownOutput();
-                    listener.onWriteComplete(0, true, qw.getContext());
+                    qw.getHandler().ioComplete(0, 0);
                 } else {
                     int written = clientChannel.write(qw.buf);
                     if (log.isDebugEnabled()) {
@@ -407,7 +405,7 @@ public class NIOSocketHandle
                         addInterest(SelectionKey.OP_WRITE);
                         break;
                     } else {
-                        listener.onWriteComplete(qw.getLength(), true, qw.getContext());
+                        qw.getHandler().ioComplete(0, qw.getLength());
                     }
                 }
 
@@ -415,12 +413,12 @@ public class NIOSocketHandle
                 if (log.isDebugEnabled()) {
                     log.debug("Channel is closed");
                 }
-                listener.onWriteError(ErrorCodes.EOF, true, qw.getContext());
+                qw.getHandler().ioComplete(ErrorCodes.EOF, 0);
             } catch (IOException ioe) {
                 if (log.isDebugEnabled()) {
                     log.debug("Error on write: {}", ioe);
                 }
-                listener.onWriteError(ErrorCodes.EIO, true, qw.getContext());
+                qw.getHandler().ioComplete(ErrorCodes.EIO, 0);
             }
         }
     }
@@ -450,11 +448,11 @@ public class NIOSocketHandle
                 buf.put(readBuffer);
                 buf.flip();
                 readBuffer.clear();
-                listener.onReadComplete(buf, true, listenerCtx);
+                readHandler.ioComplete(0, buf);
 
             } else if (read < 0) {
                 removeInterest(SelectionKey.OP_READ);
-                listener.onReadError(ErrorCodes.EOF, true, listenerCtx);
+                readHandler.ioComplete(ErrorCodes.EOF, null);
             }
         } while (readStarted && (read > 0));
     }

@@ -77,7 +77,7 @@ public class JdbcConnection
         final Function cb = functionArg(args, 0, false);
         final JdbcConnection self = (JdbcConnection)thisObj;
 
-        final Scriptable domain = self.runtime.getDomain();
+        final Object domain = self.runtime.getDomain();
         self.runtime.getAsyncPool().execute(new Runnable() {
             @Override
             public void run()
@@ -154,7 +154,7 @@ public class JdbcConnection
         final Function cb = functionArg(args, 0, true);
         final JdbcConnection self = (JdbcConnection)thisObj;
 
-        final Scriptable domain = self.runtime.getDomain();
+        final Object domain = self.runtime.getDomain();
         self.runtime.getAsyncPool().execute(new Runnable() {
             @Override
             public void run()
@@ -178,7 +178,7 @@ public class JdbcConnection
         final Function cb = functionArg(args, 0, true);
         final JdbcConnection self = (JdbcConnection)thisObj;
 
-        final Scriptable domain = self.runtime.getDomain();
+        final Object domain = self.runtime.getDomain();
         self.runtime.getAsyncPool().execute(new Runnable() {
             @Override
             public void run()
@@ -207,7 +207,7 @@ public class JdbcConnection
         final Scriptable params =
             ((args[1] == null) || Undefined.instance.equals(args[1])) ? null : objArg(args, 1, Scriptable.class, true);
 
-        final Scriptable domain = self.runtime.getDomain();
+        final Object domain = self.runtime.getDomain();
         self.runtime.getAsyncPool().execute(new Runnable() {
             @Override
             public void run()
@@ -274,7 +274,7 @@ public class JdbcConnection
         final Scriptable params =
             ((args[1] == null) || Undefined.instance.equals(args[1])) ? null : objArg(args, 1, Scriptable.class, true);
 
-        final Scriptable domain = self.runtime.getDomain();
+        final Object domain = self.runtime.getDomain();
         self.runtime.getAsyncPool().execute(new Runnable() {
             @Override
             public void run()
@@ -391,7 +391,7 @@ public class JdbcConnection
         }
     }
 
-    private void returnError(final Function cb, Scriptable domain, final SQLException se)
+    private void returnError(final Function cb, Object domain, final SQLException se)
     {
         if (log.isDebugEnabled()) {
             log.debug("Error in SQL: {}", se);

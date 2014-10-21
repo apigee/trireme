@@ -185,7 +185,7 @@ public class AsyncFilesystem
             }
 
             final FSImpl self = this;
-            final Scriptable domain = runner.getDomain();
+            final Object domain = runner.getDomain();
             runner.pin();
             pool.execute(new Runnable()
             {
@@ -505,7 +505,7 @@ public class AsyncFilesystem
                 return new Object[] { Context.getUndefinedValue(), count, buf };
 
             } else {
-                final Scriptable domain = runner.getDomain();
+                final Object domain = runner.getDomain();
                 final long readPos = pos;
                 runner.pin();
                 handle.file.read(readBuf, pos, null,
@@ -607,7 +607,7 @@ public class AsyncFilesystem
                 return new Object[] { Context.getUndefinedValue(), count, buf };
 
             } else {
-                final Scriptable domain = runner.getDomain();
+                final Object domain = runner.getDomain();
                 final long readPos = pos;
 
                 // To make certain tests pass, we'll pre-increment the file position before writing

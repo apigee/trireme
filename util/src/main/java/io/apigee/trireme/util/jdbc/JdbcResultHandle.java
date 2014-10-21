@@ -75,7 +75,7 @@ public class JdbcResultHandle
         final Function cb = functionArg(args, 1, true);
         final JdbcResultHandle self = (JdbcResultHandle)thisObj;
 
-        final Scriptable domain = self.runtime.getDomain();
+        final Object domain = self.runtime.getDomain();
         self.runtime.getAsyncPool().execute(new Runnable() {
             @Override
             public void run()

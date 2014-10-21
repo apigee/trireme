@@ -55,7 +55,7 @@ public class JavaInputStreamHandle
     }
 
     @Override
-    public void startReading(final HandleListener listener, final Object context)
+    public void startReading(final IOCompletionHandler<ByteBuffer> handler)
     {
         if (reading) {
             return;
@@ -71,12 +71,12 @@ public class JavaInputStreamHandle
             @Override
             public void run()
             {
-                readLoop(listener, context);
+                readLoop(handler);
             }
         });
     }
 
-    protected void readLoop(HandleListener listener, Object context)
+    protected void readLoop(IOCompletionHandler<ByteBuffer> handler)
     {
         byte[] readBuf = new byte[READ_BUFFER_SIZE];
         try {
@@ -87,22 +87,35 @@ public class JavaInputStreamHandle
                     ByteBuffer buf = ByteBuffer.allocate(count);
                     buf.put(readBuf, 0, count);
                     buf.flip();
-                    listener.onReadComplete(buf, false, context);
+
+                    deliverResult(0, buf, handler);
                 }
             }
             if (count < 0) {
-                listener.onReadError(ErrorCodes.EOF, false, context);
+                deliverResult(ErrorCodes.EOF, null, handler);
             }
 
         } catch (InterruptedIOException iee) {
             // Nothing special to do, since we were asked to stop reading
         } catch (EOFException eofe) {
-            listener.onReadError(ErrorCodes.EOF, false, context);
+            deliverResult(ErrorCodes.EOF, null, handler);
         } catch (IOException ioe) {
             int err =
                 ("Stream Closed".equalsIgnoreCase(ioe.getMessage()) ? ErrorCodes.EOF : ErrorCodes.EIO);
-            listener.onReadError(err, false, context);
+            deliverResult(err, null, handler);
         }
+    }
+
+    private void deliverResult(final int err, final ByteBuffer val,
+                               final IOCompletionHandler<ByteBuffer> handler)
+    {
+        runtime.executeScriptTask(new Runnable() {
+            @Override
+            public void run()
+            {
+                handler.ioComplete(err, val);
+            }
+        }, null);
     }
 
     @Override

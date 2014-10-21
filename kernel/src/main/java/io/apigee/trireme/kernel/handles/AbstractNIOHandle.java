@@ -104,17 +104,16 @@ public abstract class AbstractNIOHandle
     {
         ByteBuffer buf;
         int length;
-        HandleListener listener;
+        IOCompletionHandler<Integer> handler;
         Object context;
         boolean shutdown;
         SocketAddress address;
 
-        public QueuedWrite(ByteBuffer buf, HandleListener listener, Object context)
+        public QueuedWrite(ByteBuffer buf, IOCompletionHandler<Integer> handler)
         {
             this.buf = buf;
             this.length = (buf == null ? 0 : buf.remaining());
-            this.listener = listener;
-            this.context = context;
+            this.handler = handler;
         }
 
         public ByteBuffer getBuf()
@@ -137,14 +136,14 @@ public abstract class AbstractNIOHandle
             this.length = length;
         }
 
-        public HandleListener getListener()
+        public IOCompletionHandler<Integer> getHandler()
         {
-            return listener;
+            return handler;
         }
 
-        public void setListener(HandleListener listener)
+        public void setListener(IOCompletionHandler<Integer> handler)
         {
-            this.listener = listener;
+            this.handler = handler;
         }
 
         public Object getContext()

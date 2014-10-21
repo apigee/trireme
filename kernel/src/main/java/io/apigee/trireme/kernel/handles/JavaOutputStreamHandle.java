@@ -44,7 +44,7 @@ public class JavaOutputStreamHandle
     }
 
     @Override
-    public int write(ByteBuffer buf, HandleListener listener, Object context)
+    public int write(ByteBuffer buf, IOCompletionHandler<Integer> handler)
     {
         try {
             int len = buf.remaining();
@@ -56,11 +56,11 @@ public class JavaOutputStreamHandle
                 buf.get(tmp);
                 out.write(tmp);
             }
-            listener.onWriteComplete(len, true, context);
+            handler.ioComplete(0, len);
             return len;
 
         } catch (IOException ioe) {
-            listener.onWriteError(ErrorCodes.EIO, true, context);
+            handler.ioComplete(ErrorCodes.EIO, 0);
             return 0;
         }
     }

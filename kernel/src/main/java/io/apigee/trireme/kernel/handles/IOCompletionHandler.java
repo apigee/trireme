@@ -21,16 +21,20 @@
  */
 package io.apigee.trireme.kernel.handles;
 
-import java.nio.ByteBuffer;
-
 /**
- * Classes that rely on being notified when handle tasks complete implement this interface.
+ * This is a generic interface that gets invoked for various I/O completion events.
+ * It always has an integer error code, and may have an optional additional parameter
+ * which is genericized. It is a single-function interface so it may be easily used
+ * by JavaScript and by lambdas.
  */
 
-public interface HandleListener
+public interface IOCompletionHandler<T>
 {
-    void onWriteComplete(int bytesWritten, boolean inScriptThread, Object context);
-    void onWriteError(int err, boolean inScriptThread, Object context);
-    void onReadComplete(ByteBuffer buf, boolean inScriptThread, Object context);
-    void onReadError(int err, boolean inScriptThread, Object context);
+    /**
+     * Indicate that I/O is complete. The context will determine what that means.
+     *
+     * @param errCode an integer "Unix" error code if I/O failed, and 0 otherwise
+     * @param value An additional value, such as a buffer or a handle.
+     */
+    void ioComplete(int errCode, T value);
 }

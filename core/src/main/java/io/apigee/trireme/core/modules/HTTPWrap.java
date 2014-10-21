@@ -843,7 +843,7 @@ public class HTTPWrap
                     if (log.isDebugEnabled()) {
                         log.debug("Write complete: success = {} closed = {} cause = {}", success, closed, cause);
                     }
-                    Scriptable domain = server.getRunner().getDomain();
+                    Object domain = server.getRunner().getDomain();
                     server.getRunner().enqueueTask(new ScriptTask()
                     {
                         @Override

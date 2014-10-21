@@ -28,11 +28,12 @@ import io.apigee.trireme.kernel.Charsets;
 import io.apigee.trireme.core.internal.ScriptRunner;
 import io.apigee.trireme.kernel.ErrorCodes;
 import io.apigee.trireme.kernel.handles.AbstractHandle;
-import io.apigee.trireme.kernel.handles.HandleListener;
 import io.apigee.trireme.core.modules.Buffer;
 import io.apigee.trireme.core.modules.Referenceable;
+import io.apigee.trireme.kernel.handles.IOCompletionHandler;
 import org.mozilla.javascript.Context;
 import org.mozilla.javascript.Function;
+import org.mozilla.javascript.ScriptRuntime;
 import org.mozilla.javascript.Scriptable;
 import org.mozilla.javascript.ScriptableObject;
 import org.mozilla.javascript.Undefined;
@@ -82,7 +83,6 @@ public class JavaStreamWrap
 
     public static class StreamWrapImpl
         extends Referenceable
-        implements HandleListener
     {
         public static final String CLASS_NAME = "JavaStream";
 
@@ -158,7 +158,8 @@ public class JavaStreamWrap
 
             if (cb != null) {
                 self.runtime.enqueueCallback(cb, self, null,
-                                             self.runtime.getDomain(), new Object[] {});
+                                             (Scriptable)(self.runtime.getDomain()),
+                                             ScriptRuntime.emptyArgs);
             }
         }
 
@@ -167,14 +168,18 @@ public class JavaStreamWrap
         public static Object writeBuffer(Context cx, Scriptable thisObj, Object[] args, Function func)
         {
             Buffer.BufferImpl buf = objArg(args, 0, Buffer.BufferImpl.class, true);
-            StreamWrapImpl self = (StreamWrapImpl)thisObj;
+            final StreamWrapImpl self = (StreamWrapImpl)thisObj;
 
-            Scriptable req = cx.newObject(self);
+            final Scriptable req = cx.newObject(self);
 
-            int len  = self.handle.write(buf.getBuffer(), self, req);
-
-            req.put("bytes", req, len);
-            self.byteCount += len;
+            self.handle.write(buf.getBuffer(), new IOCompletionHandler<Integer>()
+            {
+                @Override
+                public void ioComplete(int errCode, Integer value)
+                {
+                    self.writeComplete(errCode, value, req);
+                }
+            });
             return req;
         }
 
@@ -204,50 +209,37 @@ public class JavaStreamWrap
 
         private Scriptable doWrite(Context cx, String s, Charset cs)
         {
-            Scriptable req = cx.newObject(this);
+            final Scriptable req = cx.newObject(this);
 
-            int len  = handle.write(s, cs, this, req);
+            handle.write(s, cs, new IOCompletionHandler<Integer>()
+            {
+                @Override
+                public void ioComplete(int errCode, Integer value)
+                {
+                    writeComplete(errCode, value, req);
+                }
+            });
 
-            req.put("bytes", req, len);
-            byteCount += len;
             return req;
         }
 
-        private void deliverWriteCallback(Context cx, Scriptable req, Integer err)
+        protected void writeComplete(final int err, final int len, final Scriptable req)
         {
-            Object onComplete = ScriptableObject.getProperty(req, "oncomplete");
-            if ((onComplete != null) && !Undefined.instance.equals(onComplete)) {
-                Function afterWrite = (Function)onComplete;
-                Object errStr = (err == null ? Undefined.instance : ErrorCodes.get().toString(err));
-                afterWrite.call(cx, afterWrite, this,
-                                new Object[] { errStr, this, req });
-            }
-        }
-
-        @Override
-        public void onWriteComplete(int bytesWritten, boolean inScriptThread, Object context)
-        {
-            // Always deliver the write callback on the next tick, because the caller expects to add a
-            // callback to the return value before it can be invoked.
-            final Scriptable req = (Scriptable)context;
+            // Have to make sure that this happens in the next tick, so always enqueue
             runtime.enqueueTask(new ScriptTask() {
                 @Override
                 public void execute(Context cx, Scriptable scope)
                 {
-                    deliverWriteCallback(cx, req, null);
-                }
-            });
-        }
+                    req.put("bytes", req, len);
+                    byteCount += len;
 
-        @Override
-        public void onWriteError(final int err, boolean inScriptThread, Object context)
-        {
-            final Scriptable req = (Scriptable)context;
-            runtime.enqueueTask(new ScriptTask() {
-                @Override
-                public void execute(Context cx, Scriptable scope)
-                {
-                    deliverWriteCallback(cx, req, err);
+                    Object onComplete = ScriptableObject.getProperty(req, "oncomplete");
+                    if ((onComplete != null) && !Undefined.instance.equals(onComplete)) {
+                        Function afterWrite = (Function)onComplete;
+                        Object errStr = (err == 0 ? Undefined.instance : ErrorCodes.get().toString(err));
+                        afterWrite.call(cx, afterWrite, StreamWrapImpl.this,
+                                        new Object[] { errStr, StreamWrapImpl.this, req });
+                    }
                 }
             });
         }
@@ -257,7 +249,14 @@ public class JavaStreamWrap
         public void readStart()
         {
             if (!reading) {
-                handle.startReading(this, null);
+                handle.startReading(new IOCompletionHandler<ByteBuffer>()
+                {
+                    @Override
+                    public void ioComplete(int errCode, ByteBuffer value)
+                    {
+                        onRead(errCode, value);
+                    }
+                });
                 reading = true;
             }
         }
@@ -272,48 +271,18 @@ public class JavaStreamWrap
             }
         }
 
-        private void deliverReadCallback(Context cx, ByteBuffer buf, Integer err)
+        protected void onRead(int err, ByteBuffer buf)
         {
+            // "onread" is set before starting reading so we don't need to re-enqueue here
+            Context cx = Context.getCurrentContext();
             if (onRead != null) {
                 Buffer.BufferImpl jBuf = (buf == null ? null : Buffer.BufferImpl.newBuffer(cx, this, buf, false));
-                if (err == null) {
+                if (err == 0) {
                     runtime.clearErrno();
                 } else {
                     runtime.setErrno(ErrorCodes.get().toString(err));
                 }
                 onRead.call(cx, onRead, this, new Object[] { jBuf, 0, (buf == null ? 0 : buf.remaining()) });
-            }
-        }
-
-        @Override
-        public void onReadComplete(final ByteBuffer buf, boolean inScriptThread, Object context)
-        {
-            if (inScriptThread) {
-                deliverReadCallback(Context.getCurrentContext(), buf, null);
-            } else {
-                runtime.enqueueTask(new ScriptTask() {
-                    @Override
-                    public void execute(Context cx, Scriptable scope)
-                    {
-                        deliverReadCallback(cx, buf, null);
-                    }
-                });
-            }
-        }
-
-        @Override
-        public void onReadError(final int err, boolean inScriptThread, Object context)
-        {
-            if (inScriptThread) {
-                deliverReadCallback(Context.getCurrentContext(), null, err);
-            } else {
-                runtime.enqueueTask(new ScriptTask() {
-                    @Override
-                    public void execute(Context cx, Scriptable scope)
-                    {
-                        deliverReadCallback(cx, null, err);
-                    }
-                });
             }
         }
     }

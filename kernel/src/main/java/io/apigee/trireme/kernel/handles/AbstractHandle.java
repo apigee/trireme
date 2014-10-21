@@ -32,12 +32,12 @@ import java.nio.charset.Charset;
 
 public abstract class AbstractHandle
 {
-    public int write(ByteBuffer buf, HandleListener listener, Object context)
+    public int write(ByteBuffer buf, IOCompletionHandler<Integer> handler)
     {
         throw new IllegalStateException("Handle not capable of writing");
     }
 
-    public int write(String s, Charset cs, HandleListener listener, Object context)
+    public int write(String s, Charset cs, IOCompletionHandler<Integer> handler)
     {
         // Convert the string to a buffer, which may involve some re-allocating and copying if the
         // string has many long multi-byte characters.
@@ -45,7 +45,7 @@ public abstract class AbstractHandle
         // chunk of data that it produces. This would optimize for allocating and copying ByteBuffers
         // but it would result in more "write" calls to the socket.
         ByteBuffer buf = StringUtils.stringToBuffer(s, cs);
-        return write(buf, listener, context);
+        return write(buf, handler);
     }
 
     public int getWritesOutstanding()
@@ -53,7 +53,7 @@ public abstract class AbstractHandle
         return 0;
     }
 
-    public void startReading(HandleListener listener, Object context)
+    public void startReading(IOCompletionHandler<ByteBuffer> handler)
     {
         throw new IllegalStateException("Handle not capable of reading");
     }

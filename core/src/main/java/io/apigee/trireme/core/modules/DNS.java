@@ -105,7 +105,7 @@ public class DNS
 
             // TO prevent many, many tests from exiting, we have to "pin" the main script runner thread
             // before we go off into another thread, so it doesn't exit.
-            final Scriptable domain = runner.getDomain();
+            final Object domain = runner.getDomain();
             runner.pin();
             runner.getAsyncPool().execute(new Runnable()
             {
@@ -120,7 +120,7 @@ public class DNS
         /**
          * This message does an actual DNS lookup from a thread pool to prevent blocking.
          */
-        private void doLookup(String name, int family, Function callback, Scriptable domain)
+        private void doLookup(String name, int family, Function callback, Object domain)
         {
             Context cx = Context.enter();
             try {
@@ -143,7 +143,7 @@ public class DNS
         }
 
         private void invokeCallback(Context cx, Function callback, String code, String address,
-                                    int family, Scriptable domain)
+                                    int family, Object domain)
         {
             Scriptable err = null;
             if (code != null) {

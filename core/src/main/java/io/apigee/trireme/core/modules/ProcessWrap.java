@@ -243,7 +243,7 @@ public class ProcessWrap
             }
             spawned.setFinished(true);
             processTable.remove(pid);
-            final Scriptable domain = runner.getDomain();
+            final Object domain = runner.getDomain();
             runner.enqueueTask(new ScriptTask()
             {
                 @Override

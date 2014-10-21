@@ -81,4 +81,15 @@ public interface GenericNodeRuntime
      * certain hosts on an internal network.
      */
     public NetworkPolicy getNetworkPolicy();
+
+    /**
+     * Return the current Node.js domain of the calling scrpit. This should be replaced
+     * when executing asynchronous tasks.
+     */
+    public Object getDomain();
+
+    /**
+     * Execute a task in the script thread, and set the domain on the thread before doing so.
+     */
+    public void executeScriptTask(Runnable task, Object domain);
 }

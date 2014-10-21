@@ -22,21 +22,19 @@
 package io.apigee.trireme.node10.modules;
 
 import io.apigee.trireme.core.NodeRuntime;
-import io.apigee.trireme.core.ScriptTask;
 import io.apigee.trireme.core.InternalNodeModule;
 import io.apigee.trireme.core.internal.ScriptRunner;
 import io.apigee.trireme.kernel.ErrorCodes;
 import io.apigee.trireme.kernel.OSException;
 import io.apigee.trireme.kernel.handles.AbstractHandle;
+import io.apigee.trireme.kernel.handles.IOCompletionHandler;
 import io.apigee.trireme.kernel.handles.NIOSocketHandle;
-import io.apigee.trireme.kernel.handles.NetworkHandleListener;
 import io.apigee.trireme.core.modules.Referenceable;
 import io.apigee.trireme.net.NetUtils;
 import org.mozilla.javascript.Context;
 import org.mozilla.javascript.Function;
 import org.mozilla.javascript.Scriptable;
 import org.mozilla.javascript.ScriptableObject;
-import org.mozilla.javascript.Undefined;
 import org.mozilla.javascript.annotations.JSConstructor;
 import org.mozilla.javascript.annotations.JSFunction;
 import org.mozilla.javascript.annotations.JSGetter;
@@ -78,7 +76,6 @@ public class TCPWrap
 
     public static class TCPImpl
         extends JavaStreamWrap.StreamWrapImpl
-        implements NetworkHandleListener
     {
         public static final String CLASS_NAME       = "TCP";
 
@@ -163,7 +160,14 @@ public class TCPWrap
         public String listen(int backlog)
         {
             try {
-                sockHandle.listen(backlog, this, null);
+                sockHandle.listen(backlog, new IOCompletionHandler<AbstractHandle>()
+                {
+                    @Override
+                    public void ioComplete(int errCode, AbstractHandle value)
+                    {
+                        onConnection(value);
+                    }
+                });
                 clearErrno();
                 return null;
             } catch (OSException ose) {
@@ -172,26 +176,9 @@ public class TCPWrap
             }
         }
 
-        @Override
-        public void onConnection(boolean inScriptThread, final AbstractHandle handle, Object context)
+        protected void onConnection(AbstractHandle handle)
         {
-            if (inScriptThread) {
-                Context cx = Context.getCurrentContext();
-                sendOnConnection(cx, handle);
-            } else {
-                runtime.enqueueTask(new ScriptTask()
-                {
-                    @Override
-                    public void execute(Context cx, Scriptable scope)
-                    {
-                        sendOnConnection(cx, handle);
-                    }
-                });
-            }
-        }
-
-        private void sendOnConnection(Context cx, AbstractHandle handle)
-        {
+            Context cx = Context.getCurrentContext();
             if (onConnection != null) {
                 TCPImpl sock = (TCPImpl)cx.newObject(this, CLASS_NAME, new Object[] { handle });
                 onConnection.call(cx, onConnection, this, new Object[] { sock });
@@ -202,13 +189,20 @@ public class TCPWrap
         @SuppressWarnings("unused")
         public static Object connect(Context cx, Scriptable thisObj, Object[] args, Function func)
         {
-            TCPImpl tcp = (TCPImpl)thisObj;
+            final TCPImpl tcp = (TCPImpl)thisObj;
             String host = stringArg(args, 0);
             int port = intArg(args, 1);
 
-            Scriptable pending = cx.newObject(thisObj);
+            final Scriptable pending = cx.newObject(thisObj);
             try {
-                tcp.sockHandle.connect(host, port, tcp, pending);
+                tcp.sockHandle.connect(host, port, new IOCompletionHandler<Integer>()
+                {
+                    @Override
+                    public void ioComplete(int errCode, Integer value)
+                    {
+                        tcp.connectComplete(errCode, pending);
+                    }
+                });
             } catch (OSException ose) {
                 setErrno(ose.getCode());
                 return null;
@@ -220,57 +214,29 @@ public class TCPWrap
         @SuppressWarnings("unused")
         public static Object connect6(Context cx, Scriptable thisObj, Object[] args, Function func)
         {
-            return connect(cx, thisObj,  args, func);
+            return connect(cx, thisObj, args, func);
         }
 
-        @Override
-        public void onConnectComplete(boolean inScriptThread, final Object context)
+        protected void connectComplete(final int err, final Scriptable s)
         {
-            if (inScriptThread) {
-                sendOnConnectComplete(Context.getCurrentContext(), context, null, true, true);
-            } else {
-                runtime.enqueueTask(new ScriptTask() {
-                    @Override
-                    public void execute(Context cx, Scriptable scope)
-                    {
-                        sendOnConnectComplete(cx, context, null, true, true);
-                    }
-                });
-            }
-        }
-
-        @Override
-        public void onConnectError(final int err, boolean inScriptThread, final Object context)
-        {
-            if (inScriptThread) {
-                sendOnConnectComplete(Context.getCurrentContext(), context, err, false, false);
-            } else {
-                runtime.enqueueTask(new ScriptTask() {
-                    @Override
-                    public void execute(Context cx, Scriptable scope)
-                    {
-                        sendOnConnectComplete(cx, context, err, false, false);
-                    }
-                });
-            }
-        }
-
-        private void sendOnConnectComplete(Context cx, Object context, Integer err,
-                                           boolean readable, boolean writable)
-        {
-            Scriptable s = (Scriptable)context;
             Object onComplete = ScriptableObject.getProperty(s, "oncomplete");
             if (onComplete != null) {
+                Context cx = Context.getCurrentContext();
                 Function ocf = (Function)onComplete;
 
                 Object errStr;
-                if (err == null) {
+                boolean readable;
+                boolean writable;
+
+                if (err == 0) {
                     clearErrno();
                     // Yes, the code in net.js specifically checks for a value of zero
                     errStr = Integer.valueOf(0);
+                    readable = writable = true;
                 } else {
                     setErrno(err);
                     errStr = ErrorCodes.get().toString(err);
+                    readable = writable = false;
                 }
                 ocf.call(cx, ocf, this,
                          new Object[]{errStr, this, s, readable, writable});
@@ -281,11 +247,19 @@ public class TCPWrap
         @SuppressWarnings("unused")
         public static Object shutdown(Context cx, Scriptable thisObj, Object[] args, Function func)
         {
-            TCPImpl tcp = (TCPImpl)thisObj;
-            Scriptable req = cx.newObject(tcp);
+            final TCPImpl tcp = (TCPImpl)thisObj;
+            final Scriptable req = cx.newObject(tcp);
 
             clearErrno();
-            tcp.sockHandle.shutdown(tcp, req);
+            tcp.sockHandle.shutdown(new IOCompletionHandler<Integer>()
+            {
+                @Override
+                public void ioComplete(int errCode, Integer value)
+                {
+                    // Re-use same code we use to deliver callbacks on write
+                    tcp.writeComplete(errCode, 0, req);
+                }
+            });
             return req;
         }
 

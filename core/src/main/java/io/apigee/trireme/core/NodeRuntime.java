@@ -70,7 +70,7 @@ public interface NodeRuntime
      * any thread and will cause the script to be run in the main script thread. This method is the <i>only</i>
      * way that code running outside the main script thread should cause work to be done in the main thread.
      */
-    void enqueueTask(ScriptTask taskm, Scriptable domain);
+    void enqueueTask(ScriptTask task, Object domain);
 
 
     /**
@@ -96,14 +96,7 @@ public interface NodeRuntime
      * @param domain the domain where this callback should run -- should set to the current domain
      * @param args arguments for the function, or null
      */
-    void enqueueCallback(Function f, Scriptable scope, Scriptable thisObj, Scriptable domain, Object[] args);
-
-    /**
-     * Get the current domain. Modules that run tasks in the main thread from other threads must first save the
-     * current domain so that they can be restored. (The built-in Node "nextTick," timer, and event libraries
-     * do this automatically, but new Java code must do the same.
-     */
-    Scriptable getDomain();
+    void enqueueCallback(Function f, Scriptable scope, Scriptable thisObj, Object domain, Object[] args);
 
     /**
      * Given a file path, return a File object that represents the actual file to open. If a PathTranslator

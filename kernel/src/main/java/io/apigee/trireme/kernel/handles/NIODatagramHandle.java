@@ -50,7 +50,7 @@ public class NIODatagramHandle
 
     private DatagramChannel channel;
     private boolean readStarted;
-    private HandleListener listener;
+    private IOCompletionHandler<ReceivedDatagram> readHandler;
     private ByteBuffer receiveBuffer;
 
     public NIODatagramHandle(GenericNodeRuntime runtime)
@@ -113,7 +113,7 @@ public class NIODatagramHandle
         }
     }
 
-    public int send(String host, int port, ByteBuffer buf, HandleListener listener, Object context)
+    public int send(String host, int port, ByteBuffer buf, IOCompletionHandler<Integer> handler)
         throws OSException
     {
         InetSocketAddress addr = new InetSocketAddress(host, port);
@@ -123,7 +123,7 @@ public class NIODatagramHandle
             throw new OSException(ErrorCodes.EINVAL);
         }
 
-        QueuedWrite qw = new QueuedWrite(buf, listener, context);
+        QueuedWrite qw = new QueuedWrite(buf, handler);
         qw.setAddress(addr);
         offerWrite(qw);
         return qw.length;
@@ -149,7 +149,7 @@ public class NIODatagramHandle
                 writeReady = false;
                 queueWrite(qw);
             } else {
-                qw.getListener().onWriteComplete(qw.getLength(), true, qw.getContext());
+                qw.getHandler().ioComplete(0, qw.getLength());
             }
         } else {
             queueWrite(qw);
@@ -182,28 +182,27 @@ public class NIODatagramHandle
                     addInterest(SelectionKey.OP_WRITE);
                     break;
                 } else {
-                    listener.onWriteComplete(qw.getLength(), true, qw.getContext());
+                    qw.getHandler().ioComplete(0, qw.getLength());
                 }
 
             } catch (ClosedChannelException cce) {
                 if (log.isDebugEnabled()) {
                     log.debug("Channel is closed");
                 }
-                listener.onWriteError(ErrorCodes.EOF, true, qw.getContext());
+                qw.getHandler().ioComplete(ErrorCodes.EOF, 0);
             } catch (IOException ioe) {
                 if (log.isDebugEnabled()) {
                     log.debug("Error on write: {}", ioe);
                 }
-                listener.onWriteError(ErrorCodes.EIO, true, qw.getContext());
+                qw.getHandler().ioComplete(ErrorCodes.EIO, 0);
             }
         }
     }
 
-    @Override
-    public void startReading(HandleListener listener, Object context)
+    public void startReadingDatagrams(IOCompletionHandler<ReceivedDatagram> handler)
     {
         if (!readStarted) {
-            this.listener = listener;
+            this.readHandler = handler;
             if (receiveBuffer == null) {
                 try {
                     receiveBuffer =
@@ -256,7 +255,7 @@ public class NIODatagramHandle
                 ByteBuffer readBuf = ByteBuffer.allocate(receiveBuffer.remaining());
                 readBuf.put(receiveBuffer);
                 readBuf.flip();
-                listener.onReadComplete(readBuf, true, addr);
+                readHandler.ioComplete(0, new ReceivedDatagram(readBuf, addr));
             }
         } while (readStarted && (addr != null));
     }
@@ -305,6 +304,26 @@ public class NIODatagramHandle
         } catch (NoClassDefFoundError cnfe) {
             // This happens on Java 6
             throw new OSException(ErrorCodes.ESRCH, "Multicast not available on Java 6");
+        }
+    }
+
+    public static class ReceivedDatagram
+    {
+        private final ByteBuffer buf;
+        private final SocketAddress address;
+
+        ReceivedDatagram(ByteBuffer buf, SocketAddress addr)
+        {
+            this.buf = buf;
+            this.address = addr;
+        }
+
+        public ByteBuffer getBuffer() {
+            return buf;
+        }
+
+        public SocketAddress getAddress() {
+            return address;
         }
     }
 }

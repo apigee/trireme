@@ -142,7 +142,7 @@ public class Filesystem
             }
 
             final FSImpl self = this;
-            final Scriptable domain = runner.getDomain();
+            final Object domain = runner.getDomain();
             runner.pin();
             pool.execute(new Runnable()
             {

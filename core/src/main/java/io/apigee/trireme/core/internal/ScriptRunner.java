@@ -370,10 +370,10 @@ public class ScriptRunner
      * This method uses a concurrent queue so it may be called from any thread.
      */
     @Override
-    public void enqueueCallback(Function f, Scriptable scope, Scriptable thisObj, Scriptable domain, Object[] args)
+    public void enqueueCallback(Function f, Scriptable scope, Scriptable thisObj, Object domain, Object[] args)
     {
         Callback cb = new Callback(f, scope, thisObj, args);
-        cb.setDomain(domain);
+        cb.setDomain((Scriptable)domain);
         tickFunctions.offer(cb);
         selector.wakeup();
     }
@@ -391,10 +391,19 @@ public class ScriptRunner
      * This method uses a concurrent queue so it may be called from any thread.
      */
     @Override
-    public void enqueueTask(ScriptTask task, Scriptable domain)
+    public void enqueueTask(ScriptTask task, Object domain)
     {
         Task t = new Task(task, scope);
-        t.setDomain(domain);
+        t.setDomain((Scriptable)domain);
+        tickFunctions.offer(t);
+        selector.wakeup();
+    }
+
+    @Override
+    public void executeScriptTask(Runnable r, Object domain)
+    {
+        RunnableTask t = new RunnableTask(r);
+        t.setDomain((Scriptable)domain);
         tickFunctions.offer(t);
         selector.wakeup();
     }
@@ -508,7 +517,8 @@ public class ScriptRunner
         return t;
     }
 
-    public Scriptable getDomain()
+    @Override
+    public Object getDomain()
     {
         return ArgUtils.ensureValid(process.getDomain());
     }
@@ -1318,17 +1328,17 @@ public class ScriptRunner
         }
     }
 
-    private final class Task
+    private abstract class AbstractTask
         extends Activity
     {
-        private ScriptTask task;
         private Scriptable scope;
 
-        Task(ScriptTask task, Scriptable scope)
+        protected AbstractTask(Scriptable scope)
         {
-            this.task = task;
             this.scope = scope;
         }
+
+        protected abstract void executeTask(Context cx);
 
         @Override
         void execute(Context cx)
@@ -1346,7 +1356,7 @@ public class ScriptRunner
                 enter.call(cx, enter, domain, ScriptRuntime.emptyArgs);
             }
 
-            task.execute(cx, scope);
+            executeTask(cx);
 
             // Do NOT do this next bit in a try..finally block. Why not? Because the exception handling
             // logic in runMain depends on "process.domain" still being set, and it will clean up
@@ -1358,6 +1368,42 @@ public class ScriptRunner
                 Function exit = (Function)ScriptableObject.getProperty(domain, "exit");
                 exit.call(cx, exit, domain, ScriptRuntime.emptyArgs);
             }
+        }
+    }
+
+    private final class Task
+        extends AbstractTask
+    {
+        private ScriptTask task;
+
+        Task(ScriptTask task, Scriptable scope)
+        {
+            super(scope);
+            this.task = task;
+        }
+
+        @Override
+        protected void executeTask(Context cx)
+        {
+            task.execute(cx, scope);
+        }
+    }
+
+    private final class RunnableTask
+        extends AbstractTask
+    {
+        private Runnable task;
+
+        RunnableTask(Runnable task)
+        {
+            super(ScriptRunner.this.scope);
+            this.task = task;
+        }
+
+        @Override
+        protected void executeTask(Context cx)
+        {
+            task.run();
         }
     }
 }

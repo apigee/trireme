@@ -66,29 +66,29 @@ public class ConsoleHandle
     }
 
     @Override
-    public int write(ByteBuffer buf, HandleListener listener, Object context)
+    public int write(ByteBuffer buf, IOCompletionHandler<Integer> handler)
     {
         int len = buf.remaining();
         String str = StringUtils.bufferToString(buf, Charsets.UTF8);
         writer.print(str);
         writer.flush();
-        listener.onWriteComplete(len, true, context);
+        handler.ioComplete(0, len);
         return len;
     }
 
     @Override
-    public int write(String s, Charset cs, HandleListener listener, Object context)
+    public int write(String s, Charset cs, IOCompletionHandler<Integer> handler)
     {
         // Not strictly correct but enough for now
         int len = s.length();
         writer.print(s);
         writer.flush();
-        listener.onWriteComplete(len, true, context);
+        handler.ioComplete(0, len);
         return len;
     }
 
     @Override
-    public void startReading(final HandleListener listener, final Object context)
+    public void startReading(final IOCompletionHandler<ByteBuffer> handler)
     {
         if (reading) {
             return;
@@ -101,12 +101,12 @@ public class ConsoleHandle
             @Override
             public void run()
             {
-                readLoop(listener, context);
+                readLoop(handler);
             }
         });
     }
 
-    protected void readLoop(HandleListener listener, Object context)
+    protected void readLoop(IOCompletionHandler<ByteBuffer> handler)
     {
         char[] readBuf = new char[READ_BUFFER_SIZE];
         try {
@@ -116,21 +116,21 @@ public class ConsoleHandle
                 if (count > 0) {
                     String rs = new String(readBuf, 0, count);
                     ByteBuffer buf = StringUtils.stringToBuffer(rs, Charsets.UTF8);
-                    listener.onReadComplete(buf, false, context);
+                    deliverResult(0, buf, handler);
                 }
             }
             if (count < 0) {
-                listener.onReadError(ErrorCodes.EOF, false, context);
+                deliverResult(ErrorCodes.EOF, null, handler);
             }
 
         } catch (InterruptedIOException iee) {
             // Nothing special to do, since we were asked to stop reading
         } catch (EOFException eofe) {
-            listener.onReadError(ErrorCodes.EOF, false, context);
+            deliverResult(ErrorCodes.EOF, null, handler);
         } catch (IOException ioe) {
             int err =
                 ("Stream Closed".equalsIgnoreCase(ioe.getMessage()) ? ErrorCodes.EOF : ErrorCodes.EIO);
-            listener.onReadError(err, false, context);
+            deliverResult(err, null, handler);
         }
     }
 
@@ -144,6 +144,18 @@ public class ConsoleHandle
         if (readTask != null) {
             readTask.cancel(true);
         }
+    }
+
+    private void deliverResult(final int err, final ByteBuffer val,
+                               final IOCompletionHandler<ByteBuffer> handler)
+    {
+        runtime.executeScriptTask(new Runnable() {
+            @Override
+            public void run()
+            {
+                handler.ioComplete(err, val);
+            }
+        }, null);
     }
 
     @Override

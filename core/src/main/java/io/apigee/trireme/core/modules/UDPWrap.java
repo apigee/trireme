@@ -27,7 +27,7 @@ import io.apigee.trireme.core.InternalNodeModule;
 import io.apigee.trireme.core.internal.ScriptRunner;
 import io.apigee.trireme.kernel.ErrorCodes;
 import io.apigee.trireme.kernel.OSException;
-import io.apigee.trireme.kernel.handles.HandleListener;
+import io.apigee.trireme.kernel.handles.IOCompletionHandler;
 import io.apigee.trireme.kernel.handles.NIODatagramHandle;
 import io.apigee.trireme.net.NetUtils;
 import org.mozilla.javascript.Context;
@@ -45,6 +45,7 @@ import static io.apigee.trireme.core.ArgUtils.*;
 
 import java.lang.reflect.InvocationTargetException;
 import java.net.InetSocketAddress;
+import java.net.SocketAddress;
 import java.nio.ByteBuffer;
 
 public class UDPWrap
@@ -73,7 +74,6 @@ public class UDPWrap
 
     public static class UDPImpl
         extends Referenceable
-        implements HandleListener
     {
         public static final String CLASS_NAME = "UDP";
 
@@ -166,7 +166,14 @@ public class UDPWrap
 
             ByteBuffer bbuf = buf.getBuffer();
             try {
-                self.handle.send(host, port, bbuf, self, qw);
+                self.handle.send(host, port, bbuf, new IOCompletionHandler<Integer>()
+                {
+                    @Override
+                    public void ioComplete(int errCode, Integer value)
+                    {
+                        self.writeComplete(errCode, qw);
+                    }
+                });
             } catch (final OSException nse) {
                 self.runner.enqueueTask(new ScriptTask() {
                     @Override
@@ -190,13 +197,43 @@ public class UDPWrap
             return send(cx, thisObj, args, func);
         }
 
+        protected void writeComplete(final int err, final QueuedWrite qw)
+        {
+            // Always put the completion callback on the queue because "oncomplete" is not
+            // set in Node 10.x until after the call returns and this callback might
+            // return first.
+            runner.enqueueTask(new ScriptTask() {
+                @Override
+                public void execute(Context cx, Scriptable scope)
+                {
+                    if (qw.onComplete != null) {
+                        if (err == 0) {
+                            qw.onComplete.call(cx, qw.onComplete, UDPImpl.this,
+                                               new Object[] { 0, UDPImpl.this, qw, qw.buf });
+                        } else {
+                            qw.onComplete.call(cx, qw.onComplete, UDPImpl.this,
+                                               new Object[] { ErrorCodes.get().toString(err),
+                                                              UDPImpl.this, qw, qw.buf });
+                        }
+                    }
+                }
+            });
+        }
+
         @JSFunction
         @SuppressWarnings("unused")
         public void recvStart()
         {
             clearErrno();
             if (handle != null) {
-                handle.startReading(this, null);
+                handle.startReadingDatagrams(new IOCompletionHandler<NIODatagramHandle.ReceivedDatagram>()
+                {
+                    @Override
+                    public void ioComplete(int errCode, NIODatagramHandle.ReceivedDatagram value)
+                    {
+                        readComplete(errCode, value.getBuffer(), value.getAddress());
+                    }
+                });
             }
             requestPin();
         }
@@ -209,6 +246,33 @@ public class UDPWrap
             clearErrno();
             if (handle != null) {
                 handle.stopReading();
+            }
+        }
+
+        protected void readComplete(int err, ByteBuffer bbuf, SocketAddress addr)
+        {
+            Context cx = Context.getCurrentContext();
+
+            // onmessage gets set before readStart so it's OK to call this in line, not on the queue
+            if (err == 0) {
+                if (onMessage != null) {
+                    Buffer.BufferImpl buf =
+                        Buffer.BufferImpl.newBuffer(cx, this, bbuf, false);
+                    Scriptable rinfo = cx.newObject(this);
+                    if (addr instanceof InetSocketAddress) {
+                        InetSocketAddress iAddr = (InetSocketAddress)addr;
+                        rinfo.put("port", rinfo, iAddr.getPort());
+                        rinfo.put("address", rinfo, iAddr.getAddress().getHostAddress());
+                    }
+                    onMessage.call(cx, onMessage, this,
+                                   new Object[] { this, buf, 0, buf.getLength(), rinfo });
+                }
+
+            } else {
+                if (onMessage != null) {
+                    onMessage.call(cx, onMessage, UDPImpl.this,
+                                   new Object[] { UDPImpl.this, null, Constants.EIO, 0 });
+                }
             }
         }
 
@@ -302,74 +366,6 @@ public class UDPWrap
             setErrno(Constants.EINVAL);
             return -1;
         }
-
-        @Override
-        public void onWriteComplete(int bytesWritten, boolean inScriptThread, Object context)
-        {
-            final QueuedWrite qw = (QueuedWrite)context;
-            runner.enqueueTask(new ScriptTask() {
-                @Override
-                public void execute(Context cx, Scriptable scope)
-                {
-                    if (qw.onComplete != null) {
-                        qw.onComplete.call(cx, qw.onComplete, UDPImpl.this,
-                                           new Object[] { 0, UDPImpl.this, qw, qw.buf });
-                    }
-                }
-            });
-        }
-
-        @Override
-        public void onWriteError(int err, boolean inScriptThread, Object context)
-        {
-            final QueuedWrite qw = (QueuedWrite)context;
-            runner.enqueueTask(new ScriptTask() {
-                @Override
-                public void execute(Context cx, Scriptable scope)
-                {
-                    if (qw.onComplete != null) {
-                        qw.onComplete.call(cx, qw.onComplete, UDPImpl.this,
-                                           new Object[] { Constants.EIO, UDPImpl.this, qw, qw.buf });
-                    }
-                }
-            });
-        }
-
-        @Override
-        public void onReadComplete(final ByteBuffer bbuf, boolean inScriptThread, final Object context)
-        {
-            runner.enqueueTask(new ScriptTask() {
-                @Override
-                public void execute(Context cx, Scriptable scope)
-                {
-                    if (onMessage != null) {
-                        InetSocketAddress addr = (InetSocketAddress)context;
-                        Buffer.BufferImpl buf =
-                            Buffer.BufferImpl.newBuffer(cx, scope, bbuf, false);
-                        Scriptable rinfo = cx.newObject(UDPImpl.this);
-                        rinfo.put("port", rinfo, addr.getPort());
-                        rinfo.put("address", rinfo, addr.getAddress().getHostAddress());
-                        onMessage.call(cx, onMessage, UDPImpl.this,
-                                       new Object[] { UDPImpl.this, buf, 0, buf.getLength(), rinfo });
-                    }
-                }
-            });
-        }
-
-        @Override
-        public void onReadError(int err, boolean inScriptThread, Object context)
-        {
-            runner.enqueueTask(new ScriptTask() {
-                @Override
-                public void execute(Context cx, Scriptable scope)
-                {
-                    if (onMessage != null) {
-                        onMessage.call(cx, onMessage, UDPImpl.this,
-                                       new Object[] { UDPImpl.this, null, Constants.EIO, 0 });
-                    }
-                }
-            });
-        }
     }
 
     public static class QueuedWrite
@@ -378,7 +374,7 @@ public class UDPWrap
         public static final String CLASS_NAME = "_writeWrap";
 
         Function onComplete;
-        Scriptable domain;
+        Object domain;
         Buffer.BufferImpl buf;
 
         @Override

@@ -114,7 +114,7 @@ public class JdbcWrap
             final Properties finalProps = properties;
 
             self.runtime.pin();
-            final Scriptable domain = self.runtime.getDomain();
+            final Object domain = self.runtime.getDomain();
             self.runtime.getAsyncPool().execute(new Runnable() {
                 @Override
                 public void run()

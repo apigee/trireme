@@ -172,7 +172,7 @@ public class JavaStreamWrap
 
             final Scriptable req = cx.newObject(self);
 
-            self.handle.write(buf.getBuffer(), new IOCompletionHandler<Integer>()
+            int len = self.handle.write(buf.getBuffer(), new IOCompletionHandler<Integer>()
             {
                 @Override
                 public void ioComplete(int errCode, Integer value)
@@ -180,6 +180,7 @@ public class JavaStreamWrap
                     self.writeComplete(errCode, value, req);
                 }
             });
+            self.updateByteCount(req, len);
             return req;
         }
 
@@ -211,7 +212,7 @@ public class JavaStreamWrap
         {
             final Scriptable req = cx.newObject(this);
 
-            handle.write(s, cs, new IOCompletionHandler<Integer>()
+            int len = handle.write(s, cs, new IOCompletionHandler<Integer>()
             {
                 @Override
                 public void ioComplete(int errCode, Integer value)
@@ -219,8 +220,16 @@ public class JavaStreamWrap
                     writeComplete(errCode, value, req);
                 }
             });
+            // net.js updates the write count before the completion callback is made
+            updateByteCount(req, len);
 
             return req;
+        }
+
+        private void updateByteCount(Scriptable req, int len)
+        {
+            req.put("bytes", req, len);
+            byteCount += len;
         }
 
         protected void writeComplete(final int err, final int len, final Scriptable req)
@@ -230,9 +239,6 @@ public class JavaStreamWrap
                 @Override
                 public void execute(Context cx, Scriptable scope)
                 {
-                    req.put("bytes", req, len);
-                    byteCount += len;
-
                     Object onComplete = ScriptableObject.getProperty(req, "oncomplete");
                     if ((onComplete != null) && !Undefined.instance.equals(onComplete)) {
                         Function afterWrite = (Function)onComplete;

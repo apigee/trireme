@@ -24,9 +24,13 @@ package io.apigee.trireme.core.modules.crypto;
 import io.apigee.trireme.core.ScriptTask;
 import io.apigee.trireme.core.Utils;
 import io.apigee.trireme.core.internal.CertificateParser;
+import io.apigee.trireme.kernel.BiCallback;
+import io.apigee.trireme.kernel.Callback;
+import io.apigee.trireme.kernel.TriCallback;
 import io.apigee.trireme.kernel.crypto.SSLCiphers;
 import io.apigee.trireme.core.internal.ScriptRunner;
 import io.apigee.trireme.core.modules.Buffer;
+import io.apigee.trireme.kernel.tls.TLSConnection;
 import org.mozilla.javascript.Context;
 import org.mozilla.javascript.Function;
 import org.mozilla.javascript.ScriptRuntime;
@@ -68,29 +72,11 @@ public class ConnectionImpl
 
     public static final String CLASS_NAME = "Connection";
 
-    protected static final ByteBuffer EMPTY = ByteBuffer.allocate(0);
-
-    private final ArrayDeque<QueuedChunk> outgoingChunks = new ArrayDeque<QueuedChunk>();
-    private final ArrayDeque<QueuedChunk> incomingChunks = new ArrayDeque<QueuedChunk>();
     private final int id = lastId.incrementAndGet();
 
     private ScriptRunner runtime;
 
-    private boolean isServer;
-    private boolean requestCert;
-    private boolean rejectUnauthorized;
-    private String serverName;
-    private int serverPort;
-
     SecureContextImpl context;
-    private SSLEngine engine;
-    private ByteBuffer readBuf;
-    private ByteBuffer writeBuf;
-
-    private boolean handshaking;
-    private boolean initFinished;
-    private boolean sentShutdown;
-    private boolean receivedShutdown;
 
     private Function onHandshakeStart;
     private Function onHandshakeDone;
@@ -98,8 +84,7 @@ public class ConnectionImpl
     private Function onUnwrap;
     private Function onError;
 
-    private Scriptable verifyError;
-    private Scriptable error;
+    private TLSConnection processor;
 
     @SuppressWarnings("unused")
     public ConnectionImpl()
@@ -136,7 +121,11 @@ public class ConnectionImpl
         boolean rejectUnauthorized = booleanArg(args, 3, false);
         int port = intArg(args, 4, -1);
 
-        ConnectionImpl conn = new ConnectionImpl(isServer, requestCert, rejectUnauthorized, serverName, port);
+        ScriptRunner runtime = (ScriptRunner)cx.getThreadLocal(ScriptRunner.RUNNER);
+
+        ConnectionImpl conn =
+            new ConnectionImpl(runtime,
+                               isServer, requestCert, rejectUnauthorized, serverName, port);
         conn.context = ctxImpl;
 
         if (log.isDebugEnabled()) {
@@ -144,19 +133,16 @@ public class ConnectionImpl
                       conn.id, isServer, requestCert, rejectUnauthorized);
         }
 
-        conn.runtime = (ScriptRunner)cx.getThreadLocal(ScriptRunner.RUNNER);
-
         return conn;
     }
 
-    private ConnectionImpl(boolean serverMode, boolean requestCert,
+    private ConnectionImpl(ScriptRunner runtime,
+                           boolean serverMode, boolean requestCert,
                            boolean rejectUnauth, String serverName, int port)
     {
-        this.isServer = serverMode;
-        this.requestCert = requestCert;
-        this.rejectUnauthorized = rejectUnauth;
-        this.serverName = serverName;
-        this.serverPort = port;
+        this.runtime = runtime;
+        this.processor = new TLSConnection(runtime, serverMode, requestCert,
+                                           rejectUnauth, serverName, port);
     }
 
     /**
@@ -172,42 +158,8 @@ public class ConnectionImpl
 
         SSLContext ctx = self.context.makeContext(cx, self);
 
-        if (!self.isServer && (self.serverName != null)) {
-            self.engine = ctx.createSSLEngine(self.serverName, self.serverPort);
-        } else {
-            self.engine = ctx.createSSLEngine();
-        }
-
-        self.engine.setUseClientMode(!self.isServer);
-        if (self.requestCert) {
-            if (self.rejectUnauthorized) {
-                self.engine.setNeedClientAuth(true);
-            } else {
-                self.engine.setWantClientAuth(true);
-            }
-        }
-        if (log.isDebugEnabled()) {
-            log.debug("Created SSLEngine {}", self.engine);
-        }
-
-        if (self.context.getCipherSuites() != null) {
-            try {
-                if (log.isDebugEnabled()) {
-                    log.debug("Setting cipher suites {}", self.context.getCipherSuites());
-                }
-                self.engine.setEnabledCipherSuites(self.context.getCipherSuites());
-            } catch (IllegalArgumentException iae) {
-                // Invalid cipher suites for some reason are not an SSLException
-                self.handleError(cx, new SSLException(iae));
-                // But keep on trucking to simplify later code
-            }
-        }
-
-        if (log.isDebugEnabled()) {
-            log.debug("Allocating read and write buffers of size {}", self.engine.getSession().getPacketBufferSize());
-        }
-        self.readBuf = ByteBuffer.allocate(self.engine.getSession().getPacketBufferSize());
-        self.writeBuf = ByteBuffer.allocate(self.engine.getSession().getPacketBufferSize());
+        self.processor.init(ctx, self.context.getCipherSuites(),
+                            self.context.getTrustManager());
     }
 
     /**
@@ -219,10 +171,7 @@ public class ConnectionImpl
     {
         ConnectionImpl self = (ConnectionImpl)thisObj;
 
-        if (!self.isServer) {
-            self.outgoingChunks.add(new QueuedChunk(null, null));
-            self.encodeLoop(cx);
-        }
+        self.processor.start();
         return 0;
     }
 
@@ -230,6 +179,19 @@ public class ConnectionImpl
     @SuppressWarnings("unused")
     public void setHandshakeStart(Function f) {
         onHandshakeStart = f;
+        if (onHandshakeStart == null) {
+            processor.setHandshakeStartCallback(null);
+        } else {
+            processor.setHandshakeStartCallback(new Callback<Void>()
+            {
+                @Override
+                public void call(Void val)
+                {
+                    onHandshakeStart.call(Context.getCurrentContext(), onHandshakeStart,
+                                          ConnectionImpl.this, ScriptRuntime.emptyArgs);
+                }
+            });
+        }
     }
 
     @JSGetter("onhandshakestart")
@@ -240,8 +202,22 @@ public class ConnectionImpl
 
     @JSSetter("onhandshakedone")
     @SuppressWarnings("unused")
-    public void setHandshakeDone(Function f) {
+    public void setHandshakeDone(Function f)
+    {
         onHandshakeDone = f;
+        if (onHandshakeDone == null) {
+            processor.setHandshakeDoneCallback(null);
+        } else {
+            processor.setHandshakeDoneCallback(new Callback<Void>()
+            {
+                @Override
+                public void call(Void val)
+                {
+                    onHandshakeDone.call(Context.getCurrentContext(), onHandshakeDone,
+                                         ConnectionImpl.this, ScriptRuntime.emptyArgs);
+                }
+            });
+        }
     }
 
     @JSGetter("onhandshakedone")
@@ -252,8 +228,30 @@ public class ConnectionImpl
 
     @JSSetter("onwrap")
     @SuppressWarnings("unused")
-    public void setOnWrap(Function f) {
+    public void setOnWrap(Function f)
+    {
         onWrap = f;
+        if (f == null) {
+            processor.setWriteCallback(null);
+        } else {
+            processor.setWriteCallback(new TriCallback<ByteBuffer, Boolean, Object>()
+            {
+                @Override
+                public void call(final ByteBuffer bb, final Boolean shutdown, final Object cb)
+                {
+                    runtime.enqueueTask(new ScriptTask()
+                    {
+                        @Override
+                        public void execute(Context cx, Scriptable scope)
+                        {
+                            ConnectionImpl self = ConnectionImpl.this;
+                            Buffer.BufferImpl buf = Buffer.BufferImpl.newBuffer(cx, self, bb, false);
+                            runtime.enqueueCallback(onWrap, self, self, new Object[]{buf, shutdown, cb});
+                        }
+                    });
+                }
+            });
+        }
     }
 
     @JSGetter("onwrap")
@@ -264,8 +262,30 @@ public class ConnectionImpl
 
     @JSSetter("onunwrap")
     @SuppressWarnings("unused")
-    public void setOnUnwrap(Function f) {
+    public void setOnUnwrap(Function f)
+    {
         onUnwrap = f;
+        if (f == null) {
+            processor.setReadCallback(null);
+        } else {
+            processor.setReadCallback(new BiCallback<ByteBuffer, Boolean>()
+            {
+                @Override
+                public void call(final ByteBuffer bb, final Boolean shutdown)
+                {
+                    runtime.enqueueTask(new ScriptTask()
+                    {
+                        @Override
+                        public void execute(Context cx, Scriptable scope)
+                        {
+                            ConnectionImpl self = ConnectionImpl.this;
+                            Buffer.BufferImpl buf = Buffer.BufferImpl.newBuffer(cx, self, bb, false);
+                            runtime.enqueueCallback(onWrap, self, self, new Object[]{buf, shutdown});
+                        }
+                    });
+                }
+            });
+        }
     }
 
     @JSGetter("onunwrap")
@@ -276,8 +296,25 @@ public class ConnectionImpl
 
     @JSSetter("onerror")
     @SuppressWarnings("unused")
-    public void setOnError(Function f) {
+    public void setOnError(Function f)
+    {
         onError = f;
+        if (onError == null) {
+            processor.setErrorCallback(null);
+        } else {
+            processor.setErrorCallback(new Callback<SSLException>()
+            {
+                @Override
+                public void call(SSLException e)
+                {
+                    Scriptable err =
+                        Utils.makeErrorObject(Context.getCurrentContext(), ConnectionImpl.this,
+                                              e.toString());
+                    onError.call(Context.getCurrentContext(), onError, ConnectionImpl.this,
+                                 new Object[] { err });
+                }
+            });
+        }
     }
 
     @JSGetter("onerror")
@@ -288,20 +325,25 @@ public class ConnectionImpl
 
     @JSGetter("error")
     @SuppressWarnings("unused")
-    public Scriptable getError() {
-        return error;
+    public Object getError()
+    {
+        SSLException err = processor.getError();
+        if (err == null) {
+            return Undefined.instance;
+        }
+        return Utils.makeErrorObject(Context.getCurrentContext(), this, err.toString());
     }
 
     @JSGetter("sentShutdown")
     @SuppressWarnings("unused")
     public boolean isSentShutdown() {
-        return sentShutdown;
+        return processor.isSentShutdown();
     }
 
     @JSGetter("receivedShutdown")
     @SuppressWarnings("unused")
     public boolean isReceivedShutdown() {
-        return receivedShutdown;
+        return processor.isReceivedShutdown();
     }
 
     @JSFunction
@@ -313,443 +355,72 @@ public class ConnectionImpl
 
     @JSFunction
     @SuppressWarnings("unused")
-    public static void wrap(Context cx, Scriptable thisObj, Object[] args, Function func)
+    public static void wrap(final Context cx, Scriptable thisObj, Object[] args, Function func)
     {
         Buffer.BufferImpl buf = objArg(args, 0, Buffer.BufferImpl.class, true);
-        Function cb = functionArg(args, 1, true);
-        ConnectionImpl self = (ConnectionImpl)thisObj;
+        final Function cb = functionArg(args, 1, true);
+        final ConnectionImpl self = (ConnectionImpl)thisObj;
 
         ByteBuffer bb = buf.getBuffer();
-        self.outgoingChunks.add(new QueuedChunk(bb, cb));
-        self.encodeLoop(cx);
-    }
 
-    @JSFunction
-    @SuppressWarnings("unused")
-    public static void shutdown(Context cx, Scriptable thisObj, Object[] args, Function func)
-    {
-        Function cb = functionArg(args, 0, false);
-        ConnectionImpl self = (ConnectionImpl)thisObj;
-
-        QueuedChunk qc = new QueuedChunk(null, cb);
-        qc.shutdown = true;
-        self.outgoingChunks.add(qc);
-        self.encodeLoop(cx);
-    }
-
-    @JSFunction
-    @SuppressWarnings("unused")
-    public static void shutdownInbound(Context cx, Scriptable thisObj, Object[] args, Function func)
-    {
-        Function cb = functionArg(args, 0, false);
-        ConnectionImpl self = (ConnectionImpl)thisObj;
-
-        try {
-            self.engine.closeInbound();
-        } catch (SSLException ssle) {
-            if (log.isDebugEnabled()) {
-                log.debug("Error closing inbound SSLEngine: {}", ssle);
-            }
-        }
-        if (cb != null) {
-            cb.call(cx, thisObj, thisObj, ScriptRuntime.emptyArgs);
-        }
-        // Force the "unwrap" callback to deliver EOF to the other side in Node.js land
-        self.doUnwrap(cx);
-        // And run the regular encode loop because we still want to (futily) wrap in this case.
-        self.encodeLoop(cx);
-    }
-
-    @JSFunction
-    @SuppressWarnings("unused")
-    public static void unwrap(Context cx, Scriptable thisObj, Object[] args, Function func)
-    {
-        Buffer.BufferImpl buf = objArg(args, 0, Buffer.BufferImpl.class, true);
-        Function cb = functionArg(args, 1, true);
-        ConnectionImpl self = (ConnectionImpl)thisObj;
-
-        ByteBuffer bb = buf.getBuffer();
-        self.incomingChunks.add(new QueuedChunk(bb, cb));
-        self.encodeLoop(cx);
-    }
-
-    protected void encodeLoop(Context cx)
-    {
-        while (true) {
-            if (log.isTraceEnabled()) {
-                log.trace("engine {} status: {} incoming: {} outgoing: {}", id, engine.getHandshakeStatus(),
-                          incomingChunks.size(), outgoingChunks.size());
-            }
-            switch (engine.getHandshakeStatus()) {
-            case NEED_WRAP:
-                // Always wrap, even if we have nothing to wrap
-                processHandshaking(cx);
-                if (!doWrap(cx)) {
-                    return;
-                }
-                break;
-            case NEED_UNWRAP:
-                processHandshaking(cx);
-                if (!doUnwrap(cx)) {
-                    return;
-                }
-                break;
-            case NEED_TASK:
-                processTasks();
-                return;
-            case FINISHED:
-            case NOT_HANDSHAKING:
-                if (outgoingChunks.isEmpty() && incomingChunks.isEmpty()) {
-                    return;
-                }
-
-                if (!outgoingChunks.isEmpty()) {
-                    if (!doWrap(cx)) {
-                        return;
-                    }
-                }
-                if (!incomingChunks.isEmpty()) {
-                    if (!doUnwrap(cx)) {
-                        return;
-                    }
-                }
-                break;
-            }
-        }
-    }
-
-    /**
-     * Wrap whatever is on the head of the outgoing queue, and return false if we should stop further processing.
-     */
-    private boolean doWrap(Context cx)
-    {
-        QueuedChunk qc = outgoingChunks.peek();
-        ByteBuffer bb = (qc == null ? EMPTY : qc.buf);
-        if (bb == null) {
-            bb = EMPTY;
-        }
-
-        boolean wasShutdown = false;
-        SSLEngineResult result;
-        do {
-            if ((qc != null) && qc.shutdown) {
-                log.trace("Sending closeOutbound");
-                engine.closeOutbound();
-                sentShutdown = true;
-                wasShutdown = true;
-            }
-
-            if (log.isTraceEnabled()) {
-                log.trace("{} Wrapping {}", id, bb);
-            }
-            try {
-                result = engine.wrap(bb, writeBuf);
-            } catch (SSLException ssle) {
-                handleEncodingError(cx, qc, ssle);
-                if (qc != null) {
-                    outgoingChunks.remove();
-                }
-                return false;
-            }
-
-            if (log.isTraceEnabled()) {
-                log.trace("wrap result: {}", result);
-            }
-            if (result.getStatus() == SSLEngineResult.Status.BUFFER_OVERFLOW) {
-                writeBuf = Utils.doubleBuffer(writeBuf);
-            }
-        } while (result.getStatus() == SSLEngineResult.Status.BUFFER_OVERFLOW);
-
-        Function writeCallback = null;
-        if ((qc != null) && !bb.hasRemaining() && initFinished) {
-            // Finished processing the current chunk, but don't deliver the callback until
-            // handshake is done in case client ended before sending any data
-            outgoingChunks.remove();
-            if (qc.callback != null) {
-                writeCallback = qc.callback;
-                qc.callback = null;
-            }
-        }
-
-        if (result.getHandshakeStatus() == SSLEngineResult.HandshakeStatus.FINISHED) {
-            // This only gets delivered once, and we can't check for it later
-            processNotHandshaking(cx);
-        }
-
-        if (result.bytesProduced() > 0) {
-            // Deliver write callback in JavaScript after we are happy with reading
-            deliverWriteBuffer(cx, wasShutdown, writeCallback);
-        } else if (writeCallback != null) {
-            writeCallback.call(cx, this, this, ScriptRuntime.emptyArgs);
-        }
-
-        return (result.getStatus() == SSLEngineResult.Status.OK);
-    }
-
-    private void deliverWriteBuffer(Context cx, boolean shutdown, Function writeCallback)
-    {
-        if (onWrap != null) {
-            writeBuf.flip();
-            ByteBuffer bb = ByteBuffer.allocate(writeBuf.remaining());
-            bb.put(writeBuf);
-            writeBuf.clear();
-            bb.flip();
-            if (log.isTraceEnabled()) {
-                log.trace("Delivering {} bytes to the onwrap callback. shutdown = {}",
-                          bb.remaining(), shutdown);
-            }
-
-            Buffer.BufferImpl buf = Buffer.BufferImpl.newBuffer(cx, this, bb, false);
-            runtime.enqueueCallback(onWrap, this, this, new Object[]{buf, shutdown, writeCallback});
-
-        } else {
-            writeBuf.clear();
-            if (writeCallback != null) {
-                writeCallback.call(cx, this, this, ScriptRuntime.emptyArgs);
-            }
-        }
-    }
-
-    private boolean doUnwrap(Context cx)
-    {
-        QueuedChunk qc = incomingChunks.peek();
-        ByteBuffer bb = (qc == null ? EMPTY : qc.buf);
-
-        SSLEngineResult result;
-        do {
-            do {
-                if (log.isTraceEnabled()) {
-                    log.trace("{} Unwrapping {}", id, bb);
-                }
-
-                try {
-                    result = engine.unwrap(bb, readBuf);
-                } catch (SSLException ssle) {
-                    handleEncodingError(cx, qc, ssle);
-                    return false;
-                }
-
-                if (log.isTraceEnabled()) {
-                    log.trace("unwrap result: {}", result);
-                }
-                if (result.getStatus() == SSLEngineResult.Status.BUFFER_OVERFLOW) {
-                    // Retry with more space in the output buffer
-                    readBuf = Utils.doubleBuffer(readBuf);
-                }
-            } while (result.getStatus() == SSLEngineResult.Status.BUFFER_OVERFLOW);
-
-            if ((result.getStatus() == SSLEngineResult.Status.BUFFER_UNDERFLOW) && (qc != null)) {
-                // Deliver the write callback so that we get some more data
-                // We might get called again ourselves when we do this
-                qc.deliverCallback(cx, this);
-
-                // Now combine the first two chunks on the queue if they exist
-                if (incomingChunks.size() >= 2) {
-                    QueuedChunk c1 = incomingChunks.poll();
-                    qc = incomingChunks.peek();
-                    qc.buf = Utils.catBuffers(c1.buf, qc.buf);
-                    bb = qc.buf;
-                } else {
-                    qc = incomingChunks.peek();
-                    break;
-                }
-            } else {
-                break;
-            }
-        } while (true);
-
-        boolean deliverShutdown = false;
-        if ((result.getStatus() == SSLEngineResult.Status.CLOSED) && !receivedShutdown) {
-            receivedShutdown = true;
-            deliverShutdown = true;
-        }
-
-        if ((qc != null) && (!qc.buf.hasRemaining())) {
-            incomingChunks.poll();
-            // Deliver the callback right now, because we are ready to consume more data right now
-            qc.deliverCallback(cx, this);
-        }
-
-        if (result.getHandshakeStatus() == SSLEngineResult.HandshakeStatus.FINISHED) {
-            // This only gets delivered once, and we can't check for it later
-            processNotHandshaking(cx);
-        }
-
-        if ((result.bytesProduced() > 0) || deliverShutdown) {
-            deliverReadBuffer(cx, deliverShutdown);
-        }
-
-        return (result.getStatus() == SSLEngineResult.Status.OK);
-    }
-
-    private void deliverReadBuffer(Context cx, boolean shutdown)
-    {
-        if (onUnwrap != null) {
-            readBuf.flip();
-            ByteBuffer bb = ByteBuffer.allocate(readBuf.remaining());
-            bb.put(readBuf);
-            bb.flip();
-            readBuf.clear();
-            if (log.isTraceEnabled()) {
-                log.trace("Delivering {} bytes to the onunwrap callback. shutdown = {}",
-                          bb.remaining(), shutdown);
-            }
-
-            Buffer.BufferImpl buf = Buffer.BufferImpl.newBuffer(cx, this, bb, false);
-            runtime.enqueueCallback(onUnwrap, this, this, new Object[]{buf, shutdown});
-
-        } else {
-            readBuf.clear();
-        }
-    }
-
-    private void handleEncodingError(Context cx, QueuedChunk qc, SSLException ssle)
-    {
-        if (log.isDebugEnabled()) {
-            log.debug("SSL exception: {}", ssle, ssle);
-        }
-        Throwable cause = ssle;
-        while (cause.getCause() != null) {
-            cause = cause.getCause();
-        }
-        Scriptable err = Utils.makeErrorObject(cx, this, cause.toString());
-        error = err;
-        if (!initFinished) {
-            // Always make this in to an "error" event
-            verifyError = err;
-            if (onError != null) {
-                onError.call(cx, this, this, new Object [] { err });
-            }
-        } else {
-            // Handshaking done, treat this as a legitimate write error
-            if (qc != null) {
-                qc.deliverCallback(cx, this, err);
-            } else if (onError != null) {
-                onError.call(cx, this, this, new Object [] { err });
-            }
-        }
-    }
-
-    private void processHandshaking(Context cx)
-    {
-        if (!handshaking && !sentShutdown && !receivedShutdown) {
-            handshaking = true;
-            if (onHandshakeStart != null) {
-                onHandshakeStart.call(cx, onHandshakeStart, this, ScriptRuntime.emptyArgs);
-            }
-        }
-    }
-
-    private void processNotHandshaking(Context cx)
-    {
-        if (handshaking) {
-            checkPeerAuthorization(cx);
-            handshaking = false;
-            initFinished = true;
-            if (onHandshakeDone != null) {
-                onHandshakeDone.call(cx, onHandshakeDone, this, ScriptRuntime.emptyArgs);
-            }
-        }
-    }
-
-    /**
-     * Check for various SSL peer verification errors, including those that require us to check manually
-     * and report back rather than just throwing...
-     */
-    private void checkPeerAuthorization(Context cx)
-    {
-        Certificate[] certChain;
-
-        try {
-            certChain = engine.getSession().getPeerCertificates();
-        } catch (SSLPeerUnverifiedException unver) {
-            if (log.isDebugEnabled()) {
-                log.debug("Peer is unverified");
-            }
-            if (!isServer || requestCert) {
-                handleError(cx, unver);
-            }
-            return;
-        }
-
-        if (certChain == null) {
-            // No certs -- same thing
-            if (log.isDebugEnabled()) {
-                log.debug("Peer has no client- or server-side certs");
-            }
-            if (!isServer || requestCert) {
-                handleError(cx, new SSLException("Peer has no certificates"));
-            }
-            return;
-        }
-
-        if (context.getTrustManager() == null) {
-            handleError(cx, new SSLException("No trusted CAs"));
-            return;
-        }
-
-        // Manually check trust
-        try {
-            if (isServer) {
-                context.getTrustManager().checkClientTrusted((X509Certificate[])certChain, "RSA");
-            } else {
-                context.getTrustManager().checkServerTrusted((X509Certificate[])certChain, "RSA");
-            }
-            if (log.isDebugEnabled()) {
-                log.debug("SSL peer {} is valid", engine.getSession());
-            }
-        } catch (CertificateException e) {
-            if (log.isDebugEnabled()) {
-                log.debug("Error verifying SSL peer {}: {}", engine.getSession(), e);
-            }
-            handleError(cx, new SSLException(e));
-        }
-    }
-
-    private void handleError(Context cx, SSLException ssle)
-    {
-        if (log.isDebugEnabled()) {
-            log.debug("SSL exception: {}", ssle, ssle);
-        }
-        Throwable cause = ssle;
-        while (cause.getCause() != null) {
-            cause = cause.getCause();
-        }
-        Scriptable err = Utils.makeErrorObject(cx, this, cause.toString());
-        if (handshaking) {
-            verifyError = err;
-        } else {
-            error = err;
-        }
-    }
-
-    /**
-     * Run tasks that will block SSLEngine in the thread pool, so that the script thread can
-     * keep on trucking. Then return back to the real world.
-     */
-    private void processTasks()
-    {
-        runtime.getAsyncPool().submit(new Runnable() {
+        self.processor.wrap(bb, new Callback<Object>() {
             @Override
-            public void run()
+            public void call(Object val)
             {
-                Runnable task = engine.getDelegatedTask();
-                while (task != null) {
-                    if (log.isTraceEnabled()) {
-                        log.trace(id + ": Running SSLEngine task {}", task);
-                    }
-                    task.run();
-                    task = engine.getDelegatedTask();
-                }
+                cb.call(cx, cb, self, new Object[] { val });
+            }
+        });
+    }
 
-                // Now back to the script thread in order to keep running with the result.
-                runtime.enqueueTask(new ScriptTask() {
-                    @Override
-                    public void execute(Context cx, Scriptable scope)
-                    {
-                        encodeLoop(cx);
-                    }
-                });
+    @JSFunction
+    @SuppressWarnings("unused")
+    public static void shutdown(final Context cx, Scriptable thisObj, Object[] args, Function func)
+    {
+        final Function cb = functionArg(args, 0, false);
+        final ConnectionImpl self = (ConnectionImpl)thisObj;
+
+        self.processor.shutdown(new Callback<Object>() {
+            @Override
+            public void call(Object val)
+            {
+                cb.call(cx, cb, self, new Object[] { val });
+            }
+        });
+    }
+
+    @JSFunction
+    @SuppressWarnings("unused")
+    public static void shutdownInbound(final Context cx, Scriptable thisObj, Object[] args, Function func)
+    {
+        final Function cb = functionArg(args, 0, false);
+        final ConnectionImpl self = (ConnectionImpl)thisObj;
+
+        self.processor.shutdownInbound(new Callback<Object>()
+        {
+            @Override
+            public void call(Object val)
+            {
+                if (cb != null) {
+                    cb.call(cx, cb, self, ScriptRuntime.emptyArgs);
+                }
+            }
+        });
+    }
+
+    @JSFunction
+    @SuppressWarnings("unused")
+    public static void unwrap(final Context cx, Scriptable thisObj, Object[] args, Function func)
+    {
+        Buffer.BufferImpl buf = objArg(args, 0, Buffer.BufferImpl.class, true);
+        final Function cb = functionArg(args, 1, true);
+        final ConnectionImpl self = (ConnectionImpl)thisObj;
+
+        ByteBuffer bb = buf.getBuffer();
+        self.processor.unwrap(bb, new Callback<Object>() {
+            @Override
+            public void call(Object val)
+            {
+                cb.call(cx, cb, self, new Object[] { val });
             }
         });
     }
@@ -759,23 +430,12 @@ public class ConnectionImpl
     public static Object getPeerCertificate(Context cx, Scriptable thisObj, Object[] args, Function func)
     {
         ConnectionImpl self = (ConnectionImpl)thisObj;
-        if ((self.engine == null) || (self.engine.getSession() == null)) {
+        X509Certificate cert = self.processor.getPeerCertificate();
+
+        if (cert == null) {
             return Undefined.instance;
         }
-        Certificate cert;
-        try {
-            cert = self.engine.getSession().getPeerCertificates()[0];
-        } catch (SSLPeerUnverifiedException puve) {
-            if (log.isDebugEnabled()) {
-                log.debug("getPeerCertificates threw {}", puve);
-            }
-            cert = null;
-        }
-        if (!(cert instanceof X509Certificate)) {
-            log.debug("Peer certificate is not an X.509 cert");
-            return Undefined.instance;
-        }
-        return CertificateParser.get().parse(cx, self, (X509Certificate) cert);
+        return CertificateParser.get().parse(cx, self, cert);
     }
 
     @JSFunction
@@ -801,7 +461,6 @@ public class ConnectionImpl
     @SuppressWarnings("unused")
     public static boolean isSessionReused(Context cx, Scriptable thisObj, Object[] args, Function func)
     {
-        ConnectionImpl self = (ConnectionImpl)thisObj;
         return false;
     }
 
@@ -810,7 +469,7 @@ public class ConnectionImpl
     public static boolean isInitFinished(Context cx, Scriptable thisObj, Object[] args, Function func)
     {
         ConnectionImpl self = (ConnectionImpl)thisObj;
-        return self.initFinished;
+        return self.processor.isInitFinished();
     }
 
     @JSFunction
@@ -818,10 +477,12 @@ public class ConnectionImpl
     public static Object verifyError(Context cx, Scriptable thisObj, Object[] args, Function func)
     {
         ConnectionImpl self = (ConnectionImpl)thisObj;
-        if (self.verifyError == null) {
+
+        SSLException ve = self.processor.getVerifyError();
+        if (ve == null) {
             return Undefined.instance;
         }
-        return self.verifyError;
+        return Utils.makeErrorObject(cx, self, ve.toString());
     }
 
     @JSFunction
@@ -829,52 +490,17 @@ public class ConnectionImpl
     public static Object getCurrentCipher(Context cx, Scriptable thisObj, Object[] args, Function func)
     {
         ConnectionImpl self = (ConnectionImpl)thisObj;
-        if ((self.engine == null) || (self.engine.getSession() == null)) {
+
+        String cipherSuite = self.processor.getCipherSuite();
+        if (cipherSuite == null) {
             return Undefined.instance;
         }
 
-        SSLCiphers.Ciph cipher =
-            SSLCiphers.get().getJavaCipher(self.engine.getSession().getCipherSuite());
-        if (cipher == null) {
-            return Undefined.instance;
-        }
-
+        SSLCiphers.Ciph cipher = SSLCiphers.get().getJavaCipher(cipherSuite);
         Scriptable c = cx.newObject(self);
         c.put("name", c, cipher.getSslName());
-        c.put("version", c, self.engine.getSession().getProtocol());
-        c.put("javaCipher", c, self.engine.getSession().getCipherSuite());
+        c.put("version", c, self.processor.getProtocol());
+        c.put("javaCipher", c, cipherSuite);
         return c;
-    }
-
-    static final class QueuedChunk
-    {
-        ByteBuffer buf;
-        Function callback;
-        boolean shutdown;
-
-        QueuedChunk(ByteBuffer buf, Function callback)
-        {
-            this.buf = buf;
-            this.callback = callback;
-        }
-
-        void deliverCallback(Context cx, Scriptable scope)
-        {
-            if (callback != null) {
-                // Set to null first because the callback might end up right back here...
-                Function cb = callback;
-                callback = null;
-                cb.call(cx, cb, scope, ScriptRuntime.emptyArgs);
-            }
-        }
-
-        void deliverCallback(Context cx, Scriptable scope, Scriptable err)
-        {
-            if (callback != null) {
-                Function cb = callback;
-                callback = null;
-                cb.call(cx, cb, scope, new Object[] { err });
-            }
-        }
     }
 }

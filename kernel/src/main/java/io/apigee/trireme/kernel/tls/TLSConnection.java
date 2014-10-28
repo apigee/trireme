@@ -323,7 +323,7 @@ public class TLSConnection
         if (result.bytesProduced() > 0) {
             // Deliver write callback in JavaScript after we are happy with reading
             deliverWriteBuffer(wasShutdown, cb);
-        } else if (writeCallback != null) {
+        } else if (cb != null) {
             cb.call(null);
         }
 
@@ -508,7 +508,7 @@ public class TLSConnection
     private void handleError(SSLException ssle)
     {
         if (log.isDebugEnabled()) {
-            log.debug("SSL exception: {}", ssle, ssle);
+            log.debug("SSL exception: handshaking = {}: {}", handshaking, ssle, ssle);
         }
         Throwable cause = ssle;
         while (cause.getCause() != null) {

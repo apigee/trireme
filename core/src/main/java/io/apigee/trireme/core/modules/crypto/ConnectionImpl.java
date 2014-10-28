@@ -245,7 +245,8 @@ public class ConnectionImpl
                         public void execute(Context cx, Scriptable scope)
                         {
                             ConnectionImpl self = ConnectionImpl.this;
-                            Buffer.BufferImpl buf = Buffer.BufferImpl.newBuffer(cx, self, bb, false);
+                            Buffer.BufferImpl buf =
+                                (bb == null ? null : Buffer.BufferImpl.newBuffer(cx, self, bb, false));
                             Function cb =
                                 (arg == null ? null : ((CallbackHolder)arg).getCallback());
                             onWrap.call(cx, onWrap, self, new Object[]{buf, shutdown, cb});
@@ -281,7 +282,8 @@ public class ConnectionImpl
                         public void execute(Context cx, Scriptable scope)
                         {
                             ConnectionImpl self = ConnectionImpl.this;
-                            Buffer.BufferImpl buf = Buffer.BufferImpl.newBuffer(cx, self, bb, false);
+                            Buffer.BufferImpl buf =
+                                (bb == null ? null : Buffer.BufferImpl.newBuffer(cx, self, bb, false));
                             onUnwrap.call(cx, onUnwrap, self, new Object[]{buf, shutdown});
                         }
                     });

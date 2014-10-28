@@ -411,16 +411,20 @@ public class TLSConnection
     private void deliverWriteBuffer(boolean shutdown, Callback<Object> cb)
     {
         if (writeCallback != null) {
-            writeBuf.flip();
-            ByteBuffer bb = ByteBuffer.allocate(writeBuf.remaining());
-            bb.put(writeBuf);
-            writeBuf.clear();
-            bb.flip();
-            if (log.isTraceEnabled()) {
-                log.trace("Delivering {} bytes to the onwrap callback. shutdown = {}",
-                          bb.remaining(), shutdown);
+            ByteBuffer bb;
+            if (writeBuf.position() > 0) {
+                writeBuf.flip();
+                bb = ByteBuffer.allocate(writeBuf.remaining());
+                bb.put(writeBuf);
+                writeBuf.clear();
+                bb.flip();
+                if (log.isTraceEnabled()) {
+                    log.trace("Delivering {} bytes to the onwrap callback. shutdown = {}",
+                              bb.remaining(), shutdown);
+                }
+            } else {
+                bb = null;
             }
-
             writeCallback.call(bb, shutdown, cb);
 
         } else {
@@ -434,14 +438,19 @@ public class TLSConnection
     private void deliverReadBuffer(boolean shutdown)
     {
         if (readCallback != null) {
-            readBuf.flip();
-            ByteBuffer bb = ByteBuffer.allocate(readBuf.remaining());
-            bb.put(readBuf);
-            bb.flip();
-            readBuf.clear();
-            if (log.isTraceEnabled()) {
-                log.trace("Delivering {} bytes to the onunwrap callback. shutdown = {}",
-                          bb.remaining(), shutdown);
+            ByteBuffer bb;
+            if (readBuf.position() > 0) {
+                readBuf.flip();
+                bb = ByteBuffer.allocate(readBuf.remaining());
+                bb.put(readBuf);
+                bb.flip();
+                readBuf.clear();
+                if (log.isTraceEnabled()) {
+                    log.trace("Delivering {} bytes to the onunwrap callback. shutdown = {}",
+                              bb.remaining(), shutdown);
+                }
+            } else {
+                bb = null;
             }
 
             readCallback.call(bb, shutdown);

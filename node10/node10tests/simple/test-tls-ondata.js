@@ -41,13 +41,16 @@ server.listen(common.PORT, function() {
   // test that setting the `ondata` function *prevents* data from
   // being pushed to the streams2 interface of the socket
   client.ondata = function (buf, start, length) {
+    console.log('onData length = %d', length);
     var b = buf.slice(start, length);
     process.nextTick(function () {
       var b2 = client.read();
+      console.log('nextTick: read %s', b2);
       if (b2) {
         assert.notEqual(b.toString(), b2.toString());
       }
       client.destroy();
+      console.log('Closing.');
       server.close();
     });
   };

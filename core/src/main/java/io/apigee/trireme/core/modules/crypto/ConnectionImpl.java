@@ -237,7 +237,7 @@ public class ConnectionImpl
             processor.setWriteCallback(new TriCallback<ByteBuffer, Boolean, Object>()
             {
                 @Override
-                public void call(final ByteBuffer bb, final Boolean shutdown, final Object cb)
+                public void call(final ByteBuffer bb, final Boolean shutdown, final Object arg)
                 {
                     runtime.enqueueTask(new ScriptTask()
                     {
@@ -246,7 +246,9 @@ public class ConnectionImpl
                         {
                             ConnectionImpl self = ConnectionImpl.this;
                             Buffer.BufferImpl buf = Buffer.BufferImpl.newBuffer(cx, self, bb, false);
-                            runtime.enqueueCallback(onWrap, self, self, new Object[]{buf, shutdown, cb});
+                            Function cb =
+                                (arg == null ? null : ((CallbackHolder)arg).getCallback());
+                            onWrap.call(cx, onWrap, self, new Object[]{buf, shutdown, cb});
                         }
                     });
                 }
@@ -280,7 +282,7 @@ public class ConnectionImpl
                         {
                             ConnectionImpl self = ConnectionImpl.this;
                             Buffer.BufferImpl buf = Buffer.BufferImpl.newBuffer(cx, self, bb, false);
-                            runtime.enqueueCallback(onWrap, self, self, new Object[]{buf, shutdown});
+                            onUnwrap.call(cx, onUnwrap, self, new Object[]{buf, shutdown});
                         }
                     });
                 }
@@ -363,7 +365,7 @@ public class ConnectionImpl
 
         ByteBuffer bb = buf.getBuffer();
 
-        self.processor.wrap(bb, new Callback<Object>() {
+        self.processor.wrap(bb, new CallbackHolder(cb) {
             @Override
             public void call(Object val)
             {
@@ -379,7 +381,7 @@ public class ConnectionImpl
         final Function cb = functionArg(args, 0, false);
         final ConnectionImpl self = (ConnectionImpl)thisObj;
 
-        self.processor.shutdown(new Callback<Object>() {
+        self.processor.shutdown(new CallbackHolder(cb) {
             @Override
             public void call(Object val)
             {
@@ -502,5 +504,20 @@ public class ConnectionImpl
         c.put("version", c, self.processor.getProtocol());
         c.put("javaCipher", c, cipherSuite);
         return c;
+    }
+
+    private static abstract class CallbackHolder
+        implements Callback<Object>
+    {
+        private final Function callback;
+
+        protected CallbackHolder(Function callback)
+        {
+            this.callback = callback;
+        }
+
+        public Function getCallback() {
+            return callback;
+        }
     }
 }

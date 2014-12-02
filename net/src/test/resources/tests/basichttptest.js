@@ -1,13 +1,27 @@
 var http = require('http');
 var assert = require('assert');
+var util = require('util');
 
 var socketsMatch = false;
 var gotFinish = false;
 
 var svr = http.createServer(function(req, resp) {
-  if (process.env.ATTACHMENT) {
-    console.log('Looking for attachment %s and found %s', process.env.ATTACHMENT, req.attachment);
-    assert(req.attachment);
+  try {
+    if (process.env.ATTACHMENT) {
+      console.log('Looking for attachment %s and found %s', process.env.ATTACHMENT, req.attachment);
+      // "attachment" must match what we passed from Java code, but must not be enumerable.
+      assert(req.attachment);
+      assert.equal(false, Object.keys(req).some(function (v) {
+        return (v === 'attachment');
+      }));
+      // make doubly-sure this doesn't throw
+      util.inspect(req);
+    }
+  } catch (e) {
+    console.log('Error: %j', e);
+    resp.writeHead(500);
+    resp.end(util.inspect(e));
+    return;
   }
 
   req.on('data', function(chunk) {
@@ -16,20 +30,25 @@ var svr = http.createServer(function(req, resp) {
   });
 
   req.on('end', function() {
-    assert(req.socket);
-    assert(req.connection);
-    assert.equal(req.socket, resp.socket);
-    var msg = {
-      localAddress: req.socket.localAddress,
-      localPort: req.socket.localPort,
-      remoteAddress: req.socket.remoteAddress,
-      remotePort: req.socket.remotePort
-    };
+    try {
+      assert(req.socket);
+      assert(req.connection);
+      assert.equal(req.socket, resp.socket);
+      var msg = {
+        localAddress: req.socket.localAddress,
+        localPort: req.socket.localPort,
+        remoteAddress: req.socket.remoteAddress,
+        remotePort: req.socket.remotePort
+      };
 
-    resp.on('finish', function() {
-      gotFinish = true;
-    });
-    resp.end(JSON.stringify(msg));
+      resp.on('finish', function() {
+        gotFinish = true;
+      });
+      resp.end(JSON.stringify(msg));
+    } catch (e) {
+      resp.writeHead(500);
+      resp.end(util.inspect(e));
+    }
   });
 });
 

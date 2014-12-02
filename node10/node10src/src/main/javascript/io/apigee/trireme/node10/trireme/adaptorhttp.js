@@ -161,11 +161,18 @@ if (HttpWrap.hasServerAdapter()) {
     this.ended = false;
     this.sendDate = true;
     this._headers = {};
-    this._adapter = adapter;
     this.connection = conn;
     this.socket = conn;
-    this.attachment = adapter.attachment;
     this.finished = false;
+
+    Object.defineProperty(this, '_adapter', {
+      value: adapter,
+      enumerable: false
+    });
+    Object.defineProperty(this, 'attachment', {
+      value: adapter.attachment,
+      enumerable: false
+    });
   }
 
   util.inherits(ServerResponse, stream.Writable);
@@ -347,13 +354,20 @@ if (HttpWrap.hasServerAdapter()) {
     if (!(this instanceof ServerRequest)) return new ServerRequest(adapter, conn);
     NodeHttp.IncomingMessage.call(this, conn);
 
-    this._adapter = adapter;
     this.httpVersionMajor = adapter.requestMajorVersion;
     this.httpVersionMinor = adapter.requestMinorVersion;
     this.httpVersion = adapter.requestMajorVersion + '.' + adapter.requestMinorVersion;
     this.url = adapter.requestUrl;
-    this.attachment = adapter.attachment;
     this.complete = false;
+
+    Object.defineProperty(this, '_adapter', {
+      value: adapter,
+      enumerable: false
+    });
+    Object.defineProperty(this, 'attachment', {
+      value: adapter.attachment,
+      enumerable: false
+    });
   }
 
   util.inherits(ServerRequest, NodeHttp.IncomingMessage);

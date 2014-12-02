@@ -400,6 +400,8 @@ public class BasicTest
                                                   new String[] { "foo", "bar" });
 
         script.addEnvironment("foo", "bar");
+        script.addEnvironment("UPPERCASE", "BIGANDSTRONG");
+        script.addEnvironment("Lowercase", "useful");
 
         ScriptStatus status = script.execute().get();
         assertEquals(0, status.getExitCode());
@@ -417,6 +419,8 @@ public class BasicTest
         HashMap<String, String> env = new HashMap<String, String>();
         env.put("foo", "bar");
         env.put("baz", "foo");
+        env.put("UPPERCASE", "BIGANDSTRONG");
+        env.put("Lowercase", "useful");
         script.setEnvironment(env);
 
         ScriptStatus status = script.execute().get();

@@ -50,6 +50,7 @@ import static io.apigee.trireme.core.ArgUtils.*;
 
 import java.io.IOException;
 import java.lang.reflect.InvocationTargetException;
+import java.util.HashMap;
 import java.util.Map;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -891,19 +892,60 @@ public class Process
     }
 
     public static class EnvImpl
-            extends ScriptableObject
+        extends ScriptableObject
     {
         public static final String CLASS_NAME = "_Environment";
+
+        private final HashMap<String, Object> env = new HashMap<String, Object>();
+        private final HashMap<String, Object> aliases = new HashMap<String, Object>();
 
         @Override
         public String getClassName() {
             return CLASS_NAME;
         }
 
-        void initialize(Map<String, String> env)
+        /**
+         * process.environment only contains keys of the original environment variables, in their original case
+         */
+        @Override
+        public Object[] getIds()
         {
-            for (Map.Entry<String, String> ee : env.entrySet()) {
-                this.put(ee.getKey(), this, ee.getValue());
+            return env.keySet().toArray();
+        }
+
+        /**
+         * You can "get" any property value, regardless of case
+         */
+        @Override
+        public Object get(String name, Scriptable scope)
+        {
+            Object ret = env.get(name);
+            if (ret == null) {
+                ret = aliases.get(name.toUpperCase());
+            }
+            return (ret == null ? Scriptable.NOT_FOUND : ret);
+        }
+
+        @Override
+        public boolean has(String name, Scriptable scope)
+        {
+            return (env.containsKey(name) || aliases.containsKey(name.toUpperCase()));
+        }
+
+        @Override
+        public void put(String name, Scriptable scope, Object value)
+        {
+            env.put(name, value);
+            String uc = name.toUpperCase();
+            if (!uc.equals(name)) {
+                aliases.put(uc, value);
+            }
+        }
+
+        void initialize(Map<String, String> e)
+        {
+            for (Map.Entry<String, String> entry : e.entrySet()) {
+                put(entry.getKey(), null, entry.getValue());
             }
         }
     }

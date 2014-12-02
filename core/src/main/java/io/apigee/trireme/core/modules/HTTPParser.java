@@ -107,6 +107,8 @@ public class HTTPParser
         {
             parser = new HTTPParsingMachine(
                 (type == REQUEST) ? HTTPParsingMachine.ParsingMode.REQUEST : HTTPParsingMachine.ParsingMode.RESPONSE);
+            sentPartialHeaders = false;
+            sentCompleteHeaders = false;
         }
 
         public static Object newParser(Context cx, Scriptable thisObj, Object[] args, Function fn)

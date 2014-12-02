@@ -106,6 +106,13 @@ public class BasicHttpTest
         runTest("slowresponse.js");
     }
 
+    @Test
+    public void testUpgrade()
+        throws InterruptedException, ExecutionException, NodeException
+    {
+        runTest("upgradetest.js");
+    }
+
     private void runTest(String name)
         throws InterruptedException, ExecutionException, NodeException
     {

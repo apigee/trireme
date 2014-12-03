@@ -446,33 +446,7 @@ public class Buffer
             }
             int length = end - start;
             int realLength = Math.min(length, b.bufLength - start);
-
-            // Customize decoding here because we must stop decoding on a partial character
-            // like regular Node does
-            CharsetDecoder decoder = Charsets.get().getDecoder(charset);
-            decoder.onMalformedInput(CodingErrorAction.REPORT);
-            decoder.onUnmappableCharacter(CodingErrorAction.REPLACE);
-
-            int bufLen = (int)(realLength * decoder.averageCharsPerByte());
-            CharBuffer cBuf = CharBuffer.allocate(bufLen);
-            ByteBuffer buf = ByteBuffer.wrap(b.buf, start + b.bufOffset, realLength);
-
-            CoderResult result;
-            do {
-                result = decoder.decode(buf, cBuf, true);
-                if (result.isOverflow()) {
-                    cBuf = Utils.doubleBuffer(cBuf);
-                }
-            } while (result.isOverflow());
-            do {
-                result = decoder.flush(cBuf);
-                if (result.isOverflow()) {
-                    cBuf = Utils.doubleBuffer(cBuf);
-                }
-            } while (result.isOverflow());
-
-            cBuf.flip();
-            return cBuf.toString();
+            return Utils.bufferToString(ByteBuffer.wrap(b.buf, start + b.bufOffset, realLength), charset);
         }
 
         private void fromStringInternal(String s, Charset cs)

@@ -42,6 +42,7 @@ import java.nio.CharBuffer;
 import java.nio.charset.Charset;
 import java.nio.charset.CharsetDecoder;
 import java.nio.charset.CoderResult;
+import java.nio.charset.CodingErrorAction;
 
 public class DecoderWrap
     implements InternalNodeModule
@@ -141,7 +142,11 @@ public class DecoderWrap
         private String doDecode(Buffer.BufferImpl buf, boolean lastChunk)
         {
             if (decoder == null) {
+                // For this particular class, it is very important that we stop when we get to an incomplete
+                // character, rather than replace it and keep on going.
                 decoder = charset.newDecoder();
+                decoder.onMalformedInput(CodingErrorAction.REPORT);
+                decoder.onUnmappableCharacter(CodingErrorAction.REPLACE);
             }
 
             ByteBuffer inBuf = (buf == null ? EMPTY : buf.getBuffer());

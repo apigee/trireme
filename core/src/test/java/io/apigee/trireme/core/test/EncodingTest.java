@@ -217,27 +217,6 @@ public class EncodingTest
         assertFalse(utf.hasRemaining());
     }
 
-    @Test
-    public void testUtf8Partial()
-        throws UnsupportedEncodingException
-    {
-        // These are three-byte UTF-8 characters. Can we decode them partially?
-        String IN = "あああ";
-        ByteBuffer utf = ByteBuffer.wrap(IN.getBytes("UTF-8"));
-        assertEquals(9, utf.remaining());
-
-        ByteBuffer slice1 = utf.duplicate();
-        slice1.limit(4);
-        String decoded1 = Utils.bufferToString(slice1, Charset.forName("UTF-8"));
-        assertEquals(1, slice1.remaining());
-        ByteBuffer slice2 = utf.duplicate();
-        slice2.position(3);
-        String decoded2 = Utils.bufferToString(slice2, Charset.forName("UTF-8"));
-        assertFalse(slice2.hasRemaining());
-        String decoded = decoded1 + decoded2;
-        assertEquals(IN, decoded);
-    }
-
     private void encodeDecode(String text, String encoding)
         throws UnsupportedEncodingException, CharacterCodingException, IOException
     {

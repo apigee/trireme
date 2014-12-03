@@ -46,8 +46,10 @@ import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 import java.nio.CharBuffer;
 import java.nio.charset.Charset;
+import java.nio.charset.CharsetDecoder;
 import java.nio.charset.CharsetEncoder;
 import java.nio.charset.CoderResult;
+import java.nio.charset.CodingErrorAction;
 import java.util.Arrays;
 
 public class Buffer
@@ -374,8 +376,6 @@ public class Buffer
                 length = b.bufLength - offset;
             }
 
-            CharsetEncoder encoder = Charsets.get().getEncoder(charset);
-
             if (offset < 0) {
                 throw Utils.makeRangeError(cx, thisObj, "offset out of bounds");
             }
@@ -390,6 +390,10 @@ public class Buffer
             }
             ByteBuffer writeBuf = ByteBuffer.wrap(b.buf, offset + b.bufOffset, maxLen);
 
+            // When encoding, it's important that we stop on any incomplete character
+            // as per the spec.
+            CharsetEncoder encoder = getCharsetEncoder(charset, false);
+
             // Encode as much as we can and move the buffer's positions forward
             CharBuffer chars = CharBuffer.wrap(data);
             encoder.encode(chars, writeBuf, true);
@@ -397,6 +401,27 @@ public class Buffer
             b.setCharsWritten(chars.position());
 
             return Context.toNumber(writeBuf.position() - offset - b.bufOffset);
+        }
+
+        /**
+         * Get a charset encoder for this specific class, which should replace unmappable characters,
+         * unless base64 is in use, and stop on malformed input.
+         */
+        private static CharsetEncoder getCharsetEncoder(Charset cs, boolean replacePartial)
+        {
+            CharsetEncoder encoder = Charsets.get().getEncoder(cs);
+
+            if (Charsets.BASE64.equals(cs)) {
+                encoder.onUnmappableCharacter(CodingErrorAction.IGNORE);
+            } else {
+                encoder.onUnmappableCharacter(CodingErrorAction.REPLACE);
+            }
+            if (replacePartial) {
+                encoder.onMalformedInput(CodingErrorAction.REPLACE);
+            } else {
+                encoder.onMalformedInput(CodingErrorAction.REPORT);
+            }
+            return encoder;
         }
 
         @JSFunction
@@ -421,7 +446,33 @@ public class Buffer
             }
             int length = end - start;
             int realLength = Math.min(length, b.bufLength - start);
-            return Utils.bufferToString(ByteBuffer.wrap(b.buf, start + b.bufOffset, realLength), charset);
+
+            // Customize decoding here because we must stop decoding on a partial character
+            // like regular Node does
+            CharsetDecoder decoder = Charsets.get().getDecoder(charset);
+            decoder.onMalformedInput(CodingErrorAction.REPORT);
+            decoder.onUnmappableCharacter(CodingErrorAction.REPLACE);
+
+            int bufLen = (int)(realLength * decoder.averageCharsPerByte());
+            CharBuffer cBuf = CharBuffer.allocate(bufLen);
+            ByteBuffer buf = ByteBuffer.wrap(b.buf, start + b.bufOffset, realLength);
+
+            CoderResult result;
+            do {
+                result = decoder.decode(buf, cBuf, true);
+                if (result.isOverflow()) {
+                    cBuf = Utils.doubleBuffer(cBuf);
+                }
+            } while (result.isOverflow());
+            do {
+                result = decoder.flush(cBuf);
+                if (result.isOverflow()) {
+                    cBuf = Utils.doubleBuffer(cBuf);
+                }
+            } while (result.isOverflow());
+
+            cBuf.flip();
+            return cBuf.toString();
         }
 
         private void fromStringInternal(String s, Charset cs)
@@ -995,7 +1046,9 @@ public class Buffer
         {
             String data = stringArg(args, 0);
             Charset charset = resolveEncoding(args, 1);
-            CharsetEncoder encoder = Charsets.get().getEncoder(charset);
+
+            // Encode the characters and replace, just as we would do in the constructor
+            CharsetEncoder encoder = getCharsetEncoder(charset, true);
 
             if (encoder.averageBytesPerChar() == encoder.maxBytesPerChar()) {
                 // Optimize for ASCII

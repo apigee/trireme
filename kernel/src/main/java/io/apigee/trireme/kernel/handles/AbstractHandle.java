@@ -31,6 +31,7 @@ import java.nio.charset.Charset;
  */
 
 public abstract class AbstractHandle
+    implements Handle
 {
     public int write(ByteBuffer buf, IOCompletionHandler<Integer> handler)
     {

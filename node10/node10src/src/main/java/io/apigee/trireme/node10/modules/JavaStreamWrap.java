@@ -27,9 +27,9 @@ import io.apigee.trireme.core.ScriptTask;
 import io.apigee.trireme.kernel.Charsets;
 import io.apigee.trireme.core.internal.ScriptRunner;
 import io.apigee.trireme.kernel.ErrorCodes;
-import io.apigee.trireme.kernel.handles.AbstractHandle;
 import io.apigee.trireme.core.modules.Buffer;
 import io.apigee.trireme.core.modules.Referenceable;
+import io.apigee.trireme.kernel.handles.Handle;
 import io.apigee.trireme.kernel.handles.IOCompletionHandler;
 import org.mozilla.javascript.Context;
 import org.mozilla.javascript.Function;
@@ -89,7 +89,7 @@ public class JavaStreamWrap
         protected int byteCount;
         private Function onRead;
         protected ScriptRunner runtime;
-        private AbstractHandle handle;
+        private Handle handle;
         private boolean reading;
 
         @Override
@@ -102,7 +102,7 @@ public class JavaStreamWrap
         {
         }
 
-        protected StreamWrapImpl(AbstractHandle handle, ScriptRunner runtime)
+        protected StreamWrapImpl(Handle handle, ScriptRunner runtime)
         {
             this.handle = handle;
             this.runtime = runtime;
@@ -116,7 +116,7 @@ public class JavaStreamWrap
             }
 
             ScriptRunner runtime = (ScriptRunner)cx.getThreadLocal(ScriptRunner.RUNNER);
-            AbstractHandle handle = objArg(args, 0, AbstractHandle.class, true);
+            Handle handle = objArg(args, 0, Handle.class, true);
             return new StreamWrapImpl(handle, runtime);
         }
 

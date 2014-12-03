@@ -45,6 +45,7 @@ import java.nio.channels.SocketChannel;
  */
 public class NIOSocketHandle
     extends AbstractNIOHandle
+    implements SocketHandle
 {
     private static final Logger log = LoggerFactory.getLogger(NIOSocketHandle.class);
 
@@ -112,6 +113,7 @@ public class NIOSocketHandle
         }
     }
 
+    @Override
     public void bind(String address, int port)
         throws OSException
     {
@@ -121,6 +123,7 @@ public class NIOSocketHandle
         }
     }
 
+    @Override
     public void listen(int backlog, IOCompletionHandler<AbstractHandle> handler)
         throws OSException
     {
@@ -231,6 +234,7 @@ public class NIOSocketHandle
         return qw.length;
     }
 
+    @Override
     public void shutdown(IOCompletionHandler<Integer> handler)
     {
         QueuedWrite qw = new QueuedWrite(null, handler);
@@ -290,6 +294,7 @@ public class NIOSocketHandle
         }
     }
 
+    @Override
     public void connect(String host, int port, IOCompletionHandler<Integer> handler)
         throws OSException
     {
@@ -457,6 +462,7 @@ public class NIOSocketHandle
         } while (readStarted && (read > 0));
     }
 
+    @Override
     public InetSocketAddress getSockName()
     {
         if (svrChannel == null) {
@@ -465,6 +471,7 @@ public class NIOSocketHandle
         return (InetSocketAddress)(svrChannel.socket().getLocalSocketAddress());
     }
 
+    @Override
     public InetSocketAddress getPeerName()
     {
         if (clientChannel == null) {
@@ -473,6 +480,7 @@ public class NIOSocketHandle
         return (InetSocketAddress)(clientChannel.socket().getRemoteSocketAddress());
     }
 
+    @Override
     public void setNoDelay(boolean nd)
         throws OSException
     {
@@ -486,6 +494,7 @@ public class NIOSocketHandle
         }
     }
 
+    @Override
     public void setKeepAlive(boolean nd)
         throws OSException
     {

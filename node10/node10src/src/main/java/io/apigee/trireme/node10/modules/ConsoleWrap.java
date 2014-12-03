@@ -25,7 +25,7 @@ import io.apigee.trireme.core.InternalNodeModule;
 import io.apigee.trireme.core.NodeRuntime;
 import io.apigee.trireme.core.Utils;
 import io.apigee.trireme.core.internal.ScriptRunner;
-import io.apigee.trireme.kernel.handles.AbstractHandle;
+import io.apigee.trireme.kernel.handles.Handle;
 import org.mozilla.javascript.Context;
 import org.mozilla.javascript.Function;
 import org.mozilla.javascript.Scriptable;
@@ -80,7 +80,7 @@ public class ConsoleWrap
             return CLASS_NAME;
         }
 
-        protected ConsoleWrapImpl(AbstractHandle handle, ScriptRunner runtime)
+        protected ConsoleWrapImpl(Handle handle, ScriptRunner runtime)
         {
             super(handle, runtime);
         }
@@ -98,7 +98,7 @@ public class ConsoleWrap
             }
 
             ScriptRunner runtime = (ScriptRunner)cx.getThreadLocal(ScriptRunner.RUNNER);
-            AbstractHandle handle = objArg(args, 0, AbstractHandle.class, true);
+            Handle handle = objArg(args, 0, Handle.class, true);
             return new ConsoleWrapImpl(handle, runtime);
         }
 

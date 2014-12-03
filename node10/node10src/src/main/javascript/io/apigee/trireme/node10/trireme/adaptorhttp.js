@@ -60,6 +60,7 @@ exports.createClient = NodeHttp.createClient;
 
 if (HttpWrap.hasServerAdapter()) {
   var util = require('util');
+  var net = require('net');
   var events = require('events');
   var stream = require('stream');
   var timers = require('timers');
@@ -69,81 +70,6 @@ if (HttpWrap.hasServerAdapter()) {
   debug('Using server adapter');
 
   var END_OF_FILE = {};
-
-  function DummySocket(info) {
-    if (!(this instanceof DummySocket)) return new DummySocket(info);
-    events.EventEmitter.call(this);
-    // Need to make this socket "readable" or HTTP will assume that we are always at EOF
-    this.readable = true;
-    this.writable = true;
-    this.remoteAddress = info.remoteAddress;
-    this.remotePort = info.remotePort;
-    this.localAddress = info.localAddress;
-    this.localPort = info.localPort;
-    this.localFamily = info.localFamily;
-  }
-
-  util.inherits(DummySocket, events.EventEmitter);
-
-  DummySocket.prototype.address = function() {
-    return {
-      port: this.localPort,
-      address: this.localAddress,
-      family: this.localFamily
-    };
-  };
-
-  DummySocket.prototype.setTimeout = function(msecs, callback) {
-    if (msecs > 0 && !isNaN(msecs) && isFinite(msecs)) {
-      if (debugOn) {
-        debug('Enrolling timeout in ' + msecs);
-      }
-      timers.enroll(this, msecs);
-      timers._unrefActive(this);
-      if (callback) {
-        this.once('timeout', callback);
-      }
-    } else if (msecs === 0) {
-      if (debugOn) {
-        debug('Unenrolling timeout');
-      }
-      timers.unenroll(this);
-      if (callback) {
-        this.removeListener('timeout', callback);
-      }
-    }
-  };
-
-  DummySocket.prototype.clearTimeout = function(cb) {
-    this.setTimeout(0, cb);
-  };
-
-  DummySocket.prototype._onTimeout = function() {
-    debug('_onTimeout');
-    this.emit('timeout');
-  };
-
-  DummySocket.prototype.active = function() {
-    timers._unrefActive(this);
-  };
-
-  DummySocket.prototype.close = function() {
-    if (!this.closed) {
-      timers.unenroll(this);
-      this.closed = true;
-      this.readable = false;
-      this.writable = false;
-    }
-  };
-
-  DummySocket.prototype.destroy = function() {
-    if (this._outgoing) {
-      this._outgoing.destroy();
-    } else {
-      this.close();
-    }
-    this.emit('close');
-  };
 
   /*
    * This object represents the "http.ServerResponse" object from Node with code that wraps our
@@ -449,9 +375,11 @@ if (HttpWrap.hasServerAdapter()) {
     }
   }
 
-  Server.prototype._makeSocket = function(info) {
+  Server.prototype._makeSocket = function(handle) {
     var self = this;
-    var conn = new DummySocket(info);
+    var conn = new net.Socket({
+      handle: handle
+    });
     if (this.sslContext) {
       conn.encrypted = true;
     }
@@ -460,6 +388,7 @@ if (HttpWrap.hasServerAdapter()) {
         self.timeoutCallback(conn);
       });
     }
+    conn.readable = conn.writable = true;
     conn.active();
     return conn;
   };
@@ -613,8 +542,8 @@ if (HttpWrap.hasServerAdapter()) {
     self._adapter.makeResponse = function(resp, conn, timeoutOpts) {
       return self._makeResponse(resp, conn, timeoutOpts);
     };
-    self._adapter.makeSocket = function(info) {
-      return self._makeSocket(info);
+    self._adapter.makeSocket = function(handle) {
+      return self._makeSocket(handle);
     };
     self._adapter.onheaders = function(request, response) {
       self._onHeaders(request, response);

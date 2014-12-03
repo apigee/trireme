@@ -27,6 +27,8 @@ import io.apigee.trireme.kernel.Charsets;
 import io.apigee.trireme.core.InternalNodeModule;
 import io.apigee.trireme.core.Utils;
 import io.apigee.trireme.core.modules.crypto.SecureContextImpl;
+import io.apigee.trireme.kernel.handles.AbstractHandle;
+import io.apigee.trireme.net.spi.AdapterHandleDelegate;
 import io.apigee.trireme.net.spi.HttpDataAdapter;
 import io.apigee.trireme.net.spi.HttpFuture;
 import io.apigee.trireme.net.spi.HttpRequestAdapter;
@@ -261,10 +263,11 @@ public class HTTPWrap
                         (ResponseAdapter)cx.newObject(ServerContainer.this, ResponseAdapter.CLASS_NAME);
                     respAdapter.init(response, ServerContainer.this);
 
-                    Scriptable socketInfo = makeSocketInfo(cx, request);
+                    AdapterHandleDelegate handle =
+                         new AdapterHandleDelegate(request, response);
 
                     Scriptable socketObj = (Scriptable)makeSocket.call(cx, makeSocket, null,
-                                                                       new Object[] { socketInfo });
+                                                                       new Object[] { handle });
                     Scriptable requestObj = (Scriptable)makeRequest.call(cx, makeRequest, null,
                                                                          new Object[] { reqAdapter, socketObj });
                     Scriptable responseObj = (Scriptable)makeResponse.call(cx, makeResponse, null,
@@ -328,6 +331,13 @@ public class HTTPWrap
                     }
                 });
             }
+        }
+
+        @Override
+        public void onUpgrade(HttpRequestAdapter request, AbstractHandle socketHandle)
+        {
+            // TODO!
+            throw new AssertionError("Not implemented");
         }
 
         private void callOnComplete(Context cx, HttpRequestAdapter request)
@@ -533,20 +543,6 @@ public class HTTPWrap
             }
 
             return t;
-        }
-
-        /**
-         * Create an object that contains information about the client that made the request.
-         */
-        private Scriptable makeSocketInfo(Context cx, HttpRequestAdapter request)
-        {
-            Scriptable i = cx.newObject(this);
-            i.put("remoteAddress", i, request.getRemoteAddress());
-            i.put("remotePort", i, request.getRemotePort());
-            i.put("localAddress", i, request.getLocalAddress());
-            i.put("localPort", i, request.getLocalPort());
-            i.put("localFamily", i, (request.isLocalIPv6() ? "IPv6" : "IPv4"));
-            return i;
         }
     }
 

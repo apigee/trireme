@@ -30,6 +30,7 @@ import io.apigee.trireme.kernel.handles.AbstractHandle;
 import io.apigee.trireme.kernel.handles.IOCompletionHandler;
 import io.apigee.trireme.kernel.handles.NIOSocketHandle;
 import io.apigee.trireme.core.modules.Referenceable;
+import io.apigee.trireme.kernel.handles.SocketHandle;
 import io.apigee.trireme.net.NetUtils;
 import org.mozilla.javascript.Context;
 import org.mozilla.javascript.Function;
@@ -81,14 +82,14 @@ public class TCPWrap
 
         private Function          onConnection;
 
-        private NIOSocketHandle   sockHandle;
+        private SocketHandle sockHandle;
 
         @SuppressWarnings("unused")
         public TCPImpl()
         {
         }
 
-        protected TCPImpl(NIOSocketHandle handle, ScriptRunner runtime)
+        protected TCPImpl(SocketHandle handle, ScriptRunner runtime)
         {
             super(handle, runtime);
             this.sockHandle = handle;
@@ -103,7 +104,7 @@ public class TCPWrap
             }
 
             ScriptRunner runner = getRunner(cx);
-            NIOSocketHandle handle = objArg(args, 0, NIOSocketHandle.class, false);
+            SocketHandle handle = objArg(args, 0, SocketHandle.class, false);
             if (handle == null) {
                 handle = new NIOSocketHandle(runner);
             }

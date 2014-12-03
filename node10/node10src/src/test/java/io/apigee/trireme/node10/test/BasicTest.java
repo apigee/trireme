@@ -591,6 +591,14 @@ public class BasicTest
     }
 
     @Test
+    public void testDecoding()
+        throws InterruptedException, ExecutionException, NodeException
+    {
+        runTest("decodingtest.js");
+    }
+
+
+    @Test
     public void testDefaultVersion()
     {
         String defaultVer = env.getDefaultNodeVersion();

@@ -1,6 +1,10 @@
 var assert = require('assert');
 var child = require('child_process');
 
+if (process.platform === 'win32') {
+  process.exit(0);
+}
+
 assert(process.argv.length === 3);
 var op = process.argv[2];
 

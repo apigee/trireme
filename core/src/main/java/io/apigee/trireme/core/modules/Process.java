@@ -942,6 +942,16 @@ public class Process
             }
         }
 
+        @Override
+        public void delete(String name)
+        {
+            env.remove(name);
+            String uc = name.toUpperCase();
+            if (!uc.equals(name)) {
+                aliases.remove(uc);
+            }
+        }
+
         void initialize(Map<String, String> e)
         {
             for (Map.Entry<String, String> entry : e.entrySet()) {

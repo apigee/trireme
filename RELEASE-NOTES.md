@@ -1,3 +1,18 @@
+* 0.8.4 5-Dec-2014:
+
+This is a bug fix for a few important bugs. The next release may include some more refactoring.
+
+* [Issue 90](https://github.com/apigee/trireme/issues/90) Make "attachments" to the HTTP adapter's request
+object non-enumerable so that they don't blow up util.inspect.
+* [Issue 91](https://github.com/apigee/trireme/issues/91) Support case-insensitive retrieval of environment
+variables, like Windows. This makes variables like "Path" work on Windows.
+* [Issue 92](https://github.com/apigee/trireme/issues/92) Fix the string encoding and decoding mechanisms so
+that characters that are not valid for the current character set are converted into a "replacement" character
+rather than causing string encoding to stop.
+* [Issue 94](https://github.com/apigee/trireme/issues/94) Repeated HTTP requests sometimes fail because
+of problems with resetting the state of the HTTP parser that the "http" module tries to cache. (Said caching
+may be important with regular Node, but in Trireme is has no performance benefit.)
+
 * 0.8.3 15-Oct-2014:
 
 * Fix the error that happens when "dlopen" cannot find load a native code module. This bug was causing

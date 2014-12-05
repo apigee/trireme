@@ -4,8 +4,14 @@ Be sure that JAVA_HOME is set. On the Mac:
 
         export JAVA_HOME=`/usr/libexec/java_home -v 1.7`
 
+Then run this:
+
 	mvn -DautoVersionSubmodules=true release:prepare
 	mvn release:perform
+	pushd target/checkout/npm-package/target/trireme-npm-x.x.x-bin
+	npm publish
+        popd
+	(Verify on oss.sonatype.com that it is all OK.)
 	mvn release:clean
 
 What this does:
@@ -18,6 +24,7 @@ What this does:
 6) Checks out the tag in a temporary directory
 7) Builds there (without running tests)
 8) Uploads the artifacts to the repo
+9) Publishes the latest "trireme" to NPM.
 
 ** If it doesn't work
 
@@ -43,7 +50,11 @@ labdt1 on our internal network). You will need to have
 	  </servers>
 	</settings>
 
-If the "deploy" task fails part way, then some deployment tasks will return
+If the "deploy" task fails part way, you can cd to "target/checkout/",
+then to the specific modules that failed, and "npm publish"
+manually. 
+
+Sometimes, deployment tasks will return
 a "409" (conflict) status. You can fix this by using the Archiva web app to
 manually delete the artifacts and try again. I'm not sure of a better way
 to do this.
@@ -63,6 +74,12 @@ Apparently this can be automated, but it has not been automated yet.
 
 Sometimes the validation step fails, so you can't do the release. This
 might happen if a file upload breaks.
+
+The best thing to do in this case is to go to "target/checkout" 
+and "npm publish" the individual modules.
+
+However, if you did "mvn release:cleanup" first then you might 
+need to rebuild the release manually.
 
 In that case, you can:
 

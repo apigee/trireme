@@ -160,7 +160,7 @@ although it may not necessarily pass all the node.js tests.
   <tr><td>readline</td><td>Partial</td><td>node.js</td></tr>
   <tr><td>repl</td><td>Not Supported</td><td>node.js</td></tr>
   <tr><td>stream</td><td>Complete</td><td>node.js</td></tr>
-  <tr><td>string_decoder</td><td>Complete</td><td>Trireme</td></tr>
+  <tr><td>string_decoder</td><td>Complete</td><td>node.js</td></tr>
   <tr><td>timers</td><td>Complete</td><td>node.js + Trireme</td></tr>
   <tr><td>tls</td><td>Complete but See Notes</td><td>Trireme</td></tr>
   <tr><td>tty</td><td>Complete</td><td>Trireme</td></tr>

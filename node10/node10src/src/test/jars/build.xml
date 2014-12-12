@@ -1,0 +1,38 @@
+<project name="testjars" default="jar">
+
+    <target name="init">
+        <mkdir dir="depjar/build"/>
+        <mkdir dir="jar/build"/>
+        <mkdir dir="lib"/>
+
+        <exec executable="mvn">
+            <arg value="dependency:copy-dependencies"/>
+            <arg value="-DoutputDirectory=./lib"/>
+            <arg value="-Dmdep.stripVersion=true"/>
+        </exec>
+    </target>
+
+    <target name="compile" depends="init">
+        <javac srcdir="depjar/src"
+               destdir="depjar/build"
+        />
+        <javac srcdir="jar/src"
+               destdir="jar/build">
+            <classpath>
+                <pathelement location="depjar/build"/>
+                <pathelement location="lib/trireme-core.jar"/>
+                <pathelement location="lib/rhino.jar"/>
+            </classpath>
+        </javac>
+    </target>
+
+    <target name="jar" depends="compile">
+        <jar destfile="../resources/depjar.jar"
+             basedir="depjar/build"
+        />
+        <jar destfile="../resources/testjar.jar">
+            <fileset dir="jar/build"/>
+            <fileset dir="jar/resources"/>
+        </jar>
+    </target>
+</project>

@@ -53,6 +53,7 @@ public class Sandbox
     private List<Map.Entry<String, String>> mounts;
     private boolean         hideOsDetails;
     private ClassShutter    extraClassShutter;
+    private boolean         allowJarLoading;
 
     /**
      * Create a new sandbox that will not affect anything in any way.
@@ -81,6 +82,7 @@ public class Sandbox
             this.processPolicy = parent.processPolicy;
             this.hideOsDetails = parent.hideOsDetails;
             this.extraClassShutter = parent.extraClassShutter;
+            this.allowJarLoading = parent.allowJarLoading;
             if (parent.mounts != null) {
                 this.mounts = new ArrayList<Map.Entry<String, String>>(parent.mounts);
             }
@@ -257,5 +259,19 @@ public class Sandbox
 
     public ClassShutter getExtraClassShutter() {
         return extraClassShutter;
+    }
+
+    /**
+     * Allow the use of the "trireme-support" module's "loadJars" method to load JAR files into the
+     * currently-running script. This is enabled by default -- this option allows an environment to
+     * disable this feature.
+     */
+    public Sandbox setAllowJarLoading(boolean allowed) {
+        this.allowJarLoading = allowed;
+        return this;
+    }
+
+    public boolean isAllowJarLoading() {
+        return allowJarLoading;
     }
 }

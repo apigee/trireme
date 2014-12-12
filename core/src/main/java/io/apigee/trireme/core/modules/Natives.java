@@ -24,7 +24,7 @@ package io.apigee.trireme.core.modules;
 import io.apigee.trireme.core.InternalNodeModule;
 import io.apigee.trireme.core.NodeRuntime;
 import io.apigee.trireme.core.Utils;
-import io.apigee.trireme.core.internal.ModuleRegistry;
+import io.apigee.trireme.core.internal.AbstractModuleRegistry;
 import io.apigee.trireme.core.internal.ScriptRunner;
 import org.mozilla.javascript.Context;
 import org.mozilla.javascript.Script;
@@ -56,7 +56,7 @@ public class Natives
     {
         Scriptable natives = cx.newObject(global);
 
-        ModuleRegistry registry = ((ScriptRunner)runtime).getRegistry();
+        AbstractModuleRegistry registry = ((ScriptRunner)runtime).getRegistry();
         for (String name : registry.getCompiledModuleNames()) {
             Script script = registry.getCompiledModule(name);
             String fileName = '/' + script.getClass().getName().replace(".", "/") + ".js";

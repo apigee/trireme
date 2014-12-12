@@ -1,0 +1,25 @@
+<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+  <modelVersion>4.0.0</modelVersion>
+  
+  <parent>
+    <groupId>io.apigee.trireme</groupId>
+    <artifactId>trireme-node10</artifactId>
+    <version>0.8.5-SNAPSHOT</version>
+  </parent>
+
+  <name>trireme-node10src-testjars</name>
+  <artifactId>trireme-node10src-testjars</artifactId>
+  <version>0.8.5-SNAPSHOT</version>
+
+  <dependencies>
+    <dependency>
+      <groupId>io.apigee.trireme</groupId>
+      <artifactId>trireme-core</artifactId>
+      <version>0.8.5-SNAPSHOT</version>
+    </dependency>
+    <dependency>
+      <groupId>io.apigee</groupId>
+      <artifactId>rhino</artifactId>
+    </dependency>
+  </dependencies>
+</project>

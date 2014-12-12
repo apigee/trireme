@@ -23,7 +23,7 @@ package io.apigee.trireme.core.modules;
 
 import io.apigee.trireme.core.NodeModule;
 import io.apigee.trireme.core.NodeRuntime;
-import io.apigee.trireme.core.internal.ModuleRegistry;
+import io.apigee.trireme.core.internal.AbstractModuleRegistry;
 import io.apigee.trireme.core.internal.NodeExitException;
 import io.apigee.trireme.core.internal.ScriptRunner;
 import io.apigee.trireme.core.Utils;
@@ -233,7 +233,7 @@ public class Process
             Object mod = runner.getCachedInternalModule(name);
             if (mod == null) {
                 try {
-                    mod = runner.initializeModule(name, ModuleRegistry.ModuleType.INTERNAL, cx, runner.getScriptScope());
+                    mod = runner.initializeModule(name, AbstractModuleRegistry.ModuleType.INTERNAL, cx, runner.getScriptScope());
                     if (log.isTraceEnabled()) {
                         log.trace("Creating new instance {} of internal module {}",
                                   System.identityHashCode(mod), name);
@@ -280,7 +280,7 @@ public class Process
             String name = m.group(4);
 
             try {
-                Object nativeMod = runner.initializeModule(name, ModuleRegistry.ModuleType.NATIVE, cx,
+                Object nativeMod = runner.initializeModule(name, AbstractModuleRegistry.ModuleType.NATIVE, cx,
                                                            runner.getScriptScope());
                 if (log.isTraceEnabled()) {
                     log.trace("Creating new instance {} of native module {}",

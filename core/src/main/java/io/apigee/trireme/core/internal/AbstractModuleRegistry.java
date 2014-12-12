@@ -1,5 +1,5 @@
 /**
- * Copyright 2013 Apigee Corporation.
+ * Copyright 2014 Apigee Corporation.
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -32,8 +32,6 @@ import org.mozilla.javascript.Script;
 
 import java.io.IOException;
 import java.io.InputStream;
-import java.util.Collections;
-import java.util.HashMap;
 import java.util.ServiceLoader;
 import java.util.Set;
 
@@ -54,6 +52,15 @@ import java.util.Set;
  *     class. These modules may only reside within this Maven module.</li>
  * </ol>
  * <p>
+ *     There are two types of registries -- the root registry loads classes from the classloader that
+ *     was used to load Trireme, and there is one in the environment for each node implementation.
+ *     It is used for all the built-in modules for each version of Node.
+ * </p>
+ * <p>
+ *     A child registry can be used to load new classes (specifically for script-specific native classes
+ *     loaded using the "trireme-support" module) and delegates to the rest.
+ * </p>
+ * <p>
  *     The constructor for this class manually defines all compiled script modules. All the rest
  *     are loaded using the ServiceLoader, which means that new modules can add new scripts.
  * </p>
@@ -62,7 +69,7 @@ import java.util.Set;
  *     are a lot of versions of Node available.
  * </p>
  */
-public class ModuleRegistry
+public abstract class AbstractModuleRegistry
 {
     public enum ModuleType { PUBLIC, INTERNAL, NATIVE }
 
@@ -75,45 +82,63 @@ public class ModuleRegistry
     private static final String CODE_PREFIX = "(function (exports, require, module, __filename, __dirname) {";
     private static final String CODE_POSTFIX = "});";
 
-    private final HashMap<String, NodeModule>         modules         = new HashMap<String, NodeModule>();
-    private final HashMap<String, InternalNodeModule> internalModules = new HashMap<String, InternalNodeModule>();
-    private final HashMap<String, Script>             compiledModules = new HashMap<String, Script>();
-    private final HashMap<String, NativeNodeModule>   nativeModules = new HashMap<String, NativeNodeModule>();
-    private final NodeImplementation                  implementation;
+    public abstract NodeImplementation getImplementation();
 
-    private Script mainScript;
-    private boolean loaded;
+    /**
+     * To be called once per script invocation, at startup. Triggers one-time-only lazy initialization
+     * of the root module registry.
+     */
+    public abstract void loadRoot(Context cx);
 
-    public ModuleRegistry(NodeImplementation impl)
+    /**
+     * Get a "regular" module, loadable via "require".
+     */
+    public abstract NodeModule get(String name);
+
+    /**
+     * Get an "internal" module, loadable via "process.binding".
+     */
+    public abstract NodeModule getInternal(String name);
+
+    /**
+     * Get a "native" module -- a replacement for native code, loadable via "dlopen".
+     */
+    public abstract NodeModule getNative(String name);
+
+    /**
+     * Get a pre-compiled script, loaded via NodeScriptModule.
+     */
+    public abstract Script getCompiledModule(String name);
+
+    public abstract Set<String> getCompiledModuleNames();
+    public abstract Script getMainScript();
+
+    // For subclasses to optimize storage
+    protected abstract void putCompiledModule(String name, Script script);
+    protected abstract void putInternalModule(String name, InternalNodeModule mod);
+    protected abstract void putNativeModule(String name, NativeNodeModule mod);
+    protected abstract void putRegularModule(String name, NodeModule mod);
+
+    /**
+     * Load modules from the classloader and store them in this registry. Modules to be
+     * loaded include any implementation that the java.util.ServiceLoader returns for:
+     * <ul>
+     *     <li>NativeNodeModule: for "native" modules</li>
+     *     <li>InternalNodeModule: "internal" modules</li>
+     *     <li>NodeModule: All other Java-based modules</li>
+     *     <li>NodeScriptModule: A list of scripts that we should pre-compile</li>
+     * </ul>
+     */
+    public void load(Context cx, ClassLoader cl)
     {
-        this.implementation = impl;
-    }
-
-    public NodeImplementation getImplementation() {
-        return implementation;
-    }
-
-    public synchronized void load(Context cx)
-    {
-        if (loaded) {
-            return;
-        }
         // Load all native Java modules implemented using the "NodeModule" interface
-        ServiceLoader<NodeModule> loader = ServiceLoader.load(NodeModule.class);
+        ServiceLoader<NodeModule> loader = ServiceLoader.load(NodeModule.class, cl);
         for (NodeModule mod : loader) {
             addNativeModule(mod);
         }
 
-        // Load special modules that depend on the version of Java that we have.
-        // Load using reflection to avoid classloading in case we are on an old Java version
-        if (JavaVersion.get().hasAsyncFileIO()) {
-            loadModuleByName("io.apigee.trireme.core.modules.AsyncFilesystem");
-        } else {
-            loadModuleByName("io.apigee.trireme.core.modules.Filesystem");
-        }
-
         // Load all JavaScript modules implemented using "NodeScriptModule"
-        ServiceLoader<NodeScriptModule> scriptLoader = ServiceLoader.load(NodeScriptModule.class);
+        ServiceLoader<NodeScriptModule> scriptLoader = ServiceLoader.load(NodeScriptModule.class, cl);
         for (NodeScriptModule mod: scriptLoader) {
             for (String[] src : mod.getScriptSources()) {
                 if (src.length != 2) {
@@ -123,16 +148,17 @@ public class ModuleRegistry
                 compileAndAdd(cx, mod, src[0], src[1]);
             }
         }
+    }
 
-        loadMainScript(implementation.getMainScriptClass());
-        for (String[] builtin : implementation.getBuiltInModules()) {
-            addCompiledModule(builtin[0], builtin[1]);
+    protected void addNativeModule(NodeModule mod)
+    {
+        if (mod instanceof InternalNodeModule) {
+            putInternalModule(mod.getModuleName(), (InternalNodeModule) mod);
+        } else if (mod instanceof NativeNodeModule) {
+            putNativeModule(mod.getModuleName(), (NativeNodeModule)mod);
+        } else {
+            putRegularModule(mod.getModuleName(), mod);
         }
-        for (Class<? extends NodeModule> nat : implementation.getNativeModules()) {
-            loadModuleByClass(nat);
-        }
-
-        loaded = true;
     }
 
     private void compileAndAdd(Context cx, Object impl, String name, String path)
@@ -155,98 +181,7 @@ public class ModuleRegistry
 
         String finalSource = CODE_PREFIX + scriptSource + CODE_POSTFIX;
         Script compiled = cx.compileString(finalSource, name, 1, null);
-        compiledModules.put(name, compiled);
-    }
-
-    private void addNativeModule(NodeModule mod)
-    {
-        if (mod instanceof InternalNodeModule) {
-            internalModules.put(mod.getModuleName(), (InternalNodeModule) mod);
-        } else if (mod instanceof NativeNodeModule) {
-            nativeModules.put(mod.getModuleName(), (NativeNodeModule)mod);
-        } else {
-            modules.put(mod.getModuleName(), mod);
-        }
-    }
-
-    private void loadMainScript(String className)
-    {
-        try {
-            Class<Script> klass = (Class<Script>)Class.forName(className);
-            mainScript = klass.newInstance();
-        } catch (ClassNotFoundException e) {
-            throw new AssertionError(e);
-        } catch (InstantiationException e) {
-            throw new AssertionError(e);
-        } catch (IllegalAccessException e) {
-            throw new AssertionError(e);
-        }
-    }
-
-    private void loadModuleByName(String className)
-    {
-        try {
-            Class<NodeModule> klass = (Class<NodeModule>)Class.forName(className);
-            loadModuleByClass(klass);
-        } catch (ClassNotFoundException e) {
-            throw new AssertionError(e);
-        }
-    }
-
-    private void loadModuleByClass(Class<? extends NodeModule> klass)
-    {
-        try {
-            NodeModule mod = klass.newInstance();
-            addNativeModule(mod);
-        } catch (InstantiationException e) {
-            throw new AssertionError(e);
-        } catch (IllegalAccessException e) {
-            throw new AssertionError(e);
-        }
-    }
-
-    private void addCompiledModule(String name, String className)
-    {
-        try {
-            Class<Script> cl = (Class<Script>)Class.forName(className);
-            Script script = cl.newInstance();
-            compiledModules.put(name, script);
-        } catch (ClassNotFoundException e) {
-            throw new AssertionError("Missing built-in module " + className);
-        } catch (InstantiationException e) {
-            throw new AssertionError("Error creating Script instance for " + className);
-        } catch (IllegalAccessException e) {
-            throw new AssertionError("Error creating Script instance for " + className);
-        }
-    }
-
-    public NodeModule get(String name)
-    {
-        return modules.get(name);
-    }
-
-    public NodeModule getInternal(String name)
-    {
-        return internalModules.get(name);
-    }
-
-    public NodeModule getNative(String name)
-    {
-        return nativeModules.get(name);
-    }
-
-    public Script getCompiledModule(String name)
-    {
-        return compiledModules.get(name);
-    }
-
-    public Set<String> getCompiledModuleNames()
-    {
-        return Collections.unmodifiableSet(compiledModules.keySet());
-    }
-
-    public Script getMainScript()
-    {
-        return mainScript;
+        putCompiledModule(name, compiled);
     }
 }
+

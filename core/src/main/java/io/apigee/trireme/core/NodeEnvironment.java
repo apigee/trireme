@@ -21,7 +21,7 @@
  */
 package io.apigee.trireme.core;
 
-import io.apigee.trireme.core.internal.ModuleRegistry;
+import io.apigee.trireme.core.internal.RootModuleRegistry;
 import io.apigee.trireme.core.internal.RhinoContextFactory;
 import io.apigee.trireme.core.internal.SoftClassCache;
 import io.apigee.trireme.core.internal.VersionMatcher;
@@ -52,7 +52,7 @@ import java.util.concurrent.TimeUnit;
  */
 public class NodeEnvironment
 {
-    private static final Logger log = LoggerFactory.getLogger(ModuleRegistry.class);
+    private static final Logger log = LoggerFactory.getLogger(RootModuleRegistry.class);
 
     /**
      * The default version of the Node.js runtime that will be used.
@@ -81,8 +81,8 @@ public class NodeEnvironment
 
     private int                 optLevel = DEFAULT_OPT_LEVEL;
 
-    private final VersionMatcher<ModuleRegistry> versions =
-        new VersionMatcher<ModuleRegistry>();
+    private final VersionMatcher<RootModuleRegistry> versions =
+        new VersionMatcher<RootModuleRegistry>();
 
     /**
      * Create a new NodeEnvironment with all the defaults.
@@ -94,7 +94,7 @@ public class NodeEnvironment
             if (log.isDebugEnabled()) {
                 log.debug("Discovered Node version {}", impl.getVersion());
             }
-            versions.add(new NodeVersion(impl.getVersion(), new ModuleRegistry(impl)));
+            versions.add(new NodeVersion(impl.getVersion(), new RootModuleRegistry(impl)));
         }
     }
 
@@ -126,7 +126,7 @@ public class NodeEnvironment
     public List<String> getNodeVersions()
     {
         ArrayList<String> a = new ArrayList<String>();
-        for (ModuleRegistry reg : versions.getVersions()) {
+        for (RootModuleRegistry reg : versions.getVersions()) {
             a.add(reg.getImplementation().getVersion());
         }
         return a;
@@ -137,7 +137,7 @@ public class NodeEnvironment
      */
     public String getDefaultNodeVersion()
     {
-        ModuleRegistry reg = versions.match(DEFAULT_NODE_VERSION);
+        RootModuleRegistry reg = versions.match(DEFAULT_NODE_VERSION);
         if (reg == null) {
             return null;
         }
@@ -276,7 +276,7 @@ public class NodeEnvironment
     /**
      * Internal: Get the registry for a particular implementation
      */
-    public ModuleRegistry getRegistry(String version)
+    public RootModuleRegistry getRegistry(String version)
     {
         if (version == null) {
             return versions.match(DEFAULT_NODE_VERSION);

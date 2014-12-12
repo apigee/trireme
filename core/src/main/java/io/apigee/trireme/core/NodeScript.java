@@ -21,7 +21,9 @@
  */
 package io.apigee.trireme.core;
 
-import io.apigee.trireme.core.internal.ModuleRegistry;
+import io.apigee.trireme.core.internal.AbstractModuleRegistry;
+import io.apigee.trireme.core.internal.ChildModuleRegistry;
+import io.apigee.trireme.core.internal.RootModuleRegistry;
 import io.apigee.trireme.core.internal.ScriptRunner;
 import io.apigee.trireme.core.modules.ProcessWrap;
 import org.mozilla.javascript.Scriptable;
@@ -98,7 +100,7 @@ public class NodeScript
     public ScriptFuture execute()
         throws NodeException
     {
-        ModuleRegistry registry = getRegistry();
+        AbstractModuleRegistry registry = getRegistry();
 
         if ((scriptFile == null) && (script == null)) {
             runner = new ScriptRunner(this, env, sandbox, args, forceRepl);
@@ -143,7 +145,7 @@ public class NodeScript
         if (scriptFile == null) {
             throw new NodeException("Modules must be specified as a file name and not as a string");
         }
-        ModuleRegistry registry = getRegistry();
+        AbstractModuleRegistry registry = getRegistry();
 
         runner = new ScriptRunner(this, env, sandbox, scriptName,
                                   makeModuleScript(), args);
@@ -164,14 +166,14 @@ public class NodeScript
         return future;
     }
 
-    private ModuleRegistry getRegistry()
+    private AbstractModuleRegistry getRegistry()
         throws NodeException
     {
-        ModuleRegistry registry = env.getRegistry(nodeVersion);
-        if (registry == null) {
+        RootModuleRegistry root = env.getRegistry(nodeVersion);
+        if (root == null) {
             throw new NodeException("No available Node.js implementation matches version " + nodeVersion);
         }
-        return registry;
+        return new ChildModuleRegistry(root);
     }
 
     /**

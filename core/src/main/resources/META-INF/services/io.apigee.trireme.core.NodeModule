@@ -13,5 +13,6 @@ io.apigee.trireme.core.modules.OS
 io.apigee.trireme.core.modules.Process
 io.apigee.trireme.core.modules.ProcessWrap
 io.apigee.trireme.core.modules.TimerWrap
+io.apigee.trireme.core.modules.TriremeNativeSupport
 io.apigee.trireme.core.modules.UDPWrap
 io.apigee.trireme.core.modules.ZLib

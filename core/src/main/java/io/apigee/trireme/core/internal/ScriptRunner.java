@@ -89,7 +89,7 @@ public class ScriptRunner
 
     private final  NodeEnvironment env;
     private        long            now;
-    private        ModuleRegistry  registry;
+    private        AbstractModuleRegistry registry;
     private        File            scriptFile;
     private        String          script;
     private final  NodeScript      scriptObject;
@@ -221,11 +221,11 @@ public class ScriptRunner
         return now;
     }
 
-    public ModuleRegistry getRegistry() {
+    public AbstractModuleRegistry getRegistry() {
         return registry;
     }
 
-    public void setRegistry(ModuleRegistry registry) {
+    public void setRegistry(AbstractModuleRegistry registry) {
         this.registry = registry;
     }
 
@@ -653,7 +653,7 @@ public class ScriptRunner
             scope = cx.initStandardObjects();
 
             // Lazy first-time init of the node version.
-            registry.load(cx);
+            registry.loadRoot(cx);
 
             try {
                 initGlobals(cx);
@@ -1040,7 +1040,7 @@ public class ScriptRunner
         try {
             // Need to bootstrap the "native module" before we can do anything
             NativeModule.NativeImpl nativeMod =
-              (NativeModule.NativeImpl)initializeModule(NativeModule.MODULE_NAME, ModuleRegistry.ModuleType.PUBLIC, cx, scope);
+              (NativeModule.NativeImpl)initializeModule(NativeModule.MODULE_NAME, AbstractModuleRegistry.ModuleType.PUBLIC, cx, scope);
             this.nativeModule = nativeMod;
             NativeModule.ModuleImpl nativeModMod = NativeModule.ModuleImpl.newModule(cx, scope,
                                                                                      NativeModule.MODULE_NAME, NativeModule.MODULE_NAME);
@@ -1089,7 +1089,7 @@ public class ScriptRunner
     /**
      * Initialize a native module implemented in Java code.
      */
-    public Object initializeModule(String modName, ModuleRegistry.ModuleType type,
+    public Object initializeModule(String modName, AbstractModuleRegistry.ModuleType type,
                                    Context cx, Scriptable scope)
         throws InvocationTargetException, InstantiationException, IllegalAccessException
     {

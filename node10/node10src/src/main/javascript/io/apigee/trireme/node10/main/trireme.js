@@ -726,6 +726,7 @@
 
     // Wrap addListener for the special signal types
     process.on = process.addListener = function(type, listener) {
+      /* TODO Trireme
       if (isSignal(type) &&
           !signalWraps.hasOwnProperty(type)) {
         var Signal = process.binding('signal_wrap').Signal;
@@ -744,6 +745,7 @@
 
         signalWraps[type] = wrap;
       }
+      */
 
       return addListener.apply(this, arguments);
     };

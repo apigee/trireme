@@ -10,6 +10,7 @@ import org.mozilla.javascript.ScriptRuntime;
 import org.mozilla.javascript.Scriptable;
 import org.mozilla.javascript.ScriptableObject;
 import org.mozilla.javascript.annotations.JSFunction;
+import org.mozilla.javascript.annotations.JSGetter;
 
 import static io.apigee.trireme.core.ArgUtils.*;
 
@@ -43,6 +44,7 @@ public class TriremeNativeSupport
         extends ScriptableObject
     {
         public static final String CLASS_NAME = "_triremeNativeSupportClass";
+        public static final String INTERFACE_VERSION = "1.0.0";
 
         private ScriptRunner runtime;
 
@@ -57,8 +59,15 @@ public class TriremeNativeSupport
         }
 
         @SuppressWarnings("unused")
+        @JSGetter("interfaceVersion")
+        public String getInterfaceVersion()
+        {
+            return INTERFACE_VERSION;
+        }
+
+        @SuppressWarnings("unused")
         @JSFunction
-        public static void loadJars(Context cx, Scriptable thisObj, Object[] args, Function func)
+        public static Object loadJars(Context cx, Scriptable thisObj, Object[] args, Function func)
         {
             Scriptable jars = objArg(args, 0, Scriptable.class, true);
 
@@ -95,7 +104,10 @@ public class TriremeNativeSupport
             // Load the classes in to the module registry for this script only.
             // After this they will appear in "require" depending on what kind of
             // Java classes are in the JAR.
-            ((ScriptRunner)self.runtime).getRegistry().load(cx, loader);
+            self.runtime.getRegistry().load(cx, loader);
+
+            // Return the classloader. The wrapper code (in the trireme-support module) will hide it.
+            return loader;
         }
     }
 }

@@ -53,7 +53,7 @@ public class Sandbox
     private List<Map.Entry<String, String>> mounts;
     private boolean         hideOsDetails;
     private ClassShutter    extraClassShutter;
-    private boolean         allowJarLoading;
+    private boolean         allowJarLoading = true;
 
     /**
      * Create a new sandbox that will not affect anything in any way.

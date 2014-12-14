@@ -1,3 +1,10 @@
+* 0.8.5 14-Dec-2014:
+
+[Issue 98](https://github.com/apigee/trireme/issues/98) Add support for the "trireme-support"
+module, which initially has support only for the "loadJars" method, which loads JAR files into
+the current script and scans them for "native" modules implemented in Java using the "NodeModule"
+and "NodeScriptModule" interfaces.
+
 * 0.8.4 5-Dec-2014:
 
 This is a bug fix for a few important bugs. The next release may include some more refactoring.

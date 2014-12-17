@@ -66,6 +66,7 @@ if (HttpWrap.hasServerAdapter()) {
   var timers = require('timers');
   var domain = require('domain');
   var assert = require('assert');
+  var tcp_wrap = process.binding('tcp_wrap');
 
   debug('Using server adapter');
 
@@ -155,7 +156,7 @@ if (HttpWrap.hasServerAdapter()) {
       this.writeHead(this.statusCode);
     }
 
-    this.connection.active();
+    timers.active(this.connection);
     if (!this.headersSent) {
       // Just send one additional chunk of data
       if (debugOn) {
@@ -185,10 +186,9 @@ if (HttpWrap.hasServerAdapter()) {
       this.writeHead(this.statusCode);
     }
 
-    this.connection.active();
+    timers.active(this.connection);
     var self = this;
     stream.Writable.prototype.end.call(this, data, encoding, function() {
-      self.connection.close();
       if (self.headersSent) {
         debug('Sending end of response');
         self._adapter.sendChunk(null, null, self._trailers, true);
@@ -198,6 +198,7 @@ if (HttpWrap.hasServerAdapter()) {
                            null, null, self._trailers, true);
       }
       this.finished = true;
+      self.connection.emit('finish');
     });
   };
 
@@ -255,7 +256,7 @@ if (HttpWrap.hasServerAdapter()) {
     if (this._adapter) {
       this._adapter.destroy();
     }
-    this.connection.close();
+    this.connection.destroy();
   };
 
   ServerResponse.prototype.setTimeout = function(timeout, cb) {
@@ -301,7 +302,7 @@ if (HttpWrap.hasServerAdapter()) {
   function addPending(self, chunk) {
     // We are always readable in this implementation, so whenever we get incoming data,
     // add it to the read queue. We don't care if _read was already called.
-    self.connection.active();
+    timers.active(self.connection);
     if (debugOn) {
       debug('Pushing ' + chunk.length + ' bytes to the request stream');
     }
@@ -377,8 +378,13 @@ if (HttpWrap.hasServerAdapter()) {
 
   Server.prototype._makeSocket = function(handle) {
     var self = this;
+
+    // The handle is just a Java object -- make it an actual socket handle
+    var sockHandle = new tcp_wrap.TCP(handle);
+
+    // And make that handle an actual socket
     var conn = new net.Socket({
-      handle: handle
+      handle: sockHandle
     });
     if (this.sslContext) {
       conn.encrypted = true;
@@ -389,7 +395,7 @@ if (HttpWrap.hasServerAdapter()) {
       });
     }
     conn.readable = conn.writable = true;
-    conn.active();
+    timers.active(conn);
     return conn;
   };
 
@@ -457,9 +463,11 @@ if (HttpWrap.hasServerAdapter()) {
       if (!response.ended) {
         response.emit('close');
       }
+      /* Not sure this is a good idea
       if (response.conn) {
-        response.conn.close();
+        response.conn.destroy();
       }
+      */
     };
 
     response._adapter.onwritecomplete = function(err) {
@@ -480,12 +488,39 @@ if (HttpWrap.hasServerAdapter()) {
     });
   };
 
+  /**
+   * Called when the client sent a message containing an upgrade header.
+   */
+  var EMPTY_BUFFER = new Buffer(0);
+
+  Server.prototype._onUpgrade = function(request, socket) {
+    debug('onUpgrade');
+
+    if (events.EventEmitter.listenerCount(this, 'upgrade') === 0) {
+      debug('No listeners for upgrade event');
+      return false;
+    }
+
+    // TODO timeout?
+
+    var self = this;
+    request._adapter.domain = domain.create();
+    request._adapter.domain.on('error', function(err) {
+      handleError(err, response);
+    });
+    request._adapter.domain.run(function() {
+      self.emit('upgrade', request, socket, EMPTY_BUFFER);
+    });
+
+    return true;
+  };
+
   /*
    * This is called directly by the adapter when data is received for the message body.
    */
   function onBody(request, b) {
     debug('onBody');
-    request.connection.active();
+    timers.active(request.connection);
     request._adapter.domain.run(function() {
       addPending(request, b);
     });
@@ -496,7 +531,7 @@ if (HttpWrap.hasServerAdapter()) {
    */
   function onMessageComplete(request) {
     debug('onMessageComplete');
-    request.connection.active();
+    timers.active(request.connection);
     request.complete = true;
     if (!request.upgrade) {
       request._adapter.domain.run(function() {
@@ -507,7 +542,7 @@ if (HttpWrap.hasServerAdapter()) {
 
   function onClose(request, response) {
     debug('onClose');
-    request.connection.close();
+    request.connection.destroy();
     if (!request.ended) {
       request._adapter.domain.run(function() {
         request.ended = true;
@@ -550,6 +585,9 @@ if (HttpWrap.hasServerAdapter()) {
     };
     self._adapter.ondata = onBody;
     self._adapter.oncomplete = onMessageComplete;
+    self._adapter.onupgrade = function(request, handle) {
+      return self._onUpgrade(request, handle);
+    };
     self._adapter.onclose = onClose;
 
     process.on('uncaughtException', function(err) {

@@ -134,7 +134,7 @@ public class Buffer
 
         /**
          * Read the bytes from the corresponding buffer into this one. If "copy" is true then
-         * make a new copy.
+         * make a new copy. In either case, the position of the original buffer is not changed.
          */
         public static BufferImpl newBuffer(Context cx, Scriptable scope,
                                            ByteBuffer bb, boolean copy)
@@ -148,8 +148,9 @@ public class Buffer
                 buf.bufOffset = bb.arrayOffset() + bb.position();
                 buf.bufLength = bb.remaining();
             } else {
-                buf.buf = new byte[bb.remaining()];
-                bb.get(buf.buf);
+                ByteBuffer tmp = bb.duplicate();
+                buf.buf = new byte[tmp.remaining()];
+                tmp.get(buf.buf);
                 buf.bufOffset = 0;
                 buf.bufLength = buf.buf.length;
             }

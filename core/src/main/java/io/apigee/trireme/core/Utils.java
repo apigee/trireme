@@ -23,7 +23,6 @@ package io.apigee.trireme.core;
 
 import io.apigee.trireme.kernel.Charsets;
 import io.apigee.trireme.core.internal.NodeOSException;
-import io.apigee.trireme.core.modules.Constants;
 import io.apigee.trireme.kernel.ErrorCodes;
 import io.apigee.trireme.kernel.util.BufferUtils;
 import io.apigee.trireme.kernel.util.StringUtils;
@@ -41,14 +40,8 @@ import java.lang.reflect.Method;
 import java.nio.ByteBuffer;
 import java.nio.CharBuffer;
 import java.nio.charset.Charset;
-import java.nio.charset.CharsetDecoder;
-import java.nio.charset.CharsetEncoder;
-import java.nio.charset.CoderResult;
-import java.nio.charset.CodingErrorAction;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
 
 /**
  * A few utility functions, mainly for Rhino, that are useful when writing Node modules in Java.

@@ -19,13 +19,15 @@
  * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
  * SOFTWARE.
  */
-package io.apigee.trireme.net.spi;
+package io.apigee.trireme.net.internal;
 
 import io.apigee.trireme.kernel.ErrorCodes;
 import io.apigee.trireme.kernel.OSException;
 import io.apigee.trireme.kernel.handles.AbstractHandle;
 import io.apigee.trireme.kernel.handles.IOCompletionHandler;
 import io.apigee.trireme.kernel.handles.SocketHandle;
+import io.apigee.trireme.net.spi.HttpRequestAdapter;
+import io.apigee.trireme.net.spi.HttpResponseAdapter;
 
 import java.net.InetAddress;
 import java.net.InetSocketAddress;
@@ -84,6 +86,17 @@ public class AdapterHandleDelegate
         } catch (UnknownHostException e) {
             return new InetSocketAddress(req.getRemoteAddress(), req.getRemotePort());
         }
+    }
+
+    @Override
+    public void startReading(IOCompletionHandler<ByteBuffer> handler)
+    {
+        // Nothing to do here yet
+    }
+
+    @Override
+    public void stopReading()
+    {
     }
 
     @Override

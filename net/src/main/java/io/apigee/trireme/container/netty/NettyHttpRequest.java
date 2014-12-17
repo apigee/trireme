@@ -107,4 +107,10 @@ public class NettyHttpRequest
             return ((connHeader == null) || !"close".equalsIgnoreCase(connHeader));
         }
     }
+
+    boolean isUpgrade()
+    {
+        String upgradeHeader = req.headers().get("Upgrade");
+        return (upgradeHeader != null);
+    }
 }

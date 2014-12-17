@@ -17,6 +17,7 @@ srv.on('upgrade', function(req, socket, head) {
                '\r\n');
 
   var allData = head.toString('utf8');
+  console.log('Server got an upgrade');
   socket.setEncoding('utf8');
   socket.on('data', function(chunk) {
     allData += chunk;
@@ -53,13 +54,16 @@ srv.listen(33334, function() {
   req.end();
 
   req.on('upgrade', function(res, socket, upgradeHead) {
+    console.log('Client got upgrade');
     socket.setEncoding('utf8');
     socket.on('data', function(chunk) {
       console.log('Client: got %s', chunk);
     });
 
+    console.log('Client: writing');
     socket.write('PACKPA');
     socket.write('CK');
+    console.log('Client: end');
     socket.end();
 
     srv.close();

@@ -21,12 +21,14 @@
  */
 package io.apigee.trireme.container.netty;
 
-import io.apigee.trireme.kernel.CompositeTrustManager;
 import io.apigee.trireme.net.spi.HttpServerAdapter;
 import io.apigee.trireme.net.spi.HttpServerStub;
 import io.apigee.trireme.net.spi.TLSParams;
+import io.netty.buffer.ByteBuf;
 import io.netty.channel.ChannelException;
+import io.netty.channel.ChannelHandler;
 import io.netty.channel.ChannelHandlerContext;
+import io.netty.channel.ChannelInboundHandlerAdapter;
 import io.netty.channel.ChannelInitializer;
 import io.netty.channel.SimpleChannelInboundHandler;
 import io.netty.channel.socket.SocketChannel;
@@ -49,7 +51,6 @@ import org.slf4j.LoggerFactory;
 
 import javax.net.ssl.SSLEngine;
 import java.util.concurrent.TimeUnit;
-
 
 public class NettyHttpServer
     implements HttpServerAdapter
@@ -114,13 +115,28 @@ public class NettyHttpServer
                     c.pipeline().addLast("loggingReq", new LoggingHandler(LogLevel.DEBUG));
                 }
                 c.pipeline().addLast(new HttpRequestDecoder())
-                            .addLast(new Handler())
+                            .addLast(new HttpHandler())
                             .addLast(new HttpResponseEncoder());
                 if (log.isTraceEnabled()) {
                     c.pipeline().addLast("loggingResp", new LoggingHandler(LogLevel.DEBUG));
                 }
             }
         };
+    }
+
+    private void makeUpgradePipeline(SocketChannel c, UpgradedHandler handler)
+    {
+        // Remove the last handlers until we have remove the requestDecoder
+        ChannelHandler lastHandler = null;
+        do {
+            lastHandler = c.pipeline().removeLast();
+        } while (!(lastHandler instanceof HttpRequestDecoder));
+
+        // Now tack the new handler on the end instead
+        c.pipeline().addLast(handler);
+        if (log.isTraceEnabled()) {
+            c.pipeline().addLast("loggingResp", new LoggingHandler(LogLevel.DEBUG));
+        }
     }
 
     boolean isClosing() {
@@ -158,7 +174,7 @@ public class NettyHttpServer
         return eng;
     }
 
-    private final class Handler
+    private final class HttpHandler
         extends SimpleChannelInboundHandler<HttpObject>
     {
         private NettyHttpRequest curRequest;
@@ -207,14 +223,26 @@ public class NettyHttpServer
                 // Set the "attachment" field on the Java request object for testing
                 curRequest.setClientAttachment(injectedAttachment);
 
-                curResponse = new NettyHttpResponse(
-                    new DefaultHttpResponse(req.getProtocolVersion(),
-                                            HttpResponseStatus.OK),
-                    channel,
-                    curRequest.isKeepAlive(), isTls,
-                    NettyHttpServer.this);
-                curResponse.setClientAttachment(injectedAttachment);
-                stub.onRequest(curRequest, curResponse);
+                if (curRequest.isUpgrade()) {
+                    // The Trireme handle that abstractly represents the "socket"
+                    UpgradedSocketHandler handler =
+                        new UpgradedSocketHandler(channel);
+                    // The Netty handler that replaces this HTTP handler
+                    UpgradedHandler nettyHandler = new UpgradedHandler(handler);
+                    makeUpgradePipeline(channel, nettyHandler);
+                    // Now deliver it
+                    stub.onUpgrade(curRequest, handler);
+
+                } else {
+                    curResponse = new NettyHttpResponse(
+                        new DefaultHttpResponse(req.getProtocolVersion(),
+                                                HttpResponseStatus.OK),
+                        channel,
+                        curRequest.isKeepAlive(), isTls,
+                        NettyHttpServer.this);
+                    curResponse.setClientAttachment(injectedAttachment);
+                    stub.onRequest(curRequest, curResponse);
+                }
 
             } else if (httpObject instanceof HttpContent) {
                 if ((curRequest == null) || (curResponse == null)) {
@@ -240,6 +268,43 @@ public class NettyHttpServer
             }
             FullHttpResponse response = new DefaultFullHttpResponse(HttpVersion.HTTP_1_1, status);
             ctx.channel().writeAndFlush(response);
+        }
+    }
+
+    private final class UpgradedHandler
+        extends ChannelInboundHandlerAdapter
+    {
+        private final UpgradedSocketHandler handler;
+
+        public UpgradedHandler(UpgradedSocketHandler handler)
+        {
+            this.handler = handler;
+        }
+
+        @Override
+        public void channelRead(ChannelHandlerContext ctx, Object msg)
+            throws Exception
+        {
+            if (log.isDebugEnabled()) {
+                log.debug("Upgraded socket handler got {}", msg);
+            }
+
+            if (msg instanceof ByteBuf) {
+                handler.deliverRead((ByteBuf)msg);
+            }
+        }
+
+        @Override
+        public void channelInactive(ChannelHandlerContext ctx)
+        {
+            handler.deliverRead(null);
+        }
+
+        @Override
+        public void exceptionCaught(ChannelHandlerContext ctx, Throwable t)
+        {
+            log.debug("Channel exception caught: {}", t);
+            handler.deliverError(t);
         }
     }
 }

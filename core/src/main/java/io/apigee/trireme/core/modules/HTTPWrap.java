@@ -27,8 +27,8 @@ import io.apigee.trireme.kernel.Charsets;
 import io.apigee.trireme.core.InternalNodeModule;
 import io.apigee.trireme.core.Utils;
 import io.apigee.trireme.core.modules.crypto.SecureContextImpl;
-import io.apigee.trireme.kernel.handles.AbstractHandle;
-import io.apigee.trireme.net.spi.AdapterHandleDelegate;
+import io.apigee.trireme.net.internal.AdapterHandleDelegate;
+import io.apigee.trireme.net.internal.UpgradedSocketDelegate;
 import io.apigee.trireme.net.spi.HttpDataAdapter;
 import io.apigee.trireme.net.spi.HttpFuture;
 import io.apigee.trireme.net.spi.HttpRequestAdapter;
@@ -37,6 +37,7 @@ import io.apigee.trireme.net.spi.HttpServerAdapter;
 import io.apigee.trireme.net.spi.HttpServerContainer;
 import io.apigee.trireme.net.spi.HttpServerStub;
 import io.apigee.trireme.net.spi.TLSParams;
+import io.apigee.trireme.net.spi.UpgradedSocket;
 import org.mozilla.javascript.Context;
 import org.mozilla.javascript.Function;
 import org.mozilla.javascript.RhinoException;
@@ -148,6 +149,7 @@ public class HTTPWrap
         private Function onHeaders;
         private Function onData;
         private Function onComplete;
+        private Function onUpgrade;
         private Function onClose;
         private TLSParams tlsParams;
         private Scriptable timeoutOpts;
@@ -306,6 +308,38 @@ public class HTTPWrap
         }
 
         @Override
+        public void onUpgrade(final HttpRequestAdapter request, final UpgradedSocket socket)
+        {
+            runner.enqueueTask(new ScriptTask() {
+                @Override
+                public void execute(Context cx, Scriptable scope)
+                {
+                    RequestAdapter reqAdapter =
+                        (RequestAdapter)cx.newObject(ServerContainer.this, RequestAdapter.CLASS_NAME);
+                    reqAdapter.init(request);
+
+                    UpgradedSocketDelegate socketHandle =
+                        new UpgradedSocketDelegate(socket, runner, request);
+
+                    Scriptable socketObj = (Scriptable)makeSocket.call(cx, makeSocket, null,
+                                                                       new Object[] { socketHandle });
+                    Scriptable requestObj = (Scriptable)makeRequest.call(cx, makeRequest, null,
+                                                                         new Object[] { reqAdapter, socketObj });
+
+                    request.setScriptObject(requestObj);
+
+                    Object result =
+                        onUpgrade.call(cx, onUpgrade, ServerContainer.this,
+                                   new Object[] { requestObj, socketObj });
+                    boolean success = Context.toBoolean(result);
+                    if (!success) {
+                        socketHandle.close();
+                    }
+                }
+            });
+        }
+
+        @Override
         public void onData(final HttpRequestAdapter request, final HttpResponseAdapter response, HttpDataAdapter data)
         {
             if (log.isDebugEnabled()) {
@@ -333,12 +367,7 @@ public class HTTPWrap
             }
         }
 
-        @Override
-        public void onUpgrade(HttpRequestAdapter request, AbstractHandle socketHandle)
-        {
-            // TODO!
-            throw new AssertionError("Not implemented");
-        }
+
 
         private void callOnComplete(Context cx, HttpRequestAdapter request)
         {
@@ -507,6 +536,20 @@ public class HTTPWrap
         public void setOnComplete(Function onComplete)
         {
             this.onComplete = onComplete;
+        }
+
+        @JSGetter("onupgrade")
+        @SuppressWarnings("unused")
+        public Function getOnUpgrade()
+        {
+            return onUpgrade;
+        }
+
+        @JSSetter("onupgrade")
+        @SuppressWarnings("unused")
+        public void setOnUpgrade(Function onComplete)
+        {
+            this.onUpgrade = onComplete;
         }
 
         @JSGetter("onclose")

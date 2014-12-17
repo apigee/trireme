@@ -60,6 +60,11 @@ svr.listen(33333, function() {
       process.exit(1);
     }
 
+    var localAddress = resp.socket.localAddress;
+    var localPort = resp.socket.localPort;
+    var remoteAddress = resp.socket.remoteAddress;
+    var remotePort = resp.socket.remotePort;
+
     resp.on('data', function(chunk) {
       received += chunk;
     });
@@ -70,10 +75,10 @@ svr.listen(33333, function() {
       var msg = JSON.parse(received);
       console.log('Received: %j', msg);
 
-      assert.equal(resp.socket.localAddress, msg.remoteAddress);
-      assert.equal(resp.socket.localPort, msg.remotePort);
-      assert.equal(resp.socket.remoteAddress, msg.localAddress);
-      assert.equal(resp.socket.remotePort, msg.localPort);
+      assert.equal(localAddress, msg.remoteAddress);
+      assert.equal(localPort, msg.remotePort);
+      assert.equal(remoteAddress, msg.localAddress);
+      assert.equal(remotePort, msg.localPort);
       socketsMatch = true;
     });
   });

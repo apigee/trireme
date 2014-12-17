@@ -21,8 +21,6 @@
  */
 package io.apigee.trireme.net.spi;
 
-import io.apigee.trireme.kernel.handles.AbstractHandle;
-
 import java.util.concurrent.TimeUnit;
 
 /**
@@ -45,9 +43,10 @@ public interface HttpServerStub
     /**
      * The adapter should call this method if it detects that an "upgrade" request was made by the
      * client. The adapter must then turn control of the socket to Trireme by supplying an implementation
-     * of the "Handle" interface. Trireme will close the connection when done.
+     * of the "UpgradedSocket" interface that provides access to the underlying socket.
+     * Trireme will close the connection when done.
      */
-    void onUpgrade(HttpRequestAdapter request, AbstractHandle socketHandle);
+    void onUpgrade(HttpRequestAdapter request, UpgradedSocket socketHandle);
 
     /**
      * This method is called on each new network connection.

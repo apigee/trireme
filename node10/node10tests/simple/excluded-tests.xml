@@ -275,7 +275,15 @@
         <Description>Checks for specific error messages that are differnet in Rhino.</Description>
     </Excluded>
     <Excluded>
-        <Name>test-http-upgrade-.+\.js</Name>
+        <Name>test-http-upgrade-agent.js</Name>
+        <Description>Assumes that all data on the socket after the upgrade comes in in one chunk.</Description>
+    </Excluded>
+    <Excluded>
+        <Name>test-http-upgrade-client.js</Name>
+        <Description>Assumes that all data on the socket after the upgrade comes in in one chunk.</Description>
+    </Excluded>
+    <Excluded>
+        <Name>test-http-upgrade-server.js</Name>
         <Description>Assumes that all data on the socket after the upgrade comes in in one chunk.</Description>
     </Excluded>
     <Excluded>

@@ -39,7 +39,7 @@ import java.nio.ByteBuffer;
 /**
  * This class mediates between the HTTP adapters "UpgradedSocket" interface and the
  * "Handle" interface that is used to implement network sockets in Trireme. It thinly wraps
- * the Handle interface ina way that makes the implementer to less work.
+ * the Handle interface in a way that makes the implementer do less work.
  */
 
 public class UpgradedSocketDelegate
@@ -59,7 +59,6 @@ public class UpgradedSocketDelegate
 
         this.localAddress = new InetSocketAddress(request.getLocalAddress(), request.getLocalPort());
         this.remoteAddress = new InetSocketAddress(request.getRemoteAddress(), request.getRemotePort());
-        runtime.pin();
     }
 
     @Override
@@ -111,7 +110,6 @@ public class UpgradedSocketDelegate
     @Override
     public void close()
     {
-        runtime.unPin();
         adapterSocket.close();
     }
 

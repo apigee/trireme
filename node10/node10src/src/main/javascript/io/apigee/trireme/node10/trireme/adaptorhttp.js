@@ -189,6 +189,11 @@ if (HttpWrap.hasServerAdapter()) {
     timers.active(this.connection);
     var self = this;
     stream.Writable.prototype.end.call(this, data, encoding, function() {
+      // The connection is a dummy connection, but it still must be ended to clean up state
+      self.connection.end();
+      // That does not "unref" it in all cases -- must do that so we don't hold server open.
+      self.connection.unref();
+      
       if (self.headersSent) {
         debug('Sending end of response');
         self._adapter.sendChunk(null, null, self._trailers, true);

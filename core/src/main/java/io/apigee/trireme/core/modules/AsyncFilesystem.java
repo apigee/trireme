@@ -919,10 +919,10 @@ public class AsyncFilesystem
             throws NodeOSException
         {
             Path sp = translatePath(dn);
-            Context cx = Context.enter();
             if (!Files.isDirectory(sp)) {
                 throw new NodeOSException(Constants.ENOTDIR, sp.toString());
             }
+            Context cx = Context.enter();
             try {
                 final ArrayList<String> paths = new ArrayList<String>();
                 Set<FileVisitOption> options = Collections.emptySet();

@@ -140,6 +140,8 @@ public class HTTPWrap
     {
         public static final String CLASS_NAME = "_httpServerWrapperClass";
 
+        private static final String RFC_1123_FORMAT = "EEE, dd MM yyyy HH:mm:ss zzz";
+
         private NodeRuntime       runner;
         private HttpServerAdapter adapter;
 
@@ -157,6 +159,10 @@ public class HTTPWrap
         private final IdentityHashMap<ResponseAdapter, ResponseAdapter> pendingRequests =
             new IdentityHashMap<ResponseAdapter, ResponseAdapter>();
 
+        /** DateFormat is not thread safe. Create one for each server, which will only use it in one thread at a time. */
+        private final SimpleDateFormat dateFormat = new SimpleDateFormat(RFC_1123_FORMAT);
+
+
         @Override
         public String getClassName()
         {
@@ -167,6 +173,7 @@ public class HTTPWrap
         {
             this.runner = runner;
             this.adapter = container.newServer(runner.getScriptObject(), this);
+            this.dateFormat.setTimeZone(TimeZone.getTimeZone("GMT"));
             runner.pin();
         }
 
@@ -587,6 +594,11 @@ public class HTTPWrap
 
             return t;
         }
+
+        protected String formatDate()
+        {
+            return dateFormat.format(new Date());
+        }
     }
 
     /**
@@ -861,16 +873,9 @@ public class HTTPWrap
             }
         }
 
-        private static final String RFC_1123_FORMAT = "EEE, dd MM yyyy HH:mm:ss zzz";
-
         private void addDateHeader(HttpResponseAdapter response)
         {
-            // TODO we can optimize this by attaching the formatter to the server adapter
-            // However it cannot just be static as it is not thread safe
-            SimpleDateFormat df = new SimpleDateFormat(RFC_1123_FORMAT);
-            df.setTimeZone(TimeZone.getTimeZone("GMT"));
-            String headerVal = df.format(new Date());
-            response.addHeader("Date", headerVal);
+            response.addHeader("Date", server.formatDate());
         }
 
         private void setListener(HttpFuture future)

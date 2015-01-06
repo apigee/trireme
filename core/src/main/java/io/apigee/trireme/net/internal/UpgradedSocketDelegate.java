@@ -149,14 +149,14 @@ public class UpgradedSocketDelegate
     public void setNoDelay(boolean nd)
         throws OSException
     {
-        throw new AssertionError("Not implemented yet");
+        // Ignore -- can't be supported by all adapters.
     }
 
     @Override
     public void setKeepAlive(boolean nd)
         throws OSException
     {
-        throw new AssertionError("Not implemented yet");
+        // Ignore -- can't be supported by all adapters.
     }
 
     @Override

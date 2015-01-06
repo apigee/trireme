@@ -626,6 +626,11 @@
         <Adapter>netty</Adapter>
         <Description>Netty doesn't count the way that node wants.</Description>
     </Excluded>
+    <Excluded>
+        <Name>test-http-many-keep-alive-connections.js</Name>
+        <Adapter>netty</Adapter>
+        <Description>Assumes that "socket" is the same in all cases.</Description>
+    </Excluded>
 
     <!-- DEPRECATION
          These tests depend on the "&amp;&amp;throw-deprecation" feature of Node, not implemented here.

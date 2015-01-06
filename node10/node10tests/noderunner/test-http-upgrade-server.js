@@ -175,11 +175,11 @@ function test_standard_http() {
 
 
 var server = createTestServer();
+var NUM_TESTS = 3;
 
 server.listen(common.PORT, function() {
   // All tests get chained after this:
-  //test_upgrade_with_listener(server);
-  test_standard_http();
+  test_upgrade_with_listener(server);
 });
 
 
@@ -187,7 +187,7 @@ server.listen(common.PORT, function() {
   Fin.
 -----------------------------------------------*/
 process.on('exit', function() {
-  assert.equal(3, requests_recv);
-  assert.equal(3, requests_sent);
+  assert.equal(NUM_TESTS, requests_recv);
+  assert.equal(NUM_TESTS, requests_sent);
   assert.ok(test_upgrade_no_listener_ended);
 });

@@ -193,7 +193,7 @@ if (HttpWrap.hasServerAdapter()) {
       self.connection.end();
       // That does not "unref" it in all cases -- must do that so we don't hold server open.
       self.connection.unref();
-      
+
       if (self.headersSent) {
         debug('Sending end of response');
         self._adapter.sendChunk(null, null, self._trailers, true);
@@ -401,6 +401,7 @@ if (HttpWrap.hasServerAdapter()) {
     }
     conn.readable = conn.writable = true;
     timers.active(conn);
+    this.emit('connection', conn);
     return conn;
   };
 
@@ -468,11 +469,6 @@ if (HttpWrap.hasServerAdapter()) {
       if (!response.ended) {
         response.emit('close');
       }
-      /* Not sure this is a good idea
-      if (response.conn) {
-        response.conn.destroy();
-      }
-      */
     };
 
     response._adapter.onwritecomplete = function(err) {
@@ -503,20 +499,11 @@ if (HttpWrap.hasServerAdapter()) {
 
     if (events.EventEmitter.listenerCount(this, 'upgrade') === 0) {
       debug('No listeners for upgrade event');
+      socket.unref();
       return false;
     }
 
-    // TODO timeout?
-
-    var self = this;
-    request._adapter.domain = domain.create();
-    request._adapter.domain.on('error', function(err) {
-      handleError(err, response);
-    });
-    request._adapter.domain.run(function() {
-      self.emit('upgrade', request, socket, EMPTY_BUFFER);
-    });
-
+    this.emit('upgrade', request, socket, EMPTY_BUFFER);
     return true;
   };
 

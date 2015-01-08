@@ -25,11 +25,15 @@ import io.apigee.trireme.core.NodeEnvironment;
 import io.apigee.trireme.core.NodeException;
 import io.apigee.trireme.core.NodeScript;
 import io.apigee.trireme.core.ScriptStatus;
+import io.apigee.trireme.core.Utils;
 import io.apigee.trireme.core.internal.Version;
+import io.apigee.trireme.kernel.handles.ConsoleHandle;
 import org.mozilla.javascript.Context;
 import org.mozilla.javascript.JavaScriptException;
 import org.mozilla.javascript.RhinoException;
 
+import java.io.IOException;
+import java.io.InputStream;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Future;
 
@@ -45,7 +49,7 @@ public class Main
 
     private static void printUsage()
     {
-        System.err.println("Usage: " + Main.class.getName() + " [options] [ -e script | script.js ] [arguments]");
+        System.err.println("Usage: trireme [options] [ -e script | script.js ] [arguments]");
         System.err.println();
         System.err.println("Options:");
         System.err.println("  -v, --version        Print Version");
@@ -111,14 +115,22 @@ public class Main
     {
         NodeEnvironment env = new NodeEnvironment();
 
+        if (((scriptArgs == null) || (scriptArgs.length == 0)) &&
+            ConsoleHandle.isConsoleSupported()) {
+            runRepl = true;
+        }
+
         try {
             NodeScript ns;
             if (scriptSource != null) {
                 // Force an "eval"
                 ns = env.createScript("[eval]", scriptSource, scriptArgs);
                 ns.setPrintEval(printEval);
+            } else if (runRepl) {
+                String replSrc = readReplSource();
+                ns = env.createScript("[repl]", replSrc, null);
             } else {
-                ns = env.createScript(scriptArgs, runRepl);
+                ns = env.createScript(scriptArgs, false);
             }
 
             ScriptStatus status;
@@ -134,6 +146,9 @@ public class Main
             }
 
             return status.getExitCode();
+        } catch (IOException ioe) {
+            System.err.println(ioe.toString());
+            return 97;
         } catch (NodeException ne) {
             ne.printStackTrace(System.err);
             return 99;
@@ -162,6 +177,21 @@ public class Main
         } else {
             System.err.println(ee.getMessage());
             ee.printStackTrace(System.err);
+        }
+    }
+
+    private static String readReplSource()
+        throws NodeException, IOException
+    {
+        InputStream replIn = Main.class.getClassLoader().getResourceAsStream("trireme-shell/trireme-repl.js");
+        if (replIn == null) {
+            throw new NodeException("Cannot find REPL source code");
+        }
+
+        try {
+            return Utils.readStream(replIn);
+        } finally {
+            replIn.close();
         }
     }
 }

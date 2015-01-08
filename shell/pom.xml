@@ -46,10 +46,6 @@
       <groupId>io.apigee</groupId>
       <artifactId>rhino</artifactId>
     </dependency>
-    <dependency>
-      <groupId>jline</groupId>
-      <artifactId>jline</artifactId>
-    </dependency>
 
     <dependency>
       <groupId>junit</groupId>

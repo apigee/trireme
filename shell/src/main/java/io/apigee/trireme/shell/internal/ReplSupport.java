@@ -3,6 +3,7 @@ package io.apigee.trireme.shell.internal;
 import io.apigee.trireme.core.NodeModule;
 import io.apigee.trireme.core.NodeRuntime;
 import io.apigee.trireme.core.Utils;
+import io.apigee.trireme.core.ScriptTask;
 import org.mozilla.javascript.Context;
 import org.mozilla.javascript.Function;
 import org.mozilla.javascript.Scriptable;
@@ -12,7 +13,9 @@ import org.mozilla.javascript.annotations.JSFunction;
 
 import static io.apigee.trireme.core.ArgUtils.*;
 
+import java.io.BufferedReader;
 import java.io.Console;
+import java.io.InputStreamReader;
 import java.io.IOException;
 import java.lang.reflect.InvocationTargetException;
 
@@ -42,6 +45,7 @@ public class ReplSupport
 
         private NodeRuntime runtime;
         private Console console;
+        private BufferedReader consoleReader;
 
         @Override
         public String getClassName() {
@@ -63,7 +67,8 @@ public class ReplSupport
 
             self.console = System.console();
             if (self.console == null) {
-                throw Utils.makeError(cx, thisObj, "Console not supported on this platform");
+                self.consoleReader =
+                  new BufferedReader(new InputStreamReader(System.in));
             }
 
             self.runtime.pin();
@@ -80,12 +85,32 @@ public class ReplSupport
          * This will run in a separate thread. It will use JLine
          * to read a single line and feed it back to the main script via a callback.
          */
-        private void readOneLine(String prompt, Function cb)
+        private void readOneLine(String prompt, final Function cb)
         {
-            String line = console.readLine(prompt);
+            try {
+                String line;
+                if (console == null) {
+                  System.out.print(prompt);
+                  System.out.flush();
+                  line = consoleReader.readLine();
+                } else {
+                  line = console.readLine(prompt);
+                }
 
-            runtime.enqueueCallback(cb, cb, this,
-                                    new Object[]{Undefined.instance, line});
+                runtime.enqueueCallback(cb, cb, this,
+                                        new Object[]{Undefined.instance, line});
+
+            } catch (final IOException ioe) {
+                runtime.enqueueTask(new ScriptTask() {
+                    @Override
+                    public void execute(Context cx, Scriptable scope)
+                    {
+                        Scriptable err =
+                            Utils.makeErrorObject(cx, scope, ioe.toString());
+                        cb.call(cx, cb, null, new Object[] { err });
+                    }
+                });
+            }
         }
     }
 }

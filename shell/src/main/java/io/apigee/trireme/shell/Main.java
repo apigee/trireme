@@ -27,7 +27,6 @@ import io.apigee.trireme.core.NodeScript;
 import io.apigee.trireme.core.ScriptStatus;
 import io.apigee.trireme.core.Utils;
 import io.apigee.trireme.core.internal.Version;
-import io.apigee.trireme.kernel.handles.ConsoleHandle;
 import org.mozilla.javascript.Context;
 import org.mozilla.javascript.JavaScriptException;
 import org.mozilla.javascript.RhinoException;
@@ -115,8 +114,7 @@ public class Main
     {
         NodeEnvironment env = new NodeEnvironment();
 
-        if (((scriptArgs == null) || (scriptArgs.length == 0)) &&
-            ConsoleHandle.isConsoleSupported()) {
+        if ((scriptArgs == null) || (scriptArgs.length == 0)) {
             runRepl = true;
         }
 

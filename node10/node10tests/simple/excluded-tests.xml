@@ -56,10 +56,6 @@
         <Description>Debug module support requires V8 and won't be implemented.</Description>
     </Excluded>
     <Excluded>
-        <Name>test-c-ares.js</Name>
-        <Description>This is a wrapper around some native code.</Description>
-    </Excluded>
-    <Excluded>
         <Name>test-.*repl.*\.js</Name>
         <Description>repl is only partially implemented</Description>
     </Excluded>

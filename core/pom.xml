@@ -26,6 +26,10 @@
       <groupId>io.apigee</groupId>
       <artifactId>rhino</artifactId>
     </dependency>
+    <dependency>
+      <groupId>dnsjava</groupId>
+      <artifactId>dnsjava</artifactId>
+    </dependency>
 
     <dependency>
       <groupId>junit</groupId>

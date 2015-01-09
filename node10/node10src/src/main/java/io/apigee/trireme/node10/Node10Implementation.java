@@ -40,6 +40,7 @@ public class Node10Implementation
             { "cluster",               P + "node.cluster" },
             { "console",               P + "node.console" },
             { "constants",             P + "node.constants" },
+            { "dns",                   P + "node.dns" },
             { "dgram",                 P + "node.dgram" },
             { "domain",                P + "node.domain" },
             { "events",                P + "node.events" },

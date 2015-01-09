@@ -1,0 +1,6 @@
+<ExcludedTests>
+    <Excluded>
+        <Name>test-dgram-multicast-multi-process.js</Name>
+        <Description>Not doing multicast in Trireme.</Description>
+    </Excluded>
+</ExcludedTests>

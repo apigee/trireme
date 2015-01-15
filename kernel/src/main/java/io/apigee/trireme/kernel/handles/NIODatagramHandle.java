@@ -61,9 +61,15 @@ public class NIODatagramHandle
     public void bind(String address, int port)
         throws OSException
     {
-        InetSocketAddress bound = new InetSocketAddress(address, port);
-        if (bound.isUnresolved()) {
-            throw new OSException(ErrorCodes.ENOENT);
+        InetSocketAddress bound;
+
+        if ((address == null) && (port == 0)) {
+            bound = null;
+        } else {
+            bound = new InetSocketAddress(address, port);
+            if (bound.isUnresolved()) {
+                throw new OSException(ErrorCodes.ENOENT);
+            }
         }
 
         boolean success = false;

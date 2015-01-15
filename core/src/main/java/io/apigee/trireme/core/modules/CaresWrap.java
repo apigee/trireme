@@ -25,8 +25,14 @@ import io.apigee.trireme.core.NodeRuntime;
 import io.apigee.trireme.core.InternalNodeModule;
 import io.apigee.trireme.core.ScriptTask;
 import io.apigee.trireme.core.Utils;
+import io.apigee.trireme.core.internal.NodeOSException;
 import io.apigee.trireme.core.internal.ScriptRunner;
 import io.apigee.trireme.kernel.ErrorCodes;
+import io.apigee.trireme.kernel.OSException;
+import io.apigee.trireme.kernel.dns.DNSResolver;
+import io.apigee.trireme.kernel.dns.Types;
+import io.apigee.trireme.kernel.dns.Wire;
+import io.apigee.trireme.kernel.handles.IOCompletionHandler;
 import org.mozilla.javascript.BaseFunction;
 import org.mozilla.javascript.Context;
 import org.mozilla.javascript.Function;
@@ -35,21 +41,6 @@ import org.mozilla.javascript.Scriptable;
 import org.mozilla.javascript.ScriptableObject;
 import org.mozilla.javascript.Undefined;
 import org.mozilla.javascript.annotations.JSFunction;
-import org.xbill.DNS.AAAARecord;
-import org.xbill.DNS.ARecord;
-import org.xbill.DNS.CNAMERecord;
-import org.xbill.DNS.Lookup;
-import org.xbill.DNS.MXRecord;
-import org.xbill.DNS.NAPTRRecord;
-import org.xbill.DNS.NSRecord;
-import org.xbill.DNS.Name;
-import org.xbill.DNS.PTRRecord;
-import org.xbill.DNS.Record;
-import org.xbill.DNS.ReverseMap;
-import org.xbill.DNS.SRVRecord;
-import org.xbill.DNS.TXTRecord;
-import org.xbill.DNS.TextParseException;
-import org.xbill.DNS.Type;
 import sun.net.util.IPAddressUtil;
 
 import static io.apigee.trireme.core.ArgUtils.*;
@@ -59,6 +50,8 @@ import java.net.Inet4Address;
 import java.net.Inet6Address;
 import java.net.InetAddress;
 import java.net.UnknownHostException;
+import java.nio.ByteBuffer;
+import java.util.ArrayList;
 
 /**
  * Node's built-in JavaScript uses C-ARES for async DNS stuff. This module emulates that.
@@ -95,6 +88,7 @@ public class CaresWrap
         public static final String CLASS_NAME = "_caresClass";
 
         private ScriptRunner runtime;
+        private DNSResolver resolver;
 
         @Override
         public String getClassName() {
@@ -104,6 +98,7 @@ public class CaresWrap
         public void init(NodeRuntime runtime)
         {
             this.runtime = (ScriptRunner)runtime;
+            this.resolver = new DNSResolver(runtime);
 
             put("AF_INET", this, AF_INET);
             put("AF_INET6", this, AF_INET6);
@@ -111,15 +106,21 @@ public class CaresWrap
 
             // dns.java expects to look up un-bound (no this) functions as members and call them for each type of
             // lookup. We handle this here using a customized Function class in Rhino.
-            put("queryA", this, new LookupFunction(this, Type.A));
-            put("queryAaaa", this, new LookupFunction(this, Type.AAAA));
-            put("queryCname", this, new LookupFunction(this, Type.CNAME));
+            put("queryA", this, new LookupFunction(this, "A"));
+            put("queryAaaa", this, new LookupFunction(this, "AAAA"));
+            put("queryCname", this, new LookupFunction(this, "CNAME"));
+            put("getHostByAddr", this, new LookupFunction(this, "PTR"));
+
+            /*
+
+
             put("queryMx", this, new LookupFunction(this, Type.MX));
             put("queryNs", this, new LookupFunction(this, Type.NS));
             put("queryTxt", this, new LookupFunction(this, Type.TXT));
             put("querySrv", this, new LookupFunction(this, Type.SRV));
             put("queryNaptr", this, new LookupFunction(this, Type.NAPTR));
-            put("getHostByAddr", this, new LookupFunction(this, Type.PTR));
+
+            */
         }
 
         @SuppressWarnings("unused")
@@ -219,56 +220,45 @@ public class CaresWrap
             });
         }
 
-        private void runQuery(Context cx, String n, final int type, final Function callback)
+        private void runQuery(Context cx, String name, String type, final Function callback)
         {
-            final Name name;
-            try {
+            final int typeCode = Types.get().getTypeCode(type);
 
-                switch (type) {
-                case Type.PTR:
-                    // For a reverse lookup, convert to d.c.b.a.in-addr.arpa
-                    name = ReverseMap.fromAddress(n);
-                    break;
-                default:
-                    name = new Name(n);
-                    break;
-                }
-            } catch (UnknownHostException uhe) {
-                throw new JavaScriptException(makeError(cx, uhe.toString(), "ENOTIMP"));
-            } catch (TextParseException tpe) {
-                throw new JavaScriptException(makeError(cx, tpe.toString(), "EADNAME"));
+            try {
+                resolver.resolve(name, type, new IOCompletionHandler<Wire>()
+                {
+                    @Override
+                    public void ioComplete(int errCode, Wire msg)
+                    {
+                        runtime.unPin();
+                        if (errCode == 0) {
+                            if (msg.getAnswers().isEmpty()) {
+                                queryErrorCallback("NODATA", callback);
+                            } else {
+                                querySuccessCallback(msg, typeCode, callback);
+                            }
+                        } else {
+                            queryErrorCallback(ErrorCodes.get().toString(errCode), callback);
+                        }
+                    }
+                });
+            } catch (OSException ose) {
+                throw Utils.makeError(cx, this, ose.toString(), ose.getStringCode());
             }
 
             runtime.pin();
-            runtime.getAsyncPool().execute(new Runnable()
-            {
-                @Override
-                public void run()
-                {
-                    try {
-                        Lookup look = new Lookup(name, type);
-                        Record[] result = look.run();
-                        if ((result == null) || (result.length == 0)) {
-                            queryErrorCallback("NODATA", callback);
-                        } else {
-                            querySuccessCallback(result, type, callback);
-                        }
-                    } finally {
-                        runtime.unPin();
-                    }
-                }
-            });
         }
 
-        private Object convertResult(Context cx, Record rec, int type)
+        private Object convertResult(Context cx, Wire.RR rec)
         {
-            switch(type) {
-            case Type.A:
-                return ((ARecord)rec).getAddress().getHostAddress();
-            case Type.AAAA:
-                return ((AAAARecord)rec).getAddress().getHostAddress();
-            case Type.CNAME:
-                return ((CNAMERecord)rec).getTarget().toString();
+            switch(rec.getType()) {
+            case Types.TYPE_A:
+            case Types.TYPE_AAAA:
+                return ((InetAddress)rec.getResult()).getHostAddress();
+            case Types.TYPE_CNAME:
+            case Types.TYPE_PTR:
+                return rec.getResult();
+            /*
             case Type.MX:
                 return convertMx(cx, (MXRecord)rec);
             case Type.NS:
@@ -276,17 +266,17 @@ public class CaresWrap
             case Type.TXT:
                 // TODO can we do this or do we need to do something else?
                 return ((TXTRecord)rec).getStrings().get(0);
-            case Type.PTR:
-                return ((PTRRecord)rec).getTarget().toString();
             case Type.SRV:
                 return convertSrv(cx, (SRVRecord)rec);
             case Type.NAPTR:
                 return convertNaptr(cx, (NAPTRRecord)rec);
+                */
             default:
-                throw new AssertionError("invalid type " + type);
+                throw new AssertionError("invalid type " + rec.getType());
             }
         }
 
+        /*
         private Scriptable convertMx(Context cx, MXRecord mx)
         {
             Scriptable r = cx.newObject(this);
@@ -316,6 +306,7 @@ public class CaresWrap
             r.put("preference", r, p.getPreference());
             return r;
         }
+        */
 
         private void queryErrorCallback(final String errno, final Function callback)
         {
@@ -336,20 +327,27 @@ public class CaresWrap
             return err;
         }
 
-        private void querySuccessCallback(final Record[] result, final int type, final Function callback)
+        private void querySuccessCallback(final Wire msg, final int requestedType, final Function callback)
         {
             runtime.enqueueTask(new ScriptTask() {
                 @Override
                 public void execute(Context cx, Scriptable scope)
                 {
-                    Object[] jResult = new Object[result.length];
-                    for (int i = 0; i < result.length; i++) {
-                        jResult[i] = convertResult(cx, result[i], type);
+                    ArrayList<Object> jResult = new ArrayList<Object>(msg.getAnswers().size());
+                    for (Wire.RR rr : msg.getAnswers()) {
+                        if (rr.getType() == requestedType) {
+                            jResult.add(convertResult(cx, rr));
+                        }
                     }
 
-                    Scriptable ra = cx.newArray(CaresImpl.this, jResult);
-                    callback.call(cx, callback, null,
-                                  new Object[] { Undefined.instance, ra });
+                    if (jResult.isEmpty()) {
+                        runtime.setErrno("NODATA");
+                        callback.call(cx, callback, null, new Object[]{ -1 });
+                    } else {
+                        Scriptable ra = cx.newArray(CaresImpl.this, jResult.toArray());
+                        callback.call(cx, callback, null,
+                                      new Object[] { Undefined.instance, ra });
+                    }
                 }
             });
         }
@@ -362,9 +360,9 @@ public class CaresWrap
         extends BaseFunction
     {
         private final CaresImpl cares;
-        private final int type;
+        private final String type;
 
-        public LookupFunction(CaresImpl cares, int type)
+        public LookupFunction(CaresImpl cares, String type)
         {
             this.cares = cares;
             this.type = type;

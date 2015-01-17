@@ -110,17 +110,11 @@ public class CaresWrap
             put("queryAaaa", this, new LookupFunction(this, "AAAA"));
             put("queryCname", this, new LookupFunction(this, "CNAME"));
             put("getHostByAddr", this, new LookupFunction(this, "PTR"));
-
-            /*
-
-
-            put("queryMx", this, new LookupFunction(this, Type.MX));
-            put("queryNs", this, new LookupFunction(this, Type.NS));
-            put("queryTxt", this, new LookupFunction(this, Type.TXT));
-            put("querySrv", this, new LookupFunction(this, Type.SRV));
-            put("queryNaptr", this, new LookupFunction(this, Type.NAPTR));
-
-            */
+            put("queryMx", this, new LookupFunction(this, "MX"));
+            put("queryNs", this, new LookupFunction(this, "NS"));
+            put("queryTxt", this, new LookupFunction(this, "TXT"));
+            put("querySrv", this, new LookupFunction(this, "SRV"));
+            put("queryNaptr", this, new LookupFunction(this, "NAPTR"));
         }
 
         @SuppressWarnings("unused")
@@ -243,7 +237,7 @@ public class CaresWrap
                     }
                 });
             } catch (OSException ose) {
-                throw Utils.makeError(cx, this, ose.toString(), ose.getStringCode());
+                throw new JavaScriptException(makeError(cx, ose.toString(), ose.getStringCode()));
             }
 
             runtime.pin();
@@ -256,68 +250,55 @@ public class CaresWrap
             case Types.TYPE_AAAA:
                 return ((InetAddress)rec.getResult()).getHostAddress();
             case Types.TYPE_CNAME:
+            case Types.TYPE_NS:
             case Types.TYPE_PTR:
+            case Types.TYPE_TXT:
                 return rec.getResult();
-            /*
-            case Type.MX:
-                return convertMx(cx, (MXRecord)rec);
-            case Type.NS:
-                return ((NSRecord)rec).getTarget().toString();
-            case Type.TXT:
-                // TODO can we do this or do we need to do something else?
-                return ((TXTRecord)rec).getStrings().get(0);
-            case Type.SRV:
-                return convertSrv(cx, (SRVRecord)rec);
-            case Type.NAPTR:
-                return convertNaptr(cx, (NAPTRRecord)rec);
-                */
+            case Types.TYPE_MX:
+                return convertMx(cx, (Types.Mx)rec.getResult());
+            case Types.TYPE_SRV:
+                return convertSrv(cx, (Types.Srv)rec.getResult());
+            case Types.TYPE_NAPTR:
+                return convertNaptr(cx, (Types.Naptr)rec.getResult());
             default:
                 throw new AssertionError("invalid type " + rec.getType());
             }
         }
 
-        /*
-        private Scriptable convertMx(Context cx, MXRecord mx)
+        private Scriptable convertMx(Context cx, Types.Mx mx)
         {
             Scriptable r = cx.newObject(this);
-            r.put("priority", r, mx.getPriority());
-            r.put("exchange", r, mx.getTarget().toString());
+            r.put("priority", r, mx.getPreference());
+            r.put("exchange", r, mx.getExchange());
             return r;
         }
 
-        private Scriptable convertSrv(Context cx, SRVRecord s)
+        private Scriptable convertSrv(Context cx, Types.Srv s)
         {
             Scriptable r = cx.newObject(this);
             r.put("priority", r, s.getPriority());
             r.put("weight", r, s.getWeight());
             r.put("port", r, s.getPort());
-            r.put("name", r, s.getName().toString());
+            r.put("name", r, s.getTarget());
             return r;
         }
 
-        private Scriptable convertNaptr(Context cx, NAPTRRecord p)
+        private Scriptable convertNaptr(Context cx, Types.Naptr p)
         {
             Scriptable r = cx.newObject(this);
             r.put("flags", r, p.getFlags());
             r.put("service", r, p.getService());
             r.put("regexp", r, p.getRegexp());
-            r.put("replacement", r, p.getReplacement().toString());
+            r.put("replacement", r, p.getReplacement());
             r.put("order", r, p.getOrder());
             r.put("preference", r, p.getPreference());
             return r;
         }
-        */
 
-        private void queryErrorCallback(final String errno, final Function callback)
+        private void queryErrorCallback(String errno, Function callback)
         {
-            runtime.enqueueTask(new ScriptTask() {
-                @Override
-                public void execute(Context cx, Scriptable scope)
-                {
-                    runtime.setErrno(errno);
-                    callback.call(cx, callback, null, new Object[]{-1});
-                }
-            });
+            runtime.setErrno(errno);
+            callback.call(Context.getCurrentContext(), callback, null, new Object[]{-1});
         }
 
         private Scriptable makeError(Context cx, String msg, String code)
@@ -327,29 +308,24 @@ public class CaresWrap
             return err;
         }
 
-        private void querySuccessCallback(final Wire msg, final int requestedType, final Function callback)
+        private void querySuccessCallback(Wire msg, int requestedType, Function callback)
         {
-            runtime.enqueueTask(new ScriptTask() {
-                @Override
-                public void execute(Context cx, Scriptable scope)
-                {
-                    ArrayList<Object> jResult = new ArrayList<Object>(msg.getAnswers().size());
-                    for (Wire.RR rr : msg.getAnswers()) {
-                        if (rr.getType() == requestedType) {
-                            jResult.add(convertResult(cx, rr));
-                        }
-                    }
-
-                    if (jResult.isEmpty()) {
-                        runtime.setErrno("NODATA");
-                        callback.call(cx, callback, null, new Object[]{ -1 });
-                    } else {
-                        Scriptable ra = cx.newArray(CaresImpl.this, jResult.toArray());
-                        callback.call(cx, callback, null,
-                                      new Object[] { Undefined.instance, ra });
-                    }
+            Context cx = Context.getCurrentContext();
+            ArrayList<Object> jResult = new ArrayList<Object>(msg.getAnswers().size());
+            for (Wire.RR rr : msg.getAnswers()) {
+                if (rr.getType() == requestedType) {
+                    jResult.add(convertResult(cx, rr));
                 }
-            });
+            }
+
+            if (jResult.isEmpty()) {
+                runtime.setErrno("NODATA");
+                callback.call(cx, callback, null, new Object[]{ -1 });
+            } else {
+                Scriptable ra = cx.newArray(CaresImpl.this, jResult.toArray());
+                callback.call(cx, callback, null,
+                              new Object[] { Undefined.instance, ra });
+            }
         }
     }
 

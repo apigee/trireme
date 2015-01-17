@@ -55,6 +55,13 @@ public class ErrorCodes
 
     public static final int EOF = 99;
 
+    // Extensions used by Node
+    public static final int ENOTIMP = 200;
+    public static final int ETIMEOUT = 201;
+    public static final int ESERVFAIL = 202;
+    public static final int EREFUSED = 203;
+    public static final int EBADRESP = 204;
+
     public static ErrorCodes get() {
         return myself;
     }
@@ -92,6 +99,12 @@ public class ErrorCodes
         mapCode("ESRCH", 3);
 
         mapCode("EOF", 99);
+
+        mapCode("ENOTIMP", ENOTIMP);
+        mapCode("ETIMEOUT", ETIMEOUT);
+        mapCode("ESERVFAIL", ESERVFAIL);
+        mapCode("EREFUSED", EREFUSED);
+        mapCode("EBADRESP", EBADRESP);
     }
 
     private void mapCode(String s, int n)

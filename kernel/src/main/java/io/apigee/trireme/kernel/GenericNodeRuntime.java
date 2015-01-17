@@ -26,6 +26,8 @@ import io.apigee.trireme.kernel.net.NetworkPolicy;
 import java.io.Closeable;
 import java.nio.channels.Selector;
 import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
 
 /**
  * This is a high-level interface to the runtime of the script. It provides support for getting access to thread
@@ -80,16 +82,23 @@ public interface GenericNodeRuntime
      * connection or listen for incoming connections. This may be used to protect access to and from
      * certain hosts on an internal network.
      */
-    public NetworkPolicy getNetworkPolicy();
+    NetworkPolicy getNetworkPolicy();
 
     /**
      * Return the current Node.js domain of the calling scrpit. This should be replaced
      * when executing asynchronous tasks.
      */
-    public Object getDomain();
+    Object getDomain();
 
     /**
-     * Execute a task in the script thread, and set the domain on the thread before doing so.
+     * Execute a task in the script thread, and set the domain on the thread before doing so. This method may
+     * be called from any thread.
      */
-    public void executeScriptTask(Runnable task, Object domain);
+    void executeScriptTask(Runnable task, Object domain);
+
+    /**
+     * Execute a ask after "delay". This method may be called from any thread. It returns a Future which may
+     * be used to cancel the task, but it will always return "null" as a result.
+     */
+    public Future<Boolean> createTimedTask(Runnable r, long delay, TimeUnit unit, Object domain);
 }

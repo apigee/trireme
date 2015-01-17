@@ -39,7 +39,7 @@ public class Decompressor
         }
     }
 
-    public String readLabel()
+    private String readLabel()
         throws DNSFormatException
     {
         if (!readBuf.hasRemaining()) {
@@ -72,10 +72,32 @@ public class Decompressor
                 return null;
             }
 
-            labelBytes = new byte[len];
-            readBuf.get(labelBytes);
+            return readString(readBuf, len);
+        }
+    }
+
+    public String readCharacterString(ByteBuffer buf)
+    {
+        int len = buf.get() & 0xff;
+        if (len == 0) {
+            return "";
+        }
+        return readString(buf, len);
+    }
+
+    private String readString(ByteBuffer buf, int len)
+    {
+        if (buf.hasArray()) {
+            String s = new String(buf.array(),
+                                  buf.arrayOffset() + buf.position(),
+                                  len,
+                                  ASCII);
+            buf.position(buf.position() + len);
+            return s;
         }
 
-        return new String(labelBytes, ASCII);
+        byte[] tmp = new byte[len];
+        buf.get(tmp);
+        return new String(tmp, ASCII);
     }
 }

@@ -72,7 +72,11 @@ import java.util.PriorityQueue;
 import java.util.concurrent.Callable;
 import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicInteger;
 
 /**
@@ -546,6 +550,30 @@ public class ScriptRunner
         }
         timerQueue.add(t);
         selector.wakeup();
+        return t;
+    }
+
+    /**
+     * This is a more generic way of creating a timer that can be used in the kernel, and which
+     * works even if we are not in the main thread.
+     */
+    public Future<Boolean> createTimedTask(Runnable r, long delay, TimeUnit unit, Object domain)
+    {
+        final RunnableTask t = new RunnableTask(r);
+        t.setDomain((Scriptable)domain);
+        t.setTimeout(System.currentTimeMillis() + unit.toMillis(delay));
+
+        enqueueTask(new ScriptTask() {
+            @Override
+            public void execute(Context cx, Scriptable scope)
+            {
+                if (!t.isCancelled()) {
+                    t.setId(timerSequence++);
+                    timerQueue.add(t);
+                    selector.wakeup();
+                }
+            }
+        });
         return t;
     }
 
@@ -1391,6 +1419,7 @@ public class ScriptRunner
 
     private final class RunnableTask
         extends AbstractTask
+        implements Future<Boolean>
     {
         private Runnable task;
 
@@ -1404,6 +1433,31 @@ public class ScriptRunner
         protected void executeTask(Context cx)
         {
             task.run();
+        }
+
+        @Override
+        public boolean cancel(boolean mayInterruptIfRunning)
+        {
+            setCancelled(true);
+            return true;
+        }
+
+        @Override
+        public boolean isDone()
+        {
+            return false;
+        }
+
+        @Override
+        public Boolean get()
+        {
+            return Boolean.TRUE;
+        }
+
+        @Override
+        public Boolean get(long timeout, TimeUnit unit) throws InterruptedException, ExecutionException, TimeoutException
+        {
+            return Boolean.TRUE;
         }
     }
 }

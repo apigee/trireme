@@ -33,7 +33,12 @@ public class DNSConfig
 
     private DNSConfig()
     {
-        readResolvConf();
+        String servers = System.getProperty("TRIREME_DNS_SERVERS");
+        if (servers != null) {
+            readProperty(servers);
+        } else {
+            readResolvConf();
+        }
     }
 
     public List<String> getServers()
@@ -76,5 +81,14 @@ public class DNSConfig
             }
             return false;
         }
+    }
+
+    private boolean readProperty(String prop)
+    {
+        String[] sl = prop.split(",");
+        for (String s : sl) {
+            servers.add(s);
+        }
+        return true;
     }
 }

@@ -36,7 +36,7 @@ public abstract class AbstractNIOHandle
 {
     private static final Logger log = LoggerFactory.getLogger(AbstractNIOHandle.class);
 
-    protected final GenericNodeRuntime runtime;
+    protected GenericNodeRuntime runtime;
 
     protected SelectionKey            selKey;
     protected boolean                 writeReady;

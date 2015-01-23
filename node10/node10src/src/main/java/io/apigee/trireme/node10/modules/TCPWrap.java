@@ -23,6 +23,7 @@ package io.apigee.trireme.node10.modules;
 
 import io.apigee.trireme.core.NodeRuntime;
 import io.apigee.trireme.core.InternalNodeModule;
+import io.apigee.trireme.core.Utils;
 import io.apigee.trireme.core.internal.ScriptRunner;
 import io.apigee.trireme.kernel.ErrorCodes;
 import io.apigee.trireme.kernel.OSException;
@@ -45,6 +46,7 @@ import org.slf4j.LoggerFactory;
 
 import static io.apigee.trireme.core.ArgUtils.*;
 
+import java.io.IOException;
 import java.lang.reflect.InvocationTargetException;
 import java.net.InetSocketAddress;
 
@@ -55,6 +57,11 @@ public class TCPWrap
     implements InternalNodeModule
 {
     protected static final Logger log = LoggerFactory.getLogger(TCPWrap.class);
+
+    // Constants for child process handling
+    public static final int ATTACH_TYPE_NONE = 0;
+    public static final int ATTACH_TYPE_SERVER = 1;
+    public static final int ATTACH_TYPE_SOCKET = 2;
 
     @Override
     public String getModuleName()
@@ -72,6 +79,11 @@ public class TCPWrap
         ScriptableObject.defineClass(exports, Referenceable.class, false, true);
         ScriptableObject.defineClass(exports, JavaStreamWrap.StreamWrapImpl.class, false, true);
         ScriptableObject.defineClass(exports, TCPImpl.class, false, true);
+
+        Scriptable tcpClass = (Scriptable)exports.get(TCPImpl.CLASS_NAME, exports);
+        tcpClass.put("ATTACH_SERVER", tcpClass, ATTACH_TYPE_SERVER);
+        tcpClass.put("ATTACH_SOCKET", tcpClass, ATTACH_TYPE_SOCKET);
+
         return exports;
     }
 
@@ -83,16 +95,27 @@ public class TCPWrap
         private Function          onConnection;
 
         private SocketHandle sockHandle;
+        private IOCompletionHandler<AbstractHandle> listener;
+        private int attachType;
 
         @SuppressWarnings("unused")
         public TCPImpl()
         {
         }
 
-        protected TCPImpl(SocketHandle handle, ScriptRunner runtime)
+        protected TCPImpl(SocketHandle handle, ScriptRunner runtime, int attachType)
         {
             super(handle, runtime);
             this.sockHandle = handle;
+            this.attachType = attachType;
+
+            if (attachType == ATTACH_TYPE_SOCKET) {
+                try {
+                    handle.attach(runtime);
+                } catch (IOException e) {
+                    throw Utils.makeError(Context.getCurrentContext(), this, "Handle from parent is closed");
+                }
+            }
         }
 
         @JSConstructor
@@ -105,15 +128,25 @@ public class TCPWrap
 
             ScriptRunner runner = getRunner(cx);
             SocketHandle handle = objArg(args, 0, SocketHandle.class, false);
+            int attachType = intArg(args, 1, ATTACH_TYPE_NONE);
+
             if (handle == null) {
                 handle = new NIOSocketHandle(runner);
             }
 
             // Unlike other types of handles, every open socket "pins" the server explicitly and keeps it
-            // running until it is either closed or "unref" is called.
-            TCPImpl tcp = new TCPImpl(handle, runner);
-            tcp.requestPin();
+            // running until it is either closed or "unref" is called. But not if we're a child. Ugh.
+            TCPImpl tcp = new TCPImpl(handle, runner, attachType);
+            if (attachType != ATTACH_TYPE_SERVER) {
+                tcp.requestPin();
+            }
             return tcp;
+        }
+
+        @JSGetter("_nativeHandle")
+        @SuppressWarnings("unused")
+        public Object getHandle() {
+            return sockHandle;
         }
 
         @Override
@@ -158,22 +191,79 @@ public class TCPWrap
 
         @JSFunction
         @SuppressWarnings("unused")
-        public String listen(int backlog)
+        public static String listen(Context cx, Scriptable thisObj, Object[] args, Function func)
         {
-            try {
-                sockHandle.listen(backlog, new IOCompletionHandler<AbstractHandle>()
+            int backlog = intArg(args, 0);
+            final TCPImpl self = (TCPImpl)thisObj;
+
+            self.listener = new IOCompletionHandler<AbstractHandle>()
                 {
                     @Override
                     public void ioComplete(int errCode, AbstractHandle value)
                     {
-                        onConnection(value);
+                        self.onConnection(value);
                     }
-                });
-                clearErrno();
+                };
+
+            if (self.attachType == ATTACH_TYPE_SERVER) {
+                self.sockHandle.childListen(self.listener);
                 return null;
-            } catch (OSException ose) {
-                setErrno(ose.getCode());
-                return ose.getStringCode();
+            } else {
+                try {
+                    self.sockHandle.listen(backlog, self.listener);
+                    clearErrno();
+                    return null;
+                } catch (OSException ose) {
+                    setErrno(ose.getCode());
+                    return ose.getStringCode();
+                }
+            }
+        }
+
+        /**
+         * Make doubly-sure that we are ready to support children in other subprocesses.
+         */
+        @JSFunction
+        @SuppressWarnings("unused")
+        public static void prepareForChildren(Context cx, Scriptable thisObj, Object[] args, Function func)
+        {
+            TCPImpl self = (TCPImpl)thisObj;
+            self.sockHandle.prepareForChildren();
+        }
+
+        /**
+         * Disconnect this socket from the current runtime so that we can pass it to a child.
+         */
+        @JSFunction
+        @SuppressWarnings("unused")
+        public static void detach(Context cx, Scriptable thisObj, Object[] args, Function func)
+        {
+            TCPImpl self = (TCPImpl)thisObj;
+            self.sockHandle.detach();
+            self.clearPin();
+        }
+
+        @JSFunction
+        @SuppressWarnings("unused")
+        public static void close(Context cx, Scriptable thisObj, Object[] args, Function func)
+        {
+            Function cb = functionArg(args, 0, false);
+            TCPImpl self = (TCPImpl)thisObj;
+
+            if (self.listener != null) {
+                self.sockHandle.stopListening(self.listener);
+                self.listener = null;
+            }
+
+            if (self.attachType != ATTACH_TYPE_SERVER) {
+                // Don't close if we're a child server -- just stop listening.
+                self.doClose(cb);
+            }
+
+            if (cb != null) {
+                self.runtime.enqueueCallback(cb, self, null,
+                                        self.runtime.getDomain(),
+                                        Context.emptyArgs);
             }
         }
 

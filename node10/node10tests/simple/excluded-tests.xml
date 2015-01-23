@@ -28,14 +28,6 @@
         <Description>No passing handles to children yet</Description>
     </Excluded>
     <Excluded>
-        <Name>test-child-process-fork-getconnections.js</Name>
-        <Description>No passing handles to children yet</Description>
-    </Excluded>
-    <Excluded>
-        <Name>test-child-process-fork-net.js</Name>
-        <Description>No passing handles to children yet</Description>
-    </Excluded>
-    <Excluded>
         <Name>test-child-process-fork-net2.js</Name>
         <Description>No passing handles to children yet</Description>
     </Excluded>

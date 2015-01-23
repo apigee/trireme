@@ -25,6 +25,10 @@ var util = require('util');
 var constants; // if (!constants) constants = process.binding('constants');
 var ProcessWrap = process.binding('trireme_process_wrap');
 
+var SERVER_HANDLE = 'server_handle';
+var SOCKET_HANDLE = 'socket_handle';
+var TCP_HANDLE = 'tcp_handle';
+
 var debug;
 var isDebug;
 if (process.env.NODE_DEBUG && /child_process/.test(process.env.NODE_DEBUG)) {
@@ -483,6 +487,44 @@ function createSocket(handle, isReadable) {
   });
 }
 
+function convertHandle(handle) {
+  if (handle instanceof net.Server) {
+    var tcp = handle._handle;
+    tcp.prepareForChildren();
+    return {
+      type: SERVER_HANDLE,
+      handle: tcp._nativeHandle
+    };
+
+  } else if (handle instanceof net.Socket) {
+    var tcp = handle._handle;
+
+    // Make this server forget about the socket
+    if (handle.server) {
+      handle.server._connections--;
+    }
+    tcp.detach();
+    tcp.onread = function() {}
+    handle._handle = null;
+
+    return {
+      type: SOCKET_HANDLE,
+      handle: tcp._nativeHandle
+    };
+
+  } else if (handle instanceof process.binding('tcp_wrap').TCP) {
+    handle.detach();
+
+    return {
+      type: TCP_HANDLE,
+      handle: handle._nativeHandle
+    };
+
+  } else {
+    throw new Error('Handle type cannot be sent to the child');
+  }
+}
+
 function setupChannel(target) {
   target.connected = true;
 
@@ -496,12 +538,16 @@ function setupChannel(target) {
       return;
     }
 
+    var nativeHandle;
     if (handle) {
       // Do some handle processing here!
-      throw new Error('Handles aren\'t supported yet');
+      nativeHandle = convertHandle(handle);
+      if (isDebug) {
+        debug('Preparing to send handle of type ' + nativeHandle.type);
+      }
     }
 
-    target._handle.send(message);
+    target._handle.send(message, nativeHandle);
   };
 
   target.disconnect = function() {
@@ -516,10 +562,11 @@ function setupChannel(target) {
   };
 
   // Called when the child sends a message back to us.
-  target._handle.onMessage = function(event, message) {
+  target._handle.onMessage = function(event, message, handleType, handle) {
     if (event === 'disconnect') {
       target.connected = false;
     }
+
     target.emit(event, message);
   };
 }

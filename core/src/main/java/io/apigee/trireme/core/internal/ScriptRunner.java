@@ -416,7 +416,8 @@ public class ScriptRunner
      * @param child If null, deliver the message to the "process" object. Otherwise, deliver it to the
      *              specified child.
      */
-    public void enqueueIpc(Context cx, Object message, final ProcessWrap.ProcessImpl child)
+    public void enqueueIpc(Context cx, Object message, final String handleType,
+                           final Object handle, final ProcessWrap.ProcessImpl child)
     {
         Object toDeliver;
         String event = "message";
@@ -463,8 +464,8 @@ public class ScriptRunner
                             process.getEmit().call(cx, scope, process, new Object[] { fevent });
                         }
                     } else {
-                        process.getEmit().call(cx, scope, process,
-                                               new Object[] { fevent, reallyDeliver });
+                        process.getHandleIpc().call(cx, scope, process,
+                                               new Object[] { fevent, reallyDeliver, handleType, handle });
                     }
                 }
             });
@@ -479,7 +480,8 @@ public class ScriptRunner
                 public void execute(Context cx, Scriptable scope)
                 {
                     // Now we should be running inside the script thread of the other script
-                    child.getOnMessage().call(cx, scope, null, new Object[] { fevent, reallyDeliver });
+                    child.getOnMessage().call(cx, scope, null,
+                                              new Object[] { fevent, reallyDeliver, handleType, handle });
                 }
             });
         }

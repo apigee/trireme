@@ -22,6 +22,7 @@
 package io.apigee.trireme.net.internal;
 
 import io.apigee.trireme.kernel.ErrorCodes;
+import io.apigee.trireme.kernel.GenericNodeRuntime;
 import io.apigee.trireme.kernel.OSException;
 import io.apigee.trireme.kernel.handles.AbstractHandle;
 import io.apigee.trireme.kernel.handles.IOCompletionHandler;
@@ -29,6 +30,7 @@ import io.apigee.trireme.kernel.handles.SocketHandle;
 import io.apigee.trireme.net.spi.HttpRequestAdapter;
 import io.apigee.trireme.net.spi.HttpResponseAdapter;
 
+import java.io.IOException;
 import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.net.UnknownHostException;
@@ -125,6 +127,36 @@ public class AdapterHandleDelegate
         throws OSException
     {
         throw new OSException(ErrorCodes.EINVAL);
+    }
+
+    @Override
+    public void prepareForChildren()
+    {
+        throw new AssertionError("Children not supported");
+    }
+
+    @Override
+    public void childListen(IOCompletionHandler<AbstractHandle> handler)
+    {
+        throw new AssertionError("Children not supported");
+    }
+
+    @Override
+    public void stopListening(IOCompletionHandler<AbstractHandle> handler)
+    {
+        throw new AssertionError("Children not supported");
+    }
+
+    @Override
+    public void detach()
+    {
+        throw new AssertionError("Children not supported");
+    }
+
+    @Override
+    public void attach(GenericNodeRuntime runtime) throws IOException
+    {
+        throw new AssertionError("Children not supported");
     }
 
     @Override

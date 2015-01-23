@@ -45,6 +45,7 @@ function master() {
   proc.stdout.on('data', function(data) {
     assert.equal(data, 'ok\r\n');
     net.createServer(assert.fail).listen(common.PORT, function() {
+      console.log('Server listening. This is %s', this);
       handle = this._handle;
       proc.send('one');
       proc.send('two', handle);
@@ -56,7 +57,7 @@ function master() {
 }
 
 function worker() {
-  process._channel.readStop();  // Make messages batch up.
+  //process._channel.readStop();  // Make messages batch up.
   process.stdout.ref();
   process.stdout.write('ok\r\n');
   process.stdin.once('data', function(data) {

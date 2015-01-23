@@ -151,16 +151,20 @@ public class JavaStreamWrap
         {
             Function cb = functionArg(args, 0, false);
             StreamWrapImpl self = (StreamWrapImpl)thisObj;
-
-            self.readStop();
-            self.handle.close();
-            self.close();
+            self.doClose(cb);
 
             if (cb != null) {
                 self.runtime.enqueueCallback(cb, self, null,
-                                             (Scriptable)(self.runtime.getDomain()),
-                                             ScriptRuntime.emptyArgs);
+                                        self.runtime.getDomain(),
+                                        Context.emptyArgs);
             }
+        }
+
+        protected void doClose(Function cb)
+        {
+            readStop();
+            handle.close();
+            close();
         }
 
         @JSFunction

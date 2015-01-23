@@ -116,6 +116,7 @@ public class Process
         private Function immediateCallback;
         private Function fatalException;
         private Function emit;
+        private Function handleIpc;
         private Object domain;
         private boolean exiting;
         private int umask = DEFAULT_UMASK;
@@ -568,7 +569,7 @@ public class Process
             // We have a parent, which has a reference to its own "child_process" object that
             // refers back to us. Put a message on THAT script's queue that came from us.
             ProcessWrap.ProcessImpl childObj = self.runner.getParentProcess();
-            childObj.getRuntime().enqueueIpc(cx, message, childObj);
+            childObj.getRuntime().enqueueIpc(cx, message, null, null, childObj);
         }
 
         @JSFunction
@@ -585,7 +586,7 @@ public class Process
 
             self.emit.call(cx, self.emit, thisObj, new Object[] { "disconnected" });
             self.connected = false;
-            childObj.getRuntime().enqueueIpc(cx, ProcessWrap.IPC_DISCONNECT, childObj);
+            childObj.getRuntime().enqueueIpc(cx, ProcessWrap.IPC_DISCONNECT, null, null, childObj);
         }
 
         @JSGetter("_errno")
@@ -691,6 +692,18 @@ public class Process
         @SuppressWarnings("unused")
         public Function getEmit() {
             return emit;
+        }
+
+        @JSSetter("_handleIpc")
+        @SuppressWarnings("unused")
+        public void setHandleIpc(Function f) {
+            this.handleIpc = f;
+        }
+
+        @JSGetter("_handleIpc")
+        @SuppressWarnings("unused")
+        public Function getHandleIpc() {
+            return handleIpc;
         }
 
         @JSSetter("_tickCallback")

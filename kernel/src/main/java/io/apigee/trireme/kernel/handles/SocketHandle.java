@@ -21,19 +21,44 @@
  */
 package io.apigee.trireme.kernel.handles;
 
+import io.apigee.trireme.kernel.GenericNodeRuntime;
 import io.apigee.trireme.kernel.OSException;
 
+import java.io.IOException;
 import java.net.InetSocketAddress;
 
 public interface SocketHandle
     extends Handle
 {
+    /** Like it says, bind to a port. */
     void bind(String address, int port)
         throws OSException;
+
+    /** Start listening for connections at the bound port and call handler when we get them */
     void listen(int backlog, IOCompletionHandler<AbstractHandle> handler)
         throws OSException;
+
+    /** Ensure that "childListen" will work if called -- one-time, non-thread-safe init */
+    void prepareForChildren();
+
+    /** Listen as a child, without opening the port. Used for child processes. */
+    void childListen(IOCompletionHandler<AbstractHandle> handler);
+
+    /** Stop listening as a child */
+    void stopListening(IOCompletionHandler<AbstractHandle> handler);
+
+    /** Break connection with the current Script process so that we can attach to another one */
+    void detach();
+
+    /** Attach to a new script process so that we can process I/O. */
+    void attach(GenericNodeRuntime runtime)
+        throws IOException;
+
+    /** As you might imagine, initiate a connection and call handler when complete */
     void connect(String host, int port, IOCompletionHandler<Integer> handler)
         throws OSException;
+
+    /** Send a "shutdown output" packet */
     void shutdown(IOCompletionHandler<Integer> handler);
 
     InetSocketAddress getSockName();

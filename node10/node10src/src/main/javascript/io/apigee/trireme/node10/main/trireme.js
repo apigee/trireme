@@ -850,6 +850,7 @@
 
     if (process.connected) {
       var childRef = 0;
+      var net = NativeModule.require('net');
 
       // Pin and unpin the process depending on whether we are listening for events from the parent
       process.on('disconnect', function() {
@@ -881,6 +882,47 @@
           }
         }
       });
+
+      process._handleIpc = function(event, msg, handleType, handle) {
+        switch (handleType) {
+          case 'server_handle':
+            var TCP = process.binding('tcp_wrap').TCP;
+            var tcpHandle = new TCP(handle, TCP.ATTACH_SERVER);
+
+            process.on('exit', function() {
+              tcpHandle.close();
+            });
+
+            var server = new net.Server();
+            server.listen(tcpHandle, function()   {
+              process.emit(event, msg, server);
+            });
+            break;
+
+          case 'socket_handle':
+            var TCP = process.binding('tcp_wrap').TCP;
+            var tcpHandle = new TCP(handle, TCP.ATTACH_SOCKET);
+
+            process.on('exit', function() {
+              tcpHandle.close();
+            });
+
+            var socket = new net.Socket({handle: tcpHandle});
+            socket.readable = socket.writable = true;
+            process.emit(event, msg, socket);
+            break;
+
+          case 'tcp_handle':
+            var TCP = process.binding('tcp_wrap').TCP;
+            var tcpHandle = new TCP(handle, TCP.ATTACH_SOCKET);
+            process.emit(event, msg, tcpHandle);
+            break;
+
+          default:
+            process.emit(event, msg);
+            break;
+        }
+      };
     }
   };
 

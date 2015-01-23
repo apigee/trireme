@@ -47,6 +47,7 @@ import org.mozilla.javascript.EvaluatorException;
 import org.mozilla.javascript.Function;
 import org.mozilla.javascript.Scriptable;
 import org.mozilla.javascript.ScriptableObject;
+import org.mozilla.javascript.Undefined;
 import org.mozilla.javascript.annotations.JSFunction;
 import org.mozilla.javascript.annotations.JSGetter;
 import org.mozilla.javascript.annotations.JSSetter;
@@ -272,11 +273,19 @@ public class ProcessWrap
         public static void send(Context cx, Scriptable thisObj, Object[] args, Function fn)
         {
             ensureArg(args, 0);
+            Object msg = args[0];
+            Scriptable handle = null;
+
+            if ((args.length > 0) && !Undefined.instance.equals(args[1])) {
+                handle = (Scriptable)args[1];
+            }
+
             ProcessImpl self = (ProcessImpl)thisObj;
+
             if (self.spawned == null) {
                 throw new AssertionError("Sending to closed process");
             }
-            self.spawned.send(cx, args[0]);
+            self.spawned.send(cx, msg, handle);
         }
 
         @JSFunction
@@ -287,7 +296,7 @@ public class ProcessWrap
             if (self.spawned == null) {
                 throw new AssertionError("Sending to closed process");
             }
-            self.spawned.send(cx, IPC_DISCONNECT);
+            self.spawned.send(cx, IPC_DISCONNECT, null);
         }
 
         @JSGetter("connected")
@@ -351,7 +360,7 @@ public class ProcessWrap
         abstract void close();
         abstract Object spawn(Context cx, List<String> execArgs, Scriptable options);
 
-        protected void send(Context cx, Object message)
+        protected void send(Context cx, Object message, Scriptable handle)
         {
             throw new EvaluatorException("IPC is not enabled to the child");
         }
@@ -888,9 +897,17 @@ public class ProcessWrap
         }
 
         @Override
-        protected void send(Context cx, Object message)
+        protected void send(Context cx, Object message, Scriptable handle)
         {
-            script._getRuntime().enqueueIpc(cx, message, null);
+            String handleType = null;
+            Object nativeHandle = null;
+
+            if (handle != null) {
+                handleType = (String)handle.get("type", handle);
+                nativeHandle = handle.get("handle", handle);
+            }
+
+            script._getRuntime().enqueueIpc(cx, message, handleType, nativeHandle, null);
         }
     }
 }

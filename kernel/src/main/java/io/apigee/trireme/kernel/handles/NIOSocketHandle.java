@@ -39,6 +39,8 @@ import java.nio.channels.ClosedChannelException;
 import java.nio.channels.SelectionKey;
 import java.nio.channels.ServerSocketChannel;
 import java.nio.channels.SocketChannel;
+import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.concurrent.atomic.AtomicInteger;
 
 /**
  * Node's own script modules use this internal module to implement the guts of async TCP.
@@ -56,7 +58,8 @@ public class NIOSocketHandle
     private SocketChannel           clientChannel;
     private boolean                 readStarted;
     private ByteBuffer              readBuffer;
-    private IOCompletionHandler<AbstractHandle> serverConnectionHandler;
+    private CopyOnWriteArrayList<IOCompletionHandler<AbstractHandle>> serverConnectionHandlers;
+    private AtomicInteger receiveCount;
     private IOCompletionHandler<Integer>        clientConnectionHandler;
     private IOCompletionHandler<ByteBuffer>     readHandler;
 
@@ -114,6 +117,37 @@ public class NIOSocketHandle
     }
 
     @Override
+    public void detach()
+    {
+        if (selKey != null) {
+            selKey.cancel();
+        }
+        if (clientChannel != null) {
+            runtime.unregisterCloseable(clientChannel);
+        }
+        runtime = null;
+    }
+
+    @Override
+    public void attach(GenericNodeRuntime runtime)
+        throws IOException
+    {
+        this.runtime = runtime;
+        if (clientChannel != null) {
+            runtime.registerCloseable(clientChannel);
+            selKey = clientChannel.register(runtime.getSelector(), SelectionKey.OP_WRITE,
+                                            new SelectorHandler()
+                                            {
+                                                @Override
+                                                public void selected(SelectionKey key)
+                                                {
+                                                    clientSelected(key);
+                                                }
+                                            });
+        }
+    }
+
+    @Override
     public void bind(String address, int port)
         throws OSException
     {
@@ -130,13 +164,16 @@ public class NIOSocketHandle
         if (boundAddress == null) {
             throw new OSException(ErrorCodes.EINVAL);
         }
+
+        prepareForChildren();
+        serverConnectionHandlers.add(handler);
+
         NetworkPolicy netPolicy = getNetworkPolicy();
         if ((netPolicy != null) && !netPolicy.allowListening(boundAddress)) {
             log.debug("Address {} not allowed by network policy", boundAddress);
             throw new OSException(ErrorCodes.EINVAL);
         }
 
-        this.serverConnectionHandler = handler;
         if (log.isDebugEnabled()) {
             log.debug("Server listening on {} with backlog {}",
                       boundAddress, backlog);
@@ -178,6 +215,40 @@ public class NIOSocketHandle
         }
     }
 
+    /**
+     * Set up this object to listen for traffic. We allocate some state here in case the server handle is
+     * passed to a child (as it would be if clustering is enabled). We assume that this happens only in the
+     * "parent" process so it is not thread safe.
+     */
+    @Override
+    public void prepareForChildren()
+    {
+        if (serverConnectionHandlers == null) {
+            serverConnectionHandlers = new CopyOnWriteArrayList<IOCompletionHandler<AbstractHandle>>();
+            receiveCount = new AtomicInteger();
+        }
+    }
+
+    private IOCompletionHandler<AbstractHandle> selectServer()
+    {
+        if ((serverConnectionHandlers == null) || serverConnectionHandlers.isEmpty()) {
+            return null;
+        }
+        return serverConnectionHandlers.get(receiveCount.getAndIncrement() % serverConnectionHandlers.size());
+    }
+
+    @Override
+    public void childListen(IOCompletionHandler<AbstractHandle> handler)
+    {
+        serverConnectionHandlers.add(handler);
+    }
+
+    @Override
+    public void stopListening(IOCompletionHandler<AbstractHandle> handler)
+    {
+        serverConnectionHandlers.remove(handler);
+    }
+
     protected void serverSelected(SelectionKey key)
     {
         if (!key.isValid()) {
@@ -201,7 +272,11 @@ public class NIOSocketHandle
                         try {
                             runtime.registerCloseable(child);
                             NIOSocketHandle sock = new NIOSocketHandle(runtime, child);
-                            serverConnectionHandler.ioComplete(0, sock);
+                            IOCompletionHandler<AbstractHandle> handler = selectServer();
+                            if (handler == null) {
+                                throw new OSException(ErrorCodes.EOF);
+                            }
+                            handler.ioComplete(0, sock);
                             success = true;
                         } finally {
                             if (!success) {

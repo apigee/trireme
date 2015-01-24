@@ -79,6 +79,7 @@ public class NodeEnvironment
     private RhinoContextFactory contextFactory;
     private long                scriptTimeLimit;
     private ClassCache          classCache;
+    private String              defaultNodeVersion;
 
     private int                 optLevel = DEFAULT_OPT_LEVEL;
 
@@ -138,11 +139,20 @@ public class NodeEnvironment
      */
     public String getDefaultNodeVersion()
     {
-        RootModuleRegistry reg = versions.match(DEFAULT_NODE_VERSION);
+        String version = (defaultNodeVersion != null) ? defaultNodeVersion : DEFAULT_NODE_VERSION;
+        RootModuleRegistry reg = versions.match(version);
         if (reg == null) {
             return null;
         }
         return reg.getImplementation().getVersion();
+    }
+
+    /**
+     * Override the default version.
+     */
+    public void setDefaultNodeVersion(String version)
+    {
+        this.defaultNodeVersion = version;
     }
 
     /**

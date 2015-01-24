@@ -42,6 +42,7 @@
     <module>kernel</module>
     <module>net</module>
     <module>node10</module>
+    <module>node12</module>
     <module>nodetests</module>
     <module>npm-package</module>
     <module>samples</module>

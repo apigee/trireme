@@ -57,7 +57,7 @@ public class NodeScript
     private boolean printEval;
     private String workingDir;
     private Map<String, String> environment;
-    private String nodeVersion = NodeEnvironment.DEFAULT_NODE_VERSION;
+    private String nodeVersion;
 
     NodeScript(NodeEnvironment env, String scriptName, File script, String[] args)
     {
@@ -169,6 +169,9 @@ public class NodeScript
     private AbstractModuleRegistry getRegistry()
         throws NodeException
     {
+        if (nodeVersion == null) {
+            nodeVersion = env.getDefaultNodeVersion();
+        }
         RootModuleRegistry root = env.getRegistry(nodeVersion);
         if (root == null) {
             throw new NodeException("No available Node.js implementation matches version " + nodeVersion);

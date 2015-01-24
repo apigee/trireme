@@ -20,6 +20,7 @@
 // USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 var punycode = require('punycode');
+var util = require('util');
 
 exports.parse = urlParse;
 exports.resolve = urlResolve;
@@ -50,25 +51,28 @@ function Url() {
 var protocolPattern = /^([a-z0-9.+-]+:)/i,
     portPattern = /:[0-9]*$/,
 
+    // Special case for a simple path URL
+    simplePathPattern = /^(\/\/?(?!\/)[^\?\s]*)(\?[^\s]*)?$/,
+
     // RFC 2396: characters reserved for delimiting URLs.
     // We actually just auto-escape these.
     delims = ['<', '>', '"', '`', ' ', '\r', '\n', '\t'],
 
     // RFC 2396: characters not allowed for various reasons.
-    unwise = ['{', '}', '|', '\\', '^', '~', '`'].concat(delims),
+    unwise = ['{', '}', '|', '\\', '^', '`'].concat(delims),
 
     // Allowed by RFCs, but cause of XSS attacks.  Always escape these.
-    autoEscape = ['\''].concat(delims),
+    autoEscape = ['\''].concat(unwise),
     // Characters that are never ever allowed in a hostname.
     // Note that any invalid chars are also handled, but these
     // are the ones that are *expected* to be seen, so we fast-path
     // them.
-    nonHostChars = ['%', '/', '?', ';', '#']
-      .concat(unwise).concat(autoEscape),
+    nonHostChars = ['%', '/', '?', ';', '#'].concat(autoEscape),
     hostEndingChars = ['/', '?', '#'],
     hostnameMaxLen = 255,
-    hostnamePartPattern = /^[a-z0-9A-Z_-]{0,63}$/,
-    hostnamePartStart = /^([a-z0-9A-Z_-]{0,63})(.*)$/,
+    hostnamePatternString = '[^' + nonHostChars.join('') + ']{0,63}',
+    hostnamePartPattern = new RegExp('^' + hostnamePatternString + '$'),
+    hostnamePartStart = new RegExp('^(' + hostnamePatternString + ')(.*)$'),
     // protocols that can allow "unsafe" and "unwise" chars.
     unsafeProtocol = {
       'javascript': true,
@@ -95,7 +99,7 @@ var protocolPattern = /^([a-z0-9.+-]+:)/i,
     querystring = require('querystring');
 
 function urlParse(url, parseQueryString, slashesDenoteHost) {
-  if (url && typeof(url) === 'object' && url instanceof Url) return url;
+  if (url && util.isObject(url) && url instanceof Url) return url;
 
   var u = new Url;
   u.parse(url, parseQueryString, slashesDenoteHost);
@@ -103,21 +107,48 @@ function urlParse(url, parseQueryString, slashesDenoteHost) {
 }
 
 Url.prototype.parse = function(url, parseQueryString, slashesDenoteHost) {
-  if (typeof url !== 'string') {
+  if (!util.isString(url)) {
     throw new TypeError("Parameter 'url' must be a string, not " + typeof url);
   }
 
   // Copy chrome, IE, opera backslash-handling behavior.
+  // Back slashes before the query string get converted to forward slashes
   // See: https://code.google.com/p/chromium/issues/detail?id=25916
-  var hashSplit = url.split('#');
-  hashSplit[0] = hashSplit[0].replace(/\\/g, '/');
-  url = hashSplit.join('#');
+  var queryIndex = url.indexOf('?'),
+      splitter =
+          (queryIndex !== -1 && queryIndex < url.indexOf('#')) ? '?' : '#',
+      uSplit = url.split(splitter),
+      slashRegex = /\\/g;
+  uSplit[0] = uSplit[0].replace(slashRegex, '/');
+  url = uSplit.join(splitter);
 
   var rest = url;
 
   // trim before proceeding.
   // This is to support parse stuff like "  http://foo.com  \n"
   rest = rest.trim();
+
+  if (!slashesDenoteHost && url.split('#').length === 1) {
+    // Try fast path regexp
+    var simplePath = simplePathPattern.exec(rest);
+    if (simplePath) {
+      this.path = rest;
+      this.href = rest;
+      this.pathname = simplePath[1];
+      if (simplePath[2]) {
+        this.search = simplePath[2];
+        if (parseQueryString) {
+          this.query = querystring.parse(this.search.substr(1));
+        } else {
+          this.query = this.search.substr(1);
+        }
+      } else if (parseQueryString) {
+        this.search = '';
+        this.query = {};
+      }
+      return this;
+    }
+  }
 
   var proto = protocolPattern.exec(rest);
   if (proto) {
@@ -287,6 +318,8 @@ Url.prototype.parse = function(url, parseQueryString, slashesDenoteHost) {
     // need to be.
     for (var i = 0, l = autoEscape.length; i < l; i++) {
       var ae = autoEscape[i];
+      if (rest.indexOf(ae) === -1)
+        continue;
       var esc = encodeURIComponent(ae);
       if (esc === ae) {
         esc = escape(ae);
@@ -330,7 +363,7 @@ Url.prototype.parse = function(url, parseQueryString, slashesDenoteHost) {
   }
 
   // finally, reconstruct the href based on what has been validated.
-  this.href = this.format();
+  this.href = this.format(parseQueryString);
   return this;
 };
 
@@ -340,12 +373,12 @@ function urlFormat(obj) {
   // If it's an obj, this is a no-op.
   // this way, you can call url_format() on strings
   // to clean up potentially wonky urls.
-  if (typeof(obj) === 'string') obj = urlParse(obj);
+  if (util.isString(obj)) obj = urlParse(obj);
   if (!(obj instanceof Url)) return Url.prototype.format.call(obj);
   return obj.format();
 }
 
-Url.prototype.format = function() {
+Url.prototype.format = function(parseQueryString) {
   var auth = this.auth || '';
   if (auth) {
     auth = encodeURIComponent(auth);
@@ -357,7 +390,26 @@ Url.prototype.format = function() {
       pathname = this.pathname || '',
       hash = this.hash || '',
       host = false,
-      query = '';
+      query = '',
+      search = '';
+
+  if (this.path) {
+    var qm = this.path.indexOf('?');
+    if (qm !== -1) {
+      query = this.path.slice(qm + 1);
+      search = '?' + query;
+      pathname = this.path.slice(0, qm);
+    } else {
+      if (parseQueryString) {
+        this.query = {};
+        this.search = '';
+      } else {
+        this.query = null;
+        this.search = null;
+      }
+      pathname = this.path;
+    }
+  }
 
   if (this.host) {
     host = auth + this.host;
@@ -370,12 +422,15 @@ Url.prototype.format = function() {
     }
   }
 
-  if (this.query && typeof this.query === 'object' &&
+  if (!query &&
+      this.query &&
+      util.isObject(this.query) &&
       Object.keys(this.query).length) {
     query = querystring.stringify(this.query);
   }
 
-  var search = this.search || (query && ('?' + query)) || '';
+  if (!search)
+    search = this.search || (query && ('?' + query)) || '';
 
   if (protocol && protocol.substr(-1) !== ':') protocol += ':';
 
@@ -414,16 +469,18 @@ function urlResolveObject(source, relative) {
 }
 
 Url.prototype.resolveObject = function(relative) {
-  if (typeof relative === 'string') {
+  if (util.isString(relative)) {
     var rel = new Url();
     rel.parse(relative, false, true);
     relative = rel;
   }
 
   var result = new Url();
-  Object.keys(this).forEach(function(k) {
-    result[k] = this[k];
-  }, this);
+  var tkeys = Object.keys(this);
+  for (var tk = 0; tk < tkeys.length; tk++) {
+    var tkey = tkeys[tk];
+    result[tkey] = this[tkey];
+  }
 
   // hash is always overridden, no matter what.
   // even href="" will remove it.
@@ -438,10 +495,12 @@ Url.prototype.resolveObject = function(relative) {
   // hrefs like //foo/bar always cut to the protocol.
   if (relative.slashes && !relative.protocol) {
     // take everything except the protocol from relative
-    Object.keys(relative).forEach(function(k) {
-      if (k !== 'protocol')
-        result[k] = relative[k];
-    });
+    var rkeys = Object.keys(relative);
+    for (var rk = 0; rk < rkeys.length; rk++) {
+      var rkey = rkeys[rk];
+      if (rkey !== 'protocol')
+        result[rkey] = relative[rkey];
+    }
 
     //urlParse appends trailing / to urls like http://www.example.com
     if (slashedProtocol[result.protocol] &&
@@ -463,9 +522,11 @@ Url.prototype.resolveObject = function(relative) {
     // because that's known to be hostless.
     // anything else is assumed to be absolute.
     if (!slashedProtocol[relative.protocol]) {
-      Object.keys(relative).forEach(function(k) {
+      var keys = Object.keys(relative);
+      for (var v = 0; v < keys.length; v++) {
+        var k = keys[v];
         result[k] = relative[k];
-      });
+      }
       result.href = result.format();
       return result;
     }
@@ -554,7 +615,7 @@ Url.prototype.resolveObject = function(relative) {
     srcPath = srcPath.concat(relPath);
     result.search = relative.search;
     result.query = relative.query;
-  } else if (relative.search !== null && relative.search !== undefined) {
+  } else if (!util.isNullOrUndefined(relative.search)) {
     // just pull out the search.
     // like href='?foo'.
     // Put this after the other two cases because it simplifies the booleans
@@ -573,7 +634,7 @@ Url.prototype.resolveObject = function(relative) {
     result.search = relative.search;
     result.query = relative.query;
     //to support http.request
-    if (result.pathname !== null || result.search !== null) {
+    if (!util.isNull(result.pathname) || !util.isNull(result.search)) {
       result.path = (result.pathname ? result.pathname : '') +
                     (result.search ? result.search : '');
     }
@@ -608,7 +669,7 @@ Url.prototype.resolveObject = function(relative) {
   var up = 0;
   for (var i = srcPath.length; i >= 0; i--) {
     last = srcPath[i];
-    if (last == '.') {
+    if (last === '.') {
       srcPath.splice(i, 1);
     } else if (last === '..') {
       srcPath.splice(i, 1);
@@ -667,7 +728,7 @@ Url.prototype.resolveObject = function(relative) {
   }
 
   //to support request.http
-  if (result.pathname !== null || result.search !== null) {
+  if (!util.isNull(result.pathname) || !util.isNull(result.search)) {
     result.path = (result.pathname ? result.pathname : '') +
                   (result.search ? result.search : '');
   }

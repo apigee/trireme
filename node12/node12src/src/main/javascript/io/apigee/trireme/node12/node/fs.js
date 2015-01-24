@@ -31,75 +31,67 @@ var pathModule = require('path');
 var binding = process.binding('fs');
 var constants = process.binding('constants');
 var fs = exports;
+var Buffer = require('buffer').Buffer;
 var Stream = require('stream').Stream;
 var EventEmitter = require('events').EventEmitter;
+var FSReqWrap = binding.FSReqWrap;
 
 var Readable = Stream.Readable;
 var Writable = Stream.Writable;
 
 var kMinPoolSpace = 128;
+var kMaxLength = require('smalloc').kMaxLength;
 
 var O_APPEND = constants.O_APPEND || 0;
 var O_CREAT = constants.O_CREAT || 0;
-var O_DIRECTORY = constants.O_DIRECTORY || 0;
 var O_EXCL = constants.O_EXCL || 0;
-var O_NOCTTY = constants.O_NOCTTY || 0;
-var O_NOFOLLOW = constants.O_NOFOLLOW || 0;
 var O_RDONLY = constants.O_RDONLY || 0;
 var O_RDWR = constants.O_RDWR || 0;
-var O_SYMLINK = constants.O_SYMLINK || 0;
 var O_SYNC = constants.O_SYNC || 0;
 var O_TRUNC = constants.O_TRUNC || 0;
 var O_WRONLY = constants.O_WRONLY || 0;
+var F_OK = constants.F_OK || 0;
+var R_OK = constants.R_OK || 0;
+var W_OK = constants.W_OK || 0;
+var X_OK = constants.X_OK || 0;
 
 var isWindows = process.platform === 'win32';
 
 var DEBUG = process.env.NODE_DEBUG && /fs/.test(process.env.NODE_DEBUG);
+var errnoException = util._errnoException;
+
 
 function rethrow() {
   // Only enable in debug mode. A backtrace uses ~1000 bytes of heap space and
   // is fairly slow to generate.
-  var callback;
   if (DEBUG) {
     var backtrace = new Error;
-    callback = debugCallback;
-  } else
-    callback = missingCallback;
-
-  return callback;
-
-  function debugCallback(err) {
-    if (err) {
-      backtrace.message = err.message;
-      err = backtrace;
-      missingCallback(err);
-    }
-  }
-
-  function missingCallback(err) {
-    if (err) {
-      if (process.throwDeprecation)
-        throw err;  // Forgot a callback but don't know where? Use NODE_DEBUG=fs
-      else if (!process.noDeprecation) {
-        var msg = 'fs: missing callback ' + (err.stack || err.message);
-        if (process.traceDeprecation)
-          console.trace(msg);
-        else
-          console.error(msg);
+    return function(err) {
+      if (err) {
+        backtrace.stack = err.name + ': ' + err.message +
+                          backtrace.stack.substr(backtrace.name.length);
+        err = backtrace;
+        throw err;
       }
-    }
+    };
   }
+
+  return function(err) {
+    if (err) {
+      throw err;  // Forgot a callback but don't know where? Use NODE_DEBUG=fs
+    }
+  };
 }
 
 function maybeCallback(cb) {
-  return typeof cb === 'function' ? cb : rethrow();
+  return util.isFunction(cb) ? cb : rethrow();
 }
 
 // Ensure that callbacks run in the global context. Only use this function
 // for callbacks that are passed to the binding layer, callbacks that are
 // invoked from JS already run in the proper scope.
 function makeCallback(cb) {
-  if (typeof cb !== 'function') {
+  if (!util.isFunction(cb)) {
     return rethrow();
   }
 
@@ -127,7 +119,40 @@ function nullCheck(path, callback) {
   return true;
 }
 
-fs.Stats = binding.Stats;
+// Static method to set the stats properties on a Stats object.
+fs.Stats = function(
+    dev,
+    mode,
+    nlink,
+    uid,
+    gid,
+    rdev,
+    blksize,
+    ino,
+    size,
+    blocks,
+    atim_msec,
+    mtim_msec,
+    ctim_msec,
+    birthtim_msec) {
+  this.dev = dev;
+  this.mode = mode;
+  this.nlink = nlink;
+  this.uid = uid;
+  this.gid = gid;
+  this.rdev = rdev;
+  this.blksize = blksize;
+  this.ino = ino;
+  this.size = size;
+  this.blocks = blocks;
+  this.atime = new Date(atim_msec);
+  this.mtime = new Date(mtim_msec);
+  this.ctime = new Date(ctim_msec);
+  this.birthtime = new Date(birthtim_msec);
+};
+
+// Create a C++ binding to the function which creates a Stats object.
+binding.FSInitialize(fs.Stats);
 
 fs.Stats.prototype._checkModeProperty = function(property) {
   return ((this.mode & constants.S_IFMT) === property);
@@ -161,9 +186,44 @@ fs.Stats.prototype.isSocket = function() {
   return this._checkModeProperty(constants.S_IFSOCK);
 };
 
+fs.F_OK = F_OK;
+fs.R_OK = R_OK;
+fs.W_OK = W_OK;
+fs.X_OK = X_OK;
+
+fs.access = function(path, mode, callback) {
+  if (!nullCheck(path, callback))
+    return;
+
+  if (typeof mode === 'function') {
+    callback = mode;
+    mode = F_OK;
+  } else if (typeof callback !== 'function') {
+    throw new TypeError('callback must be a function');
+  }
+
+  mode = mode | 0;
+  var req = new FSReqWrap();
+  req.oncomplete = makeCallback(callback);
+  binding.access(pathModule._makeLong(path), mode, req);
+};
+
+fs.accessSync = function(path, mode) {
+  nullCheck(path);
+
+  if (mode === undefined)
+    mode = F_OK;
+  else
+    mode = mode | 0;
+
+  binding.access(pathModule._makeLong(path), mode);
+};
+
 fs.exists = function(path, callback) {
   if (!nullCheck(path, cb)) return;
-  binding.stat(pathModule._makeLong(path), cb);
+  var req = new FSReqWrap();
+  req.oncomplete = cb;
+  binding.stat(pathModule._makeLong(path), req);
   function cb(err, stats) {
     if (callback) callback(err ? false : true);
   }
@@ -182,13 +242,11 @@ fs.existsSync = function(path) {
 fs.readFile = function(path, options, callback_) {
   var callback = maybeCallback(arguments[arguments.length - 1]);
 
-  if (typeof options === 'function' || !options) {
+  if (util.isFunction(options) || !options) {
     options = { encoding: null, flag: 'r' };
-  } else if (typeof options === 'string') {
+  } else if (util.isString(options)) {
     options = { encoding: options, flag: 'r' };
-  } else if (!options) {
-    options = { encoding: null, flag: 'r' };
-  } else if (typeof options !== 'object') {
+  } else if (!util.isObject(options)) {
     throw new TypeError('Bad arguments');
   }
 
@@ -222,6 +280,13 @@ fs.readFile = function(path, options, callback_) {
         return read();
       }
 
+      if (size > kMaxLength) {
+        var err = new RangeError('File size is greater than possible Buffer: ' +
+            '0x3FFFFFFF bytes');
+        return fs.close(fd, function() {
+          callback(err);
+        });
+      }
       buffer = new Buffer(size);
       read();
     });
@@ -276,9 +341,9 @@ fs.readFile = function(path, options, callback_) {
 fs.readFileSync = function(path, options) {
   if (!options) {
     options = { encoding: null, flag: 'r' };
-  } else if (typeof options === 'string') {
+  } else if (util.isString(options)) {
     options = { encoding: options, flag: 'r' };
-  } else if (typeof options !== 'object') {
+  } else if (!util.isObject(options)) {
     throw new TypeError('Bad arguments');
   }
 
@@ -354,21 +419,17 @@ fs.readFileSync = function(path, options) {
 // Used by binding.open and friends
 function stringToFlags(flag) {
   // Only mess with strings
-  if (typeof flag !== 'string') {
+  if (!util.isString(flag)) {
     return flag;
-  }
-
-  // O_EXCL is mandated by POSIX, Windows supports it too.
-  // Let's add a check anyway, just in case.
-  if (!O_EXCL && ~flag.indexOf('x')) {
-    throw errnoException('ENOSYS', 'fs.open(O_EXCL)');
   }
 
   switch (flag) {
     case 'r' : return O_RDONLY;
-    case 'rs' : return O_RDONLY | O_SYNC;
+    case 'rs' : // fall through
+    case 'sr' : return O_RDONLY | O_SYNC;
     case 'r+' : return O_RDWR;
-    case 'rs+' : return O_RDWR | O_SYNC;
+    case 'rs+' : // fall through
+    case 'sr+' : return O_RDWR | O_SYNC;
 
     case 'w' : return O_TRUNC | O_CREAT | O_WRONLY;
     case 'wx' : // fall through
@@ -401,7 +462,9 @@ Object.defineProperty(exports, '_stringToFlags', {
 // list to make the arguments clear.
 
 fs.close = function(fd, callback) {
-  binding.close(fd, makeCallback(callback));
+  var req = new FSReqWrap();
+  req.oncomplete = makeCallback(callback);
+  binding.close(fd, req);
 };
 
 fs.closeSync = function(fd) {
@@ -409,16 +472,13 @@ fs.closeSync = function(fd) {
 };
 
 function modeNum(m, def) {
-  switch (typeof m) {
-    case 'number': return m;
-    case 'string': return parseInt(m, 8);
-    default:
-      if (def) {
-        return modeNum(def);
-      } else {
-        return undefined;
-      }
-  }
+  if (util.isNumber(m))
+    return m;
+  if (util.isString(m))
+    return parseInt(m, 8);
+  if (def)
+    return modeNum(def);
+  return undefined;
 }
 
 fs.open = function(path, flags, mode, callback) {
@@ -426,10 +486,14 @@ fs.open = function(path, flags, mode, callback) {
   mode = modeNum(mode, 438 /*=0666*/);
 
   if (!nullCheck(path, callback)) return;
+
+  var req = new FSReqWrap();
+  req.oncomplete = callback;
+
   binding.open(pathModule._makeLong(path),
                stringToFlags(flags),
                mode,
-               callback);
+               req);
 };
 
 fs.openSync = function(path, flags, mode) {
@@ -439,7 +503,7 @@ fs.openSync = function(path, flags, mode) {
 };
 
 fs.read = function(fd, buffer, offset, length, position, callback) {
-  if (!Buffer.isBuffer(buffer)) {
+  if (!util.isBuffer(buffer)) {
     // legacy string interface (fd, length, position, encoding, callback)
     var cb = arguments[4],
         encoding = arguments[3];
@@ -465,12 +529,15 @@ fs.read = function(fd, buffer, offset, length, position, callback) {
     callback && callback(err, bytesRead || 0, buffer);
   }
 
-  binding.read(fd, buffer, offset, length, position, wrapper);
+  var req = new FSReqWrap();
+  req.oncomplete = wrapper;
+
+  binding.read(fd, buffer, offset, length, position, req);
 };
 
 fs.readSync = function(fd, buffer, offset, length, position) {
   var legacy = false;
-  if (!Buffer.isBuffer(buffer)) {
+  if (!util.isBuffer(buffer)) {
     // legacy string interface (fd, length, position, encoding, callback)
     legacy = true;
     var encoding = arguments[3];
@@ -493,59 +560,76 @@ fs.readSync = function(fd, buffer, offset, length, position) {
   return [str, r];
 };
 
+// usage:
+//  fs.write(fd, buffer, offset, length[, position], callback);
+// OR
+//  fs.write(fd, string[, position[, encoding]], callback);
 fs.write = function(fd, buffer, offset, length, position, callback) {
-  if (!Buffer.isBuffer(buffer)) {
-    // legacy string interface (fd, data, position, encoding, callback)
-    callback = arguments[4];
-    position = arguments[2];
-    assertEncoding(arguments[3]);
-
-    buffer = new Buffer('' + arguments[1], arguments[3]);
-    offset = 0;
-    length = buffer.length;
-  }
-
-  if (!length) {
-    if (typeof callback == 'function') {
-      process.nextTick(function() {
-        callback(undefined, 0);
-      });
-    }
-    return;
-  }
-
-  callback = maybeCallback(callback);
-
-  function wrapper(err, written) {
+  function strWrapper(err, written) {
     // Retain a reference to buffer so that it can't be GC'ed too soon.
     callback(err, written || 0, buffer);
   }
 
-  binding.write(fd, buffer, offset, length, position, wrapper);
+  function bufWrapper(err, written) {
+    // retain reference to string in case it's external
+    callback(err, written || 0, buffer);
+  }
+
+  if (util.isBuffer(buffer)) {
+    // if no position is passed then assume null
+    if (util.isFunction(position)) {
+      callback = position;
+      position = null;
+    }
+    callback = maybeCallback(callback);
+    var req = new FSReqWrap();
+    req.oncomplete = strWrapper;
+    return binding.writeBuffer(fd, buffer, offset, length, position, req);
+  }
+
+  if (util.isString(buffer))
+    buffer += '';
+  if (!util.isFunction(position)) {
+    if (util.isFunction(offset)) {
+      position = offset;
+      offset = null;
+    } else {
+      position = length;
+    }
+    length = 'utf8';
+  }
+  callback = maybeCallback(position);
+  var req = new FSReqWrap();
+  req.oncomplete = bufWrapper;
+  return binding.writeString(fd, buffer, offset, length, req);
 };
 
+// usage:
+//  fs.writeSync(fd, buffer, offset, length[, position]);
+// OR
+//  fs.writeSync(fd, string[, position[, encoding]]);
 fs.writeSync = function(fd, buffer, offset, length, position) {
-  if (!Buffer.isBuffer(buffer)) {
-    // legacy string interface (fd, data, position, encoding)
-    position = arguments[2];
-    assertEncoding(arguments[3]);
-
-    buffer = new Buffer('' + arguments[1], arguments[3]);
-    offset = 0;
-    length = buffer.length;
+  if (util.isBuffer(buffer)) {
+    if (util.isUndefined(position))
+      position = null;
+    return binding.writeBuffer(fd, buffer, offset, length, position);
   }
-  if (!length) return 0;
-
-  return binding.write(fd, buffer, offset, length, position);
+  if (!util.isString(buffer))
+    buffer += '';
+  if (util.isUndefined(offset))
+    offset = null;
+  return binding.writeString(fd, buffer, offset, length, position);
 };
 
 fs.rename = function(oldPath, newPath, callback) {
   callback = makeCallback(callback);
   if (!nullCheck(oldPath, callback)) return;
   if (!nullCheck(newPath, callback)) return;
+  var req = new FSReqWrap();
+  req.oncomplete = callback;
   binding.rename(pathModule._makeLong(oldPath),
                  pathModule._makeLong(newPath),
-                 callback);
+                 req);
 };
 
 fs.renameSync = function(oldPath, newPath) {
@@ -556,33 +640,37 @@ fs.renameSync = function(oldPath, newPath) {
 };
 
 fs.truncate = function(path, len, callback) {
-  if (typeof path === 'number') {
-    // legacy
-    return fs.ftruncate(path, len, callback);
+  if (util.isNumber(path)) {
+    var req = new FSReqWrap();
+    req.oncomplete = callback;
+    return fs.ftruncate(path, len, req);
   }
-  if (typeof len === 'function') {
+  if (util.isFunction(len)) {
     callback = len;
     len = 0;
-  } else if (typeof len === 'undefined') {
+  } else if (util.isUndefined(len)) {
     len = 0;
   }
+
   callback = maybeCallback(callback);
   fs.open(path, 'r+', function(er, fd) {
     if (er) return callback(er);
-    binding.ftruncate(fd, len, function(er) {
+    var req = new FSReqWrap();
+    req.oncomplete = function ftruncateCb(er) {
       fs.close(fd, function(er2) {
         callback(er || er2);
       });
-    });
+    };
+    binding.ftruncate(fd, len, req);
   });
 };
 
 fs.truncateSync = function(path, len) {
-  if (typeof path === 'number') {
+  if (util.isNumber(path)) {
     // legacy
     return fs.ftruncateSync(path, len);
   }
-  if (typeof len === 'undefined') {
+  if (util.isUndefined(len)) {
     len = 0;
   }
   // allow error to be thrown, but still close fd.
@@ -596,26 +684,30 @@ fs.truncateSync = function(path, len) {
 };
 
 fs.ftruncate = function(fd, len, callback) {
-  if (typeof len === 'function') {
+  if (util.isFunction(len)) {
     callback = len;
     len = 0;
-  } else if (typeof len === 'undefined') {
+  } else if (util.isUndefined(len)) {
     len = 0;
   }
-  binding.ftruncate(fd, len, makeCallback(callback));
+  var req = new FSReqWrap();
+  req.oncomplete = makeCallback(callback);
+  binding.ftruncate(fd, len, req);
 };
 
 fs.ftruncateSync = function(fd, len) {
-  if (typeof len === 'undefined') {
+  if (util.isUndefined(len)) {
     len = 0;
   }
   return binding.ftruncate(fd, len);
 };
 
 fs.rmdir = function(path, callback) {
-  callback = makeCallback(callback);
+  callback = maybeCallback(callback);
   if (!nullCheck(path, callback)) return;
-  binding.rmdir(pathModule._makeLong(path), callback);
+  var req = new FSReqWrap();
+  req.oncomplete = callback;
+  binding.rmdir(pathModule._makeLong(path), req);
 };
 
 fs.rmdirSync = function(path) {
@@ -624,7 +716,9 @@ fs.rmdirSync = function(path) {
 };
 
 fs.fdatasync = function(fd, callback) {
-  binding.fdatasync(fd, makeCallback(callback));
+  var req = new FSReqWrap();
+  req.oncomplete = makeCallback(callback);
+  binding.fdatasync(fd, req);
 };
 
 fs.fdatasyncSync = function(fd) {
@@ -632,7 +726,9 @@ fs.fdatasyncSync = function(fd) {
 };
 
 fs.fsync = function(fd, callback) {
-  binding.fsync(fd, makeCallback(callback));
+  var req = new FSReqWrap();
+  req.oncomplete = makeCallback(callback);
+  binding.fsync(fd, req);
 };
 
 fs.fsyncSync = function(fd) {
@@ -640,12 +736,14 @@ fs.fsyncSync = function(fd) {
 };
 
 fs.mkdir = function(path, mode, callback) {
-  if (typeof mode === 'function') callback = mode;
+  if (util.isFunction(mode)) callback = mode;
   callback = makeCallback(callback);
   if (!nullCheck(path, callback)) return;
+  var req = new FSReqWrap();
+  req.oncomplete = callback;
   binding.mkdir(pathModule._makeLong(path),
                 modeNum(mode, 511 /*=0777*/),
-                callback);
+                req);
 };
 
 fs.mkdirSync = function(path, mode) {
@@ -657,7 +755,9 @@ fs.mkdirSync = function(path, mode) {
 fs.readdir = function(path, callback) {
   callback = makeCallback(callback);
   if (!nullCheck(path, callback)) return;
-  binding.readdir(pathModule._makeLong(path), callback);
+  var req = new FSReqWrap();
+  req.oncomplete = callback;
+  binding.readdir(pathModule._makeLong(path), req);
 };
 
 fs.readdirSync = function(path) {
@@ -666,19 +766,25 @@ fs.readdirSync = function(path) {
 };
 
 fs.fstat = function(fd, callback) {
-  binding.fstat(fd, makeCallback(callback));
+  var req = new FSReqWrap();
+  req.oncomplete = makeCallback(callback);
+  binding.fstat(fd, req);
 };
 
 fs.lstat = function(path, callback) {
   callback = makeCallback(callback);
   if (!nullCheck(path, callback)) return;
-  binding.lstat(pathModule._makeLong(path), callback);
+  var req = new FSReqWrap();
+  req.oncomplete = callback;
+  binding.lstat(pathModule._makeLong(path), req);
 };
 
 fs.stat = function(path, callback) {
   callback = makeCallback(callback);
   if (!nullCheck(path, callback)) return;
-  binding.stat(pathModule._makeLong(path), callback);
+  var req = new FSReqWrap();
+  req.oncomplete = callback;
+  binding.stat(pathModule._makeLong(path), req);
 };
 
 fs.fstatSync = function(fd) {
@@ -698,7 +804,9 @@ fs.statSync = function(path) {
 fs.readlink = function(path, callback) {
   callback = makeCallback(callback);
   if (!nullCheck(path, callback)) return;
-  binding.readlink(pathModule._makeLong(path), callback);
+  var req = new FSReqWrap();
+  req.oncomplete = callback;
+  binding.readlink(pathModule._makeLong(path), req);
 };
 
 fs.readlinkSync = function(path) {
@@ -720,20 +828,23 @@ function preprocessSymlinkDestination(path, type) {
 }
 
 fs.symlink = function(destination, path, type_, callback) {
-  var type = (typeof type_ === 'string' ? type_ : null);
+  var type = (util.isString(type_) ? type_ : null);
   var callback = makeCallback(arguments[arguments.length - 1]);
 
   if (!nullCheck(destination, callback)) return;
   if (!nullCheck(path, callback)) return;
 
+  var req = new FSReqWrap();
+  req.oncomplete = callback;
+
   binding.symlink(preprocessSymlinkDestination(destination, type),
                   pathModule._makeLong(path),
                   type,
-                  callback);
+                  req);
 };
 
 fs.symlinkSync = function(destination, path, type) {
-  type = (typeof type === 'string' ? type : null);
+  type = (util.isString(type) ? type : null);
 
   nullCheck(destination);
   nullCheck(path);
@@ -748,9 +859,12 @@ fs.link = function(srcpath, dstpath, callback) {
   if (!nullCheck(srcpath, callback)) return;
   if (!nullCheck(dstpath, callback)) return;
 
+  var req = new FSReqWrap();
+  req.oncomplete = callback;
+
   binding.link(pathModule._makeLong(srcpath),
                pathModule._makeLong(dstpath),
-               callback);
+               req);
 };
 
 fs.linkSync = function(srcpath, dstpath) {
@@ -763,7 +877,9 @@ fs.linkSync = function(srcpath, dstpath) {
 fs.unlink = function(path, callback) {
   callback = makeCallback(callback);
   if (!nullCheck(path, callback)) return;
-  binding.unlink(pathModule._makeLong(path), callback);
+  var req = new FSReqWrap();
+  req.oncomplete = callback;
+  binding.unlink(pathModule._makeLong(path), req);
 };
 
 fs.unlinkSync = function(path) {
@@ -772,7 +888,9 @@ fs.unlinkSync = function(path) {
 };
 
 fs.fchmod = function(fd, mode, callback) {
-  binding.fchmod(fd, modeNum(mode), makeCallback(callback));
+  var req = new FSReqWrap();
+  req.oncomplete = makeCallback(callback);
+  binding.fchmod(fd, modeNum(mode), req);
 };
 
 fs.fchmodSync = function(fd, mode) {
@@ -822,9 +940,11 @@ if (constants.hasOwnProperty('O_SYMLINK')) {
 fs.chmod = function(path, mode, callback) {
   callback = makeCallback(callback);
   if (!nullCheck(path, callback)) return;
+  var req = new FSReqWrap();
+  req.oncomplete = callback;
   binding.chmod(pathModule._makeLong(path),
                 modeNum(mode),
-                callback);
+                req);
 };
 
 fs.chmodSync = function(path, mode) {
@@ -851,7 +971,9 @@ if (constants.hasOwnProperty('O_SYMLINK')) {
 }
 
 fs.fchown = function(fd, uid, gid, callback) {
-  binding.fchown(fd, uid, gid, makeCallback(callback));
+  var req = new FSReqWrap();
+  req.oncomplete = makeCallback(callback);
+  binding.fchown(fd, uid, gid, req);
 };
 
 fs.fchownSync = function(fd, uid, gid) {
@@ -861,7 +983,9 @@ fs.fchownSync = function(fd, uid, gid) {
 fs.chown = function(path, uid, gid, callback) {
   callback = makeCallback(callback);
   if (!nullCheck(path, callback)) return;
-  binding.chown(pathModule._makeLong(path), uid, gid, callback);
+  var req = new FSReqWrap();
+  req.oncomplete = callback;
+  binding.chown(pathModule._makeLong(path), uid, gid, req);
 };
 
 fs.chownSync = function(path, uid, gid) {
@@ -871,10 +995,10 @@ fs.chownSync = function(path, uid, gid) {
 
 // converts Date or number to a fractional UNIX timestamp
 function toUnixTimestamp(time) {
-  if (typeof time == 'number') {
+  if (util.isNumber(time)) {
     return time;
   }
-  if (time instanceof Date) {
+  if (util.isDate(time)) {
     // convert to 123.456 UNIX timestamp
     return time.getTime() / 1000;
   }
@@ -887,10 +1011,12 @@ fs._toUnixTimestamp = toUnixTimestamp;
 fs.utimes = function(path, atime, mtime, callback) {
   callback = makeCallback(callback);
   if (!nullCheck(path, callback)) return;
+  var req = new FSReqWrap();
+  req.oncomplete = callback;
   binding.utimes(pathModule._makeLong(path),
                  toUnixTimestamp(atime),
                  toUnixTimestamp(mtime),
-                 callback);
+                 req);
 };
 
 fs.utimesSync = function(path, atime, mtime) {
@@ -903,7 +1029,9 @@ fs.utimesSync = function(path, atime, mtime) {
 fs.futimes = function(fd, atime, mtime, callback) {
   atime = toUnixTimestamp(atime);
   mtime = toUnixTimestamp(mtime);
-  binding.futimes(fd, atime, mtime, makeCallback(callback));
+  var req = new FSReqWrap();
+  req.oncomplete = makeCallback(callback);
+  binding.futimes(fd, atime, mtime, req);
 };
 
 fs.futimesSync = function(fd, atime, mtime) {
@@ -937,13 +1065,11 @@ function writeAll(fd, buffer, offset, length, position, callback) {
 fs.writeFile = function(path, data, options, callback) {
   var callback = maybeCallback(arguments[arguments.length - 1]);
 
-  if (typeof options === 'function' || !options) {
+  if (util.isFunction(options) || !options) {
     options = { encoding: 'utf8', mode: 438 /*=0666*/, flag: 'w' };
-  } else if (typeof options === 'string') {
+  } else if (util.isString(options)) {
     options = { encoding: options, mode: 438, flag: 'w' };
-  } else if (!options) {
-    options = { encoding: 'utf8', mode: 438 /*=0666*/, flag: 'w' };
-  } else if (typeof options !== 'object') {
+  } else if (!util.isObject(options)) {
     throw new TypeError('Bad arguments');
   }
 
@@ -954,7 +1080,7 @@ fs.writeFile = function(path, data, options, callback) {
     if (openErr) {
       if (callback) callback(openErr);
     } else {
-      var buffer = Buffer.isBuffer(data) ? data : new Buffer('' + data,
+      var buffer = util.isBuffer(data) ? data : new Buffer('' + data,
           options.encoding || 'utf8');
       var position = /a/.test(flag) ? null : 0;
       writeAll(fd, buffer, 0, buffer.length, position, callback);
@@ -965,9 +1091,9 @@ fs.writeFile = function(path, data, options, callback) {
 fs.writeFileSync = function(path, data, options) {
   if (!options) {
     options = { encoding: 'utf8', mode: 438 /*=0666*/, flag: 'w' };
-  } else if (typeof options === 'string') {
+  } else if (util.isString(options)) {
     options = { encoding: options, mode: 438, flag: 'w' };
-  } else if (typeof options !== 'object') {
+  } else if (!util.isObject(options)) {
     throw new TypeError('Bad arguments');
   }
 
@@ -975,7 +1101,7 @@ fs.writeFileSync = function(path, data, options) {
 
   var flag = options.flag || 'w';
   var fd = fs.openSync(path, flag, options.mode);
-  if (!Buffer.isBuffer(data)) {
+  if (!util.isBuffer(data)) {
     data = new Buffer('' + data, options.encoding || 'utf8');
   }
   var written = 0;
@@ -994,13 +1120,11 @@ fs.writeFileSync = function(path, data, options) {
 fs.appendFile = function(path, data, options, callback_) {
   var callback = maybeCallback(arguments[arguments.length - 1]);
 
-  if (typeof options === 'function' || !options) {
+  if (util.isFunction(options) || !options) {
     options = { encoding: 'utf8', mode: 438 /*=0666*/, flag: 'a' };
-  } else if (typeof options === 'string') {
+  } else if (util.isString(options)) {
     options = { encoding: options, mode: 438, flag: 'a' };
-  } else if (!options) {
-    options = { encoding: 'utf8', mode: 438 /*=0666*/, flag: 'a' };
-  } else if (typeof options !== 'object') {
+  } else if (!util.isObject(options)) {
     throw new TypeError('Bad arguments');
   }
 
@@ -1012,9 +1136,9 @@ fs.appendFile = function(path, data, options, callback_) {
 fs.appendFileSync = function(path, data, options) {
   if (!options) {
     options = { encoding: 'utf8', mode: 438 /*=0666*/, flag: 'a' };
-  } else if (typeof options === 'string') {
+  } else if (util.isString(options)) {
     options = { encoding: options, mode: 438, flag: 'a' };
-  } else if (typeof options !== 'object') {
+  } else if (!util.isObject(options)) {
     throw new TypeError('Bad arguments');
   }
   if (!options.flag)
@@ -1022,17 +1146,6 @@ fs.appendFileSync = function(path, data, options) {
 
   fs.writeFileSync(path, data, options);
 };
-
-function errnoException(errorno, syscall) {
-  // TODO make this more compatible with ErrnoException from src/node.cc
-  // Once all of Node is using this function the ErrnoException from
-  // src/node.cc should be removed.
-  var e = new Error(syscall + ' ' + errorno);
-  e.errno = e.code = errorno;
-  e.syscall = syscall;
-  return e;
-}
-
 
 function FSWatcher() {
   EventEmitter.call(this);
@@ -1043,9 +1156,9 @@ function FSWatcher() {
   this._handle.owner = this;
 
   this._handle.onchange = function(status, event, filename) {
-    if (status) {
+    if (status < 0) {
       self._handle.close();
-      self.emit('error', errnoException(process._errno, 'watch'));
+      self.emit('error', errnoException(status, 'watch'));
     } else {
       self.emit('change', event, filename);
     }
@@ -1053,13 +1166,14 @@ function FSWatcher() {
 }
 util.inherits(FSWatcher, EventEmitter);
 
-FSWatcher.prototype.start = function(filename, persistent) {
+FSWatcher.prototype.start = function(filename, persistent, recursive) {
   nullCheck(filename);
-  var r = this._handle.start(pathModule._makeLong(filename), persistent);
-
-  if (r) {
+  var err = this._handle.start(pathModule._makeLong(filename),
+                               persistent,
+                               recursive);
+  if (err) {
     this._handle.close();
-    throw errnoException(process._errno, 'watch');
+    throw errnoException(err, 'watch');
   }
 };
 
@@ -1073,7 +1187,7 @@ fs.watch = function(filename) {
   var options;
   var listener;
 
-  if ('object' == typeof arguments[1]) {
+  if (util.isObject(arguments[1])) {
     options = arguments[1];
     listener = arguments[2];
   } else {
@@ -1081,10 +1195,11 @@ fs.watch = function(filename) {
     listener = arguments[1];
   }
 
-  if (options.persistent === undefined) options.persistent = true;
+  if (util.isUndefined(options.persistent)) options.persistent = true;
+  if (util.isUndefined(options.recursive)) options.recursive = false;
 
   watcher = new FSWatcher();
-  watcher.start(filename, options.persistent);
+  watcher.start(filename, options.persistent, options.recursive);
 
   if (listener) {
     watcher.addListener('change', listener);
@@ -1154,7 +1269,7 @@ fs.watchFile = function(filename) {
     persistent: true
   };
 
-  if ('object' == typeof arguments[1]) {
+  if (util.isObject(arguments[1])) {
     options = util._extend(options, arguments[1]);
     listener = arguments[2];
   } else {
@@ -1182,7 +1297,7 @@ fs.unwatchFile = function(filename, listener) {
 
   var stat = statWatchers[filename];
 
-  if (typeof listener === 'function') {
+  if (util.isFunction(listener)) {
     stat.removeListener('change', listener);
   } else {
     stat.removeAllListeners('change');
@@ -1193,12 +1308,6 @@ fs.unwatchFile = function(filename, listener) {
     statWatchers[filename] = undefined;
   }
 };
-
-// Realpath
-// Not using realpath(2) because it's bad.
-// See: http://insanecoding.blogspot.com/2007/11/pathmax-simply-isnt.html
-
-var normalize = pathModule.normalize;
 
 // Regexp that finds the next partion of a (partial) path
 // result is [base_with_slash, base], e.g. ['somedir/', 'somedir']
@@ -1291,7 +1400,7 @@ fs.realpathSync = function realpathSync(p, cache) {
           linkTarget = seenLinks[id];
         }
       }
-      if (linkTarget === null) {
+      if (util.isNull(linkTarget)) {
         fs.statSync(base);
         linkTarget = fs.readlinkSync(base);
       }
@@ -1313,7 +1422,7 @@ fs.realpathSync = function realpathSync(p, cache) {
 
 
 fs.realpath = function realpath(p, cache, cb) {
-  if (typeof cb !== 'function') {
+  if (!util.isFunction(cb)) {
     cb = maybeCallback(cache);
     cache = null;
   }
@@ -1474,13 +1583,13 @@ function ReadStream(path, options) {
       options.autoClose : true;
   this.pos = undefined;
 
-  if (this.start !== undefined) {
-    if ('number' !== typeof this.start) {
+  if (!util.isUndefined(this.start)) {
+    if (!util.isNumber(this.start)) {
       throw TypeError('start must be a Number');
     }
-    if (this.end === undefined) {
+    if (util.isUndefined(this.end)) {
       this.end = Infinity;
-    } else if ('number' !== typeof this.end) {
+    } else if (!util.isNumber(this.end)) {
       throw TypeError('end must be a Number');
     }
 
@@ -1491,7 +1600,7 @@ function ReadStream(path, options) {
     this.pos = this.start;
   }
 
-  if (typeof this.fd !== 'number')
+  if (!util.isNumber(this.fd))
     this.open();
 
   this.on('end', function() {
@@ -1522,7 +1631,7 @@ ReadStream.prototype.open = function() {
 };
 
 ReadStream.prototype._read = function(n) {
-  if (typeof this.fd !== 'number')
+  if (!util.isNumber(this.fd))
     return this.once('open', function() {
       this._read(n);
     });
@@ -1543,7 +1652,7 @@ ReadStream.prototype._read = function(n) {
   var toRead = Math.min(pool.length - pool.used, n);
   var start = pool.used;
 
-  if (this.pos !== undefined)
+  if (!util.isUndefined(this.pos))
     toRead = Math.min(this.end - this.pos + 1, toRead);
 
   // already read everything we were supposed to read!
@@ -1556,7 +1665,7 @@ ReadStream.prototype._read = function(n) {
   fs.read(this.fd, pool, pool.used, toRead, this.pos, onread);
 
   // move the pool positions, and internal position for reading.
-  if (this.pos !== undefined)
+  if (!util.isUndefined(this.pos))
     this.pos += toRead;
   pool.used += toRead;
 
@@ -1582,7 +1691,7 @@ ReadStream.prototype.destroy = function() {
     return;
   this.destroyed = true;
 
-  if ('number' === typeof this.fd)
+  if (util.isNumber(this.fd))
     this.close();
 };
 
@@ -1591,8 +1700,8 @@ ReadStream.prototype.close = function(cb) {
   var self = this;
   if (cb)
     this.once('close', cb);
-  if (this.closed || 'number' !== typeof this.fd) {
-    if ('number' !== typeof this.fd) {
+  if (this.closed || !util.isNumber(this.fd)) {
+    if (!util.isNumber(this.fd)) {
       this.once('open', close);
       return;
     }
@@ -1640,8 +1749,8 @@ function WriteStream(path, options) {
   this.pos = undefined;
   this.bytesWritten = 0;
 
-  if (this.start !== undefined) {
-    if ('number' !== typeof this.start) {
+  if (!util.isUndefined(this.start)) {
+    if (!util.isNumber(this.start)) {
       throw TypeError('start must be a Number');
     }
     if (this.start < 0) {
@@ -1651,7 +1760,7 @@ function WriteStream(path, options) {
     this.pos = this.start;
   }
 
-  if ('number' !== typeof this.fd)
+  if (!util.isNumber(this.fd))
     this.open();
 
   // dispose on finish.
@@ -1676,10 +1785,10 @@ WriteStream.prototype.open = function() {
 
 
 WriteStream.prototype._write = function(data, encoding, cb) {
-  if (!Buffer.isBuffer(data))
+  if (!util.isBuffer(data))
     return this.emit('error', new Error('Invalid data'));
 
-  if (typeof this.fd !== 'number')
+  if (!util.isNumber(this.fd))
     return this.once('open', function() {
       this._write(data, encoding, cb);
     });
@@ -1694,7 +1803,7 @@ WriteStream.prototype._write = function(data, encoding, cb) {
     cb();
   });
 
-  if (this.pos !== undefined)
+  if (!util.isUndefined(this.pos))
     this.pos += data.length;
 };
 
@@ -1732,10 +1841,10 @@ SyncWriteStream.prototype.write = function(data, arg1, arg2) {
 
   // parse arguments
   if (arg1) {
-    if (typeof arg1 === 'string') {
+    if (util.isString(arg1)) {
       encoding = arg1;
       cb = arg2;
-    } else if (typeof arg1 === 'function') {
+    } else if (util.isFunction(arg1)) {
       cb = arg1;
     } else {
       throw new Error('bad arg');
@@ -1744,7 +1853,7 @@ SyncWriteStream.prototype.write = function(data, arg1, arg2) {
   assertEncoding(encoding);
 
   // Change strings to buffers. SLOW
-  if (typeof data == 'string') {
+  if (util.isString(data)) {
     data = new Buffer(data, encoding);
   }
 

@@ -25,7 +25,7 @@ function Console(stdout, stderr) {
   if (!(this instanceof Console)) {
     return new Console(stdout, stderr);
   }
-  if (!stdout || typeof stdout.write !== 'function') {
+  if (!stdout || !util.isFunction(stdout.write)) {
     throw new TypeError('Console expects a writable stream instance');
   }
   if (!stderr) {
@@ -44,9 +44,11 @@ function Console(stdout, stderr) {
   Object.defineProperty(this, '_times', prop);
 
   // bind the prototype functions to this Console instance
-  Object.keys(Console.prototype).forEach(function(k) {
+  var keys = Object.keys(Console.prototype);
+  for (var v = 0; v < keys.length; v++) {
+    var k = keys[v];
     this[k] = this[k].bind(this);
-  }, this);
+  }
 }
 
 Console.prototype.log = function() {
@@ -65,8 +67,10 @@ Console.prototype.warn = function() {
 Console.prototype.error = Console.prototype.warn;
 
 
-Console.prototype.dir = function(object) {
-  this._stdout.write(util.inspect(object) + '\n');
+Console.prototype.dir = function(object, options) {
+  this._stdout.write(util.inspect(object, util._extend({
+    customInspect: false
+  }, options)) + '\n');
 };
 
 
@@ -92,9 +96,7 @@ Console.prototype.trace = function() {
   err.name = 'Trace';
   err.message = util.format.apply(this, arguments);
   Error.captureStackTrace(err, arguments.callee);
-  // Trireme: This is still not quite formatted the same in Rhino, so fix it here
-  //this.error(err.stack);
-  this.error('Trace: %s\n%s', err.message, err.stack);
+  this.error(err.stack);
 };
 
 

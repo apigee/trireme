@@ -20,34 +20,49 @@
 // USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 var domain;
-
-exports.usingDomains = false;
+var util = require('util');
 
 function EventEmitter() {
+  EventEmitter.init.call(this);
+}
+module.exports = EventEmitter;
+
+// Backwards-compat with node 0.10.x
+EventEmitter.EventEmitter = EventEmitter;
+
+EventEmitter.usingDomains = false;
+
+EventEmitter.prototype.domain = undefined;
+EventEmitter.prototype._events = undefined;
+EventEmitter.prototype._maxListeners = undefined;
+
+// By default EventEmitters will print a warning if more than 10 listeners are
+// added to it. This is a useful default which helps finding memory leaks.
+EventEmitter.defaultMaxListeners = 10;
+
+EventEmitter.init = function() {
   this.domain = null;
-  if (exports.usingDomains) {
+  if (EventEmitter.usingDomains) {
     // if there is an active domain, then attach to it.
     domain = domain || require('domain');
     if (domain.active && !(this instanceof domain.Domain)) {
       this.domain = domain.active;
     }
   }
-  this._events = this._events || {};
-  this._maxListeners = this._maxListeners || defaultMaxListeners;
-}
-exports.EventEmitter = EventEmitter;
 
-// By default EventEmitters will print a warning if more than
-// 10 listeners are added to it. This is a useful default which
-// helps finding memory leaks.
-//
+  if (!this._events || this._events === Object.getPrototypeOf(this)._events)
+    this._events = {};
+
+  this._maxListeners = this._maxListeners || undefined;
+};
+
 // Obviously not all Emitters should be limited to 10. This function allows
 // that to be increased. Set to zero for unlimited.
-var defaultMaxListeners = 10;
 EventEmitter.prototype.setMaxListeners = function setMaxListeners(n) {
-  if (typeof n !== 'number' || n < 0 || isNaN(n))
+  if (!util.isNumber(n) || n < 0 || isNaN(n))
     throw TypeError('n must be a positive number');
   this._maxListeners = n;
+  return this;
 };
 
 EventEmitter.prototype.emit = function emit(type) {
@@ -57,35 +72,32 @@ EventEmitter.prototype.emit = function emit(type) {
     this._events = {};
 
   // If there is no 'error' event listener then throw.
-  if (type === 'error') {
-    if (!this._events.error ||
-        (typeof this._events.error === 'object' &&
-         !this._events.error.length)) {
-      er = arguments[1];
-      if (this.domain) {
-        if (!er) er = new TypeError('Uncaught, unspecified "error" event.');
-        er.domainEmitter = this;
-        er.domain = this.domain;
-        er.domainThrown = false;
-        this.domain.emit('error', er);
-      } else if (er instanceof Error) {
-        throw er; // Unhandled 'error' event
-      } else {
-        throw TypeError('Uncaught, unspecified "error" event.');
-      }
-      return false;
+  if (type === 'error' && !this._events.error) {
+    er = arguments[1];
+    if (this.domain) {
+      if (!er)
+        er = new Error('Uncaught, unspecified "error" event.');
+      er.domainEmitter = this;
+      er.domain = this.domain;
+      er.domainThrown = false;
+      this.domain.emit('error', er);
+    } else if (er instanceof Error) {
+      throw er; // Unhandled 'error' event
+    } else {
+      throw Error('Uncaught, unspecified "error" event.');
     }
+    return false;
   }
 
   handler = this._events[type];
 
-  if (typeof handler === 'undefined')
+  if (util.isUndefined(handler))
     return false;
 
   if (this.domain && this !== process)
     this.domain.enter();
 
-  if (typeof handler === 'function') {
+  if (util.isFunction(handler)) {
     switch (arguments.length) {
       // fast cases
       case 1:
@@ -105,7 +117,7 @@ EventEmitter.prototype.emit = function emit(type) {
           args[i - 1] = arguments[i];
         handler.apply(this, args);
     }
-  } else if (typeof handler === 'object') {
+  } else if (util.isObject(handler)) {
     len = arguments.length;
     args = new Array(len - 1);
     for (i = 1; i < len; i++)
@@ -126,7 +138,7 @@ EventEmitter.prototype.emit = function emit(type) {
 EventEmitter.prototype.addListener = function addListener(type, listener) {
   var m;
 
-  if (typeof listener !== 'function')
+  if (!util.isFunction(listener))
     throw TypeError('listener must be a function');
 
   if (!this._events)
@@ -135,13 +147,14 @@ EventEmitter.prototype.addListener = function addListener(type, listener) {
   // To avoid recursion in the case that type === "newListener"! Before
   // adding it to the listeners, first emit "newListener".
   if (this._events.newListener)
-    this.emit('newListener', type, typeof listener.listener === 'function' ?
+    this.emit('newListener', type,
+              util.isFunction(listener.listener) ?
               listener.listener : listener);
 
   if (!this._events[type])
     // Optimize the case of one listener. Don't need the extra array object.
     this._events[type] = listener;
-  else if (typeof this._events[type] === 'object')
+  else if (util.isObject(this._events[type]))
     // If we've already got an array, just append.
     this._events[type].push(listener);
   else
@@ -149,14 +162,20 @@ EventEmitter.prototype.addListener = function addListener(type, listener) {
     this._events[type] = [this._events[type], listener];
 
   // Check for listener leak
-  if (typeof this._events[type] === 'object' && !this._events[type].warned) {
-    m = this._maxListeners;
+  if (util.isObject(this._events[type]) && !this._events[type].warned) {
+    var m;
+    if (!util.isUndefined(this._maxListeners)) {
+      m = this._maxListeners;
+    } else {
+      m = EventEmitter.defaultMaxListeners;
+    }
+
     if (m && m > 0 && this._events[type].length > m) {
       this._events[type].warned = true;
       console.error('(node) warning: possible EventEmitter memory ' +
-                    'leak detected. %d listeners added. ' +
+                    'leak detected. %d %s listeners added. ' +
                     'Use emitter.setMaxListeners() to increase limit.',
-                    this._events[type].length);
+                    this._events[type].length, type);
       console.trace();
     }
   }
@@ -167,7 +186,7 @@ EventEmitter.prototype.addListener = function addListener(type, listener) {
 EventEmitter.prototype.on = EventEmitter.prototype.addListener;
 
 EventEmitter.prototype.once = function once(type, listener) {
-  if (typeof listener !== 'function')
+  if (!util.isFunction(listener))
     throw TypeError('listener must be a function');
 
   var fired = false;
@@ -192,7 +211,7 @@ EventEmitter.prototype.removeListener =
     function removeListener(type, listener) {
   var list, position, length, i;
 
-  if (typeof listener !== 'function')
+  if (!util.isFunction(listener))
     throw TypeError('listener must be a function');
 
   if (!this._events || !this._events[type])
@@ -203,12 +222,12 @@ EventEmitter.prototype.removeListener =
   position = -1;
 
   if (list === listener ||
-      (typeof list.listener === 'function' && list.listener === listener)) {
+      (util.isFunction(list.listener) && list.listener === listener)) {
     delete this._events[type];
     if (this._events.removeListener)
       this.emit('removeListener', type, listener);
 
-  } else if (typeof list === 'object') {
+  } else if (util.isObject(list)) {
     for (i = length; i-- > 0;) {
       if (list[i] === listener ||
           (list[i].listener && list[i].listener === listener)) {
@@ -263,7 +282,7 @@ EventEmitter.prototype.removeAllListeners =
 
   listeners = this._events[type];
 
-  if (typeof listeners === 'function') {
+  if (util.isFunction(listeners)) {
     this.removeListener(type, listeners);
   } else if (Array.isArray(listeners)) {
     // LIFO order
@@ -279,7 +298,7 @@ EventEmitter.prototype.listeners = function listeners(type) {
   var ret;
   if (!this._events || !this._events[type])
     ret = [];
-  else if (typeof this._events[type] === 'function')
+  else if (util.isFunction(this._events[type]))
     ret = [this._events[type]];
   else
     ret = this._events[type].slice();
@@ -290,7 +309,7 @@ EventEmitter.listenerCount = function(emitter, type) {
   var ret;
   if (!emitter._events || !emitter._events[type])
     ret = 0;
-  else if (typeof emitter._events[type] === 'function')
+  else if (util.isFunction(emitter._events[type]))
     ret = 1;
   else
     ret = emitter._events[type].length;

@@ -20,10 +20,11 @@
 // USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 var NativeModule = require('native_module');
-var Script = process.binding('evals').NodeScript;
-var runInThisContext = Script.runInThisContext;
-var runInNewContext = Script.runInNewContext;
+var util = NativeModule.require('util');
+var runInThisContext = require('vm').runInThisContext;
+var runInNewContext = require('vm').runInNewContext;
 var assert = require('assert').ok;
+var fs = NativeModule.require('fs');
 
 
 // If obj.hasOwnProperty has been overridden, then calling
@@ -49,7 +50,7 @@ function Module(id, parent) {
 module.exports = Module;
 
 // Set the environ variable NODE_MODULE_CONTEXTS=1 to make node load all
-// modules in thier own context.
+// modules in their own context.
 Module._contextLoad = (+process.env['NODE_MODULE_CONTEXTS'] > 0);
 Module._cache = {};
 Module._pathCache = {};
@@ -62,12 +63,7 @@ Module.wrap = NativeModule.wrap;
 
 var path = NativeModule.require('path');
 
-Module._debug = function() {};
-if (process.env.NODE_DEBUG && /module/.test(process.env.NODE_DEBUG)) {
-  Module._debug = function(x) {
-    console.error(x);
-  };
-}
+Module._debug = util.debuglog('module');
 
 
 // We use this alias for the preprocessor that filters it out
@@ -86,7 +82,6 @@ var debug = Module._debug;
 //   -> a/index.<ext>
 
 function statPath(path) {
-  var fs = NativeModule.require('fs');
   try {
     return fs.statSync(path);
   } catch (ex) {}
@@ -101,7 +96,6 @@ function readPackage(requestPath) {
     return packageMainCache[requestPath];
   }
 
-  var fs = NativeModule.require('fs');
   try {
     var jsonPath = path.resolve(requestPath, 'package.json');
     var json = fs.readFileSync(jsonPath, 'utf8');
@@ -136,7 +130,6 @@ Module._realpathCache = {};
 
 // check if the file exists and is not a directory
 function tryFile(requestPath) {
-  var fs = NativeModule.require('fs');
   var stats = statPath(requestPath);
   if (stats && !stats.isDirectory()) {
     return fs.realpathSync(requestPath, Module._realpathCache);
@@ -212,15 +205,13 @@ Module._nodeModulePaths = function(from) {
   // to be absolute.  Doing a fully-edge-case-correct path.split
   // that works on both Windows and Posix is non-trivial.
   var splitRe = process.platform === 'win32' ? /[\/\\]/ : /\//;
-  // yes, '/' works on both, but let's be a little canonical.
-  var joiner = process.platform === 'win32' ? '\\' : '/';
   var paths = [];
   var parts = from.split(splitRe);
 
   for (var tip = parts.length - 1; tip >= 0; tip--) {
     // don't search in .../node_modules/node_modules
     if (parts[tip] === 'node_modules') continue;
-    var dir = parts.slice(0, tip + 1).concat('node_modules').join(joiner);
+    var dir = parts.slice(0, tip + 1).concat('node_modules').join(path.sep);
     paths.push(dir);
   }
 
@@ -272,6 +263,13 @@ Module._resolveLookupPaths = function(request, parent) {
 };
 
 
+// Check the cache for the requested file.
+// 1. If a module already exists in the cache: return its exports object.
+// 2. If the module is native: call `NativeModule.require()` with the
+//    filename and return the result.
+// 3. Otherwise, create a new module for the file and save it to the cache.
+//    Then have it load  the file contents before returning its exports
+//    object.
 Module._load = function(request, parent, isMain) {
   if (parent) {
     debug('Module._load REQUEST  ' + (request) + ' parent: ' + parent.id);
@@ -343,6 +341,7 @@ Module._resolveFilename = function(request, parent) {
 };
 
 
+// Given a file name, pass it to the proper extension handler.
 Module.prototype.load = function(filename) {
   debug('load ' + JSON.stringify(filename) +
         ' for module ' + JSON.stringify(this.id));
@@ -358,9 +357,11 @@ Module.prototype.load = function(filename) {
 };
 
 
+// Loads a module at the given file path. Returns that module's
+// `exports` property.
 Module.prototype.require = function(path) {
-  assert(typeof path === 'string', 'path must be a string');
   assert(path, 'missing path');
+  assert(util.isString(path), 'path must be a string');
   return Module._load(path, this);
 };
 
@@ -370,7 +371,10 @@ Module.prototype.require = function(path) {
 var resolvedArgv;
 
 
-// Returns exception if any
+// Run the file contents in the correct scope or sandbox. Expose
+// the correct helper variables (require, module, exports) to
+// the file.
+// Returns exception, if any.
 Module.prototype._compile = function(content, filename) {
   var self = this;
   // remove shebang
@@ -419,7 +423,7 @@ Module.prototype._compile = function(content, filename) {
       sandbox.global = sandbox;
       sandbox.root = root;
 
-      return runInNewContext(content, sandbox, filename, true);
+      return runInNewContext(content, sandbox, { filename: filename });
     }
 
     debug('load root module');
@@ -430,13 +434,13 @@ Module.prototype._compile = function(content, filename) {
     global.__dirname = dirname;
     global.module = self;
 
-    return runInThisContext(content, filename, true);
+    return runInThisContext(content, { filename: filename });
   }
 
   // create wrapper function
   var wrapper = Module.wrap(content);
 
-  var compiledWrapper = runInThisContext(wrapper, filename, true);
+  var compiledWrapper = runInThisContext(wrapper, { filename: filename });
   if (global.v8debug) {
     if (!resolvedArgv) {
       // we enter the repl if we're not given a filename argument.
@@ -470,14 +474,14 @@ function stripBOM(content) {
 
 // Native extension for .js
 Module._extensions['.js'] = function(module, filename) {
-  var content = NativeModule.require('fs').readFileSync(filename, 'utf8');
+  var content = fs.readFileSync(filename, 'utf8');
   module._compile(stripBOM(content), filename);
 };
 
 
 // Native extension for .json
 Module._extensions['.json'] = function(module, filename) {
-  var content = NativeModule.require('fs').readFileSync(filename, 'utf8');
+  var content = fs.readFileSync(filename, 'utf8');
   try {
     module.exports = JSON.parse(stripBOM(content));
   } catch (err) {
@@ -517,8 +521,7 @@ Module._initPaths = function() {
 
   var nodePath = process.env['NODE_PATH'];
   if (nodePath) {
-    var splitter = isWindows ? ';' : ':';
-    paths = nodePath.split(splitter).concat(paths);
+    paths = nodePath.split(path.delimiter).concat(paths);
   }
 
   modulePaths = paths;

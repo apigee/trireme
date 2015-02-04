@@ -76,6 +76,7 @@ public class JavaStreamWrap
         Scriptable exports = cx.newObject(scope);
         exports.setPrototype(scope);
         exports.setParentScope(null);
+
         ScriptableObject.defineClass(exports, Referenceable.class);
         ScriptableObject.defineClass(exports, StreamWrapImpl.class);
         return exports;
@@ -165,70 +166,69 @@ public class JavaStreamWrap
 
         @JSFunction
         @SuppressWarnings("unused")
-        public static Object writeBuffer(Context cx, Scriptable thisObj, Object[] args, Function func)
+        public static void writeBuffer(Context cx, Scriptable thisObj, Object[] args, Function func)
         {
-            Buffer.BufferImpl buf = objArg(args, 0, Buffer.BufferImpl.class, true);
+            final StreamWrap.WriteWrap req = objArg(args, 0, StreamWrap.WriteWrap.class, true);
+            Buffer.BufferImpl buf = objArg(args, 1, Buffer.BufferImpl.class, true);
             final StreamWrapImpl self = (StreamWrapImpl)thisObj;
-
-            final Scriptable req = cx.newObject(self);
 
             int len = self.handle.write(buf.getBuffer(), new IOCompletionHandler<Integer>()
             {
                 @Override
                 public void ioComplete(int errCode, Integer value)
                 {
-                    self.writeComplete(errCode, value, req);
+                    req.callOnComplete(Context.getCurrentContext(), self, self, errCode);
                 }
             });
             self.updateByteCount(req, len);
-            return req;
         }
 
         @JSFunction
         @SuppressWarnings("unused")
-        public static Object writeUtf8String(Context cx, Scriptable thisObj, Object[] args, Function func)
+        public static void writeUtf8String(Context cx, Scriptable thisObj, Object[] args, Function func)
         {
-            String s = stringArg(args, 0);
-            return ((StreamWrapImpl)thisObj).doWrite(cx, s, Charsets.UTF8);
+            StreamWrap.WriteWrap req = objArg(args, 0, StreamWrap.WriteWrap.class, true);
+            String s = stringArg(args, 1);
+            ((StreamWrapImpl)thisObj).doWrite(cx, req, s, Charsets.UTF8);
         }
 
         @JSFunction
         @SuppressWarnings("unused")
-        public static Object writeAsciiString(Context cx, Scriptable thisObj, Object[] args, Function func)
+        public static void writeAsciiString(Context cx, Scriptable thisObj, Object[] args, Function func)
         {
-            String s = stringArg(args, 0);
-            return ((StreamWrapImpl)thisObj).doWrite(cx, s, Charsets.ASCII);
+            StreamWrap.WriteWrap req = objArg(args, 0, StreamWrap.WriteWrap.class, true);
+            String s = stringArg(args, 1);
+            ((StreamWrapImpl)thisObj).doWrite(cx, req, s, Charsets.ASCII);
         }
 
         @JSFunction
         @SuppressWarnings("unused")
-        public static Object writeUcs2String(Context cx, Scriptable thisObj, Object[] args, Function func)
+        public static void writeUcs2String(Context cx, Scriptable thisObj, Object[] args, Function func)
         {
-            String s = stringArg(args, 0);
-            return ((StreamWrapImpl)thisObj).doWrite(cx, s, Charsets.UCS2);
+            StreamWrap.WriteWrap req = objArg(args, 0, StreamWrap.WriteWrap.class, true);
+            String s = stringArg(args, 1);
+            ((StreamWrapImpl)thisObj).doWrite(cx, req, s, Charsets.UCS2);
         }
 
-        private Scriptable doWrite(Context cx, String s, Charset cs)
+        private void doWrite(Context cx, final StreamWrap.WriteWrap req, String s, Charset cs)
         {
-            final Scriptable req = cx.newObject(this);
+            final StreamWrapImpl self = this;
 
             int len = handle.write(s, cs, new IOCompletionHandler<Integer>()
             {
                 @Override
                 public void ioComplete(int errCode, Integer value)
                 {
-                    writeComplete(errCode, value, req);
+                    req.callOnComplete(Context.getCurrentContext(), self, self, errCode);
                 }
             });
             // net.js updates the write count before the completion callback is made
             updateByteCount(req, len);
-
-            return req;
         }
 
-        private void updateByteCount(Scriptable req, int len)
+        private void updateByteCount(StreamWrap.WriteWrap req, int len)
         {
-            req.put("bytes", req, len);
+            req.setBytes(len);
             byteCount += len;
         }
 

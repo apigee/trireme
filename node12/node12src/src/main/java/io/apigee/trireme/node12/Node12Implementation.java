@@ -1,10 +1,36 @@
+/**
+ * Copyright 2014 Apigee Corporation.
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining a copy
+ * of this software and associated documentation files (the "Software"), to deal
+ * in the Software without restriction, including without limitation the rights
+ * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+ * copies of the Software, and to permit persons to whom the Software is
+ * furnished to do so, subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice shall be included in
+ * all copies or substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+ * SOFTWARE.
+ */
 package io.apigee.trireme.node12;
 
 import io.apigee.trireme.core.NodeModule;
 import io.apigee.trireme.core.spi.NodeImplementation;
+import io.apigee.trireme.node12.modules.CaresWrap;
 import io.apigee.trireme.node12.modules.ConsoleWrap;
 import io.apigee.trireme.node12.modules.JavaStreamWrap;
+import io.apigee.trireme.node12.modules.PipeWrap;
+import io.apigee.trireme.node12.modules.Smalloc;
+import io.apigee.trireme.node12.modules.StreamWrap;
 import io.apigee.trireme.node12.modules.TCPWrap;
+import io.apigee.trireme.node12.modules.Uv;
 
 import java.util.ArrayList;
 import java.util.Collection;
@@ -88,9 +114,14 @@ public class Node12Implementation
     public Collection<Class<? extends NodeModule>> getNativeModules()
     {
         ArrayList<Class<? extends NodeModule>> r = new ArrayList<Class<? extends NodeModule>>();
+        r.add(CaresWrap.class);
         r.add(ConsoleWrap.class);
         r.add(JavaStreamWrap.class);
+        r.add(PipeWrap.class);
+        r.add(Smalloc.class);
+        r.add(StreamWrap.class);
         r.add(TCPWrap.class);
+        r.add(Uv.class);
         return r;
     }
 }

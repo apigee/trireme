@@ -7,6 +7,10 @@ INVALID_FILE = '../../chroottest.js';
 
 console.log('Running from ' + process.cwd());
 
+var myself = fs.openSync(GOOD_FILE, 'r');
+fs.close(myself);
+fs.statSync(GOOD_FILE);
+
 // These paths should be translated to add "./target/test-classes" before:
 assert.doesNotThrow(
   function() {

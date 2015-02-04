@@ -916,6 +916,14 @@
         return s;
       };
     }
+
+    Number.isFinite = Number.isFinite || function(value) {
+      return typeof value === "number" && isFinite(value);
+    };
+
+    Number.isNaN = Number.isNaN || function(value) {
+      return typeof value === "number" && isNaN(value);
+    };
   };
 
   // "Minimal module system" from node.js replaced here with the "NativeModule" Java module.

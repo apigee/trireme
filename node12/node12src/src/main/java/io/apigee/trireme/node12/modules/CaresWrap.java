@@ -1,5 +1,5 @@
 /**
- * Copyright 2013 Apigee Corporation.
+ * Copyright 2015 Apigee Corporation.
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -19,13 +19,14 @@
  * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
  * SOFTWARE.
  */
-package io.apigee.trireme.core.modules;
+package io.apigee.trireme.node12.modules;
 
 import io.apigee.trireme.core.NodeRuntime;
 import io.apigee.trireme.core.InternalNodeModule;
 import io.apigee.trireme.core.ScriptTask;
 import io.apigee.trireme.core.Utils;
-import io.apigee.trireme.core.internal.NodeOSException;
+import io.apigee.trireme.core.internal.AbstractIdObject;
+import io.apigee.trireme.core.internal.IdPropertyMap;
 import io.apigee.trireme.core.internal.ScriptRunner;
 import io.apigee.trireme.kernel.ErrorCodes;
 import io.apigee.trireme.kernel.OSException;
@@ -40,7 +41,6 @@ import org.mozilla.javascript.JavaScriptException;
 import org.mozilla.javascript.Scriptable;
 import org.mozilla.javascript.ScriptableObject;
 import org.mozilla.javascript.Undefined;
-import org.mozilla.javascript.annotations.JSFunction;
 import sun.net.util.IPAddressUtil;
 
 import static io.apigee.trireme.core.ArgUtils.*;
@@ -50,7 +50,6 @@ import java.net.Inet4Address;
 import java.net.Inet6Address;
 import java.net.InetAddress;
 import java.net.UnknownHostException;
-import java.nio.ByteBuffer;
 import java.util.ArrayList;
 
 /**
@@ -76,33 +75,61 @@ public class CaresWrap
     public Scriptable registerExports(Context cx, Scriptable scope, NodeRuntime runner)
         throws InvocationTargetException, IllegalAccessException, InstantiationException
     {
-        ScriptableObject.defineClass(scope, CaresImpl.class);
+        new CaresImpl().exportAsClass(scope);
+
         CaresImpl cares = (CaresImpl)cx.newObject(scope, CaresImpl.CLASS_NAME);
+        cares.setPrototype(scope);
+        cares.setParentScope(null);
+
         cares.init(runner);
+        new ReqWrap().exportAsClass(cares);
         return cares;
     }
 
     public static class CaresImpl
-        extends ScriptableObject
+        extends AbstractIdObject
     {
         public static final String CLASS_NAME = "_caresClass";
 
+        private static final IdPropertyMap props;
+
+        private static final int m_isIp = 2,
+                                 m_getaddrinfo = 3,
+                                 p_af_inet = 1,
+                                 p_af_inet6 = 2,
+                                 p_af_unspec = 3;
+
         private ScriptRunner runtime;
         private DNSResolver resolver;
+
+        static {
+            props = new IdPropertyMap();
+            props.addMethod("isIP", m_isIp, 1);
+            props.addMethod("getaddrinfo", m_getaddrinfo, 3);
+            props.addProperty("AF_INET", p_af_inet, ScriptableObject.READONLY);
+            props.addProperty("AF_INET6", p_af_inet6, ScriptableObject.READONLY);
+            props.addProperty("AF_UNSPEC", p_af_unspec, ScriptableObject.READONLY);
+        }
+
+        public CaresImpl()
+        {
+            super(props);
+        }
 
         @Override
         public String getClassName() {
             return CLASS_NAME;
         }
 
+        @Override
+        protected Object defaultConstructor(Context cx, Object[] args) {
+            return new CaresImpl();
+        }
+
         public void init(NodeRuntime runtime)
         {
             this.runtime = (ScriptRunner)runtime;
             this.resolver = new DNSResolver(runtime);
-
-            put("AF_INET", this, AF_INET);
-            put("AF_INET6", this, AF_INET6);
-            put("AF_UNSPEC", this, AF_UNSPEC);
 
             // dns.java expects to look up un-bound (no this) functions as members and call them for each type of
             // lookup. We handle this here using a customized Function class in Rhino.
@@ -117,9 +144,7 @@ public class CaresWrap
             put("queryNaptr", this, new LookupFunction(this, "NAPTR"));
         }
 
-        @SuppressWarnings("unused")
-        @JSFunction
-        public static int isIP(Context cx, Scriptable thisObj, Object[] args, Function func)
+        private int isIP(Object[] args)
         {
             String addrStr = stringArg(args, 0, null);
             if ((addrStr == null) || addrStr.isEmpty() || addrStr.equals("0")) {
@@ -138,13 +163,11 @@ public class CaresWrap
             return 0;
         }
 
-        @SuppressWarnings("unused")
-        @JSFunction
-        public static Object getaddrinfo(Context cx, Scriptable thisObj, Object[] args, Function func)
+        private void getaddrinfo(Context cx, Object[] args)
         {
-            final String name = stringArg(args, 0);
-            int fam = intArg(args, 1, AF_UNSPEC);
-            final CaresImpl self = (CaresImpl)thisObj;
+            final ReqWrap req = objArg(args, 0, ReqWrap.class, true);
+            final String name = stringArg(args, 1);
+            int fam = intArg(args, 2, AF_UNSPEC);
 
             final int family;
             switch (fam) {
@@ -158,13 +181,11 @@ public class CaresWrap
                 family = AF_INET6;
                 break;
             default:
-                throw Utils.makeError(cx, self, "Invalid family " + fam);
+                throw Utils.makeError(cx, this, "Invalid family " + fam);
             }
 
-            final Scriptable res = cx.newObject(self);
-
-            self.runtime.pin();
-            self.runtime.getAsyncPool().execute(new Runnable()
+            runtime.pin();
+            runtime.getAsyncPool().execute(new Runnable()
             {
                 @Override
                 public void run()
@@ -175,29 +196,42 @@ public class CaresWrap
                         InetAddress addr = InetAddress.getByName(name);
                         if (((family == AF_INET) && (!(addr instanceof Inet4Address))) ||
                             ((family == AF_INET6) && (!(addr instanceof Inet6Address)))) {
-                            self.lookupCallback(ErrorCodes.EIO, null, res);
+                            lookupCallback(ErrorCodes.EIO, null, req);
                         } else {
-                            self.lookupCallback(0, addr, res);
+                            lookupCallback(0, addr, req);
                         }
                     } catch (UnknownHostException uh) {
-                        self.lookupCallback(ErrorCodes.ENOTFOUND, null, res);
+                        lookupCallback(ErrorCodes.ENOTFOUND, null, req);
                     } finally {
-                        self.runtime.unPin();
+                        runtime.unPin();
                     }
                 }
             });
-
-            return res;
         }
 
-        private void lookupCallback(final int errno, final InetAddress result, final Scriptable res)
+        @Override
+        protected Object execCall(int id, Context cx, Scriptable scope, Scriptable thisObj,
+                                  Object[] args)
         {
-            // Fire the callback in the script thread. Must do this later because the "oncomplete" isn't set until then
+            switch (id) {
+            case m_isIp:
+                return isIP(args);
+            case m_getaddrinfo:
+                ((CaresImpl)thisObj).getaddrinfo(cx, args);
+                return Undefined.instance;
+            default:
+                return super.execCall(id, cx, scope, thisObj, args);
+            }
+        }
+
+        private void lookupCallback(final int errno, final InetAddress result, final ReqWrap req)
+        {
+            // Fire the callback in the script thread.
             runtime.enqueueTask(new ScriptTask() {
                 @Override
                 public void execute(Context cx, Scriptable scope)
                 {
-                    Function onComplete = (Function)res.get("oncomplete", res);
+                    Function onComplete = req.getOnComplete();
                     if (onComplete == null) {
                         return;
                     }
@@ -205,10 +239,11 @@ public class CaresWrap
                     if (errno == 0) {
                         // Return a one-element array containing the results
                         Object[] results = new Object[] { result.getHostAddress() };
-                        onComplete.call(cx, onComplete, null, new Object[] { cx.newArray(CaresImpl.this, results) });
+                        onComplete.call(cx, onComplete, req,
+                                        new Object[] { Undefined.instance, cx.newArray(req, results) });
                     } else {
-                        runtime.setErrno(ErrorCodes.get().toString(errno));
-                        onComplete.call(cx, onComplete, null, Context.emptyArgs);
+                        onComplete.call(cx, onComplete, req,
+                                        new Object[] { ErrorCodes.get().toString(errno) });
                     }
                 }
             });
@@ -325,6 +360,105 @@ public class CaresWrap
                 Scriptable ra = cx.newArray(CaresImpl.this, jResult.toArray());
                 callback.call(cx, callback, null,
                               new Object[] { Undefined.instance, ra });
+            }
+        }
+
+        @Override
+        protected Object getInstanceIdValue(int id)
+        {
+            switch (id) {
+            case p_af_inet:
+                return "AF_INET";
+            case p_af_inet6:
+                return "AF_INET6";
+            case p_af_unspec:
+                return "AF_UNSPEC";
+            default:
+                return super.getInstanceIdValue(id);
+            }
+        }
+    }
+
+    public static class ReqWrap
+        extends AbstractIdObject
+    {
+        public static final String CLASS_NAME = "GetAddrInfoReqWrap";
+
+        private static final int p_callback = 1,
+                                 p_family = 2,
+                                 p_hostname = 3,
+                                 p_oncomplete = 4;
+
+        private static final IdPropertyMap props;
+
+        static {
+            props = new IdPropertyMap();
+            props.addProperty("callback", p_callback, 0);
+            props.addProperty("family", p_family, 0);
+            props.addProperty("hostname", p_hostname, 0);
+            props.addProperty("oncomplete", p_oncomplete, 0);
+        }
+
+        private Object callback;
+        private Object family;
+        private Object hostname;
+        private Function oncomplete;
+
+        public ReqWrap()
+        {
+            super(props);
+        }
+
+        Function getOnComplete() {
+            return oncomplete;
+        }
+
+        @Override
+        public String getClassName() {
+            return CLASS_NAME;
+        }
+
+        @Override
+        protected Object defaultConstructor(Context cx, Object[] args) {
+            return new ReqWrap();
+        }
+
+        @Override
+        protected Object getInstanceIdValue(int id)
+        {
+            switch (id) {
+            case p_callback:
+                return callback;
+            case p_family:
+                return family;
+            case p_hostname:
+                return hostname;
+            case p_oncomplete:
+                return oncomplete;
+            default:
+                return super.getInstanceIdValue(id);
+            }
+        }
+
+        @Override
+        protected void setInstanceIdValue(int id, Object value)
+        {
+            switch (id) {
+            case p_callback:
+                callback = value;
+                break;
+            case p_family:
+                family = value;
+                break;
+            case p_hostname:
+                hostname = value;
+                break;
+            case p_oncomplete:
+                oncomplete = (Function)value;
+                break;
+            default:
+                super.setInstanceIdValue(id, value);
+                break;
             }
         }
     }

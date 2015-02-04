@@ -31,6 +31,7 @@ import org.mozilla.javascript.Context;
 import org.mozilla.javascript.Function;
 import org.mozilla.javascript.Scriptable;
 import org.mozilla.javascript.ScriptableObject;
+import org.mozilla.javascript.Undefined;
 import org.mozilla.javascript.annotations.JSFunction;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -121,6 +122,8 @@ public class AsyncFilesystem
 
         protected ScriptRunner runner;
         protected ExecutorService pool;
+        private Function makeStats;
+
         private final AtomicInteger nextFd = new AtomicInteger(FIRST_FD);
         private final ConcurrentHashMap<Integer, FileHandle> descriptors =
             new ConcurrentHashMap<Integer, FileHandle>();
@@ -291,6 +294,19 @@ public class AsyncFilesystem
                 throw Utils.makeError(cx, scope,
                                       "Not a buffer", Constants.EINVAL);
             }
+        }
+
+        /**
+         * This function is called by Node 11 and up to tell us how to make a "Stats" object.
+         */
+        @JSFunction
+        @SuppressWarnings("unused")
+        public static void FSInitialize(Context cx, Scriptable thisObj, Object[] args, Function func)
+        {
+            Function f = functionArg(args, 0, true);
+            FSImpl self = (FSImpl)thisObj;
+
+            self.makeStats = f;
         }
 
         @JSFunction
@@ -990,7 +1006,7 @@ public class AsyncFilesystem
         {
             Context cx = Context.enter();
             try {
-                StatsImpl s;
+                Object s = Undefined.instance;
                 
                 try {
                     Map<String, Object> attrs;
@@ -1003,9 +1019,8 @@ public class AsyncFilesystem
                         attrs.putAll(readAttrs("*", p, noFollow));
                         attrs.putAll(readAttrs("owner:*", p, noFollow));
                     }
-                    
-                    s = (StatsImpl)cx.newObject(this, StatsImpl.CLASS_NAME);
-                    s.setAttributes(cx, p, attrs);
+
+                    s = makeStats(cx, p, attrs);
 
                 } catch (IOException ioe) {
                     throw new NodeOSException(getErrorCode(ioe), ioe, p.toString());
@@ -1483,51 +1498,45 @@ public class AsyncFilesystem
                 throw new NodeOSException(getErrorCode(ioe), ioe, pathStr);
             }
         }
-    }
 
-    public static class StatsImpl
-        extends ScriptableObject
-    {
-        public static final String CLASS_NAME = "Stats";
-
-        @Override
-        public String getClassName() {
-            return CLASS_NAME;
-        }
-        
-        public void setAttributes(Context cx, Path path, Map<String, Object> attrs)
+        private Object makeStats(Context cx, Path path, Map<String, Object> attrs)
         {
-            // Fake "dev" and "ino" based on whatever information we can get from the product
-            put("size", this, attrs.get("size"));
-            put("dev", this, 0);
-            Object ino = attrs.get("fileKey");
-            if (ino instanceof Number) {
-                put("ino", this, ino);
-            } else if (ino != null) {
-                put("ino", this, ino.hashCode());
+            Object size = attrs.get("size");
+            if (size instanceof Long) {
+                size = new Double(((Long)size).longValue());
             }
-            put("atime", this, makeDate(cx, attrs.get("lastAccessTime")));
-            put("mtime", this, makeDate(cx, attrs.get("lastModifiedTime")));
-            put("ctime", this, makeDate(cx, attrs.get("creationTime")));
-            
+
+            Object inoObj = attrs.get("fileKey");
+            int ino;
+            if (inoObj instanceof Number) {
+                ino = ((Number)inoObj).intValue();
+            } else if (inoObj != null) {
+                ino = inoObj.hashCode();
+            } else {
+                ino = 0;
+            }
+
+            long atime = ((FileTime)attrs.get("lastAccessTime")).toMillis();
+            long mtime = ((FileTime)attrs.get("lastModifiedTime")).toMillis();
+            long ctime = ((FileTime)attrs.get("creationTime")).toMillis();
+
             // This is a bit gross -- we can't actually get the real Unix UID of the user or group, but some
             // code -- notably NPM -- expects that this is returned as a number. So, returned the hashed
             // value, which is the best that we can do without native code.
+            int uid = 0;
             if (attrs.containsKey("owner")) {
                 UserPrincipal up = (UserPrincipal)attrs.get("owner");
-                put("uid", this, up.hashCode());
-            } else {
-                put("uid", this, 0);
+                uid = up.hashCode();
             }
+
+            int gid = 0;
             if (attrs.containsKey("group")) {
                 GroupPrincipal gp = (GroupPrincipal)attrs.get("group");
-                put("gid", this, gp.hashCode());
-            } else {
-                put("gid", this, 0);
+                gid = gp.hashCode();
             }
-            
+
             int mode = 0;
-            
+
             if ((Boolean)attrs.get("isRegularFile")) {
                 mode |= Constants.S_IFREG;
             }
@@ -1537,19 +1546,28 @@ public class AsyncFilesystem
             if ((Boolean)attrs.get("isSymbolicLink")) {
                 mode |= Constants.S_IFLNK;
             }
-            
+
             if (attrs.containsKey("permissions")) {
-                Set<PosixFilePermission> perms = 
+                Set<PosixFilePermission> perms =
                     (Set<PosixFilePermission>)attrs.get("permissions");
                 mode |= setPosixPerms(perms);
             } else {
                 mode |= setNonPosixPerms(path);
             }
-            
-            put("mode", this, mode);
+
+            if (makeStats == null) {
+                StatsImpl stats = (StatsImpl)cx.newObject(this, StatsImpl.CLASS_NAME);
+                stats.setAttributes(cx, size, ino, atime, mtime, ctime, uid, gid, mode);
+                return stats;
+            }
+
+            return makeStats.construct(cx, makeStats,
+                           new Object[] { /* dev */ 0, mode, /* nlink */ 0, uid, gid, /* rdev */ 0,
+                                          /* blksize */ 0, /* ino */ 0, size, /* blocks */ 0,
+                                          atime, mtime, ctime, /* birth time */ 0 });
         }
 
-        public int setPosixPerms(Set<PosixFilePermission> perms)
+        private int setPosixPerms(Set<PosixFilePermission> perms)
         {
             int mode = 0;
             // Posix file perms
@@ -1582,12 +1600,12 @@ public class AsyncFilesystem
             }
             return mode;
         }
-        
-        public int setNonPosixPerms(Path p)
-        {       
+
+        private int setNonPosixPerms(Path p)
+        {
             File file = p.toFile();
             int mode = 0;
-            
+
             if (file.canRead()) {
                 mode |= Constants.S_IRUSR;
             }
@@ -1599,11 +1617,33 @@ public class AsyncFilesystem
             }
             return mode;
         }
+    }
 
-        private Object makeDate(Context cx, Object o)
+    public static class StatsImpl
+        extends ScriptableObject
+    {
+        public static final String CLASS_NAME = "Stats";
+
+        @Override
+        public String getClassName() {
+            return CLASS_NAME;
+        }
+        
+        public void setAttributes(Context cx, Object size, int ino,
+                                  long atime, long mtime, long ctime,
+                                  int uid, int gid, int mode)
         {
-            FileTime ft = (FileTime)o;
-            return cx.newObject(this, "Date", new Object[] { ft.toMillis() });
+            // Fake "dev" and "ino" based on whatever information we can get from the product
+            put("size", this, size);
+            put("dev", this, 0);
+            put("ino", this, ino);
+            put("atime", this, cx.newObject(this, "Date", new Object[] { atime }));
+            put("mtime", this, cx.newObject(this, "Date", new Object[] { mtime }));
+            put("ctime", this, cx.newObject(this, "Date", new Object[] { ctime }));
+
+            put("uid", this, uid);
+            put("gid", this, gid);
+            put("mode", this, mode);
         }
     }
 

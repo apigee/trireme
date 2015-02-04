@@ -24,7 +24,6 @@ package io.apigee.trireme.node12.modules;
 import io.apigee.trireme.core.NodeRuntime;
 import io.apigee.trireme.core.InternalNodeModule;
 import io.apigee.trireme.core.internal.ScriptRunner;
-import io.apigee.trireme.kernel.ErrorCodes;
 import io.apigee.trireme.kernel.OSException;
 import io.apigee.trireme.kernel.handles.AbstractHandle;
 import io.apigee.trireme.kernel.handles.IOCompletionHandler;
@@ -36,6 +35,7 @@ import org.mozilla.javascript.Context;
 import org.mozilla.javascript.Function;
 import org.mozilla.javascript.Scriptable;
 import org.mozilla.javascript.ScriptableObject;
+import org.mozilla.javascript.Undefined;
 import org.mozilla.javascript.annotations.JSConstructor;
 import org.mozilla.javascript.annotations.JSFunction;
 import org.mozilla.javascript.annotations.JSGetter;
@@ -69,6 +69,7 @@ public class TCPWrap
         ScriptableObject exports = (ScriptableObject)cx.newObject(scope);
         exports.setPrototype(scope);
         exports.setParentScope(null);
+
         ScriptableObject.defineClass(exports, Referenceable.class, false, true);
         ScriptableObject.defineClass(exports, JavaStreamWrap.StreamWrapImpl.class, false, true);
         ScriptableObject.defineClass(exports, TCPImpl.class, false, true);
@@ -191,24 +192,23 @@ public class TCPWrap
         public static Object connect(Context cx, Scriptable thisObj, Object[] args, Function func)
         {
             final TCPImpl tcp = (TCPImpl)thisObj;
-            String host = stringArg(args, 0);
-            int port = intArg(args, 1);
+            final ConnectImpl req = objArg(args, 0, ConnectImpl.class, true);
+            String host = stringArg(args, 1);
+            int port = intArg(args, 2);
 
-            final Scriptable pending = cx.newObject(thisObj);
             try {
                 tcp.sockHandle.connect(host, port, new IOCompletionHandler<Integer>()
                 {
                     @Override
                     public void ioComplete(int errCode, Integer value)
                     {
-                        tcp.connectComplete(errCode, pending);
+                        req.callOnComplete(Context.getCurrentContext(), tcp, tcp, errCode);
                     }
                 });
             } catch (OSException ose) {
-                setErrno(ose.getCode());
-                return null;
+                return ose.getCode();
             }
-            return pending;
+            return Undefined.instance;
         }
 
         @JSFunction
@@ -218,38 +218,12 @@ public class TCPWrap
             return connect(cx, thisObj, args, func);
         }
 
-        protected void connectComplete(final int err, final Scriptable s)
-        {
-            Object onComplete = ScriptableObject.getProperty(s, "oncomplete");
-            if (onComplete != null) {
-                Context cx = Context.getCurrentContext();
-                Function ocf = (Function)onComplete;
-
-                Object errStr;
-                boolean readable;
-                boolean writable;
-
-                if (err == 0) {
-                    clearErrno();
-                    // Yes, the code in net.js specifically checks for a value of zero
-                    errStr = Integer.valueOf(0);
-                    readable = writable = true;
-                } else {
-                    setErrno(err);
-                    errStr = ErrorCodes.get().toString(err);
-                    readable = writable = false;
-                }
-                ocf.call(cx, ocf, this,
-                         new Object[]{errStr, this, s, readable, writable});
-            }
-        }
-
         @JSFunction
         @SuppressWarnings("unused")
         public static Object shutdown(Context cx, Scriptable thisObj, Object[] args, Function func)
         {
+            final StreamWrap.ShutdownWrap req = objArg(args, 0, StreamWrap.ShutdownWrap.class, true);
             final TCPImpl tcp = (TCPImpl)thisObj;
-            final Scriptable req = cx.newObject(tcp);
 
             clearErrno();
             tcp.sockHandle.shutdown(new IOCompletionHandler<Integer>()
@@ -257,8 +231,7 @@ public class TCPWrap
                 @Override
                 public void ioComplete(int errCode, Integer value)
                 {
-                    // Re-use same code we use to deliver callbacks on write
-                    tcp.writeComplete(errCode, 0, req);
+                    req.callOnComplete(Context.getCurrentContext(), tcp, tcp, errCode);
                 }
             });
             return req;
@@ -316,6 +289,44 @@ public class TCPWrap
             } catch (OSException ose) {
                 setErrno(ose.getCode());
             }
+        }
+    }
+
+    public static class ConnectImpl
+        extends ScriptableObject
+    {
+        public static final String CLASS_NAME = "TCPConnectWrap";
+
+        private Function onComplete;
+
+        @Override
+        public String getClassName() {
+            return CLASS_NAME;
+        }
+
+        @JSGetter("oncomplete")
+        @SuppressWarnings("unused")
+        public Function getOnComplete() {
+            return onComplete;
+        }
+
+        @JSSetter("oncomplete")
+        @SuppressWarnings("unused")
+        public void setOnComplete(Function f) {
+            this.onComplete = f;
+        }
+
+        public void callOnComplete(Context cx, Scriptable thisObj, Scriptable handle, int err)
+        {
+            if ((onComplete == null) || Undefined.instance.equals(onComplete)) {
+                return;
+            }
+
+            boolean rw = (err == 0);
+            onComplete.call(cx, onComplete, thisObj,
+                            new Object[] {
+                                err, handle, this, rw, rw
+                            });
         }
     }
 }

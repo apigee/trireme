@@ -2,7 +2,9 @@ package io.apigee.trireme.node10;
 
 import io.apigee.trireme.core.NodeModule;
 import io.apigee.trireme.core.spi.NodeImplementation;
+import io.apigee.trireme.node10.modules.AsyncFilesystem;
 import io.apigee.trireme.node10.modules.ConsoleWrap;
+import io.apigee.trireme.node10.modules.Filesystem;
 import io.apigee.trireme.node10.modules.JavaStreamWrap;
 import io.apigee.trireme.node10.modules.TCPWrap;
 
@@ -79,6 +81,7 @@ public class Node10Implementation
     {
         ArrayList<Class<? extends NodeModule>> r = new ArrayList<Class<? extends NodeModule>>();
         r.add(ConsoleWrap.class);
+        r.add(Filesystem.class);
         r.add(JavaStreamWrap.class);
         r.add(TCPWrap.class);
         return r;

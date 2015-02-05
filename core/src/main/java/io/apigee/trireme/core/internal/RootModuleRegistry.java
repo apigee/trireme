@@ -66,14 +66,6 @@ public class RootModuleRegistry
         // Load NodeModule, InternalNodeModule, NativeNodeModule, and NodeScriptModule from the system classloader
         load(cx, this.getClass().getClassLoader());
 
-        // Load special modules that depend on the version of Java that we have.
-        // Load using reflection to avoid classloading in case we are on an old Java version
-        if (JavaVersion.get().hasAsyncFileIO()) {
-            loadModuleByName("io.apigee.trireme.core.modules.AsyncFilesystem");
-        } else {
-            loadModuleByName("io.apigee.trireme.core.modules.Filesystem");
-        }
-
         // Load modules from this specific version of node.
         loadMainScript(getImplementation().getMainScriptClass());
         for (String[] builtin : implementation.getBuiltInModules()) {

@@ -19,11 +19,14 @@
  * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
  * SOFTWARE.
  */
-package io.apigee.trireme.core.modules;
+package io.apigee.trireme.node10.modules;
 
 import io.apigee.trireme.core.NodeRuntime;
 import io.apigee.trireme.core.InternalNodeModule;
 import io.apigee.trireme.core.internal.NodeOSException;
+import io.apigee.trireme.core.modules.AbstractFilesystem;
+import io.apigee.trireme.core.modules.Buffer;
+import io.apigee.trireme.core.modules.Constants;
 import io.apigee.trireme.kernel.Platform;
 import io.apigee.trireme.core.internal.ScriptRunner;
 import io.apigee.trireme.core.Utils;
@@ -116,7 +119,7 @@ public class AsyncFilesystem
     public static class FSImpl
         extends AbstractFilesystem
     {
-        public static final String CLASS_NAME = "_fsClass";
+        public static final String CLASS_NAME = "_fsClassNode10Async";
         private static final int FIRST_FD = 4;
 
         protected ScriptRunner runner;
@@ -628,7 +631,7 @@ public class AsyncFilesystem
                                           }
 
                                           runner.enqueueCallback(callback, callback, null, domain,
-                                                                 new Object[] { Context.getUndefinedValue(), count, buf });
+                                                                 new Object[]{Context.getUndefinedValue(), count, buf});
                                           runner.unPin();
                                       }
 
@@ -636,9 +639,9 @@ public class AsyncFilesystem
                                       public void failed(Throwable exc, Integer attachment)
                                       {
                                           runner.enqueueCallback(callback, callback, null, domain,
-                                                                new Object[] { Utils.makeErrorObject(
-                                                                                 cx, FSImpl.this, Constants.EIO, Constants.EIO),
-                                                                               0, buf });
+                                                                 new Object[]{Utils.makeErrorObject(
+                                                                     cx, FSImpl.this, Constants.EIO, Constants.EIO),
+                                                                              0, buf});
                                           runner.unPin();
                                       }
                                   });

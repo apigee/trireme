@@ -35,7 +35,7 @@ public class BasicFileHandle
     {
         super(file, origPath);
         this.raf = raf;
-        this.channel = raf.getChannel();
+        this.channel = (raf == null ? null : raf.getChannel());
     }
 
     public FileChannel getChannel() {

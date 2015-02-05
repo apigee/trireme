@@ -47,6 +47,7 @@ import static io.apigee.trireme.core.ArgUtils.*;
 
 import java.io.File;
 import java.lang.reflect.InvocationTargetException;
+import java.nio.ByteBuffer;
 import java.util.List;
 import java.util.concurrent.Executor;
 
@@ -243,8 +244,8 @@ public class Filesystem
             final FSImpl fs = (FSImpl)thisObj;
             final int fd = intArg(args, 0);
             final Buffer.BufferImpl buf = ensureBuffer(cx, thisObj, args, 1);
-            final int off = intArgOnly(cx, fs, args, 2, 0);
-            final int len = intArgOnly(cx, fs, args, 3, 0);
+            int off = intArgOnly(cx, fs, args, 2, 0);
+            int len = intArgOnly(cx, fs, args, 3, 0);
             final long pos = longArgOnly(cx, fs, args, 4, -1L);
             Function callback = functionArg(args, 5, false);
 
@@ -255,13 +256,17 @@ public class Filesystem
                 throw Utils.makeError(cx, thisObj, "Length extends beyond buffer", Constants.EINVAL);
             }
 
+            byte[] bytes = buf.getArray();
+            int bytesOffset = buf.getArrayOffset() + off;
+            final ByteBuffer readBuf = ByteBuffer.wrap(bytes, bytesOffset, len);
+
             return fs.runAction(cx, callback, new AsyncAction()
             {
                 @Override
                 public Object[] execute()
                     throws OSException
                 {
-                    int count = fs.fs.read(fd, buf.getBuffer(), off, len, pos);
+                    int count = fs.fs.read(fd, readBuf, pos);
                     return new Object[] { Undefined.instance, count, buf };
                 }
 
@@ -280,7 +285,7 @@ public class Filesystem
             final FSImpl fs = (FSImpl)thisObj;
             final int fd = intArg(args, 0);
             final Buffer.BufferImpl buf = ensureBuffer(cx, thisObj, args, 1);
-            final int off = intArgOnly(cx, fs, args, 2, 0);
+            int off = intArgOnly(cx, fs, args, 2, 0);
             final int len = intArgOnly(cx, fs, args, 3, 0);
             final long pos = longArgOnly(cx, fs, args, 4, 0);
             Function callback = functionArg(args, 5, false);
@@ -292,13 +297,17 @@ public class Filesystem
                 throw Utils.makeError(cx, thisObj, "Length extends beyond buffer", "EINVAL");
             }
 
+            byte[] bytes = buf.getArray();
+            int bytesOffset = buf.getArrayOffset() + off;
+            final ByteBuffer writeBuf = ByteBuffer.wrap(bytes, bytesOffset, len);
+
             return fs.runAction(cx, callback, new AsyncAction()
             {
                 @Override
                 public Object[] execute()
                     throws OSException
                 {
-                    fs.fs.write(fd, buf.getBuffer(), off, len, pos);
+                    fs.fs.write(fd, writeBuf, pos);
                     return new Object[] { Undefined.instance, len, buf };
                 }
 
@@ -695,13 +704,14 @@ public class Filesystem
             Function callback = functionArg(args, 3, false);
             final FSImpl self = (FSImpl)thisObj;
 
-            self.runAction(cx, callback, new AsyncAction() {
+            self.runAction(cx, callback, new AsyncAction()
+            {
                 @Override
                 public Object[] execute()
                     throws OSException
                 {
                     self.fs.fchown(fd, uid, gid, false);
-                    return new Object[] { Undefined.instance, Undefined.instance };
+                    return new Object[]{Undefined.instance, Undefined.instance};
                 }
             });
         }

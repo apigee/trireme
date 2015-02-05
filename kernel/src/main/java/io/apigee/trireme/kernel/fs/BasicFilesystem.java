@@ -164,41 +164,45 @@ public class BasicFilesystem
         }
     }
 
-    public int write(int fd, ByteBuffer buf, int off, int len, long p)
+    public int write(int fd, ByteBuffer buf, long p)
         throws OSException
     {
         BasicFileHandle handle = ensureRegularFileHandle(fd);
-        long pos = (p < 0L ? handle.getPosition() : p);
+        // Yes, fs.js expects that this comparison here is <= and not <
+        long pos = (p <= 0L ? handle.getPosition() : p);
+        int origLen = buf.remaining();
         int written;
         try {
-            written = handle.getChannel().write(positionBuf(buf, off, len), pos);
+            written = handle.getChannel().write(buf, pos);
         } catch (IOException ioe) {
             throw new OSException(ErrorCodes.EIO, ioe);
         }
 
         if (log.isTraceEnabled()) {
-            log.trace("write({}, {}) = {}", pos, len, written);
+            log.trace("write({}, {}) = {}", pos, origLen, written);
         }
         handle.incrementPosition(written);
 
         return written;
     }
 
-    public int read(int fd, ByteBuffer buf, int off, int len, long p)
+    public int read(int fd, ByteBuffer buf, long p)
         throws OSException
     {
         BasicFileHandle handle = ensureRegularFileHandle(fd);
 
+        // Yes, fs.js expects that this comparison here is < and not <=
         long pos = (p < 0L ? handle.getPosition() : p);
+        int origLen = buf.remaining();
         int read;
         try {
-            read = handle.getChannel().read(positionBuf(buf, off, len), pos);
+            read = handle.getChannel().read(buf, pos);
         } catch (IOException ioe) {
             throw new OSException(ErrorCodes.EIO, ioe);
         }
 
         if (log.isTraceEnabled()) {
-            log.trace("read({}, {}) = {}", pos, len, read);
+            log.trace("read({}, {}) = {}", pos, origLen, read);
         }
 
         if (read > 0) {

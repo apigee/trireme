@@ -45,15 +45,15 @@ import java.util.concurrent.atomic.AtomicInteger;
 public class BasicFilesystem
 {
     /* Fds 0-3 are reserved for stdin, out, err, and the "pipe" between processes */
-    private static final int FIRST_FD = 4;
+    protected static final int FIRST_FD = 4;
 
     private static final Logger log = LoggerFactory.getLogger(BasicFilesystem.class);
 
-    private final AtomicInteger nextFd = new AtomicInteger(FIRST_FD);
-        private final ConcurrentHashMap<Integer, BasicFileHandle> descriptors =
-            new ConcurrentHashMap<Integer, BasicFileHandle>();
+    protected final AtomicInteger nextFd = new AtomicInteger(FIRST_FD);
+    protected final ConcurrentHashMap<Integer, AbstractFileHandle> descriptors =
+            new ConcurrentHashMap<Integer, AbstractFileHandle>();
 
-    public BasicFileHandle basicOpen(File path, String origPath, int flags, int mode, int umask)
+    public int open(File path, String origPath, int flags, int mode, int umask)
         throws OSException
     {
         if (log.isDebugEnabled()) {
@@ -72,7 +72,7 @@ public class BasicFilesystem
                 throw new OSException(ErrorCodes.EIO, e, origPath);
             }
             if (justCreated) {
-                chmod(path, mode, umask);
+                chmod(path, origPath, mode, umask, false);
             } else if ((flags & FileConstants.O_EXCL) != 0) {
                 throw new OSException(ErrorCodes.EEXIST, origPath);
             }
@@ -147,29 +147,49 @@ public class BasicFilesystem
             log.debug("Opened FD {}", fd);
         }
 
-        return handle;
+        return fd;
     }
 
     public void close(int fd)
         throws OSException
     {
-        BasicFileHandle h = ensureHandle(fd);
+        AbstractFileHandle h = ensureHandle(fd);
         descriptors.remove(fd);
         try {
-            if (h.getFileHandle() != null) {
-                h.getFileHandle().close();
+            if (h.getChannel() != null) {
+                h.getChannel().close();
             }
         } catch (IOException ioe) {
             throw new OSException(ErrorCodes.EIO);
         }
     }
 
-    public int write(int fd, ByteBuffer buf, long p)
+    /**
+     * Update the saved position for a file descriptor. This is used for "positional writes"
+     * and "positional reads." The call updates the position by "delta," and it returns the
+     * original position BEFORE the update was made.
+     */
+    public long updatePosition(int fd, int delta)
         throws OSException
     {
-        BasicFileHandle handle = ensureRegularFileHandle(fd);
-        // Yes, fs.js expects that this comparison here is <= and not <
-        long pos = (p <= 0L ? handle.getPosition() : p);
+        AbstractFileHandle h = ensureHandle(fd);
+        long oldPos = h.getPosition();
+        h.setPosition(oldPos + delta);
+        return oldPos;
+    }
+
+    public long getPosition(int fd)
+        throws OSException
+    {
+        AbstractFileHandle h = ensureHandle(fd);
+        return h.getPosition();
+    }
+
+    public int write(int fd, ByteBuffer buf, long pos)
+        throws OSException
+    {
+        AbstractFileHandle handle = ensureRegularFileHandle(fd);
+
         int origLen = buf.remaining();
         int written;
         try {
@@ -181,18 +201,15 @@ public class BasicFilesystem
         if (log.isTraceEnabled()) {
             log.trace("write({}, {}) = {}", pos, origLen, written);
         }
-        handle.incrementPosition(written);
 
         return written;
     }
 
-    public int read(int fd, ByteBuffer buf, long p)
+    public int read(int fd, ByteBuffer buf, long pos)
         throws OSException
     {
-        BasicFileHandle handle = ensureRegularFileHandle(fd);
+        AbstractFileHandle handle = ensureRegularFileHandle(fd);
 
-        // Yes, fs.js expects that this comparison here is < and not <=
-        long pos = (p < 0L ? handle.getPosition() : p);
         int origLen = buf.remaining();
         int read;
         try {
@@ -205,23 +222,8 @@ public class BasicFilesystem
             log.trace("read({}, {}) = {}", pos, origLen, read);
         }
 
-        if (read > 0) {
-            handle.incrementPosition(read);
-        }
         // Node (like C) expects 0 on EOF, not -1
         return (read < 0 ? 0 : read);
-    }
-
-    protected ByteBuffer positionBuf(ByteBuffer buf, int off, int len)
-    {
-        if ((off == 0) && (len == buf.remaining())) {
-            return buf;
-        } else {
-            ByteBuffer ret = buf.duplicate();
-            ret.position(buf.position() + off);
-            ret.limit(buf.position() + len);
-            return ret;
-        }
     }
 
     public FileStats stat(File f, String origPath, boolean noFollow)
@@ -236,7 +238,7 @@ public class BasicFilesystem
     public FileStats fstat(int fd, boolean noFollow)
         throws OSException
     {
-        BasicFileHandle handle = ensureHandle(fd);
+        AbstractFileHandle handle = ensureHandle(fd);
         return stat(handle.getFile(), handle.getOrigPath(), noFollow);
     }
 
@@ -256,11 +258,12 @@ public class BasicFilesystem
     public void futimes(int fd, long atime, long mtime)
         throws OSException
     {
-        BasicFileHandle handle = ensureHandle(fd);
+        AbstractFileHandle handle = ensureHandle(fd);
         utimes(handle.getFile(), handle.getOrigPath(), atime, mtime);
     }
 
-    public void chmod(File f, int origMode, int umask)
+    public void chmod(File f, String origPath, int origMode, int umask, boolean nofollow)
+        throws OSException
     {
         // We won't check the result of these calls. They don't all work
         // on all OSes, like Windows. If some fail, then we did the best
@@ -294,8 +297,8 @@ public class BasicFilesystem
     public void fchmod(int fd, int mode, int umask)
         throws OSException
     {
-        BasicFileHandle handle = ensureHandle(fd);
-        chmod(handle.getFile(), mode, umask);
+        AbstractFileHandle handle = ensureHandle(fd);
+        chmod(handle.getFile(), handle.getOrigPath(), mode, umask, false);
     }
 
     public void mkdir(File file, String origPath, int mode, int umask)
@@ -310,7 +313,7 @@ public class BasicFilesystem
         if (!file.mkdir()) {
             throw new OSException(ErrorCodes.EIO, origPath);
         }
-        chmod(file, mode, umask);
+        chmod(file, origPath, mode, umask, false);
     }
 
     public void unlink(File file, String origPath)
@@ -355,7 +358,7 @@ public class BasicFilesystem
     public void ftruncate(int fd, long len)
         throws OSException
     {
-        BasicFileHandle handle = ensureRegularFileHandle(fd);
+        BasicFileHandle handle = (BasicFileHandle)ensureRegularFileHandle(fd);
         try {
             handle.getFileHandle().setLength(len);
         } catch (IOException e) {
@@ -366,7 +369,7 @@ public class BasicFilesystem
     public void fsync(int fd, boolean syncMetadata)
         throws OSException
     {
-        BasicFileHandle handle = ensureRegularFileHandle(fd);
+        AbstractFileHandle handle = ensureRegularFileHandle(fd);
         try {
             handle.getChannel().force(syncMetadata);
         } catch (IOException e) {
@@ -394,7 +397,7 @@ public class BasicFilesystem
     public void fchown(int fd, String uid, String gid, boolean noFollow)
         throws OSException
     {
-        BasicFileHandle handle = ensureHandle(fd);
+        AbstractFileHandle handle = ensureHandle(fd);
         chown(handle.getFile(), handle.getOrigPath(), uid, gid, noFollow);
     }
 
@@ -416,10 +419,10 @@ public class BasicFilesystem
         throw new OSException(ErrorCodes.EACCES, origPath);
     }
 
-    private BasicFileHandle ensureHandle(int fd)
+    protected AbstractFileHandle ensureHandle(int fd)
         throws OSException
     {
-        BasicFileHandle handle = descriptors.get(fd);
+        AbstractFileHandle handle = descriptors.get(fd);
         if (handle == null) {
             if (log.isDebugEnabled()) {
                 log.debug("FD {} is not a valid handle", fd);
@@ -429,14 +432,11 @@ public class BasicFilesystem
         return handle;
     }
 
-    private BasicFileHandle ensureRegularFileHandle(int fd)
+    protected AbstractFileHandle ensureRegularFileHandle(int fd)
         throws OSException
     {
-        BasicFileHandle h = ensureHandle(fd);
-        if (h.getFile() == null) {
-            if (log.isDebugEnabled()) {
-                log.debug("FD {} is not a valid handle or regular file", fd);
-            }
+        AbstractFileHandle h = ensureHandle(fd);
+        if (h.getChannel() == null) {
             throw new OSException(ErrorCodes.EBADF);
         }
         return h;
@@ -444,14 +444,17 @@ public class BasicFilesystem
 
     public void cleanup()
     {
-        for (BasicFileHandle handle : descriptors.values()) {
+        for (AbstractFileHandle handle : descriptors.values()) {
             if (log.isDebugEnabled()) {
                 log.debug("Closing leaked file descriptor " + handle);
             }
-            if (handle.getFileHandle() != null) {
-                try {
-                    handle.getFileHandle().close();
-                } catch (IOException ignore) {
+            if (handle instanceof BasicFileHandle) {
+                BasicFileHandle bh = (BasicFileHandle)handle;
+                if (bh.getFileHandle() != null) {
+                    try {
+                        bh.getFileHandle().close();
+                    } catch (IOException ignore) {
+                    }
                 }
             }
         }

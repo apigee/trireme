@@ -22,13 +22,16 @@
 package io.apigee.trireme.kernel.fs;
 
 import java.io.File;
+import java.nio.channels.FileChannel;
 
 /**
  * This class represents a currently-open file.
  */
 
-public abstract class AbstractFileHandle
+public class AbstractFileHandle
 {
+    /** The channel for the file, if any */
+    protected FileChannel channel;
     /** The unique ID of this file within the script. */
     protected int fd;
     /** A pointer to the physical file on the disk, wherever it is */
@@ -38,10 +41,19 @@ public abstract class AbstractFileHandle
     /** Position where we are writing in the file, for appending */
     protected long position;
 
-    protected AbstractFileHandle(File file, String origPath)
+    protected AbstractFileHandle(File file, String origPath, FileChannel channel)
     {
         this.file = file;
         this.origPath = origPath;
+        this.channel = channel;
+    }
+
+    public FileChannel getChannel() {
+        return channel;
+    }
+
+    public void setChannel(FileChannel channel) {
+        this.channel = channel;
     }
 
     public int getFd() {

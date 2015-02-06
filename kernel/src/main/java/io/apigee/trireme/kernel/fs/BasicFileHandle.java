@@ -23,27 +23,16 @@ package io.apigee.trireme.kernel.fs;
 
 import java.io.File;
 import java.io.RandomAccessFile;
-import java.nio.channels.FileChannel;
 
 public class BasicFileHandle
     extends AbstractFileHandle
 {
-    private FileChannel channel;
     private RandomAccessFile raf;
 
     public BasicFileHandle(File file, String origPath, RandomAccessFile raf)
     {
-        super(file, origPath);
+        super(file, origPath, (raf == null ? null : raf.getChannel()));
         this.raf = raf;
-        this.channel = (raf == null ? null : raf.getChannel());
-    }
-
-    public FileChannel getChannel() {
-        return channel;
-    }
-
-    public void setChannel(FileChannel channel) {
-        this.channel = channel;
     }
 
     public RandomAccessFile getFileHandle() {

@@ -23,6 +23,7 @@ package io.apigee.trireme.node10.modules;
 
 import io.apigee.trireme.core.NodeRuntime;
 import io.apigee.trireme.core.InternalNodeModule;
+import io.apigee.trireme.core.internal.JavaVersion;
 import io.apigee.trireme.core.internal.ScriptRunner;
 import io.apigee.trireme.core.Utils;
 import io.apigee.trireme.core.modules.AbstractFilesystem;
@@ -30,7 +31,8 @@ import io.apigee.trireme.core.modules.Buffer;
 import io.apigee.trireme.core.modules.Constants;
 import io.apigee.trireme.kernel.ErrorCodes;
 import io.apigee.trireme.kernel.OSException;
-import io.apigee.trireme.kernel.fs.BasicFileHandle;
+import io.apigee.trireme.kernel.Platform;
+import io.apigee.trireme.kernel.fs.AdvancedFilesystem;
 import io.apigee.trireme.kernel.fs.BasicFilesystem;
 import io.apigee.trireme.kernel.fs.FileStats;
 import org.mozilla.javascript.BaseFunction;
@@ -53,9 +55,8 @@ import java.util.concurrent.Executor;
 
 /**
  * An implementation of the "fs" internal Node module. The "fs.js" script depends on it.
- * This is an implementation that supports Java versions up to and including Java 6. That means that
- * it does not have all the features supported by "real" Node.js "AsyncFilesystem" uses the new Java 7
- * APIs and is much more complete.
+ * This implementation depends on an implementation of the filesystem, either BasicFilesystem for
+ * versions of Java before Java 7, and AdvancedFilesystem for Java 7 and up.
  */
 public class Filesystem
     implements InternalNodeModule
@@ -97,9 +98,15 @@ public class Filesystem
 
         protected void initialize(NodeRuntime runner, Executor fsPool)
         {
-            this.fs = new BasicFilesystem();
             this.runner = (ScriptRunner)runner;
             this.pool = fsPool;
+
+            if (JavaVersion.get().hasAsyncFileIO()) {
+                // Java 7 and up -- use new filesystem
+                fs = new AdvancedFilesystem();
+            } else {
+                fs = new BasicFilesystem();
+            }
         }
 
         @Override
@@ -204,9 +211,9 @@ public class Filesystem
                 public Object[] execute() throws OSException
                 {
                     File path = fs.translatePath(pathStr);
-                    BasicFileHandle handle =
-                        fs.fs.basicOpen(path, pathStr, flags, mode, fs.runner.getProcess().getUmask());
-                    return new Object [] { Undefined.instance, handle.getFd() };
+                    int fd =
+                        fs.fs.open(path, pathStr, flags, mode, fs.runner.getProcess().getUmask());
+                    return new Object [] { Undefined.instance, fd };
                 }
 
                 @Override
@@ -246,7 +253,7 @@ public class Filesystem
             final Buffer.BufferImpl buf = ensureBuffer(cx, thisObj, args, 1);
             int off = intArgOnly(cx, fs, args, 2, 0);
             int len = intArgOnly(cx, fs, args, 3, 0);
-            final long pos = longArgOnly(cx, fs, args, 4, -1L);
+            long pos = longArgOnly(cx, fs, args, 4, -1L);
             Function callback = functionArg(args, 5, false);
 
             if (off >= buf.getLength()) {
@@ -260,13 +267,24 @@ public class Filesystem
             int bytesOffset = buf.getArrayOffset() + off;
             final ByteBuffer readBuf = ByteBuffer.wrap(bytes, bytesOffset, len);
 
+            if (pos < 0L) {
+                // Case for a "positional read" that reads from the "current position"
+                try {
+                    pos = fs.fs.getPosition(fd);
+                } catch (OSException ose) {
+                    // Ignore -- we will catch later
+                }
+            }
+            final long readPos = pos;
+
             return fs.runAction(cx, callback, new AsyncAction()
             {
                 @Override
                 public Object[] execute()
                     throws OSException
                 {
-                    int count = fs.fs.read(fd, readBuf, pos);
+                    int count = fs.fs.read(fd, readBuf, readPos);
+                    fs.fs.updatePosition(fd, count);
                     return new Object[] { Undefined.instance, count, buf };
                 }
 
@@ -287,7 +305,7 @@ public class Filesystem
             final Buffer.BufferImpl buf = ensureBuffer(cx, thisObj, args, 1);
             int off = intArgOnly(cx, fs, args, 2, 0);
             final int len = intArgOnly(cx, fs, args, 3, 0);
-            final long pos = longArgOnly(cx, fs, args, 4, 0);
+            long pos = longArgOnly(cx, fs, args, 4, 0);
             Function callback = functionArg(args, 5, false);
 
             if (off >= buf.getLength()) {
@@ -301,13 +319,24 @@ public class Filesystem
             int bytesOffset = buf.getArrayOffset() + off;
             final ByteBuffer writeBuf = ByteBuffer.wrap(bytes, bytesOffset, len);
 
+            // Increment the position before writing. This makes certain tests work which issue
+            // lots of asynchronous writes in parallel.
+            if (pos <= 0L) {
+                try {
+                    pos = fs.fs.updatePosition(fd, len);
+                } catch (OSException ose) {
+                    // Ignore -- we will catch later
+                }
+            }
+            final long writePos = pos;
+
             return fs.runAction(cx, callback, new AsyncAction()
             {
                 @Override
                 public Object[] execute()
                     throws OSException
                 {
-                    fs.fs.write(fd, writeBuf, pos);
+                    fs.fs.write(fd, writeBuf, writePos);
                     return new Object[] { Undefined.instance, len, buf };
                 }
 
@@ -646,7 +675,7 @@ public class Filesystem
                 public Object[] execute() throws OSException
                 {
                     File f = self.translatePath(path);
-                    self.fs.chmod(f, mode, self.runner.getProcess().getUmask());
+                    self.fs.chmod(f, path, mode, self.runner.getProcess().getUmask(), false);
                     return null;
                 }
             });
@@ -720,8 +749,8 @@ public class Filesystem
         @SuppressWarnings("unused")
         public static Object link(Context cx, Scriptable thisObj, Object[] args, Function func)
         {
-            final String srcPath = stringArg(args, 0);
-            final String destPath = stringArg(args, 1);
+            final String targetPath = stringArg(args, 0);
+            final String linkPath = stringArg(args, 1);
             Function callback = functionArg(args, 2, false);
             final FSImpl self = (FSImpl)thisObj;
 
@@ -730,9 +759,9 @@ public class Filesystem
                 public Object[] execute()
                    throws OSException
                 {
-                    File srcFile = self.translatePath(srcPath);
-                    File destFile = self.translatePath(destPath);
-                    self.fs.link(destFile, destPath, srcFile, srcPath);
+                    File targetFile = self.translatePath(targetPath);
+                    File linkFile = self.translatePath(linkPath);
+                    self.fs.link(targetFile, targetPath, linkFile, linkPath);
                     return new Object[] { Undefined.instance, Undefined.instance };
                 }
             });
@@ -780,6 +809,15 @@ public class Filesystem
                    return new Object[] { Undefined.instance, target };
                }
            });
+        }
+
+        private void handleSyncException(Context cx, OSException ose, Function cb)
+        {
+            if (cb == null) {
+                throw Utils.makeError(cx, this, ose);
+            } else {
+                cb.call(cx, cb, this, new Object[] { Utils.makeErrorObject(cx, this, ose) });
+            }
         }
     }
 

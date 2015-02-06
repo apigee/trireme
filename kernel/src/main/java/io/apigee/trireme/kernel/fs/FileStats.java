@@ -22,7 +22,6 @@
 package io.apigee.trireme.kernel.fs;
 
 import java.io.File;
-import java.nio.file.Path;
 import java.nio.file.attribute.FileTime;
 import java.nio.file.attribute.GroupPrincipal;
 import java.nio.file.attribute.PosixFilePermission;
@@ -38,12 +37,20 @@ public class FileStats
     private long ctime;
     private int dev;
     private int ino;
+    private int nlink;
     private int uid;
     private int gid;
-    int mode;
+    private int mode;
+
+    public FileStats()
+    {
+    }
 
     public FileStats(File file)
     {
+        // Fake "nlink"
+        nlink = 1;
+
         size = file.length();
         atime = mtime = ctime = file.lastModified();
 
@@ -67,6 +74,8 @@ public class FileStats
 
     public FileStats(File file, Map<String, Object> attrs)
     {
+        // Fake "nlink"
+        this.nlink = 1;
         // Fake "dev" and "ino" based on whatever information we can get from the product
         this.size = ((Number)attrs.get("size")).longValue();
 
@@ -195,5 +204,31 @@ public class FileStats
 
     public int getMode() {
         return mode;
+    }
+
+    public int getNLink() {
+        return nlink;
+    }
+
+    @Override
+    public boolean equals(Object o)
+    {
+        try {
+            FileStats s = (FileStats)o;
+
+            return (
+                (atime == s.atime) && (mtime == s.mtime) && (ctime == s.ctime) &&
+                (dev == s.dev) && (gid == s.gid) && (ino == s.ino) &&
+                (mode == s.mode) && (size == s.size) && (uid == s.uid)
+            );
+        } catch (ClassCastException cce) {
+            return false;
+        }
+    }
+
+    @Override
+    public int hashCode()
+    {
+        return (int)size + mode + ino;
     }
 }

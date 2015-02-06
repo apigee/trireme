@@ -38,6 +38,8 @@ import io.apigee.trireme.core.modules.NativeModule;
 import io.apigee.trireme.core.modules.Process;
 import io.apigee.trireme.core.modules.ProcessWrap;
 import io.apigee.trireme.kernel.PathTranslator;
+import io.apigee.trireme.kernel.fs.AdvancedFilesystem;
+import io.apigee.trireme.kernel.fs.BasicFilesystem;
 import io.apigee.trireme.kernel.net.NetworkPolicy;
 import io.apigee.trireme.kernel.net.SelectorHandler;
 import org.mozilla.javascript.Context;
@@ -115,6 +117,7 @@ public class ScriptRunner
     private final  Selector                      selector;
     private        int                           timerSequence;
     private final  AtomicInteger                 pinCount      = new AtomicInteger(0);
+    private        BasicFilesystem               filesystem;
 
     // Globals that are set up for the process
     private NativeModule.NativeImpl nativeModule;
@@ -292,6 +295,10 @@ public class ScriptRunner
     @Override
     public ExecutorService getUnboundedPool() {
         return env.getScriptPool();
+    }
+
+    public BasicFilesystem getFilesystem() {
+        return filesystem;
     }
 
     public InputStream getStdin() {
@@ -557,13 +564,18 @@ public class ScriptRunner
      * This is a more generic way of creating a timer that can be used in the kernel, and which
      * works even if we are not in the main thread.
      */
-    public Future<Boolean> createTimedTask(Runnable r, long delay, TimeUnit unit, Object domain)
+    public Future<Boolean> createTimedTask(Runnable r, long delay, TimeUnit unit, boolean repeating, Object domain)
     {
         final RunnableTask t = new RunnableTask(r);
         t.setDomain((Scriptable)domain);
         t.setTimeout(System.currentTimeMillis() + unit.toMillis(delay));
+        t.setRepeating(repeating);
+        if (repeating) {
+            t.setInterval(delay);
+        }
 
-        enqueueTask(new ScriptTask() {
+        enqueueTask(new ScriptTask()
+        {
             @Override
             public void execute(Context cx, Scriptable scope)
             {
@@ -1082,6 +1094,13 @@ public class ScriptRunner
     private void initGlobals(Context cx)
         throws NodeException
     {
+        if (JavaVersion.get().hasAsyncFileIO()) {
+            // Java 7 and up -- use new filesystem
+            filesystem = new AdvancedFilesystem();
+        } else {
+            filesystem = new BasicFilesystem();
+        }
+
         try {
             // Need to bootstrap the "native module" before we can do anything
             NativeModule.NativeImpl nativeMod =
@@ -1101,8 +1120,8 @@ public class ScriptRunner
             // The buffer module needs special handling because of the "charsWritten" variable
             buffer = (Buffer.BufferModuleImpl)require("buffer", cx);
 
-            // Set up metrics -- defining these lets us run internal Node projects.
-            // Presumably in "real" node these are set up by some sort of preprocessor...
+            // These macros are used all over node code, so stub them out.
+            // A JavaScript preprocessor does this in real node -- TODO to switch to that.
             Scriptable metrics = nativeMod.internalRequire("trireme_metrics", cx);
             copyProp(metrics, scope, "DTRACE_NET_SERVER_CONNECTION");
             copyProp(metrics, scope, "DTRACE_NET_STREAM_END");

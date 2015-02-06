@@ -31,14 +31,6 @@
         <Description>Diffie-Hellman not yet implemented</Description>
     </Excluded>
     <Excluded>
-        <Name>test-fs-watch.+</Name>
-        <Description>Not implemented yet.</Description>
-    </Excluded>
-    <Excluded>
-        <Name>test-watch.+</Name>
-        <Description>Not implemented yet.</Description>
-    </Excluded>
-    <Excluded>
        <Name>test-net-write-callbacks.js</Name>
        <Description>Not sure that we care about order of callback delivery</Description>
     </Excluded>

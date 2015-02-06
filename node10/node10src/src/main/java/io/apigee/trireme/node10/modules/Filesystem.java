@@ -23,7 +23,6 @@ package io.apigee.trireme.node10.modules;
 
 import io.apigee.trireme.core.NodeRuntime;
 import io.apigee.trireme.core.InternalNodeModule;
-import io.apigee.trireme.core.internal.JavaVersion;
 import io.apigee.trireme.core.internal.ScriptRunner;
 import io.apigee.trireme.core.Utils;
 import io.apigee.trireme.core.modules.AbstractFilesystem;
@@ -31,8 +30,6 @@ import io.apigee.trireme.core.modules.Buffer;
 import io.apigee.trireme.core.modules.Constants;
 import io.apigee.trireme.kernel.ErrorCodes;
 import io.apigee.trireme.kernel.OSException;
-import io.apigee.trireme.kernel.Platform;
-import io.apigee.trireme.kernel.fs.AdvancedFilesystem;
 import io.apigee.trireme.kernel.fs.BasicFilesystem;
 import io.apigee.trireme.kernel.fs.FileStats;
 import org.mozilla.javascript.BaseFunction;
@@ -79,6 +76,7 @@ public class Filesystem
         FSImpl fs = (FSImpl) cx.newObject(scope, FSImpl.CLASS_NAME);
         fs.initialize(runner, runner.getAsyncPool());
         ScriptableObject.defineClass(fs, StatsImpl.class, false, true);
+        ScriptableObject.defineClass(fs, StatWatcher.class, false, true);
         return fs;
     }
 
@@ -100,13 +98,7 @@ public class Filesystem
         {
             this.runner = (ScriptRunner)runner;
             this.pool = fsPool;
-
-            if (JavaVersion.get().hasAsyncFileIO()) {
-                // Java 7 and up -- use new filesystem
-                fs = new AdvancedFilesystem();
-            } else {
-                fs = new BasicFilesystem();
-            }
+            this.fs = this.runner.getFilesystem();
         }
 
         @Override
@@ -810,42 +802,6 @@ public class Filesystem
                    return new Object[] { Undefined.instance, target };
                }
            });
-        }
-
-        private void handleSyncException(Context cx, OSException ose, Function cb)
-        {
-            if (cb == null) {
-                throw Utils.makeError(cx, this, ose);
-            } else {
-                cb.call(cx, cb, this, new Object[] { Utils.makeErrorObject(cx, this, ose) });
-            }
-        }
-    }
-
-    public static class StatsImpl
-        extends ScriptableObject
-    {
-        public static final String CLASS_NAME = "Stats";
-
-        @Override
-        public String getClassName() {
-            return CLASS_NAME;
-        }
-
-        public void setAttributes(Context cx, FileStats s)
-        {
-            put("size", this, s.getSize());
-
-            put("atime", this, cx.newObject(this, "Date", new Object[] { s.getAtime() }));
-            put("mtime", this, cx.newObject(this, "Date", new Object[] { s.getMtime() }));
-            put("ctime", this, cx.newObject(this, "Date", new Object[] { s.getCtime() }));
-
-            // Need to fake some things because some code expects these things to be there
-            put("dev", this, s.getDev());
-            put("ino", this, s.getIno());
-            put("uid", this, s.getUid());
-            put("gid", this, s.getGid());
-            put("mode", this, s.getMode());
         }
     }
 

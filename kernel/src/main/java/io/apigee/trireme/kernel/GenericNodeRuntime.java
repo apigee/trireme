@@ -100,5 +100,5 @@ public interface GenericNodeRuntime
      * Execute a ask after "delay". This method may be called from any thread. It returns a Future which may
      * be used to cancel the task, but it will always return "null" as a result.
      */
-    public Future<Boolean> createTimedTask(Runnable r, long delay, TimeUnit unit, Object domain);
+    public Future<Boolean> createTimedTask(Runnable r, long delay, TimeUnit unit, boolean repeating, Object domain);
 }

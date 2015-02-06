@@ -12,10 +12,6 @@
         <Description>cluster module support planned but not implemented.</Description>
     </Excluded>
     <Excluded>
-        <Name>test-regress-GH-4027.js</Name>
-	<Description>Tests fs "watch", not implemented yet.</Description>
-    </Excluded>
-    <Excluded>
         <Name>test-dgram.*address.*\.js</Name>
         <Description>Can't support IPv6 addresses yet.</Description>
     </Excluded>

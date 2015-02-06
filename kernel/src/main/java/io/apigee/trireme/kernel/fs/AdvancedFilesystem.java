@@ -60,6 +60,7 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Map;
 import java.util.Set;
+import java.util.regex.Pattern;
 
 /**
  * This class extends basic filesystem support to use Java 7 features for file modes and ownership,
@@ -544,8 +545,16 @@ public class AdvancedFilesystem
         }
     }
 
+    public static final Pattern NOT_DIRECTORY_MSG =
+        Pattern.compile(".*[Nn]ot a directory$");
+
+    /**
+     * Do the best we can to map Java error codes to the ones returned by a real Posix filesystem.
+     * This might involve some regular expressions, which we just defined above.
+     */
     private int getErrorCode(IOException ioe)
     {
+        String msg = ioe.getMessage();
         int code = ErrorCodes.EIO;
         if (ioe instanceof FileNotFoundException) {
             code = ErrorCodes.ENOENT;
@@ -557,7 +566,8 @@ public class AdvancedFilesystem
             code = ErrorCodes.EEXIST;
         } else if (ioe instanceof NoSuchFileException) {
             code = ErrorCodes.ENOENT;
-        } else if (ioe instanceof NotDirectoryException) {
+        } else if ((ioe instanceof NotDirectoryException) ||
+                   NOT_DIRECTORY_MSG.matcher(msg).matches()) {
             code = ErrorCodes.ENOTDIR;
         } else if (ioe instanceof NotLinkException) {
             code = ErrorCodes.EINVAL;

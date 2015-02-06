@@ -378,7 +378,11 @@ public class BasicFilesystem
     }
 
     public List<String> readdir(File f, String origPath)
+        throws OSException
     {
+        if (!f.isDirectory()) {
+            throw new OSException(ErrorCodes.ENOTDIR, origPath);
+        }
         String[] files = f.list();
         if (files == null) {
             return Collections.emptyList();

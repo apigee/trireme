@@ -2,7 +2,7 @@ package io.apigee.trireme.node10;
 
 import io.apigee.trireme.core.NodeModule;
 import io.apigee.trireme.core.spi.NodeImplementation;
-import io.apigee.trireme.node10.modules.AsyncFilesystem;
+
 import io.apigee.trireme.node10.modules.ConsoleWrap;
 import io.apigee.trireme.node10.modules.Filesystem;
 import io.apigee.trireme.node10.modules.JavaStreamWrap;

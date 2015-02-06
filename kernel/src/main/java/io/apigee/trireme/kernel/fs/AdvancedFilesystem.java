@@ -37,6 +37,8 @@ import java.nio.file.AtomicMoveNotSupportedException;
 import java.nio.file.DirectoryNotEmptyException;
 import java.nio.file.FileAlreadyExistsException;
 import java.nio.file.FileSystems;
+import java.nio.file.FileVisitOption;
+import java.nio.file.FileVisitResult;
 import java.nio.file.Files;
 import java.nio.file.LinkOption;
 import java.nio.file.NoSuchFileException;
@@ -45,6 +47,7 @@ import java.nio.file.NotLinkException;
 import java.nio.file.OpenOption;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.nio.file.SimpleFileVisitor;
 import java.nio.file.StandardCopyOption;
 import java.nio.file.StandardOpenOption;
 import java.nio.file.attribute.BasicFileAttributeView;
@@ -55,9 +58,12 @@ import java.nio.file.attribute.PosixFilePermission;
 import java.nio.file.attribute.PosixFilePermissions;
 import java.nio.file.attribute.UserPrincipal;
 import java.nio.file.attribute.UserPrincipalLookupService;
+import java.util.ArrayList;
+import java.util.Collections;
 import java.util.EnumSet;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.regex.Pattern;
@@ -236,6 +242,35 @@ public class AdvancedFilesystem
         } catch (IOException ioe) {
             throw new OSException(getErrorCode(ioe), ioe, origPath);
         }
+    }
+
+    @Override
+    public List<String> readdir(File f, String origPath)
+        throws OSException
+    {
+        if (!f.isDirectory()) {
+            throw new OSException(ErrorCodes.ENOTDIR, origPath);
+        }
+
+        Path path = Paths.get(f.getPath());
+        final ArrayList<String> paths = new ArrayList<String>();
+        Set<FileVisitOption> options = Collections.emptySet();
+
+        try {
+            Files.walkFileTree(path, options, 1,
+                               new SimpleFileVisitor<Path>() {
+                                   @Override
+                                   public FileVisitResult visitFile(Path child, BasicFileAttributes attrs)
+                                   {
+                                       paths.add(child.getFileName().toString());
+                                       return FileVisitResult.CONTINUE;
+                                   }
+                               });
+        } catch (IOException ioe) {
+            throw new OSException(getErrorCode(ioe), origPath);
+        }
+
+        return paths;
     }
 
     /**

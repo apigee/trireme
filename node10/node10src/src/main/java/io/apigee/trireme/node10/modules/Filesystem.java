@@ -514,11 +514,12 @@ public class Filesystem
         private Object[] doReaddir(String dn)
             throws OSException
         {
+            File f = translatePath(dn);
+            List<String> files = fs.readdir(f, dn);
+            Object[] objs = files.toArray(new Object[files.size()]);
+
             Context cx = Context.enter();
             try {
-                File f = translatePath(dn);
-                List<String> files = fs.readdir(f, dn);
-                Object[] objs = files.toArray(new Object[files.size()]);
                 Scriptable fileList = cx.newArray(this, objs);
                 return new Object[] { Undefined.instance, fileList };
             } finally {

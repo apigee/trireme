@@ -43,6 +43,7 @@ public class PathTranslator
     private static final Logger log = LoggerFactory.getLogger(PathTranslator.class.getName());
     private static final Pattern separator = Pattern.compile("\\" + File.separatorChar);
     private static final Pattern windowsRoot = Pattern.compile("^[A-Za-z]:.*$");
+    private static final boolean caseSensitive = !new File("a").equals(new File("A"));
 
     private File root;
     private String canonicalRoot;
@@ -111,7 +112,7 @@ public class PathTranslator
 
         // Calculate mounted filesystems. These must be absolute paths or it doesn't work.
         for (Map.Entry<String, File> mount : mounts) {
-            if (path.getPath().startsWith(mount.getKey())) {
+            if (startsWithFS(path.getPath(), mount.getKey())) {
                 // We hit one of the "mounted filesystems," so take off the path and re-calculate.
                 // Then the rest of the filesystem stuff doesn't matter -- we have found our path.
                 String remaining;
@@ -167,7 +168,7 @@ public class PathTranslator
             String mountPath = path;
             for (final Map.Entry<String, File> mount : mounts) {
                 final String realMount = mount.getValue().getPath();
-                if (path.startsWith(realMount)) {
+                if (startsWithFS(path, realMount)) {
                     // We hit one of the "mounted filesystems," so reverse translate from here.
                     final String remaining = path.substring(realMount.length());
                     if (remaining.length() < mountPath.length()) {
@@ -198,5 +199,9 @@ public class PathTranslator
             log.debug("PathTranslator.reverse: {} -> {}", path, realPath);
         }
         return realPath;
+    }
+
+    private static boolean startsWithFS(final String path, final String prefix) {
+    	return caseSensitive ? path.startsWith(prefix) : path.length() >= prefix.length() && prefix.equalsIgnoreCase(path.substring(0, prefix.length()));
     }
 }

@@ -13,6 +13,8 @@ rm ${CP}
 #rm -rf ${td}
 #mkdir ${td}
 
+rm -f ../node10/node10tests/tmp/*
+
 ARGS=-Xmx1g
 
 if [ $1 == "-d" ]

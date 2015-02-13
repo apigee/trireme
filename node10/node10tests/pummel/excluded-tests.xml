@@ -31,14 +31,6 @@
         <Description>Diffie-Hellman not yet implemented</Description>
     </Excluded>
     <Excluded>
-        <Name>test-fs-watch.+</Name>
-        <Description>Not implemented yet.</Description>
-    </Excluded>
-    <Excluded>
-        <Name>test-watch.+</Name>
-        <Description>Not implemented yet.</Description>
-    </Excluded>
-    <Excluded>
        <Name>test-net-write-callbacks.js</Name>
        <Description>Not sure that we care about order of callback delivery</Description>
     </Excluded>
@@ -79,8 +71,8 @@
         <Description>No DH implemented in crypto yet.</Description>
     </Excluded>
     <Excluded>
-        <Name>test-regress.+\.js</Name>
-        <Description>These are a variety of tests that sometimes test stuff that's not supported.</Description>
+        <Name>test-regress-GH-814.*.js</Name>
+	<Description>More tests that depend on V8 gc</Description>
     </Excluded>
     <Excluded>
         <Name>test-vm-memleak.js</Name>

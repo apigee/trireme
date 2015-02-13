@@ -16,10 +16,6 @@
         <Description>Can't support IPv6 addresses yet.</Description>
     </Excluded>
     <Excluded>
-        <Name>test-http-server-stale-close.js</Name>
-        <Description>Depends on us adding environment variable support to "fork".</Description>
-    </Excluded>
-    <Excluded>
         <Name>test-child-process-cwd.js</Name>
         <Description>Need to work on error handling.</Description>
     </Excluded>
@@ -379,8 +375,12 @@
          Tests that just don't work in Noderunner for other good reasons
     -->
     <Excluded>
-        <Name>test-regress.+\.js</Name>
-        <Description>These are a variety of tests that sometimes test stuff that's not supported.</Description>
+        <Name>test-regress-GH-1899.js</Name>
+	<Description>Not sure, process output not being collected.</Description>
+    </Excluded>
+    <Excluded>
+        <Name>test-regress-GH-4015.js</Name>
+	<Description>Depends on a V8 stack trace error.</Description>
     </Excluded>
     <Excluded>
         <Name>test-cli-eval.js</Name>

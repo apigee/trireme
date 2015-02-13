@@ -168,7 +168,7 @@ public class DNSResolver
                             handleRetry(ErrorCodes.ETIMEOUT);
                         }
                     }
-                }, timeout, TimeUnit.SECONDS, null);
+                }, timeout, TimeUnit.SECONDS, false, null);
 
                 dgHandle.startReadingDatagrams(
                     new IOCompletionHandler<NIODatagramHandle.ReceivedDatagram>()

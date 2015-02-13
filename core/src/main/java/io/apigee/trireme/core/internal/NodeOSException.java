@@ -21,6 +21,8 @@
  */
 package io.apigee.trireme.core.internal;
 
+import io.apigee.trireme.kernel.ErrorCodes;
+import io.apigee.trireme.kernel.OSException;
 import org.mozilla.javascript.EvaluatorException;
 
 /**
@@ -58,6 +60,16 @@ public class NodeOSException
         this.code = code;
         this.path = path;
         initCause(cause);
+    }
+
+    public NodeOSException(OSException ose)
+    {
+        super(ose.getPath() == null ?
+                  ErrorCodes.get().toString(ose.getCode()) :
+                  ErrorCodes.get().toString(ose.getCode()) + ':' + ose.getPath());
+        this.code = ErrorCodes.get().toString(ose.getCode());
+        this.path = ose.getPath();
+        initCause(ose);
     }
 
     public String getCode() {

@@ -7,7 +7,7 @@ import org.mozilla.javascript.Scriptable;
 import org.mozilla.javascript.ScriptableObject;
 
 public class TestIdClass
-    extends AbstractIdObject
+    extends AbstractIdObject<TestIdClass>
 {
     public static final String CLASS_NAME = "IdObject";
 
@@ -19,7 +19,7 @@ public class TestIdClass
         p_no = 2;
 
     static {
-        props = new IdPropertyMap();
+        props = new IdPropertyMap(CLASS_NAME);
         props.addMethod("callFoo", m_callFoo, 0);
         props.addMethod("callBar", m_callBar, 1);
         props.addProperty("baz", p_baz, 0);
@@ -35,12 +35,7 @@ public class TestIdClass
     }
 
     @Override
-    public String getClassName() {
-        return CLASS_NAME;
-    }
-
-    @Override
-    protected Object defaultConstructor(Context cx, Object[] args)
+    protected TestIdClass defaultConstructor()
     {
         return new TestIdClass();
     }
@@ -72,8 +67,8 @@ public class TestIdClass
     }
 
     @Override
-    protected Object execCall(int id, Context cx, Scriptable scope, Scriptable thisObj,
-                              Object[] args)
+    protected Object prototypeCall(int id, Context cx, Scriptable scope,
+                                   Object[] args)
     {
         switch (id) {
         case m_callFoo:
@@ -81,7 +76,7 @@ public class TestIdClass
         case m_callBar:
             return "Hello, " + args[0] + '!';
         default:
-            return super.execCall(id, cx, scope, thisObj, args);
+            return super.prototypeCall(id, cx, scope, args);
         }
     }
 }

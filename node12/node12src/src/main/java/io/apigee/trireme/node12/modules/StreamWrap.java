@@ -25,16 +25,16 @@ public class StreamWrap
         throws InvocationTargetException, IllegalAccessException, InstantiationException
     {
         ScriptableObject exports = (ScriptableObject)cx.newObject(global);
-        exports.setPrototype(global);
-        exports.setParentScope(null);
 
-        new WriteWrap().exportAsClass(exports);
-        new ShutdownWrap().exportAsClass(exports);
+        Function writeWrap = new WriteWrap().exportAsClass(exports);
+        exports.put(WriteWrap.CLASS_NAME, exports, writeWrap);
+        Function shutdownWrap = new ShutdownWrap().exportAsClass(exports);
+        exports.put(ShutdownWrap.CLASS_NAME, exports, shutdownWrap);
         return exports;
     }
 
     public static class WriteWrap
-        extends AbstractIdObject
+        extends AbstractIdObject<WriteWrap>
     {
         public static final String CLASS_NAME = "WriteWrap";
 
@@ -45,7 +45,7 @@ public class StreamWrap
             Id_bytes = 2;
 
         static {
-            propMap = new IdPropertyMap();
+            propMap = new IdPropertyMap(CLASS_NAME);
             propMap.addProperty("oncomplete", Id_oncomplete, 0);
             propMap.addProperty("bytes", Id_bytes, 0);
         }
@@ -59,12 +59,7 @@ public class StreamWrap
         }
 
         @Override
-        public String getClassName() {
-            return CLASS_NAME;
-        }
-
-        @Override
-        protected Object defaultConstructor(Context cx, Object[] args) {
+        protected WriteWrap defaultConstructor() {
             return new WriteWrap();
         }
 
@@ -120,7 +115,7 @@ public class StreamWrap
     }
 
     public static class ShutdownWrap
-        extends AbstractIdObject
+        extends AbstractIdObject<ShutdownWrap>
     {
         public static final String CLASS_NAME = "ShutdownWrap";
 
@@ -132,7 +127,7 @@ public class StreamWrap
             Id_oncomplete = 1;
 
         static {
-            propMap = new IdPropertyMap();
+            propMap = new IdPropertyMap(CLASS_NAME);
             propMap.addProperty("oncomplete", Id_oncomplete, 0);
         }
 
@@ -142,13 +137,8 @@ public class StreamWrap
         }
 
         @Override
-        protected Object defaultConstructor(Context cx, Object[] args) {
+        protected ShutdownWrap defaultConstructor() {
             return new ShutdownWrap();
-        }
-
-        @Override
-        public String getClassName() {
-            return CLASS_NAME;
         }
 
         public void callOnComplete(Context cx, Scriptable thisObj, Scriptable handle, int err)

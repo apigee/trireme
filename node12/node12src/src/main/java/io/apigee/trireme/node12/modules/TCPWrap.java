@@ -23,6 +23,9 @@ package io.apigee.trireme.node12.modules;
 
 import io.apigee.trireme.core.NodeRuntime;
 import io.apigee.trireme.core.InternalNodeModule;
+import io.apigee.trireme.core.Utils;
+import io.apigee.trireme.core.internal.AbstractIdObject;
+import io.apigee.trireme.core.internal.IdPropertyMap;
 import io.apigee.trireme.core.internal.ScriptRunner;
 import io.apigee.trireme.kernel.OSException;
 import io.apigee.trireme.kernel.handles.AbstractHandle;
@@ -30,6 +33,7 @@ import io.apigee.trireme.kernel.handles.IOCompletionHandler;
 import io.apigee.trireme.kernel.handles.NIOSocketHandle;
 import io.apigee.trireme.core.modules.Referenceable;
 import io.apigee.trireme.kernel.handles.SocketHandle;
+import io.apigee.trireme.kernel.util.PinState;
 import io.apigee.trireme.net.NetUtils;
 import org.mozilla.javascript.Context;
 import org.mozilla.javascript.Function;
@@ -46,6 +50,7 @@ import org.slf4j.LoggerFactory;
 import static io.apigee.trireme.core.ArgUtils.*;
 
 import java.lang.reflect.InvocationTargetException;
+import java.net.Inet6Address;
 import java.net.InetSocketAddress;
 
 /**
@@ -67,44 +72,67 @@ public class TCPWrap
         throws InvocationTargetException, IllegalAccessException, InstantiationException
     {
         ScriptableObject exports = (ScriptableObject)cx.newObject(scope);
-        exports.setPrototype(scope);
-        exports.setParentScope(null);
 
-        ScriptableObject.defineClass(exports, Referenceable.class, false, true);
-        ScriptableObject.defineClass(exports, JavaStreamWrap.StreamWrapImpl.class, false, true);
-        ScriptableObject.defineClass(exports, TCPImpl.class, false, true);
+        Function tcpImpl = new TCPImpl().exportAsClass(exports);
+        exports.put(TCPImpl.CLASS_NAME, exports, tcpImpl);
+        Function connectImpl = new ConnectImpl().exportAsClass(exports);
+        exports.put(ConnectImpl.CLASS_NAME, exports, connectImpl);
         return exports;
     }
 
     public static class TCPImpl
         extends JavaStreamWrap.StreamWrapImpl
     {
-        public static final String CLASS_NAME       = "TCP";
+        public static final String CLASS_NAME = "TCP";
 
-        private Function          onConnection;
+        private static final IdPropertyMap props = new IdPropertyMap(CLASS_NAME);
 
+        private Function     onConnection;
         private SocketHandle sockHandle;
 
-        @SuppressWarnings("unused")
+        private static final int
+            Id_onconnection = MAX_PROPERTY + 1,
+            Id_bind = MAX_METHOD + 1,
+            Id_bind6 = MAX_METHOD + 2,
+            Id_listen = MAX_METHOD + 3,
+            Id_connect = MAX_METHOD + 4,
+            Id_connect6 = MAX_METHOD + 5,
+            Id_shutdown = MAX_METHOD + 6,
+            Id_getsockname = MAX_METHOD + 7,
+            Id_getpeername = MAX_METHOD + 8,
+            Id_setnodelay = MAX_METHOD + 9,
+            Id_setkeepalive = MAX_METHOD + 10;
+
+        static {
+            JavaStreamWrap.StreamWrapImpl.defineIds(props);
+            props.addProperty("onconnection", Id_onconnection, 0);
+            props.addMethod("bind", Id_bind, 2);
+            props.addMethod("bind6", Id_bind6, 2);
+            props.addMethod("listen", Id_listen, 1);
+            props.addMethod("connect", Id_connect, 3);
+            props.addMethod("connect6", Id_connect6, 3);
+            props.addMethod("shutdown", Id_shutdown, 1);
+            props.addMethod("getsockname", Id_getsockname, 1);
+            props.addMethod("getpeername", Id_getpeername, 1);
+            props.addMethod("setNoDelay", Id_setnodelay, 1);
+            props.addMethod("setKeepAlive", Id_setkeepalive, 1);
+        }
+
         public TCPImpl()
         {
+            super(props);
         }
 
         protected TCPImpl(SocketHandle handle, ScriptRunner runtime)
         {
-            super(handle, runtime);
+            super(handle, runtime, props);
             this.sockHandle = handle;
         }
 
-        @JSConstructor
-        @SuppressWarnings("unused")
-        public static Object newTCPImpl(Context cx, Object[] args, Function ctorObj, boolean inNewExpr)
+        @Override
+        protected JavaStreamWrap.StreamWrapImpl defaultConstructor(Context cx, Object[] args)
         {
-            if (!inNewExpr) {
-                return cx.newObject(ctorObj, CLASS_NAME, args);
-            }
-
-            ScriptRunner runner = getRunner(cx);
+            ScriptRunner runner = (ScriptRunner)cx.getThreadLocal(ScriptRunner.RUNNER);
             SocketHandle handle = objArg(args, 0, SocketHandle.class, false);
             if (handle == null) {
                 handle = new NIOSocketHandle(runner);
@@ -113,54 +141,82 @@ public class TCPWrap
             // Unlike other types of handles, every open socket "pins" the server explicitly and keeps it
             // running until it is either closed or "unref" is called.
             TCPImpl tcp = new TCPImpl(handle, runner);
-            tcp.requestPin();
+            tcp.pinState.requestPin(runner);
             return tcp;
         }
 
         @Override
-        public String getClassName()
+        protected Object getInstanceIdValue(int id)
         {
-            return CLASS_NAME;
+            switch (id) {
+            case Id_onconnection:
+                return onConnection;
+            default:
+                return super.getInstanceIdValue(id);
+            }
         }
 
-        @JSSetter("onconnection")
-        @SuppressWarnings("unused")
-        public void setOnConnection(Function oc) {
-            this.onConnection = oc;
-        }
-
-        @JSGetter("onconnection")
-        @SuppressWarnings("unused")
-        public Function getOnConnection() {
-            return onConnection;
-        }
-
-        @JSFunction
-        @SuppressWarnings("unused")
-        public String bind(String address, int port)
+        @Override
+        protected void setInstanceIdValue(int id, Object value)
         {
+            switch (id) {
+            case Id_onconnection:
+                onConnection = (Function)value;
+                break;
+            default:
+                super.setInstanceIdValue(id, value);
+                break;
+            }
+        }
+
+        @Override
+        protected Object prototypeCall(int id, Context cx, Scriptable scope, Object[] args)
+        {
+            switch (id) {
+            case Id_bind:
+            case Id_bind6:
+                return bind(args);
+            case Id_listen:
+                return listen(args);
+            case Id_connect:
+            case Id_connect6:
+                return connect(args);
+            case Id_shutdown:
+                shutdown(args);
+                break;
+            case Id_getsockname:
+                getsockname(args);
+                break;
+            case Id_getpeername:
+                getpeername(args);
+                break;
+            case Id_setnodelay:
+                setNoDelay(cx, args);
+                break;
+            case Id_setkeepalive:
+                setKeepAlive(cx, args);
+                break;
+            default:
+                return super.prototypeCall(id, cx, scope, args);
+            }
+            return Undefined.instance;
+        }
+
+        private Object bind(Object[] args)
+        {
+            String address = stringArg(args, 0);
+            int port = intArg(args, 1);
             try {
                 sockHandle.bind(address, port);
-                clearErrno();
+                return Undefined.instance;
             } catch (OSException ose) {
-                setErrno(ose.getCode());
-                return ose.getStringCode();
+                return ose.getCode();
             }
-            return null;
         }
 
-        @JSFunction
-        @SuppressWarnings("unused")
-        public String bind6(String address, int port)
+        private Object listen(Object[] args)
         {
-            // TODO Java doesn't care. Do we need a check?
-            return bind(address, port);
-        }
-
-        @JSFunction
-        @SuppressWarnings("unused")
-        public String listen(int backlog)
-        {
+            int backlog = intArg(args, 0);
             try {
                 sockHandle.listen(backlog, new IOCompletionHandler<AbstractHandle>()
                 {
@@ -170,11 +226,9 @@ public class TCPWrap
                         onConnection(value);
                     }
                 });
-                clearErrno();
-                return null;
+                return Undefined.instance;
             } catch (OSException ose) {
-                setErrno(ose.getCode());
-                return ose.getStringCode();
+                return ose.getCode();
             }
         }
 
@@ -187,22 +241,20 @@ public class TCPWrap
             }
         }
 
-        @JSFunction
-        @SuppressWarnings("unused")
-        public static Object connect(Context cx, Scriptable thisObj, Object[] args, Function func)
+        private Object connect(Object[] args)
         {
-            final TCPImpl tcp = (TCPImpl)thisObj;
             final ConnectImpl req = objArg(args, 0, ConnectImpl.class, true);
             String host = stringArg(args, 1);
             int port = intArg(args, 2);
+            final TCPImpl self = this;
 
             try {
-                tcp.sockHandle.connect(host, port, new IOCompletionHandler<Integer>()
+                sockHandle.connect(host, port, new IOCompletionHandler<Integer>()
                 {
                     @Override
                     public void ioComplete(int errCode, Integer value)
                     {
-                        req.callOnComplete(Context.getCurrentContext(), tcp, tcp, errCode);
+                        req.callOnComplete(Context.getCurrentContext(), self, req, errCode);
                     }
                 });
             } catch (OSException ose) {
@@ -211,109 +263,120 @@ public class TCPWrap
             return Undefined.instance;
         }
 
-        @JSFunction
-        @SuppressWarnings("unused")
-        public static Object connect6(Context cx, Scriptable thisObj, Object[] args, Function func)
-        {
-            return connect(cx, thisObj, args, func);
-        }
-
-        @JSFunction
-        @SuppressWarnings("unused")
-        public static Object shutdown(Context cx, Scriptable thisObj, Object[] args, Function func)
+        private void shutdown(Object[] args)
         {
             final StreamWrap.ShutdownWrap req = objArg(args, 0, StreamWrap.ShutdownWrap.class, true);
-            final TCPImpl tcp = (TCPImpl)thisObj;
+            final TCPImpl self = this;
 
-            clearErrno();
-            tcp.sockHandle.shutdown(new IOCompletionHandler<Integer>()
+            sockHandle.shutdown(new IOCompletionHandler<Integer>()
             {
                 @Override
                 public void ioComplete(int errCode, Integer value)
                 {
-                    req.callOnComplete(Context.getCurrentContext(), tcp, tcp, errCode);
+                    req.callOnComplete(Context.getCurrentContext(), self, req, errCode);
                 }
             });
-            return req;
         }
 
-        @JSFunction
-        @SuppressWarnings("unused")
-        public static Object getsockname(Context cx, Scriptable thisObj, Object[] args, Function func)
+        private void getsockname(Object[] args)
         {
-            TCPImpl tcp = (TCPImpl)thisObj;
-
-            clearErrno();
-            InetSocketAddress addr = tcp.sockHandle.getSockName();
-            if (addr == null) {
-                return null;
+            Scriptable out = objArg(args, 0, Scriptable.class, true);
+            InetSocketAddress addr = sockHandle.getSockName();
+            if (addr != null) {
+                formatAddress(addr, out);
             }
-            return NetUtils.formatAddress(addr.getAddress(), addr.getPort(),
-                                          cx, thisObj);
         }
 
-        @JSFunction
-        @SuppressWarnings("unused")
-        public static Object getpeername(Context cx, Scriptable thisObj, Object[] args, Function func)
+        private void getpeername(Object[] args)
         {
-            TCPImpl tcp = (TCPImpl)thisObj;
-
-            clearErrno();
-            InetSocketAddress addr = tcp.sockHandle.getPeerName();
-            if (addr == null) {
-                return null;
+            Scriptable out = objArg(args, 0, Scriptable.class, true);
+            InetSocketAddress addr = sockHandle.getPeerName();
+            if (addr != null) {
+                formatAddress(addr, out);
             }
-            return NetUtils.formatAddress(addr.getAddress(), addr.getPort(),
-                                          cx, thisObj);
         }
 
-        @JSFunction
-        @SuppressWarnings("unused")
-        public void setNoDelay(boolean nd)
+        private void formatAddress(InetSocketAddress addr, Scriptable out)
         {
+            out.put("port", out, addr.getPort());
+            out.put("address", out, addr.getAddress().getHostAddress());
+            if (addr.getAddress() instanceof Inet6Address) {
+                out.put("family", out, "IPv6");
+            } else {
+                out.put("family", out, "IPv4");
+            }
+        }
+
+        private void setNoDelay(Context cx, Object[] args)
+        {
+            boolean nd = booleanArg(args, 0);
             try {
                 sockHandle.setNoDelay(nd);
-                clearErrno();
             } catch (OSException ose) {
-                setErrno(ose.getCode());
+                throw Utils.makeError(cx, this, ose);
             }
         }
 
-        @JSFunction
-        @SuppressWarnings("unused")
-        public void setKeepAlive(boolean nd)
+        private void setKeepAlive(Context cx, Object[] args)
         {
+            boolean nd = booleanArg(args, 0);
             try {
                 sockHandle.setKeepAlive(nd);
-                clearErrno();
             } catch (OSException ose) {
-                setErrno(ose.getCode());
+                throw Utils.makeError(cx, this, ose);
             }
         }
     }
 
     public static class ConnectImpl
-        extends ScriptableObject
+        extends AbstractIdObject<ConnectImpl>
     {
         public static final String CLASS_NAME = "TCPConnectWrap";
 
+        private static final IdPropertyMap props = new IdPropertyMap(CLASS_NAME);
+
+        private static final int
+            Id_oncomplete = 1;
+
+        static {
+            props.addProperty("oncomplete", Id_oncomplete, 0);
+        }
+
         private Function onComplete;
 
+        public ConnectImpl()
+        {
+            super(props);
+        }
+
         @Override
-        public String getClassName() {
-            return CLASS_NAME;
+        protected ConnectImpl defaultConstructor()
+        {
+            return new ConnectImpl();
         }
 
-        @JSGetter("oncomplete")
-        @SuppressWarnings("unused")
-        public Function getOnComplete() {
-            return onComplete;
+        @Override
+        protected Object getInstanceIdValue(int id)
+        {
+            switch (id) {
+            case Id_oncomplete:
+                return onComplete;
+            default:
+                return super.getInstanceIdValue(id);
+            }
         }
 
-        @JSSetter("oncomplete")
-        @SuppressWarnings("unused")
-        public void setOnComplete(Function f) {
-            this.onComplete = f;
+        @Override
+        protected void setInstanceIdValue(int id, Object value)
+        {
+            switch (id) {
+            case Id_oncomplete:
+                onComplete = (Function)value;
+                break;
+            default:
+                super.setInstanceIdValue(id, value);
+                break;
+            }
         }
 
         public void callOnComplete(Context cx, Scriptable thisObj, Scriptable handle, int err)

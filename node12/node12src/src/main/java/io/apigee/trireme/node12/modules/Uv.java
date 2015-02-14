@@ -59,33 +59,28 @@ public class Uv
     }
 
     public static class UvImpl
-        extends AbstractIdObject
+        extends AbstractIdObject<UvImpl>
     {
         public static final String CLASS_NAME = "_uvClass";
 
         private static final IdPropertyMap propMap;
 
-        static {
-            propMap = new IdPropertyMap();
-        }
-
         private static final int
             Id_errname = 2;
+
+        static {
+            propMap = new IdPropertyMap(CLASS_NAME);
+            propMap.addMethod("errname", Id_errname, 1);
+        }
 
         public UvImpl()
         {
             super(propMap);
-            propMap.addMethod("errname", Id_errname, 1);
         }
 
         @Override
-        protected Object defaultConstructor(Context cx, Object[] args) {
+        protected UvImpl defaultConstructor() {
             return new UvImpl();
-        }
-
-        @Override
-        public String getClassName() {
-            return CLASS_NAME;
         }
 
         public void init()
@@ -96,19 +91,19 @@ public class Uv
         }
 
         @Override
-        public Object execCall(int id, Context cx, Scriptable scope,
-                               Scriptable thisObj, Object[] args)
+        public Object prototypeCall(int id, Context cx, Scriptable scope,
+                                    Object[] args)
         {
             switch (id) {
             case Id_errname:
                 int err = intArg(args, 0);
                 if (err >= 0) {
-                    throw Utils.makeError(cx, thisObj, "err >= 0");
+                    throw Utils.makeError(cx, this, "err >= 0");
                 }
                 return ErrorCodes.get().toString(err);
 
             default:
-               return super.execCall(id, cx, scope, thisObj, args);
+               return super.prototypeCall(id, cx, scope, args);
             }
         }
     }

@@ -24,12 +24,14 @@ package io.apigee.trireme.node12.modules;
 import io.apigee.trireme.core.InternalNodeModule;
 import io.apigee.trireme.core.NodeRuntime;
 import io.apigee.trireme.core.Utils;
+import io.apigee.trireme.core.internal.IdPropertyMap;
 import io.apigee.trireme.core.internal.ScriptRunner;
 import io.apigee.trireme.kernel.handles.Handle;
 import org.mozilla.javascript.Context;
 import org.mozilla.javascript.Function;
 import org.mozilla.javascript.Scriptable;
 import org.mozilla.javascript.ScriptableObject;
+import org.mozilla.javascript.Undefined;
 import org.mozilla.javascript.annotations.JSConstructor;
 import org.mozilla.javascript.annotations.JSFunction;
 import org.mozilla.javascript.annotations.JSGetter;
@@ -63,10 +65,9 @@ public class ConsoleWrap
         throws InvocationTargetException, IllegalAccessException, InstantiationException
     {
         Scriptable exports = cx.newObject(scope);
-        exports.setPrototype(scope);
-        exports.setParentScope(null);
-        ScriptableObject.defineClass(exports, JavaStreamWrap.StreamWrapImpl.class, false, true);
-        ScriptableObject.defineClass(exports, ConsoleWrapImpl.class, false, true);
+
+        Function consoleWrap = new ConsoleWrapImpl().exportAsClass(exports);
+        exports.put(ConsoleWrapImpl.CLASS_NAME, exports, consoleWrap);
         return exports;
     }
 
@@ -75,54 +76,76 @@ public class ConsoleWrap
     {
         public static final String CLASS_NAME = "Console";
 
-        @Override
-        public String getClassName() {
-            return CLASS_NAME;
+        private static final IdPropertyMap props = new IdPropertyMap(CLASS_NAME);
+
+        private static final int
+            Id_setRawMode = MAX_METHOD + 1,
+            Id_getWindowSize = MAX_METHOD + 2,
+            Id_isTty = MAX_PROPERTY + 1;
+
+        static {
+            JavaStreamWrap.StreamWrapImpl.defineIds(props);
+            props.addMethod("setRawMode", Id_setRawMode, 0);
+            props.addMethod("getWindowSize", Id_getWindowSize, 1);
+            props.addProperty("isTTY", Id_isTty, ScriptableObject.READONLY);
+        }
+
+        public ConsoleWrapImpl()
+        {
+            super(props);
         }
 
         protected ConsoleWrapImpl(Handle handle, ScriptRunner runtime)
         {
-            super(handle, runtime);
+            super(handle, runtime, props);
         }
 
-        @SuppressWarnings("unused")
-        public ConsoleWrapImpl()
+        @Override
+        protected JavaStreamWrap.StreamWrapImpl defaultConstructor(Context cx, Object[] args)
         {
-        }
-
-        @JSConstructor
-        public static Object construct(Context cx, Object[] args, Function ctorObj, boolean inNewExpr)
-        {
-            if (!inNewExpr) {
-                return cx.newObject(ctorObj, CLASS_NAME);
-            }
-
             ScriptRunner runtime = (ScriptRunner)cx.getThreadLocal(ScriptRunner.RUNNER);
             Handle handle = objArg(args, 0, Handle.class, true);
             return new ConsoleWrapImpl(handle, runtime);
         }
 
-        @JSGetter("isTTY")
-        @SuppressWarnings("unused")
-        public boolean isTty() {
-            return true;
+        @Override
+        protected Object getInstanceIdValue(int id)
+        {
+            switch (id) {
+            case Id_isTty:
+                return true;
+            default:
+                return super.getInstanceIdValue(id);
+            }
         }
 
-        @JSFunction
-        @SuppressWarnings("unused")
-        public static void setRawMode(Context cx, Scriptable thisObj, Object[] args, Function func)
+        @Override
+        protected Object prototypeCall(int id, Context cx, Scriptable scope, Object[] args)
+        {
+            switch (id) {
+            case Id_setRawMode:
+                setRawMode(cx);
+                break;
+            case Id_getWindowSize:
+                getWindowSize(args);
+                break;
+            default:
+                return super.prototypeCall(id, cx, scope, args);
+            }
+            return Undefined.instance;
+        }
+
+        private void setRawMode(Context cx)
         {
             // There is actually no such thing as raw mode in Java
-            throw Utils.makeError(cx, thisObj, "Raw mode is not supported in Trireme.");
+            throw Utils.makeError(cx, this, "Raw mode is not supported in Trireme.");
         }
 
         /**
          * Do the best we can to determine the window size, and otherwise return 80x24. LINES and COLUMNS
          * works well on many platforms...
          */
-        @JSFunction
-        @SuppressWarnings("unused")
-        public static void getWindowSize(Context cx, Scriptable thisObj, Object[] args, Function func)
+        private void getWindowSize(Object[] args)
         {
             Scriptable s = objArg(args, 0, Scriptable.class, true);
 

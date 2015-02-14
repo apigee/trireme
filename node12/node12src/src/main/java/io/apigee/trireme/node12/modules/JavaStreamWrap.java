@@ -24,25 +24,20 @@ package io.apigee.trireme.node12.modules;
 import io.apigee.trireme.core.InternalNodeModule;
 import io.apigee.trireme.core.NodeRuntime;
 import io.apigee.trireme.core.ScriptTask;
+import io.apigee.trireme.core.internal.AbstractIdObject;
+import io.apigee.trireme.core.internal.IdPropertyMap;
 import io.apigee.trireme.kernel.Charsets;
 import io.apigee.trireme.core.internal.ScriptRunner;
 import io.apigee.trireme.kernel.ErrorCodes;
 import io.apigee.trireme.core.modules.Buffer;
-import io.apigee.trireme.core.modules.Referenceable;
 import io.apigee.trireme.kernel.handles.Handle;
 import io.apigee.trireme.kernel.handles.IOCompletionHandler;
+import io.apigee.trireme.kernel.util.PinState;
 import org.mozilla.javascript.Context;
 import org.mozilla.javascript.Function;
-import org.mozilla.javascript.ScriptRuntime;
 import org.mozilla.javascript.Scriptable;
 import org.mozilla.javascript.ScriptableObject;
 import org.mozilla.javascript.Undefined;
-import org.mozilla.javascript.annotations.JSConstructor;
-import org.mozilla.javascript.annotations.JSFunction;
-import org.mozilla.javascript.annotations.JSGetter;
-import org.mozilla.javascript.annotations.JSSetter;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 import java.lang.reflect.InvocationTargetException;
 import java.nio.ByteBuffer;
@@ -59,7 +54,6 @@ import static io.apigee.trireme.core.ArgUtils.*;
 public class JavaStreamWrap
     implements InternalNodeModule
 {
-    private static final Logger log = LoggerFactory.getLogger(JavaStreamWrap.class.getName());
 
     public static final String MODULE_NAME = "java_stream_wrap";
 
@@ -74,144 +68,214 @@ public class JavaStreamWrap
         throws InvocationTargetException, IllegalAccessException, InstantiationException
     {
         Scriptable exports = cx.newObject(scope);
-        exports.setPrototype(scope);
-        exports.setParentScope(null);
 
-        ScriptableObject.defineClass(exports, Referenceable.class);
-        ScriptableObject.defineClass(exports, StreamWrapImpl.class);
+        Function streamWrap = new StreamWrapImpl().exportAsClass(exports);
+        exports.put(StreamWrapImpl.CLASS_NAME, exports, streamWrap);
         return exports;
     }
 
     public static class StreamWrapImpl
-        extends Referenceable
+        extends AbstractIdObject<StreamWrapImpl>
     {
         public static final String CLASS_NAME = "JavaStream";
+
+        private static final IdPropertyMap props = new IdPropertyMap(CLASS_NAME);
+
+        private static final int
+            Id_readStop = 2,
+            Id_readStart = 3,
+            Id_writeUcs2String = 4,
+            Id_writeAsciiString = 5,
+            Id_writeUtf8String = 6,
+            Id_writeBuffer = 7,
+            Id_close = 8,
+            Id_ref = 9,
+            Id_unref = 10,
+
+            Id_bytes = 1,
+            Id_writeQueueSize = 2,
+            Id_onRead = 3;
+
+        protected static final int
+            MAX_METHOD = Id_unref,
+            MAX_PROPERTY = Id_onRead;
+
+        static {
+            defineIds(props);
+        }
 
         protected int byteCount;
         private Function onRead;
         protected ScriptRunner runtime;
         private Handle handle;
         private boolean reading;
+        protected final PinState pinState = new PinState();
 
-        @Override
-        public String getClassName() {
-            return CLASS_NAME;
+        protected static void defineIds(IdPropertyMap p)
+        {
+            p.addMethod("readStop", Id_readStop, 0);
+            p.addMethod("readStart", Id_readStart, 0);
+            p.addMethod("writeUcs2String", Id_writeUcs2String, 2);
+            p.addMethod("writeAsciiString", Id_writeAsciiString, 2);
+            p.addMethod("writeUtf8String", Id_writeUtf8String, 2);
+            p.addMethod("writeBuffer", Id_writeBuffer, 2);
+            p.addMethod("close", Id_close, 1);
+            p.addMethod("ref", Id_ref, 0);
+            p.addMethod("unref", Id_unref, 0);
+
+            p.addProperty("bytes", Id_bytes, ScriptableObject.READONLY);
+            p.addProperty("writeQueueSize", Id_writeQueueSize, ScriptableObject.READONLY);
+            p.addProperty("onread", Id_onRead, 0);
         }
 
-        @SuppressWarnings("unused")
         public StreamWrapImpl()
         {
+            super(props);
+        }
+
+        protected StreamWrapImpl(IdPropertyMap p)
+        {
+            super(p);
         }
 
         protected StreamWrapImpl(Handle handle, ScriptRunner runtime)
         {
+            super(props);
             this.handle = handle;
             this.runtime = runtime;
         }
 
-        @JSConstructor
-        public static Object construct(Context cx, Object[] args, Function ctorObj, boolean inNewExpr)
+        protected StreamWrapImpl(Handle handle, ScriptRunner runtime, IdPropertyMap p)
         {
-            if (!inNewExpr) {
-                return cx.newObject(ctorObj, CLASS_NAME, args);
-            }
+            super(p);
+            this.handle = handle;
+            this.runtime = runtime;
+        }
 
+        @Override
+        protected Object getInstanceIdValue(int id)
+        {
+            switch (id) {
+            case Id_bytes:
+                return byteCount;
+            case Id_writeQueueSize:
+                return handle.getWritesOutstanding();
+            case Id_onRead:
+                return onRead;
+            default:
+                return super.getInstanceIdValue(id);
+            }
+        }
+
+        @Override
+        protected void setInstanceIdValue(int id, Object val)
+        {
+            switch (id) {
+            case Id_onRead:
+                onRead = (Function)val;
+                break;
+            default:
+                super.setInstanceIdValue(id, val);
+                break;
+            }
+        }
+
+        @Override
+        protected StreamWrapImpl defaultConstructor(Context cx, Object[] args)
+        {
             ScriptRunner runtime = (ScriptRunner)cx.getThreadLocal(ScriptRunner.RUNNER);
             Handle handle = objArg(args, 0, Handle.class, true);
             return new StreamWrapImpl(handle, runtime);
         }
 
-        @JSGetter("bytes")
-        @SuppressWarnings("unused")
-        public int getByteCount() {
-            return byteCount;
-        }
-
-        @JSGetter("writeQueueSize")
-        @SuppressWarnings("unused")
-        public int getWriteQueueSize()
+        @Override
+        protected StreamWrapImpl defaultConstructor()
         {
-            return handle.getWritesOutstanding();
+            throw new AssertionError();
         }
 
-        @JSSetter("onread")
-        @SuppressWarnings("unused")
-        public void setOnRead(Function r) {
-            this.onRead = r;
+        @Override
+        protected Object prototypeCall(int id, Context cx, Scriptable scope, Object[] args)
+        {
+            switch (id) {
+            case Id_readStart:
+                readStart();
+                break;
+            case Id_readStop:
+                readStop();
+                break;
+            case Id_writeBuffer:
+                writeBuffer(args);
+                break;
+            case Id_writeUcs2String:
+                writeString(cx, args, Charsets.UCS2);
+                break;
+            case Id_writeAsciiString:
+                writeString(cx, args, Charsets.ASCII);
+                break;
+            case Id_writeUtf8String:
+                writeString(cx, args, Charsets.UTF8);
+                break;
+            case Id_close:
+                close(args);
+                break;
+            case Id_ref:
+                ref();
+                break;
+            case Id_unref:
+                unref();
+                break;
+            default:
+                return super.prototypeCall(id, cx, scope, args);
+            }
+            return Undefined.instance;
         }
 
-        @JSGetter("onread")
-        @SuppressWarnings("unused")
-        public Function getOnRead() {
-            return onRead;
-        }
-
-        @JSFunction
-        @SuppressWarnings("unused")
-        public static void close(Context cx, Scriptable thisObj, Object[] args, Function func)
+        private void close(Object[] args)
         {
             Function cb = functionArg(args, 0, false);
-            StreamWrapImpl self = (StreamWrapImpl)thisObj;
 
-            self.readStop();
-            self.handle.close();
-            self.close();
+            readStop();
+            handle.close();
+            pinState.clearPin(runtime);
 
             if (cb != null) {
-                self.runtime.enqueueCallback(cb, self, null,
-                                             (Scriptable)(self.runtime.getDomain()),
-                                             ScriptRuntime.emptyArgs);
+                runtime.enqueueCallback(cb, this, null,
+                                        (Scriptable)(runtime.getDomain()),
+                                        Context.emptyArgs);
             }
         }
 
-        @JSFunction
-        @SuppressWarnings("unused")
-        public static void writeBuffer(Context cx, Scriptable thisObj, Object[] args, Function func)
+        private void ref()
+        {
+            pinState.ref(runtime);
+        }
+
+        private void unref()
+        {
+            pinState.unref(runtime);
+        }
+
+        private void writeBuffer(Object[] args)
         {
             final StreamWrap.WriteWrap req = objArg(args, 0, StreamWrap.WriteWrap.class, true);
             Buffer.BufferImpl buf = objArg(args, 1, Buffer.BufferImpl.class, true);
-            final StreamWrapImpl self = (StreamWrapImpl)thisObj;
 
-            int len = self.handle.write(buf.getBuffer(), new IOCompletionHandler<Integer>()
+            int len = handle.write(buf.getBuffer(), new IOCompletionHandler<Integer>()
             {
                 @Override
                 public void ioComplete(int errCode, Integer value)
                 {
-                    req.callOnComplete(Context.getCurrentContext(), self, self, errCode);
+                    req.callOnComplete(Context.getCurrentContext(), StreamWrapImpl.this, StreamWrapImpl.this, errCode);
                 }
             });
-            self.updateByteCount(req, len);
+            updateByteCount(req, len);
         }
 
-        @JSFunction
-        @SuppressWarnings("unused")
-        public static void writeUtf8String(Context cx, Scriptable thisObj, Object[] args, Function func)
+        private void writeString(Context cx, Object[] args, Charset cs)
         {
-            StreamWrap.WriteWrap req = objArg(args, 0, StreamWrap.WriteWrap.class, true);
+            final StreamWrap.WriteWrap req = objArg(args, 0, StreamWrap.WriteWrap.class, true);
             String s = stringArg(args, 1);
-            ((StreamWrapImpl)thisObj).doWrite(cx, req, s, Charsets.UTF8);
-        }
-
-        @JSFunction
-        @SuppressWarnings("unused")
-        public static void writeAsciiString(Context cx, Scriptable thisObj, Object[] args, Function func)
-        {
-            StreamWrap.WriteWrap req = objArg(args, 0, StreamWrap.WriteWrap.class, true);
-            String s = stringArg(args, 1);
-            ((StreamWrapImpl)thisObj).doWrite(cx, req, s, Charsets.ASCII);
-        }
-
-        @JSFunction
-        @SuppressWarnings("unused")
-        public static void writeUcs2String(Context cx, Scriptable thisObj, Object[] args, Function func)
-        {
-            StreamWrap.WriteWrap req = objArg(args, 0, StreamWrap.WriteWrap.class, true);
-            String s = stringArg(args, 1);
-            ((StreamWrapImpl)thisObj).doWrite(cx, req, s, Charsets.UCS2);
-        }
-
-        private void doWrite(Context cx, final StreamWrap.WriteWrap req, String s, Charset cs)
-        {
             final StreamWrapImpl self = this;
 
             int len = handle.write(s, cs, new IOCompletionHandler<Integer>()
@@ -250,9 +314,7 @@ public class JavaStreamWrap
             });
         }
 
-        @JSFunction
-        @SuppressWarnings("unused")
-        public void readStart()
+        private void readStart()
         {
             if (!reading) {
                 handle.startReading(new IOCompletionHandler<ByteBuffer>()
@@ -267,9 +329,7 @@ public class JavaStreamWrap
             }
         }
 
-        @JSFunction
-        @SuppressWarnings("unused")
-        public void readStop()
+        private void readStop()
         {
             if (reading) {
                 handle.stopReading();

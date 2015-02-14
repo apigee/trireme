@@ -23,35 +23,24 @@ package io.apigee.trireme.core.modules;
 
 import io.apigee.trireme.core.internal.ScriptRunner;
 import io.apigee.trireme.kernel.ErrorCodes;
+import io.apigee.trireme.kernel.util.PinState;
 import org.mozilla.javascript.Context;
 import org.mozilla.javascript.ScriptableObject;
 import org.mozilla.javascript.annotations.JSFunction;
 
+/**
+ * This is a superclass used by many internal modules to manage "pin" and "unpin" behavior.
+ */
+
 public class Referenceable
     extends ScriptableObject
 {
-    /** If set, then the object has requested a pin from the OS */
-    private static final int PIN_REQUESTED = 0x01;
-    /** If set, then the user called "unref" which explicitly avoids the pinned state */
-    private static final int PIN_ALLOWED = 0x02;
-    private static final int PINNABLE = PIN_REQUESTED | PIN_ALLOWED;
-
-    private int pinState = PIN_ALLOWED;
+    private final PinState state = new PinState();
 
     @Override
     public String getClassName()
     {
         return "_Referenceable";
-    }
-
-    private void updatePinState(int newState)
-    {
-        if ((pinState != PINNABLE) && (newState == PINNABLE)) {
-            getRunner().pin();
-        } else if ((pinState == PINNABLE) && (newState != PINNABLE)) {
-            getRunner().unPin();
-        }
-        pinState = newState;
     }
 
     /**
@@ -61,7 +50,7 @@ public class Referenceable
     public void ref()
     {
         clearErrno();
-        updatePinState(pinState | PIN_ALLOWED);
+        state.ref(getRunner());
     }
 
     /**
@@ -72,7 +61,7 @@ public class Referenceable
     public void unref()
     {
         clearErrno();
-        updatePinState(pinState & ~PIN_ALLOWED);
+        state.unref(getRunner());
     }
 
     /**
@@ -80,7 +69,7 @@ public class Referenceable
      */
     protected void requestPin()
     {
-        updatePinState(pinState | PIN_REQUESTED);
+        state.requestPin(getRunner());
     }
 
     /**
@@ -88,7 +77,7 @@ public class Referenceable
      */
     protected void clearPin()
     {
-        updatePinState(pinState & ~PIN_REQUESTED);
+        state.clearPin(getRunner());
     }
 
     @JSFunction

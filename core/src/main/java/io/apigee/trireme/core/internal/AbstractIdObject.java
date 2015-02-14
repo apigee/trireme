@@ -22,32 +22,96 @@
 package io.apigee.trireme.core.internal;
 
 import org.mozilla.javascript.Context;
+import org.mozilla.javascript.Function;
 import org.mozilla.javascript.IdFunctionObject;
 import org.mozilla.javascript.IdScriptableObject;
 import org.mozilla.javascript.Scriptable;
 
 /**
- * This class makes it easier to use Rhino's "IdFunctionObject" by maintaining a map between prototype method
+ * <p>This class makes it easier to use Rhino's "IdFunctionObject" by maintaining a map between prototype method
  * names and property names, so all the implementor has to do is implement them.
  * IdFunctionObject is more efficient than using the @JSFunction and @JSGetter annotations because
- * it does not use reflection.
+ * it does not use reflection. This class uses a set of static HashMaps, per Java class, to mape between
+ * function and property IDs and names. This is slightly less-efficient than the hand-rolled switches
+ * used in Rhino source code but it is very close.
+ * </p>
+ * <p>
+ * To use a class, a subclass must:
+ * <ul>
+ *     <li>Create an instance of IdPropertyMap for the class. This should be static.</li>
+ *     <li>Call "addMethod" on that object for every new method it supports, with a unique numeric id.</li>
+ *     <li>Call "addProperty" on that object for every property, with a unique id.</li>
+ *     <li>Override "defaultConstructor" to return a valid instance of the class.</li>
+ *     <li>If the class has prototype functions, override "prototypeCall" to implement them based on the id.</li>
+ *     <li>If the class has other functions that do not depend on "this," override "anonymousCall".</li>
+ *     <li>If the class has properties, override "getInstanceIdValue" and "setInstanceIdValue".</li>
+ *     <li>Call "exportAsClass" on initialization to register the constructor and all its properties in
+ *         a JavaScript scope before using the class.</li>
+ * </ul>
+ * </p>
  */
 
-public abstract class AbstractIdObject
+public abstract class AbstractIdObject<T extends AbstractIdObject>
     extends IdScriptableObject
 {
     protected static final int Id_constructor = 1;
 
     private final IdPropertyMap map;
 
+    /**
+     * Subclasses may override this method to implement a prototype function. Each function will
+     * be called on the object that corresponds to "this" in the current scope. In order for
+     * this function to work, the "IdPropertyMap" for this class must have an entry for "id"
+     * entered by calling "addMethod". Subclasses should call "super.prototypeCall()" with all
+     * the arguments for any ID that is invalid.
+     */
+    protected Object prototypeCall(int id, Context cx, Scriptable scope, Object[] args)
+    {
+        return anonymousCall(id, cx, scope, this, args);
+    }
+
+    /**
+     * Subclasses may override this method to implement a function that does not necessarily depend
+     * on the value of "this" in the current scope. In order for
+     * this function to work, the "IdPropertyMap" for this class must have an entry for "id"
+     * entered by calling "addMethod". Subclasses should call "super.prototypeCall()" with all
+     * the arguments for any ID that is invalid.
+     */
+    protected Object anonymousCall(int id, Context cx, Scriptable scope, Object thisObj, Object[] args)
+    {
+        throw new IllegalArgumentException(String.valueOf(id));
+    }
+
+    /**
+     * Subclasses who need arguments to their constructor may override this function. If they do, then
+     * they should override the no-args form of this function as well to throw an Error.
+     */
+    protected T defaultConstructor(Context cx, Object[] args)
+    {
+        return defaultConstructor();
+    }
+
+    /**
+     * Subclasses must override this function. It must return an instance of the implementation
+     * class. It will be used during class initalization as well as every time a new instance
+     * is created.
+     */
+    protected abstract T defaultConstructor();
+
     protected AbstractIdObject(IdPropertyMap map)
     {
         this.map = map;
     }
 
-    public void exportAsClass(Scriptable scope)
+    @Override
+    public String getClassName()
     {
-        exportAsJSClass(Math.max(1, map.maxPrototypeId), scope, false);
+        return map.className;
+    }
+
+    public Function exportAsClass(Scriptable scope)
+    {
+        return exportAsJSClass(Math.max(1, map.maxPrototypeId), scope, false);
     }
 
     @Override
@@ -119,15 +183,12 @@ public abstract class AbstractIdObject
                 return f.construct(cx, scope, args);
             }
         } else {
-            return execCall(f.methodId(), cx, scope, thisObj, args);
+            if (thisObj instanceof AbstractIdObject) {
+                T self = (T)thisObj;
+                return self.prototypeCall(f.methodId(), cx, scope, args);
+            } else {
+                return anonymousCall(f.methodId(), cx, scope, thisObj, args);
+            }
         }
     }
-
-    protected Object execCall(int id, Context cx, Scriptable scope, Scriptable thisObj,
-                              Object[] args)
-    {
-        throw new IllegalArgumentException(String.valueOf(id));
-    }
-
-    protected abstract Object defaultConstructor(Context cx, Object[] args);
 }

@@ -78,16 +78,15 @@ public class CaresWrap
         new CaresImpl().exportAsClass(scope);
 
         CaresImpl cares = (CaresImpl)cx.newObject(scope, CaresImpl.CLASS_NAME);
-        cares.setPrototype(scope);
-        cares.setParentScope(null);
 
         cares.init(runner);
-        new ReqWrap().exportAsClass(cares);
+        Function reqWrap = new ReqWrap().exportAsClass(cares);
+        cares.put(ReqWrap.CLASS_NAME, cares, reqWrap);
         return cares;
     }
 
     public static class CaresImpl
-        extends AbstractIdObject
+        extends AbstractIdObject<CaresImpl>
     {
         public static final String CLASS_NAME = "_caresClass";
 
@@ -103,7 +102,7 @@ public class CaresWrap
         private DNSResolver resolver;
 
         static {
-            props = new IdPropertyMap();
+            props = new IdPropertyMap(CLASS_NAME);
             props.addMethod("isIP", m_isIp, 1);
             props.addMethod("getaddrinfo", m_getaddrinfo, 3);
             props.addProperty("AF_INET", p_af_inet, ScriptableObject.READONLY);
@@ -122,7 +121,7 @@ public class CaresWrap
         }
 
         @Override
-        protected Object defaultConstructor(Context cx, Object[] args) {
+        protected CaresImpl defaultConstructor() {
             return new CaresImpl();
         }
 
@@ -210,17 +209,25 @@ public class CaresWrap
         }
 
         @Override
-        protected Object execCall(int id, Context cx, Scriptable scope, Scriptable thisObj,
-                                  Object[] args)
+        protected Object prototypeCall(int id, Context cx, Scriptable scope, Object[] args)
+        {
+            switch (id) {
+            case m_getaddrinfo:
+                getaddrinfo(cx, args);
+                return Undefined.instance;
+            default:
+                return super.prototypeCall(id, cx, scope, args);
+            }
+        }
+
+        @Override
+        protected Object anonymousCall(int id, Context cx, Scriptable scope, Object thisObj, Object[] args)
         {
             switch (id) {
             case m_isIp:
                 return isIP(args);
-            case m_getaddrinfo:
-                ((CaresImpl)thisObj).getaddrinfo(cx, args);
-                return Undefined.instance;
             default:
-                return super.execCall(id, cx, scope, thisObj, args);
+                return super.anonymousCall(id, cx, scope, thisObj, args);
             }
         }
 
@@ -380,7 +387,7 @@ public class CaresWrap
     }
 
     public static class ReqWrap
-        extends AbstractIdObject
+        extends AbstractIdObject<ReqWrap>
     {
         public static final String CLASS_NAME = "GetAddrInfoReqWrap";
 
@@ -392,7 +399,7 @@ public class CaresWrap
         private static final IdPropertyMap props;
 
         static {
-            props = new IdPropertyMap();
+            props = new IdPropertyMap(CLASS_NAME);
             props.addProperty("callback", p_callback, 0);
             props.addProperty("family", p_family, 0);
             props.addProperty("hostname", p_hostname, 0);
@@ -414,12 +421,7 @@ public class CaresWrap
         }
 
         @Override
-        public String getClassName() {
-            return CLASS_NAME;
-        }
-
-        @Override
-        protected Object defaultConstructor(Context cx, Object[] args) {
+        protected ReqWrap defaultConstructor() {
             return new ReqWrap();
         }
 

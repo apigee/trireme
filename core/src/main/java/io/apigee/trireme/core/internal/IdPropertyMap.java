@@ -37,6 +37,12 @@ public class IdPropertyMap
 
     int maxInstanceId;
     int maxPrototypeId;
+    final String className;
+
+    public IdPropertyMap(String className)
+    {
+        this.className = className;
+    }
 
     static final class MethodInfo
     {
@@ -54,8 +60,13 @@ public class IdPropertyMap
 
     public void addProperty(String name, int id, int attrs)
     {
+        assert(id > 0);
+
         // Stash the id along with the attributes
+        assert(!propertyNames.containsKey(name));
         propertyNames.put(name, (attrs << 16) | id);
+
+        assert(!propertyIds.containsKey(id));
         propertyIds.put(id, name);
         if (id > maxInstanceId) {
             maxInstanceId = id;
@@ -64,8 +75,13 @@ public class IdPropertyMap
 
     public void addMethod(String name, int id, int arity)
     {
+        assert(id > AbstractIdObject.Id_constructor);
+
         MethodInfo mi = new MethodInfo(name, id, arity);
+        assert(!methodNames.containsKey(name));
         methodNames.put(name, mi);
+
+        assert(!methodIds.containsKey(id));
         methodIds.put(id, mi);
         if (id > maxPrototypeId) {
             maxPrototypeId = id;

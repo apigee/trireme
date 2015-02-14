@@ -21,10 +21,7 @@
  */
 package io.apigee.trireme.core.modules;
 
-import org.mozilla.javascript.ScriptableObject;
-
-public abstract class AbstractFilesystem
-    extends ScriptableObject
+public interface AbstractFilesystem
 {
-    public abstract void cleanup();
+    void cleanup();
 }

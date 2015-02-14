@@ -81,7 +81,8 @@ public class Filesystem
     }
 
     public static class FSImpl
-        extends AbstractFilesystem
+        extends ScriptableObject
+        implements AbstractFilesystem
     {
         public static final String CLASS_NAME = "_fsClassNode10Sync";
 

@@ -32,4 +32,23 @@ public class IdObjectTest
                           1, null);
         Context.exit();
     }
+
+    @Test
+    public void testNestedIdObject()
+        throws IOException
+    {
+        InputStream is = IdObjectTest.class.getResourceAsStream("/scripts/idobjecttest.js");
+        assertNotNull(is);
+
+        Context cx = Context.enter();
+        ScriptableObject global = cx.initStandardObjects();
+        new TestIdClass().exportAsClass(global);
+        TestIdClass javaId = (TestIdClass)cx.newObject(global, "IdObject");
+        javaId.setParentScope(null);
+        global.put("javaId", global, javaId);
+
+        cx.evaluateString(global, Utils.readStream(is), "idobjectest.js",
+                          1, null);
+        Context.exit();
+    }
 }

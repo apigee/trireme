@@ -25,7 +25,7 @@ import io.apigee.trireme.core.internal.AbstractModuleRegistry;
 import io.apigee.trireme.core.internal.ChildModuleRegistry;
 import io.apigee.trireme.core.internal.RootModuleRegistry;
 import io.apigee.trireme.core.internal.ScriptRunner;
-import io.apigee.trireme.core.modules.ProcessWrap;
+import io.apigee.trireme.core.internal.TriremeProcess;
 import org.mozilla.javascript.Scriptable;
 
 import java.io.File;
@@ -110,7 +110,7 @@ public class NodeScript
             runner = new ScriptRunner(this, env, sandbox, scriptFile, args);
         }
         runner.setRegistry(registry);
-        runner.setParentProcess((ProcessWrap.ProcessImpl)parentProcess);
+        runner.setParentProcess((TriremeProcess)parentProcess);
         if (workingDir != null) {
             try {
                 runner.setWorkingDirectory(workingDir);
@@ -149,7 +149,7 @@ public class NodeScript
 
         runner = new ScriptRunner(this, env, sandbox, scriptName,
                                   makeModuleScript(), args);
-        runner.setParentProcess((ProcessWrap.ProcessImpl)parentProcess);
+        runner.setParentProcess((TriremeProcess)parentProcess);
         runner.setRegistry(registry);
         if (workingDir != null) {
             try {
@@ -344,7 +344,7 @@ public class NodeScript
     {
         this.parentProcess = parent;
         if (runner != null) {
-            runner.setParentProcess((ProcessWrap.ProcessImpl)parent);
+            runner.setParentProcess((TriremeProcess)parent);
         }
     }
 

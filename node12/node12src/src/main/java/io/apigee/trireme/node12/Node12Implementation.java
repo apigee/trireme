@@ -28,6 +28,7 @@ import io.apigee.trireme.node12.modules.ConsoleWrap;
 import io.apigee.trireme.node12.modules.Filesystem;
 import io.apigee.trireme.node12.modules.JavaStreamWrap;
 import io.apigee.trireme.node12.modules.PipeWrap;
+import io.apigee.trireme.node12.modules.ProcessWrap;
 import io.apigee.trireme.node12.modules.Smalloc;
 import io.apigee.trireme.node12.modules.StreamWrap;
 import io.apigee.trireme.node12.modules.TCPWrap;
@@ -73,6 +74,7 @@ public class Node12Implementation
             { "_tls_legacy",           P + "node._tls_legacy" },
             { "_tls_wrap",             P + "node._tls_wrap" },
             { "assert",                P + "node.assert" },
+            { "child_process",         P + "node.child_process" },
             { "cluster",               P + "node.cluster" },
             { "console",               P + "node.console" },
             { "constants",             P + "node.constants" },
@@ -101,7 +103,6 @@ public class Node12Implementation
 
             { "http",                   P + "trireme.adaptorhttp" },
             { "https",                  P + "trireme.adaptorhttps" },
-            { "child_process",          P + "trireme.child_process" },
             { "crypto",                 P + "trireme.crypto" },
             { "trireme_metrics",        P + "trireme.trireme_metrics" },
             { "tls",                    P + "trireme.tls" },
@@ -120,6 +121,7 @@ public class Node12Implementation
         r.add(Filesystem.class);
         r.add(JavaStreamWrap.class);
         r.add(PipeWrap.class);
+        r.add(ProcessWrap.class);
         r.add(Smalloc.class);
         r.add(StreamWrap.class);
         r.add(TCPWrap.class);

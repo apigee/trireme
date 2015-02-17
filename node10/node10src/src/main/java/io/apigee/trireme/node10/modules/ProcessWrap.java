@@ -19,7 +19,7 @@
  * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
  * SOFTWARE.
  */
-package io.apigee.trireme.core.modules;
+package io.apigee.trireme.node10.modules;
 
 import io.apigee.trireme.core.NodeException;
 import io.apigee.trireme.core.NodeRuntime;
@@ -30,12 +30,15 @@ import io.apigee.trireme.core.ScriptStatus;
 import io.apigee.trireme.core.ScriptStatusListener;
 import io.apigee.trireme.core.ScriptTask;
 import io.apigee.trireme.core.SubprocessPolicy;
+import io.apigee.trireme.core.internal.GenericProcess;
+import io.apigee.trireme.core.internal.ProcessManager;
+import io.apigee.trireme.core.internal.TriremeProcess;
+import io.apigee.trireme.core.modules.*;
 import io.apigee.trireme.kernel.streams.BitBucketInputStream;
 import io.apigee.trireme.kernel.streams.BitBucketOutputStream;
 import io.apigee.trireme.core.InternalNodeModule;
 import io.apigee.trireme.kernel.streams.NoCloseInputStream;
 import io.apigee.trireme.kernel.streams.NoCloseOutputStream;
-import io.apigee.trireme.core.internal.NodeOSException;
 import io.apigee.trireme.core.internal.ScriptRunner;
 import io.apigee.trireme.kernel.streams.StreamPiper;
 import io.apigee.trireme.core.Utils;
@@ -66,8 +69,6 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.atomic.AtomicInteger;
 import java.util.regex.Pattern;
 
 /**
@@ -84,17 +85,6 @@ public class ProcessWrap
     public static final String STDIO_IPC =       "ipc";
 
     private static final Pattern EQUALS = Pattern.compile("=");
-
-    // A sentinel object for handling IPC "disconnect" events
-    public static final Object IPC_DISCONNECT = new Object();
-
-    /**
-     * This is a global process table for all Noderunner processes in the same JVM. This way PIDs are
-     * portable across spawned processes, although not across VMs.
-     */
-    private static final ConcurrentHashMap<Integer, SpawnedProcess> processTable =
-        new ConcurrentHashMap<Integer, SpawnedProcess>();
-    private static final AtomicInteger nextPid = new AtomicInteger(1);
 
     @Override
     public String getModuleName()
@@ -117,20 +107,7 @@ public class ProcessWrap
         return exports;
     }
 
-    public static void kill(Context cx, Scriptable scope, int pid, String signal)
-    {
-        SpawnedProcess proc = processTable.get(pid);
-        if (proc == null) {
-            throw Utils.makeError(cx, scope, new NodeOSException(Constants.ESRCH));
-        }
 
-        if (signal != null) {
-            if (log.isDebugEnabled()) {
-                log.debug("Terminating pid {} ({}) with {}", pid, proc, signal);
-            }
-            proc.terminate(signal);
-        }
-    }
 
     public static class ProcessModuleImpl
         extends ScriptableObject
@@ -225,14 +202,15 @@ public class ProcessWrap
                 }
             }
 
+            ProcessManager mgr = ProcessManager.get();
             String procName = execArgs.get(0);
-            self.pid = nextPid.getAndIncrement();
-            if ("node".equals(procName) || Process.EXECUTABLE_NAME.equals(procName)) {
+            self.pid = mgr.getNextPid();
+            if ("node".equals(procName) || io.apigee.trireme.core.modules.Process.EXECUTABLE_NAME.equals(procName)) {
                 self.spawned = new SpawnedTriremeProcess(self);
             } else {
                 self.spawned = new SpawnedOSProcess(self);
             }
-            processTable.put(self.pid, self.spawned);
+            mgr.addProcess(self.pid, self.spawned);
             return self.spawned.spawn(cx, execArgs, options);
         }
 
@@ -242,7 +220,7 @@ public class ProcessWrap
                 log.debug("Process {} exited with code {} and signal {}", spawned, code, signal);
             }
             spawned.setFinished(true);
-            processTable.remove(pid);
+            ProcessManager.get().removeProcess(pid);
             final Object domain = runner.getDomain();
             runner.enqueueTask(new ScriptTask()
             {
@@ -287,7 +265,7 @@ public class ProcessWrap
             if (self.spawned == null) {
                 throw new AssertionError("Sending to closed process");
             }
-            self.spawned.send(cx, IPC_DISCONNECT);
+            self.spawned.send(cx, TriremeProcess.IPC_DISCONNECT);
         }
 
         @JSGetter("connected")
@@ -338,6 +316,7 @@ public class ProcessWrap
     }
 
     public abstract static class SpawnedProcess
+        implements GenericProcess
     {
         protected boolean finished;
         protected final ProcessImpl parent;
@@ -347,7 +326,8 @@ public class ProcessWrap
             this.parent = parent;
         }
 
-        abstract void terminate(String code);
+        @Override
+        public abstract void terminate(String code);
         abstract void close();
         abstract Object spawn(Context cx, List<String> execArgs, Scriptable options);
 
@@ -431,7 +411,7 @@ public class ProcessWrap
         }
 
         @Override
-        void terminate(String signal)
+        public void terminate(String signal)
         {
             if (proc != null) {
                 proc.destroy();
@@ -616,7 +596,7 @@ public class ProcessWrap
         }
 
         @Override
-        void terminate(String code)
+        public void terminate(String code)
         {
             future.cancel(true);
         }

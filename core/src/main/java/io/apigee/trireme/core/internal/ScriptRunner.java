@@ -36,7 +36,6 @@ import io.apigee.trireme.core.modules.AbstractFilesystem;
 import io.apigee.trireme.core.modules.Buffer;
 import io.apigee.trireme.core.modules.NativeModule;
 import io.apigee.trireme.core.modules.Process;
-import io.apigee.trireme.core.modules.ProcessWrap;
 import io.apigee.trireme.kernel.PathTranslator;
 import io.apigee.trireme.kernel.fs.AdvancedFilesystem;
 import io.apigee.trireme.kernel.fs.BasicFilesystem;
@@ -125,7 +124,7 @@ public class ScriptRunner
     private Buffer.BufferModuleImpl buffer;
     private String              workingDirectory;
     private String              scriptFileName;
-    private ProcessWrap.ProcessImpl parentProcess;
+    private TriremeProcess      parentProcess;
     private boolean             forceRepl;
 
     private ScriptableObject    scope;
@@ -313,7 +312,7 @@ public class ScriptRunner
         return ((sandbox != null) && (sandbox.getStderr() != null)) ? sandbox.getStderr() : System.err;
     }
 
-    public ProcessWrap.ProcessImpl getParentProcess() {
+    public TriremeProcess getParentProcess() {
         return parentProcess;
     }
 
@@ -321,7 +320,7 @@ public class ScriptRunner
         return process;
     }
 
-    public void setParentProcess(ProcessWrap.ProcessImpl parentProcess)
+    public void setParentProcess(TriremeProcess parentProcess)
     {
         this.parentProcess = parentProcess;
     }
@@ -427,12 +426,12 @@ public class ScriptRunner
      * @param child If null, deliver the message to the "process" object. Otherwise, deliver it to the
      *              specified child.
      */
-    public void enqueueIpc(Context cx, Object message, final ProcessWrap.ProcessImpl child)
+    public void enqueueIpc(Context cx, Object message, final TriremeProcess child)
     {
         Object toDeliver;
         String event = "message";
 
-        if (message == ProcessWrap.IPC_DISCONNECT) {
+        if (message == TriremeProcess.IPC_DISCONNECT) {
             event = "disconnect";
             toDeliver = Undefined.instance;
 

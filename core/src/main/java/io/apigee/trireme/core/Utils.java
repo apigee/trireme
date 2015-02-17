@@ -190,6 +190,37 @@ public class Utils
         return err;
     }
 
+    public static Scriptable makeErrorObject(Context cx, Scriptable scope, String message, int code, String path)
+    {
+        return makeErrorObject(cx, scope, message, ErrorCodes.get().toString(code), path);
+    }
+
+    public static RhinoException makeError(Context cx, Scriptable scope, String message, int code, String path)
+    {
+        return new JavaScriptException(makeErrorObject(cx, scope, message, ErrorCodes.get().toString(code), path));
+    }
+
+    public static Scriptable makeErrorObject(Context cx, Scriptable scope, String message, int code)
+    {
+        return makeErrorObject(cx, scope, message, code, null);
+    }
+
+    public static RhinoException makeError(Context cx, Scriptable scope, String message, int code)
+    {
+        return new JavaScriptException(makeErrorObject(cx, scope, message, code, null));
+    }
+
+    public static Scriptable makeErrorObject(Context cx, Scriptable scope, int code)
+    {
+        return makeErrorObject(cx, scope, ErrorCodes.get().toString(code),
+                               ErrorCodes.get().toString(code), null);
+    }
+
+    public static RhinoException makeError(Context cx, Scriptable scope, int code)
+    {
+        return new JavaScriptException(makeErrorObject(cx, scope, code));
+    }
+
     /**
      * Create an exception that may be thrown from Java code, causing an exception and an Error object
      * to be thrown in JavaScript.

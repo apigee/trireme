@@ -39,6 +39,7 @@ public class ErrorCodes
 
     public static final int EACCES = -13;
     public static final int EADDRINUSE = -48;
+    public static final int EAGAIN = -35;
     public static final int ECONNREFUSED = -61;
     public static final int EBADF = -9;
     public static final int EINTR = -4;
@@ -47,6 +48,8 @@ public class ErrorCodes
     public static final int EIO = -5;
     public static final int EILSEQ = -92;
     public static final int EISDIR = -21;
+    public static final int ENFILE = -23;
+    public static final int EMFILE = -24;
     public static final int ENOTFOUND = -2;
     public static final int ENOTEMPTY = -66;
     public static final int ENOENT = -2;
@@ -88,6 +91,7 @@ public class ErrorCodes
     {
         mapCode("EACCES", EACCES);
         mapCode("EADDRINUSE", EADDRINUSE);
+        mapCode("EAGAIN", EAGAIN);
         mapCode("ECONNREFUSED", ECONNREFUSED);
         mapCode("EBADF", EBADF);
         mapCode("EINTR", EINTR);
@@ -96,6 +100,8 @@ public class ErrorCodes
         mapCode("EIO", EIO);
         mapCode("EILSEQ", EILSEQ);
         mapCode("EISDIR", EISDIR);
+        mapCode("EMFILE", EMFILE);
+        mapCode("ENFILE", ENFILE);
         mapCode("ENOTFOUND", ENOTFOUND);
         mapCode("ENOTEMPTY", ENOTEMPTY);
         mapCode("ENOENT", ENOENT);

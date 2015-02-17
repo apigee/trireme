@@ -51,7 +51,8 @@ import java.util.concurrent.TimeUnit;
  * (although this is not required). It sets up the global environment, including initializing the JavaScript
  * context that will be inherited by everything else.
  */
-public class NodeEnvironment
+public class
+    NodeEnvironment
 {
     private static final Logger log = LoggerFactory.getLogger(RootModuleRegistry.class);
 

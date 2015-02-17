@@ -12,7 +12,16 @@ var gotClose = false;
 var gotExit = false;
 var gotError = false;
 
-var echo = child.spawn('echo', ['Hello, World!']);
+var echo;
+try {
+  echo = child.spawn('echo', ['Hello, World!']);
+} catch (e) {
+  if (op === 'fail') {
+    process.exit(0);
+  } else {
+    throw e;
+  }
+}
 
 echo.on('exit', function(code, signal) {
   console.log('Got exit %d', code);
@@ -38,4 +47,20 @@ process.on('exit', function() {
     assert(gotExit);
     assert(gotClose);
   }
+});
+
+echo.stdin.on('close', function() {
+  console.log('stdin closed');
+});
+echo.stdout.on('close', function() {
+  console.log('stdout closed');
+});
+echo.stderr.on('close', function() {
+  console.log('stderr closed');
+});
+echo.stdout.on('data', function(chunk) {
+  console.log('stdout: %s', chunk);
+});
+echo.stderr.on('data', function(chunk) {
+  console.log('stderr: %s', chunk);
 });

@@ -91,13 +91,14 @@ public class JavaStreamWrap
             Id_close = 8,
             Id_ref = 9,
             Id_unref = 10,
+            Id_writeBinaryString = 11,
 
             Id_bytes = 1,
             Id_writeQueueSize = 2,
             Id_onRead = 3;
 
         protected static final int
-            MAX_METHOD = Id_unref,
+            MAX_METHOD = Id_writeBinaryString,
             MAX_PROPERTY = Id_onRead;
 
         static {
@@ -118,6 +119,7 @@ public class JavaStreamWrap
             p.addMethod("writeUcs2String", Id_writeUcs2String, 2);
             p.addMethod("writeAsciiString", Id_writeAsciiString, 2);
             p.addMethod("writeUtf8String", Id_writeUtf8String, 2);
+            p.addMethod("writeBinaryString", Id_writeBinaryString, 2);
             p.addMethod("writeBuffer", Id_writeBuffer, 2);
             p.addMethod("close", Id_close, 1);
             p.addMethod("ref", Id_ref, 0);
@@ -216,6 +218,9 @@ public class JavaStreamWrap
             case Id_writeUtf8String:
                 writeString(cx, args, Charsets.UTF8);
                 break;
+            case Id_writeBinaryString:
+                writeString(cx, args, Charsets.NODE_BINARY);
+                break;
             case Id_close:
                 close(args);
                 break;
@@ -236,13 +241,14 @@ public class JavaStreamWrap
             Function cb = functionArg(args, 0, false);
 
             readStop();
-            handle.close();
+            if (handle != null) {
+                handle.close();
+            }
             pinState.clearPin(runtime);
 
             if (cb != null) {
-                runtime.enqueueCallback(cb, this, null,
-                                        (Scriptable)(runtime.getDomain()),
-                                        Context.emptyArgs);
+                // Need to give scripts, especially tests, a chance to set up callbacks
+                runtime.enqueueCallback(cb, cb, this, runtime.getDomain(), Context.emptyArgs);
             }
         }
 
@@ -344,11 +350,10 @@ public class JavaStreamWrap
             if (onRead != null) {
                 Buffer.BufferImpl jBuf = (buf == null ? null : Buffer.BufferImpl.newBuffer(cx, this, buf, false));
                 if (err == 0) {
-                    runtime.clearErrno();
+                    onRead.call(cx, onRead, this, new Object[]{(buf == null ? 0 : buf.remaining()), jBuf});
                 } else {
-                    runtime.setErrno(ErrorCodes.get().toString(err));
+                    onRead.call(cx, onRead, this, new Object[]{err});
                 }
-                onRead.call(cx, onRead, this, new Object[] { jBuf, 0, (buf == null ? 0 : buf.remaining()) });
             }
         }
     }

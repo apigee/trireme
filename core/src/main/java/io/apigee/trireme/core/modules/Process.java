@@ -25,8 +25,10 @@ import io.apigee.trireme.core.NodeModule;
 import io.apigee.trireme.core.NodeRuntime;
 import io.apigee.trireme.core.internal.AbstractModuleRegistry;
 import io.apigee.trireme.core.internal.NodeExitException;
+import io.apigee.trireme.core.internal.ProcessManager;
 import io.apigee.trireme.core.internal.ScriptRunner;
 import io.apigee.trireme.core.Utils;
+import io.apigee.trireme.core.internal.TriremeProcess;
 import io.apigee.trireme.kernel.Platform;
 import io.apigee.trireme.core.internal.Version;
 import io.apigee.trireme.kernel.handles.AbstractHandle;
@@ -536,7 +538,7 @@ public class Process
                 signal = null;
             }
 
-            ProcessWrap.kill(cx, thisObj, pid, signal);
+            ProcessManager.get().kill(cx, thisObj, pid, signal);
         }
 
         @JSGetter("pid")
@@ -567,7 +569,7 @@ public class Process
 
             // We have a parent, which has a reference to its own "child_process" object that
             // refers back to us. Put a message on THAT script's queue that came from us.
-            ProcessWrap.ProcessImpl childObj = self.runner.getParentProcess();
+            TriremeProcess childObj = self.runner.getParentProcess();
             childObj.getRuntime().enqueueIpc(cx, message, childObj);
         }
 
@@ -581,11 +583,11 @@ public class Process
                 throw Utils.makeError(cx, thisObj, "IPC is not enabled back to the parent");
             }
 
-            ProcessWrap.ProcessImpl childObj = self.runner.getParentProcess();
+            TriremeProcess childObj = self.runner.getParentProcess();
 
             self.emit.call(cx, self.emit, thisObj, new Object[] { "disconnected" });
             self.connected = false;
-            childObj.getRuntime().enqueueIpc(cx, ProcessWrap.IPC_DISCONNECT, childObj);
+            childObj.getRuntime().enqueueIpc(cx, TriremeProcess.IPC_DISCONNECT, childObj);
         }
 
         @JSGetter("_errno")

@@ -23,12 +23,16 @@ package io.apigee.trireme.node12.modules;
 
 import io.apigee.trireme.core.InternalNodeModule;
 import io.apigee.trireme.core.NodeRuntime;
+import io.apigee.trireme.core.internal.AbstractIdObject;
+import io.apigee.trireme.core.internal.IdPropertyMap;
 import org.mozilla.javascript.Context;
 import org.mozilla.javascript.Function;
 import org.mozilla.javascript.JavaScriptException;
 import org.mozilla.javascript.Scriptable;
 import org.mozilla.javascript.ScriptableObject;
 import org.mozilla.javascript.annotations.JSConstructor;
+
+import static io.apigee.trireme.core.ArgUtils.*;
 
 import java.lang.reflect.InvocationTargetException;
 
@@ -45,47 +49,70 @@ public class PipeWrap
         throws InvocationTargetException, IllegalAccessException, InstantiationException
     {
         ScriptableObject exports = (ScriptableObject)cx.newObject(global);
-        exports.setPrototype(global);
-        exports.setParentScope(null);
 
-        ScriptableObject.defineClass(exports, PipeImpl.class);
-        ScriptableObject.defineClass(exports, PipeConnectImpl.class);
+        Function pipe = new PipeImpl().exportAsClass(global);
+        exports.put(PipeImpl.CLASS_NAME, exports, pipe);
+        Function conn = new PipeConnectImpl().exportAsClass(global);
+        exports.put(PipeConnectImpl.CLASS_NAME, exports, conn);
         return exports;
     }
 
     public static class PipeImpl
-        extends ScriptableObject
+        extends JavaStreamWrap.StreamWrapImpl
     {
         public static final String CLASS_NAME = "Pipe";
 
-        @Override
-        public String getClassName() {
-            return CLASS_NAME;
+        private static final IdPropertyMap props = new IdPropertyMap(CLASS_NAME);
+
+        static {
+            JavaStreamWrap.StreamWrapImpl.defineIds(props);
         }
 
-        @JSConstructor
-        @SuppressWarnings("unused")
-        public static Object construct(Context cx, Object[] args, Function ctorObj, boolean inNewExp)
+        public PipeImpl()
         {
-            throw new JavaScriptException("Pipe is not supported in Trireme");
+            super(props);
+        }
+
+        @Override
+        protected JavaStreamWrap.StreamWrapImpl defaultConstructor(Context cx, Object[] args)
+        {
+            if (args.length > 0) {
+                boolean ipc = booleanArg(args, 0, false);
+                if (ipc) {
+                    throw new JavaScriptException("No IPC yet!");
+                }
+            }
+            return new PipeImpl();
+        }
+
+        @Override
+        protected JavaStreamWrap.StreamWrapImpl defaultConstructor()
+        {
+            throw new AssertionError();
         }
     }
 
     public static class PipeConnectImpl
-        extends ScriptableObject
+        extends AbstractIdObject<PipeConnectImpl>
     {
         public static final String CLASS_NAME = "PipeConnectWrap";
+
+        private static final IdPropertyMap props = new IdPropertyMap(CLASS_NAME);
+
+        public PipeConnectImpl()
+        {
+            super(props);
+        }
 
         @Override
         public String getClassName() {
             return CLASS_NAME;
         }
 
-        @JSConstructor
-        @SuppressWarnings("unused")
-        public static Object construct(Context cx, Object[] args, Function ctorObj, boolean inNewExp)
+        @Override
+        protected PipeConnectImpl defaultConstructor()
         {
-            throw new JavaScriptException("Pipe is not supported in Trireme");
+            throw new JavaScriptException("PipeConnect not implemented yet");
         }
     }
 }

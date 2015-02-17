@@ -23,6 +23,7 @@ package io.apigee.trireme.kernel.handles;
 
 import io.apigee.trireme.kernel.ErrorCodes;
 import io.apigee.trireme.kernel.GenericNodeRuntime;
+import io.apigee.trireme.kernel.util.PinState;
 
 import java.io.EOFException;
 import java.io.IOException;
@@ -44,6 +45,7 @@ public class JavaInputStreamHandle
 
     private final InputStream in;
     private final GenericNodeRuntime runtime;
+    private final PinState pinState = new PinState();
 
     private Future<?> readTask;
     private volatile boolean reading;
@@ -65,7 +67,7 @@ public class JavaInputStreamHandle
         // but when we are reading many problems are averted when we do. Note that we don't do this for
         // network handles, but instead "pin" when the socket is first created.
         reading = true;
-        runtime.pin();
+        pinState.requestPin(runtime);
         readTask = runtime.getUnboundedPool().submit(new Runnable()
         {
             @Override
@@ -122,7 +124,7 @@ public class JavaInputStreamHandle
     public void stopReading()
     {
         if (reading) {
-            runtime.unPin();
+            pinState.clearPin(runtime);
             reading = false;
         }
         if (readTask != null) {

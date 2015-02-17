@@ -6,6 +6,7 @@ import io.apigee.trireme.node10.modules.CaresWrap;
 import io.apigee.trireme.node10.modules.ConsoleWrap;
 import io.apigee.trireme.node10.modules.Filesystem;
 import io.apigee.trireme.node10.modules.JavaStreamWrap;
+import io.apigee.trireme.node10.modules.ProcessWrap;
 import io.apigee.trireme.node10.modules.TCPWrap;
 
 import java.util.ArrayList;
@@ -84,6 +85,7 @@ public class Node10Implementation
         r.add(ConsoleWrap.class);
         r.add(Filesystem.class);
         r.add(JavaStreamWrap.class);
+        r.add(ProcessWrap.class);
         r.add(TCPWrap.class);
         return r;
     }

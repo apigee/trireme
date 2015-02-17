@@ -21,6 +21,7 @@
  */
 package io.apigee.trireme.kernel.handles;
 
+import io.apigee.trireme.kernel.ErrorCodes;
 import io.apigee.trireme.kernel.util.StringUtils;
 
 import java.nio.ByteBuffer;
@@ -33,6 +34,8 @@ import java.nio.charset.Charset;
 public abstract class AbstractHandle
     implements Handle
 {
+    private boolean deliveredEof;
+
     public int write(ByteBuffer buf, IOCompletionHandler<Integer> handler)
     {
         throw new IllegalStateException("Handle not capable of writing");
@@ -56,12 +59,15 @@ public abstract class AbstractHandle
 
     public void startReading(IOCompletionHandler<ByteBuffer> handler)
     {
-        throw new IllegalStateException("Handle not capable of reading");
+        // If we get here then we have nothing to read, so it's immediate EOF.
+        if (!deliveredEof) {
+            deliveredEof = true;
+            handler.ioComplete(ErrorCodes.EOF, null);
+        }
     }
 
     public void stopReading()
     {
-        throw new IllegalStateException("Handle not capable of reading");
     }
 
     public abstract void close();

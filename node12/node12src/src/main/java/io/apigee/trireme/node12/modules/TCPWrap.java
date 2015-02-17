@@ -31,19 +31,12 @@ import io.apigee.trireme.kernel.OSException;
 import io.apigee.trireme.kernel.handles.AbstractHandle;
 import io.apigee.trireme.kernel.handles.IOCompletionHandler;
 import io.apigee.trireme.kernel.handles.NIOSocketHandle;
-import io.apigee.trireme.core.modules.Referenceable;
 import io.apigee.trireme.kernel.handles.SocketHandle;
-import io.apigee.trireme.kernel.util.PinState;
-import io.apigee.trireme.net.NetUtils;
 import org.mozilla.javascript.Context;
 import org.mozilla.javascript.Function;
 import org.mozilla.javascript.Scriptable;
 import org.mozilla.javascript.ScriptableObject;
 import org.mozilla.javascript.Undefined;
-import org.mozilla.javascript.annotations.JSConstructor;
-import org.mozilla.javascript.annotations.JSFunction;
-import org.mozilla.javascript.annotations.JSGetter;
-import org.mozilla.javascript.annotations.JSSetter;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -223,7 +216,7 @@ public class TCPWrap
                     @Override
                     public void ioComplete(int errCode, AbstractHandle value)
                     {
-                        onConnection(value);
+                        onConnection(errCode, value);
                     }
                 });
                 return Undefined.instance;
@@ -232,12 +225,13 @@ public class TCPWrap
             }
         }
 
-        protected void onConnection(AbstractHandle handle)
+        protected void onConnection(int errCode, AbstractHandle handle)
         {
             Context cx = Context.getCurrentContext();
             if (onConnection != null) {
                 TCPImpl sock = (TCPImpl)cx.newObject(this, CLASS_NAME, new Object[] { handle });
-                onConnection.call(cx, onConnection, this, new Object[] { sock });
+                onConnection.call(cx, onConnection, this,
+                                  new Object[] { (errCode == 0 ? Undefined.instance : errCode), sock });
             }
         }
 
@@ -246,7 +240,6 @@ public class TCPWrap
             final ConnectImpl req = objArg(args, 0, ConnectImpl.class, true);
             String host = stringArg(args, 1);
             int port = intArg(args, 2);
-            final TCPImpl self = this;
 
             try {
                 sockHandle.connect(host, port, new IOCompletionHandler<Integer>()
@@ -254,7 +247,7 @@ public class TCPWrap
                     @Override
                     public void ioComplete(int errCode, Integer value)
                     {
-                        req.callOnComplete(Context.getCurrentContext(), self, req, errCode);
+                        req.callOnComplete(Context.getCurrentContext(), TCPWrap.TCPImpl.this, errCode);
                     }
                 });
             } catch (OSException ose) {
@@ -379,14 +372,15 @@ public class TCPWrap
             }
         }
 
-        public void callOnComplete(Context cx, Scriptable thisObj, Scriptable handle, int err)
+        public void callOnComplete(Context cx, JavaStreamWrap.StreamWrapImpl handle, int err)
         {
             if ((onComplete == null) || Undefined.instance.equals(onComplete)) {
                 return;
             }
 
             boolean rw = (err == 0);
-            onComplete.call(cx, onComplete, thisObj,
+            // This one wants err to be "0" for success, unlike "undefined" for some other ones
+            onComplete.call(cx, onComplete, handle,
                             new Object[] {
                                 err, handle, this, rw, rw
                             });

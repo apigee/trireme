@@ -33,12 +33,15 @@ import org.mozilla.javascript.Context;
 import org.mozilla.javascript.RhinoException;
 import org.mozilla.javascript.optimizer.ClassCompiler;
 
+import java.io.BufferedReader;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileOutputStream;
+import java.io.FileReader;
 import java.io.IOException;
 import java.io.InputStreamReader;
 import java.io.OutputStreamWriter;
+import java.nio.charset.Charset;
 
 /**
  * Compile the JavaScript source in a given directory to .class files that may be loaded and executed as
@@ -49,6 +52,8 @@ import java.io.OutputStreamWriter;
 public class RhinoCompiler
     extends AbstractMojo
 {
+    public static final Charset UTF8 = Charset.forName("UTF-8");
+
     /**
      * The base directory for JavaScript sources. Defaults to src/main/javascript.
      */
@@ -85,6 +90,9 @@ public class RhinoCompiler
     @Parameter
     private boolean generateObserverCount;
 
+    @Parameter
+    private String macroFile;
+
     private CompilerEnvirons createEnvironment()
     {
         // Since this is only used in our own project, we hard-code these. A "real" plugin would
@@ -104,6 +112,16 @@ public class RhinoCompiler
     public void execute()
         throws MojoExecutionException, MojoFailureException
     {
+        // Be prepared to remove some macros from the source before compiling
+        MacroProcessor macro = null;
+        if (macroFile != null) {
+            try {
+                macro = new MacroProcessor(macroFile);
+            } catch (IOException e) {
+                throw new MojoFailureException(e.toString());
+            }
+        }
+
         Log log = getLog();
         File baseDir = new File(directory);
         if (baseDir.exists() && baseDir.isDirectory()) {
@@ -131,7 +149,7 @@ public class RhinoCompiler
                     log.info("Compiling " + fn + " to " + output.getPath());
 
                     try {
-                        String source = loadSource(input);
+                        String source = loadSource(input, macro);
 
                         Object[] bytes;
                         try {
@@ -166,26 +184,29 @@ public class RhinoCompiler
         return fn;
     }
 
-    private String loadSource(File in)
+    private String loadSource(File in, MacroProcessor macro)
         throws IOException
     {
         StringBuilder str = new StringBuilder();
-        InputStreamReader rdr = new InputStreamReader(new FileInputStream(in));
-        char[] buf = new char[4096];
-        int cr;
+        BufferedReader rdr =
+            new BufferedReader(new FileReader(in));
+        String line;
 
         try {
             do {
-                cr = rdr.read(buf);
-                if (cr > 0) {
-                    str.append(buf, 0, cr);
+                line = rdr.readLine();
+                if (line != null) {
+                    if (macro != null) {
+                        line = macro.processLine(line);
+                    }
+                    str.append(line).append('\n');
                 }
-            } while (cr > 0);
+            } while (line != null);
+
+            return str.toString();
         } finally {
             rdr.close();
         }
-
-        return str.toString();
     }
 
     private String addPrefixes(String s)

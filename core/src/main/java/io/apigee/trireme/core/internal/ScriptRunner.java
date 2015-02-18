@@ -1119,6 +1119,7 @@ public class ScriptRunner
             // The buffer module needs special handling because of the "charsWritten" variable
             buffer = (Buffer.BufferModuleImpl)require("buffer", cx);
 
+            /* TODO REMOVE CLASS
             // These macros are used all over node code, so stub them out.
             // A JavaScript preprocessor does this in real node -- TODO to switch to that.
             Scriptable metrics = nativeMod.internalRequire("trireme_metrics", cx);
@@ -1134,6 +1135,7 @@ public class ScriptRunner
             copyProp(metrics, scope, "COUNTER_HTTP_CLIENT_RESPONSE");
             copyProp(metrics, scope, "COUNTER_HTTP_SERVER_REQUEST");
             copyProp(metrics, scope, "COUNTER_HTTP_SERVER_RESPONSE");
+            */
 
         } catch (InvocationTargetException e) {
             throw new NodeException(e);

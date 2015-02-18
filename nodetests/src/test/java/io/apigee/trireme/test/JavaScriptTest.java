@@ -22,9 +22,7 @@ import java.io.FilenameFilter;
 import java.io.IOException;
 import java.io.PrintWriter;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.Collection;
-import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 @RunWith(Parameterized.class)
@@ -32,7 +30,7 @@ public class JavaScriptTest
     extends TestBase
 {
     public static final String NODE_VERSION_10 = "0.10";
-    public static final String NODE_VERSION_11 = "0.11";
+    public static final String NODE_VERSION_12 = "0.11";
 
     public static final String[] BASE_DIRS_10 =
         new String[] { "../node10/node10tests/simple",
@@ -41,12 +39,11 @@ public class JavaScriptTest
                        "../node10/node10tests/iconv",
                        "../node10/node10tests/xml",
                        "../node10/node10tests/internet" };
-    public static final String[] BASE_DIRS_11 =
-    //    new String[] { "../node11/node11tests/simple" };
-        new String[] { };
+    public static final String[] BASE_DIRS_12 =
+        new String[] { "../node12/node12tests/simple" };
     public static final String[] TEMP_DIRS = { "target/test-classes/test/tmp",
-                                               "../node10/node10tests/tmp" }; //,
-    //                                           "../node11/node11tests/tmp"};
+                                               "../node10/node10tests/tmp",
+                                               "../node11/node12tests/tmp"};
     public static final String RESULT_FILE = "target/results.out";
     public static final String TEST_FILE_NAME_PROP = "TestFile";
     public static final String TEST_ADAPTER_PROP = "TestAdapter";
@@ -116,9 +113,9 @@ public class JavaScriptTest
                 addDirectory(ret, bd, namePattern, adapter, NODE_VERSION_10);
             }
         }
-        if ((version == null) || "11".equals(version)) {
-            for (String bd : BASE_DIRS_11) {
-                addDirectory(ret, bd, namePattern, adapter, NODE_VERSION_11);
+        if ((version == null) || "12".equals(version)) {
+            for (String bd : BASE_DIRS_12) {
+                addDirectory(ret, bd, namePattern, adapter, NODE_VERSION_12);
             }
         }
         return ret;

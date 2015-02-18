@@ -26,6 +26,7 @@ import io.apigee.trireme.core.spi.NodeImplementation;
 import io.apigee.trireme.node12.modules.CaresWrap;
 import io.apigee.trireme.node12.modules.ConsoleWrap;
 import io.apigee.trireme.node12.modules.Filesystem;
+import io.apigee.trireme.node12.modules.HTTPParser;
 import io.apigee.trireme.node12.modules.JavaStreamWrap;
 import io.apigee.trireme.node12.modules.PipeWrap;
 import io.apigee.trireme.node12.modules.ProcessWrap;
@@ -119,6 +120,7 @@ public class Node12Implementation
         r.add(CaresWrap.class);
         r.add(ConsoleWrap.class);
         r.add(Filesystem.class);
+        r.add(HTTPParser.class);
         r.add(JavaStreamWrap.class);
         r.add(PipeWrap.class);
         r.add(ProcessWrap.class);

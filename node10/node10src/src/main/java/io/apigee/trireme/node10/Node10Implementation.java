@@ -5,6 +5,7 @@ import io.apigee.trireme.core.spi.NodeImplementation;
 import io.apigee.trireme.node10.modules.CaresWrap;
 import io.apigee.trireme.node10.modules.ConsoleWrap;
 import io.apigee.trireme.node10.modules.Filesystem;
+import io.apigee.trireme.node10.modules.HTTPParser;
 import io.apigee.trireme.node10.modules.JavaStreamWrap;
 import io.apigee.trireme.node10.modules.ProcessWrap;
 import io.apigee.trireme.node10.modules.TCPWrap;
@@ -84,6 +85,7 @@ public class Node10Implementation
         r.add(CaresWrap.class);
         r.add(ConsoleWrap.class);
         r.add(Filesystem.class);
+        r.add(HTTPParser.class);
         r.add(JavaStreamWrap.class);
         r.add(ProcessWrap.class);
         r.add(TCPWrap.class);

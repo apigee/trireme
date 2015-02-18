@@ -19,11 +19,12 @@
  * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
  * SOFTWARE.
  */
-package io.apigee.trireme.core.modules;
+package io.apigee.trireme.node10.modules;
 
 import io.apigee.trireme.core.NodeRuntime;
 import io.apigee.trireme.core.InternalNodeModule;
 import io.apigee.trireme.core.Utils;
+import io.apigee.trireme.core.modules.Buffer;
 import io.apigee.trireme.kernel.Charsets;
 import io.apigee.trireme.core.internal.NodeOSException;
 import io.apigee.trireme.kernel.http.HTTPParsingMachine;

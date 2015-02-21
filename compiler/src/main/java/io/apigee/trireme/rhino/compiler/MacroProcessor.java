@@ -46,6 +46,7 @@ public class MacroProcessor
         String line = l;
         for (Pattern pat : patterns) {
             while (true) {
+                // Loop here to catch nested macros.
                 Matcher m = pat.matcher(line);
                 if (m.find()) {
                     line = m.replaceFirst("");

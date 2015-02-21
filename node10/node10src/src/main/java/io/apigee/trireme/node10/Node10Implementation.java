@@ -70,7 +70,6 @@ public class Node10Implementation
             { "https",                  P + "trireme.adaptorhttps" },
             { "child_process",          P + "trireme.child_process" },
             { "crypto",                 P + "trireme.crypto" },
-            { "trireme_metrics",        P + "trireme.trireme_metrics" },
             { "tls",                    P + "trireme.tls" },
             { "tty",                    P + "trireme.tty" },
             { "vm",                     P + "trireme.vm" },

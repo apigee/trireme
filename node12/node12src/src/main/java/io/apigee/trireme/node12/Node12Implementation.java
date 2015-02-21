@@ -105,7 +105,6 @@ public class Node12Implementation
             { "http",                   P + "trireme.adaptorhttp" },
             { "https",                  P + "trireme.adaptorhttps" },
             { "crypto",                 P + "trireme.crypto" },
-            { "trireme_metrics",        P + "trireme.trireme_metrics" },
             { "tls",                    P + "trireme.tls" },
             { "tty",                    P + "trireme.tty" },
             { "vm",                     P + "trireme.vm" },

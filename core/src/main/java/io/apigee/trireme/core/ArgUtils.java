@@ -41,6 +41,21 @@ public class ArgUtils
             Pattern.compile("^([0-9]+(\\.[0-9]+)?((e|E)(\\+\\-)?[0-9]+)?)|(0(x|X)[0-9a-fA-F]+)$");
 
     /**
+     * Turn an object into an integer if we can.
+     */
+    public static int toInt(Object o)
+    {
+        if (o instanceof Number) {
+            return ((Number)o).intValue();
+        }
+        double d = Context.toNumber(o);
+        if (Double.isNaN(d)) {
+            return 0;
+        }
+        return (int)d;
+    }
+
+    /**
      * Throw an execption if the argument list isn't long enough for argument "pos".
      */
     public static void ensureArg(Object[] args, int pos)

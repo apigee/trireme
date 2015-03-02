@@ -284,16 +284,11 @@
     });
   };
 
+  /*
+   * Set up tick handling. Trireme does not have "microtasks" so we simplified this a bit.
+   */
   startup.processNextTick = function() {
     var nextTickQueue = [];
-    var microtasksScheduled = false;
-
-    // Used to run V8's micro task queue.
-    var _runMicrotasks = {};
-
-    // This tickInfo thing is used so that the C++ code in src/node.cc
-    // can have easy accesss to our nextTick state, and avoid unnecessary
-    var tickInfo = {};
 
     // *Must* match Environment::TickInfo::Fields in src/env.h.
     var kIndex = 0;
@@ -301,12 +296,13 @@
 
     process.nextTick = nextTick;
     // Needs to be accessible from beyond this scope.
+
     process._tickCallback = _tickCallback;
     process._tickDomainCallback = _tickDomainCallback;
 
-    process._setupNextTick(tickInfo, _tickCallback, _runMicrotasks);
-
-    _runMicrotasks = _runMicrotasks.runMicrotasks;
+    // Return an object with efficient access to the integers that track tick counts
+    var tickInfo =
+      process._setupNextTick(_tickCallback);
 
     function tickDone() {
       if (tickInfo[kLength] !== 0) {
@@ -321,33 +317,10 @@
       tickInfo[kIndex] = 0;
     }
 
-    function scheduleMicrotasks() {
-      if (microtasksScheduled)
-        return;
-
-      nextTickQueue.push({
-        callback: runMicrotasksCallback,
-        domain: null
-      });
-
-      tickInfo[kLength]++;
-      microtasksScheduled = true;
-    }
-
-    function runMicrotasksCallback() {
-      microtasksScheduled = false;
-      _runMicrotasks();
-
-      if (tickInfo[kIndex] < tickInfo[kLength])
-        scheduleMicrotasks();
-    }
-
     // Run callbacks that have no domain.
     // Using domains will cause this to be overridden.
     function _tickCallback() {
       var callback, threw, tock;
-
-      scheduleMicrotasks();
 
       while (tickInfo[kIndex] < tickInfo[kLength]) {
         tock = nextTickQueue[tickInfo[kIndex]++];
@@ -369,8 +342,6 @@
 
     function _tickDomainCallback() {
       var callback, domain, threw, tock;
-
-      scheduleMicrotasks();
 
       while (tickInfo[kIndex] < tickInfo[kLength]) {
         tock = nextTickQueue[tickInfo[kIndex]++];
@@ -703,7 +674,7 @@
       // node.cc always re-calls the ticks after executing a callback.
       process._tickCallback();
     }
-    process._submitTick = submitTick;
+    process._submitTickCallback = submitTick;
 
     function submitDomainTick(func, thisObj, domain) {
       var fargs = copyArgs(arguments, 3);
@@ -724,7 +695,7 @@
     function usingDomains() {
       process._currentTickHandler = process._nextDomainTick;
       process._tickCallback = process._tickDomainCallback;
-      process._submitTick = submitDomainTick;
+      process._submitTickCallback = submitDomainTick;
     }
     process._usingDomains = usingDomains;
 

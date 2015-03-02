@@ -26,25 +26,32 @@ var complete = 0;
 
 process.nextTick(function() {
   complete++;
+  console.log('nested 1 %d', complete);
   process.nextTick(function() {
     complete++;
+    console.log('nested 2 %d', complete);
     process.nextTick(function() {
       complete++;
+      console.log('nested 3 %d', complete);
     });
   });
 });
 
 setTimeout(function() {
+  console.log('In timer');
   process.nextTick(function() {
     complete++;
+    console.log('timer %d', complete);
   });
 }, 50);
 
 process.nextTick(function() {
+  console.log('%d', complete);
   complete++;
 });
 
 process.on('exit', function() {
+  console.log('exit %d', complete);
   assert.equal(5, complete);
   process.nextTick(function() {
     throw new Error('this should not occur');

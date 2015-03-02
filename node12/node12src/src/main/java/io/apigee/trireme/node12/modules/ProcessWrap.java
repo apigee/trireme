@@ -26,6 +26,7 @@ import io.apigee.trireme.core.NodeRuntime;
 import io.apigee.trireme.core.SubprocessPolicy;
 import io.apigee.trireme.core.Utils;
 import io.apigee.trireme.core.internal.AbstractIdObject;
+import io.apigee.trireme.core.internal.AbstractProcess;
 import io.apigee.trireme.core.internal.IdPropertyMap;
 import io.apigee.trireme.core.internal.ProcessManager;
 import io.apigee.trireme.core.internal.ScriptRunner;
@@ -233,7 +234,7 @@ public class ProcessWrap
             ProcessManager mgr = ProcessManager.get();
             String procName = execArgs.get(0);
             pid = mgr.getNextPid();
-            if ("node".equals(procName) || io.apigee.trireme.core.modules.Process.EXECUTABLE_NAME.equals(procName)) {
+            if ("node".equals(procName) || AbstractProcess.EXECUTABLE_NAME.equals(procName)) {
                 throw new AssertionError("No forking yet");
             } else {
                 spawned = new SpawnedOSProcess(execArgs, file, cwdPath, stdio, env, detached, this);

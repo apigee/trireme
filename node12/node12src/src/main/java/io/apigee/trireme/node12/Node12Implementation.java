@@ -29,10 +29,12 @@ import io.apigee.trireme.node12.modules.Filesystem;
 import io.apigee.trireme.node12.modules.HTTPParser;
 import io.apigee.trireme.node12.modules.JavaStreamWrap;
 import io.apigee.trireme.node12.modules.PipeWrap;
+import io.apigee.trireme.node12.modules.Process;
 import io.apigee.trireme.node12.modules.ProcessWrap;
 import io.apigee.trireme.node12.modules.Smalloc;
 import io.apigee.trireme.node12.modules.StreamWrap;
 import io.apigee.trireme.node12.modules.TCPWrap;
+import io.apigee.trireme.node12.modules.TimerWrap;
 import io.apigee.trireme.node12.modules.Uv;
 
 import java.util.ArrayList;
@@ -122,10 +124,12 @@ public class Node12Implementation
         r.add(HTTPParser.class);
         r.add(JavaStreamWrap.class);
         r.add(PipeWrap.class);
+        r.add(Process.class);
         r.add(ProcessWrap.class);
         r.add(Smalloc.class);
         r.add(StreamWrap.class);
         r.add(TCPWrap.class);
+        r.add(TimerWrap.class);
         r.add(Uv.class);
         return r;
     }

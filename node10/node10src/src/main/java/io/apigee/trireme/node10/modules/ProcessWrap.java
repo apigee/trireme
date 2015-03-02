@@ -30,10 +30,12 @@ import io.apigee.trireme.core.ScriptStatus;
 import io.apigee.trireme.core.ScriptStatusListener;
 import io.apigee.trireme.core.ScriptTask;
 import io.apigee.trireme.core.SubprocessPolicy;
+import io.apigee.trireme.core.internal.AbstractProcess;
 import io.apigee.trireme.core.internal.GenericProcess;
 import io.apigee.trireme.core.internal.ProcessManager;
 import io.apigee.trireme.core.internal.TriremeProcess;
-import io.apigee.trireme.core.modules.*;
+import io.apigee.trireme.core.modules.Constants;
+import io.apigee.trireme.core.modules.Referenceable;
 import io.apigee.trireme.kernel.streams.BitBucketInputStream;
 import io.apigee.trireme.kernel.streams.BitBucketOutputStream;
 import io.apigee.trireme.core.InternalNodeModule;
@@ -183,6 +185,7 @@ public class ProcessWrap
             Scriptable options = (Scriptable)args[0];
             final ProcessImpl self = (ProcessImpl)thisObj;
 
+
             if (!options.has("args", options)) {
                 return Utils.makeErrorObject(cx, thisObj, Constants.EINVAL, Constants.EINVAL);
             }
@@ -205,7 +208,7 @@ public class ProcessWrap
             ProcessManager mgr = ProcessManager.get();
             String procName = execArgs.get(0);
             self.pid = mgr.getNextPid();
-            if ("node".equals(procName) || io.apigee.trireme.core.modules.Process.EXECUTABLE_NAME.equals(procName)) {
+            if ("node".equals(procName) || AbstractProcess.EXECUTABLE_NAME.equals(procName)) {
                 self.spawned = new SpawnedTriremeProcess(self);
             } else {
                 self.spawned = new SpawnedOSProcess(self);

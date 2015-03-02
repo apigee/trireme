@@ -19,12 +19,13 @@
  * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
  * SOFTWARE.
  */
-package io.apigee.trireme.core.modules;
+package io.apigee.trireme.node10.modules;
 
 import io.apigee.trireme.core.NodeRuntime;
 import io.apigee.trireme.core.ScriptTask;
 import io.apigee.trireme.core.InternalNodeModule;
 import io.apigee.trireme.core.internal.ScriptRunner;
+import io.apigee.trireme.core.modules.Referenceable;
 import org.mozilla.javascript.Context;
 import org.mozilla.javascript.Function;
 import org.mozilla.javascript.Scriptable;

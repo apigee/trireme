@@ -7,8 +7,10 @@ import io.apigee.trireme.node10.modules.ConsoleWrap;
 import io.apigee.trireme.node10.modules.Filesystem;
 import io.apigee.trireme.node10.modules.HTTPParser;
 import io.apigee.trireme.node10.modules.JavaStreamWrap;
+import io.apigee.trireme.node10.modules.Process;
 import io.apigee.trireme.node10.modules.ProcessWrap;
 import io.apigee.trireme.node10.modules.TCPWrap;
+import io.apigee.trireme.node10.modules.TimerWrap;
 
 import java.util.ArrayList;
 import java.util.Collection;
@@ -86,8 +88,10 @@ public class Node10Implementation
         r.add(Filesystem.class);
         r.add(HTTPParser.class);
         r.add(JavaStreamWrap.class);
+        r.add(Process.class);
         r.add(ProcessWrap.class);
         r.add(TCPWrap.class);
+        r.add(TimerWrap.class);
         return r;
     }
 }

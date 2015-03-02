@@ -35,7 +35,6 @@ import io.apigee.trireme.core.Utils;
 import io.apigee.trireme.core.modules.AbstractFilesystem;
 import io.apigee.trireme.core.modules.Buffer;
 import io.apigee.trireme.core.modules.NativeModule;
-import io.apigee.trireme.core.modules.Process;
 import io.apigee.trireme.kernel.PathTranslator;
 import io.apigee.trireme.kernel.fs.AdvancedFilesystem;
 import io.apigee.trireme.kernel.fs.BasicFilesystem;
@@ -120,7 +119,7 @@ public class ScriptRunner
 
     // Globals that are set up for the process
     private NativeModule.NativeImpl nativeModule;
-    protected Process.ProcessImpl process;
+    protected AbstractProcess    process;
     private Buffer.BufferModuleImpl buffer;
     private String              workingDirectory;
     private String              scriptFileName;
@@ -316,7 +315,7 @@ public class ScriptRunner
         return parentProcess;
     }
 
-    public Process.ProcessImpl getProcess() {
+    public AbstractProcess getProcess() {
         return process;
     }
 
@@ -466,16 +465,7 @@ public class ScriptRunner
                 @Override
                 public void execute(Context cx, Scriptable scope)
                 {
-                    if ("disconnect".equals(fevent)) {
-                        // Special handling for a disconnect from the parent
-                        if (process.isConnected()) {
-                            process.setConnected(false);
-                            process.getEmit().call(cx, scope, process, new Object[] { fevent });
-                        }
-                    } else {
-                        process.getEmit().call(cx, scope, process,
-                                               new Object[] { fevent, reallyDeliver });
-                    }
+                    process.emitEvent(fevent, reallyDeliver, cx, scope);
                 }
             });
 
@@ -773,7 +763,7 @@ public class ScriptRunner
             // wasn't already fired because we called "exit"
             try {
                 process.setExiting(true);
-                process.fireExit(cx, status.getExitCode());
+                process.emitEvent("exit", status.getExitCode(), cx, process);
             } catch (NodeExitException ee) {
                 // Exit called exit -- allow it to replace the exit code
                 log.debug("Script replacing exit code with {}", ee.getCode());
@@ -810,7 +800,7 @@ public class ScriptRunner
         }
 
         int p = 0;
-        argv[p++] = Process.EXECUTABLE_NAME;
+        argv[p++] = AbstractProcess.EXECUTABLE_NAME;
         if (scriptName != null) {
             argv[p++] = scriptName;
         }
@@ -823,7 +813,7 @@ public class ScriptRunner
                 log.debug("argv[{}] = {}", i, argv[i]);
             }
         }
-        process.initializeArgv(argv);
+        process.setArgv(argv);
     }
 
     private ScriptStatus mainLoop(Context cx)
@@ -831,7 +821,8 @@ public class ScriptRunner
     {
         // Exit if there's no work do to but only if we're not pinned by a module.
         // We might exit if there are events on the timer queue if they are not also pinned.
-        while (!tickFunctions.isEmpty() || (pinCount.get() > 0) || process.isCallbacksRequired()) {
+        while (!tickFunctions.isEmpty() || (pinCount.get() > 0) ||
+                process.isTickTaskPending() || process.isImmediateTaskPending()) {
             try {
                 if ((future != null) && future.isCancelled()) {
                     return ScriptStatus.CANCELLED;
@@ -852,7 +843,8 @@ public class ScriptRunner
                 // what is on the timer queue and if there are pending ticks or immediate tasks.
                 now = System.currentTimeMillis();
                 long pollTimeout;
-                if (!tickFunctions.isEmpty() || process.isCallbacksRequired() || (pinCount.get() == 0)) {
+                if (!tickFunctions.isEmpty() || process.isTickTaskPending() ||
+                    process.isImmediateTaskPending() || (pinCount.get() == 0)) {
                     // Immediate work -- need to keep spinning
                     // Also keep spinning if we have no reason to keep the loop open
                     pollTimeout = 0L;
@@ -861,14 +853,6 @@ public class ScriptRunner
                 } else {
                     Activity nextActivity = timerQueue.peek();
                     pollTimeout = (nextActivity.timeout - now);
-                }
-
-                if (log.isTraceEnabled()) {
-                    Scriptable ib = (Scriptable)process.getTickInfoBox();
-                    log.trace("PollDelay = {}. tickFunctions = {} needImmediate = {} needTick = {} timerQueue = {} pinCount = {} tick = {}, {}, {}",
-                              pollTimeout, tickFunctions.size(), process.isNeedImmediateCallback(),
-                              process.isNeedTickCallback(), timerQueue.size(), pinCount.get(),
-                              ib.get(0, ib), ib.get(1, ib), ib.get(2, ib));
                 }
 
                 // Check for network I/O and also sleep if necessary.
@@ -921,7 +905,7 @@ public class ScriptRunner
         // Stop script timing before we run this, so that we don't end up timing out the script twice!
         endTiming(cx);
 
-        Function handleFatal = process.getFatalException();
+        Function handleFatal = process.getHandleFatal();
         if (handleFatal == null) {
             return false;
         }
@@ -980,13 +964,13 @@ public class ScriptRunner
     private void executeNextTicks(Context cx)
         throws RhinoException
     {
-        if (process.isNeedTickCallback()) {
+        if (process.isTickTaskPending()) {
             if (log.isTraceEnabled()) {
                 log.trace("Executing ticks");
             }
             boolean timed = startTiming(cx);
             try {
-                process.callTickFromSpinner(cx);
+                process.processTickTasks(cx);
             } catch (RhinoException re) {
                 boolean handled = handleScriptException(cx, re);
                 if (!handled) {
@@ -1006,13 +990,13 @@ public class ScriptRunner
     private void executeImmediateCallbacks(Context cx)
         throws RhinoException
     {
-        if (process.isNeedImmediateCallback()) {
+        if (process.isImmediateTaskPending()) {
             if (log.isTraceEnabled()) {
                 log.trace("Executing immediate tasks");
             }
             boolean timed = startTiming(cx);
             try {
-                process.callImmediateTasks(cx);
+                process.processImmediateTasks(cx);
             } catch (RhinoException re) {
                 boolean handled = handleScriptException(cx, re);
                 if (!handled) {
@@ -1112,9 +1096,10 @@ public class ScriptRunner
             cacheModule(NativeModule.MODULE_NAME, nativeModMod);
 
             // Next we need "process" which takes a bit more care
-            process = (Process.ProcessImpl)require(Process.MODULE_NAME, cx);
+            process = (AbstractProcess)require("process", cx);
             // Check if we are connected to a parent via API
             process.setConnected(parentProcess != null);
+            scope.put("process", scope, process);
 
             // The buffer module needs special handling because of the "charsWritten" variable
             buffer = (Buffer.BufferModuleImpl)require("buffer", cx);
@@ -1343,18 +1328,7 @@ public class ScriptRunner
         @Override
         void execute(Context cx)
         {
-            Function submitTick = process.getSubmitTick();
-            Object[] callArgs =
-                new Object[(args == null ? 0 : args.length) + 3];
-            callArgs[0] = function;
-            callArgs[1] = thisObj;
-            callArgs[2] = domain;
-            if (args != null) {
-                System.arraycopy(args, 0, callArgs, 3, args.length);
-            }
-            // Submit in the scope of "function"
-            // pass "this" and the args to "submitTick," which will honor them
-            submitTick.call(cx, function, process, callArgs);
+            process.submitTick(cx, args, function, thisObj, domain);
         }
     }
 

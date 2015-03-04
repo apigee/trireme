@@ -370,20 +370,11 @@ public class Process
             switch (id) {
             case Id_binding:
                 return binding(cx, args);
-            case Id_dlopen:
-                dlopen(cx, args);
-                break;
-            case Id_abort:
-                abort();
-                break;
             case Id_chdir:
                 chdir(cx, args);
                 break;
             case Id_cwd:
                 return cwd();
-            case Id_reallyExit:
-                reallyExit(args);
-                break;
             case Id_kill:
                 doKill(cx, args);
                 break;
@@ -393,8 +384,6 @@ public class Process
             case Id_disconnect:
                 disconnect(cx);
                 break;
-            case Id_memoryUsage:
-                return memoryUsage(cx);
             case Id_pin:
                 runner.pin();
                 break;
@@ -408,10 +397,29 @@ public class Process
                 return umask(args);
             case Id_uptime:
                 return uptime();
-            case Id_hrtime:
-                return hrtime(cx, args);
             default:
                 return super.prototypeCall(id, cx, scope, args);
+            }
+            return Undefined.instance;
+        }
+
+        @Override
+        protected Object anonymousCall(int id, Context cx, Scriptable scope, Object thisObj, Object[] args)
+        {
+            switch (id) {
+            case Id_abort:
+                abort();
+                break;
+            case Id_dlopen:
+                dlopen(cx, args, (Scriptable)thisObj);
+                break;
+            case Id_reallyExit:
+                reallyExit(args);
+                break;
+            case Id_memoryUsage:
+                return memoryUsage(cx, (Scriptable)thisObj);
+            case Id_hrtime:
+                return hrtime(cx, args, (Scriptable)thisObj);
             }
             return Undefined.instance;
         }
@@ -470,7 +478,7 @@ public class Process
             return mod;
         }
 
-        private void dlopen(Context cx, Object[] args)
+        private static void dlopen(Context cx, Object[] args, Scriptable thisObj)
         {
             Scriptable module = objArg(args, 0, Scriptable.class, true);
             String fileName = stringArg(args, 1);
@@ -480,7 +488,7 @@ public class Process
 
             Matcher m = FILE_NAME_PATTERN.matcher(fileName);
             if (!m.matches()) {
-                throw Utils.makeError(cx, this, "dlopen(" + fileName + "): Native module not supported");
+                throw Utils.makeError(cx, thisObj, "dlopen(" + fileName + "): Native module not supported");
             }
 
             String name = m.group(4);
@@ -494,7 +502,7 @@ public class Process
                 }
 
                 if (nativeMod == null) {
-                    throw Utils.makeError(cx, this, "dlopen(" + fileName + "): Native module not supported");
+                    throw Utils.makeError(cx, thisObj, "dlopen(" + fileName + "): Native module not supported");
                 }
 
                 // We got passed a "module". Make the new native stuff the "exports"
@@ -580,13 +588,13 @@ public class Process
             argv = Context.getCurrentContext().newArray(this, argvArgs);
         }
 
-        private void abort()
+        private static void abort()
             throws NodeExitException
         {
             throw new NodeExitException(NodeExitException.Reason.FATAL);
         }
 
-        private void reallyExit(Object[] args)
+        private static void reallyExit(Object[] args)
             throws NodeExitException
         {
             if (args.length >= 1) {

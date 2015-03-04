@@ -43,7 +43,7 @@ public class JavaScriptTest
         new String[] { "../node12/node12tests/simple" };
     public static final String[] TEMP_DIRS = { "target/test-classes/test/tmp",
                                                "../node10/node10tests/tmp",
-                                               "../node11/node12tests/tmp"};
+                                               "../node12/node12tests/tmp"};
     public static final String RESULT_FILE = "target/results.out";
     public static final String TEST_FILE_NAME_PROP = "TestFile";
     public static final String TEST_ADAPTER_PROP = "TestAdapter";

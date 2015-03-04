@@ -216,7 +216,7 @@ public abstract class AbstractProcess
         return Context.toNumber(up);
     }
 
-    protected Object hrtime(Context cx, Object[] args)
+    protected static Object hrtime(Context cx, Object[] args, Scriptable thisObj)
     {
         long nanos = System.nanoTime();
         if (args.length == 1) {
@@ -235,13 +235,13 @@ public abstract class AbstractProcess
         Object[] ret = new Object[2];
         ret[0] = (int)(nanos / NANO);
         ret[1] = (int)(nanos % NANO);
-        return cx.newArray(this, ret);
+        return cx.newArray(thisObj, ret);
     }
 
-    protected Object memoryUsage(Context cx)
+    protected static Object memoryUsage(Context cx, Scriptable thisObj)
     {
         Runtime r = Runtime.getRuntime();
-        Scriptable mem = cx.newObject(this);
+        Scriptable mem = cx.newObject(thisObj);
         mem.put("rss", mem, r.totalMemory());
         mem.put("heapTotal", mem, r.maxMemory());
         mem.put("heapUsed", mem,  r.totalMemory());

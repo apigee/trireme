@@ -64,8 +64,8 @@ assert.equal(11, Buffer._charsWritten);
 
 var nb = new Buffer(8);
 assert.throws(function() {
-  b.writeUInt32BE(0x80000004 | (3 << 16), 0);
+  nb.writeUInt32BE(0x80000004 | (3 << 16), 0);
 });
-b.writeUInt32BE(0x80000004 | (3 << 16), 0, true);
+nb.writeUInt32BE(0x80000004 | (3 << 16), 0, true);
 
 

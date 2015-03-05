@@ -45,6 +45,7 @@
     <module>nodetests</module>
     <module>npm-package</module>
     <module>samples</module>
+    <module>servlet</module>
     <module>shell</module>
     <module>util</module>
   </modules>
@@ -111,6 +112,11 @@
         <artifactId>bcpkix-jdk15on</artifactId>
         <version>1.50</version>
       </dependency>
+      <dependency>
+        <groupId>javax.servlet</groupId>
+        <artifactId>servlet-api</artifactId>
+        <version>2.5</version>
+      </dependency>
     </dependencies>
   </dependencyManagement>
 
@@ -141,6 +147,19 @@
             </manifest>
           </archive>
         </configuration>
+      </plugin>
+      <plugin>
+          <groupId>org.apache.maven.plugins</groupId>
+          <artifactId>maven-failsafe-plugin</artifactId>
+          <version>2.18.1</version>
+          <executions>
+            <execution>
+              <goals>
+                  <goal>integration-test</goal>
+                  <goal>verify</goal>
+              </goals>
+            </execution>
+          </executions>
       </plugin>
       <plugin>
         <groupId>com.mycila.maven-license-plugin</groupId>

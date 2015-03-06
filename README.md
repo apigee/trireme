@@ -92,7 +92,13 @@ line just like regular Node.js:
 
 (and with no arguments it will launch the "repl" but that implementation is not complete)
 
-## Embedding Trireme
+## Embedding Trireme as a servlet
+
+The [war](./samples/war/README.md) sample is a sample that shows how to assemble a Node.js application into
+a WAR file. It uses the [trireme-servlet](./servlet/README.md) module to link the servlet to the Node.js script.
+Any script that operates as an HTTP server using the "http" module can be embedded in this way.
+
+## Embedding Trireme Anywhere Else that Java Runs
 
 There is JavaDoc for the "NodeEnvironment" and "NodeScript" classes, and many other features.
 Here are the basics:

@@ -3,6 +3,11 @@
 This directory contains sample code for Trireme. For the most part these samples show how to use Trireme
 to embed Java code and make it look like Node.js code.
 
+## war
+
+This sample builds a WAR file that uses the "trireme-servlet" module to run a Node.js application
+inside a Java servlet container.
+
 ## java-hello
 
 This is the simplest possible example of Java code running inside Trireme. It consists of a module that

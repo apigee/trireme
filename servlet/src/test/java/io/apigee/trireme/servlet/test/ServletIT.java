@@ -16,7 +16,8 @@ import static org.junit.Assert.*;
 public class ServletIT
 {
     private static final Charset UTF8 = Charset.forName("UTF8");
-    private static final String BASE = "http://localhost:8080";
+    // Make sure this matches "port" in pom.xml
+    private static final String BASE = "http://localhost:22222";
 
     @Test
     public void testHello()

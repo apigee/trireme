@@ -1,6 +1,6 @@
 var http = require('http');
 
-var PORT = process.env.PORT | 8080;
+var PORT = process.env.PORT || 8080;
 
 function handleRequest(req, resp) {
   console.log('%s %s', req.method, req.url);

@@ -16,5 +16,6 @@
     <module>hadoop</module>
     <module>java-hello</module>
     <module>java-stream</module>
+    <module>war</module>
   </modules>
 </project>

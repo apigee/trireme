@@ -1,0 +1,87 @@
+<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+  <modelVersion>4.0.0</modelVersion>
+  
+  <parent>
+    <groupId>io.apigee.trireme</groupId>
+    <artifactId>trireme</artifactId>
+    <version>0.8.6-SNAPSHOT</version>
+  </parent>
+
+  <name>trireme-servlet</name>
+  <artifactId>trireme-servlet</artifactId>
+  <version>0.8.6-SNAPSHOT</version>
+
+  <dependencies>
+    <dependency>
+      <groupId>io.apigee.trireme</groupId>
+      <artifactId>trireme-core</artifactId>
+      <version>0.8.6-SNAPSHOT</version>
+    </dependency>
+
+    <dependency>
+      <groupId>org.slf4j</groupId>
+      <artifactId>slf4j-api</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>io.apigee</groupId>
+      <artifactId>rhino</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>javax.servlet</groupId>
+      <artifactId>servlet-api</artifactId>
+    </dependency>
+
+    <dependency>
+      <groupId>io.apigee.trireme</groupId>
+      <artifactId>trireme-node10src</artifactId>
+      <version>0.8.6-SNAPSHOT</version>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>junit</groupId>
+      <artifactId>junit</artifactId>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>ch.qos.logback</groupId>
+      <artifactId>logback-classic</artifactId>
+      <scope>test</scope>
+    </dependency>
+  </dependencies>
+
+  <build>
+    <plugins>
+      <plugin>
+        <groupId>org.eclipse.jetty</groupId>
+        <artifactId>jetty-maven-plugin</artifactId>
+        <version>9.3.0.M1</version>
+        <configuration>
+          <httpConnector>
+            <port>22222</port>
+          </httpConnector>
+          <useTestScope>true</useTestScope>
+          <webAppSourceDirectory>${basedir}/src/test/webapp</webAppSourceDirectory>
+          <stopPort>22223</stopPort>
+          <stopKey>trireme-servlet-test</stopKey>
+          <stopWait>10</stopWait>
+        </configuration>
+        <executions>
+          <execution>
+            <id>start-jetty</id>
+            <phase>pre-integration-test</phase>
+            <goals>
+              <goal>start</goal>
+            </goals>
+          </execution>
+          <execution>
+            <id>stop-jetty</id>
+            <phase>post-integration-test</phase>
+            <goals>
+              <goal>stop</goal>
+            </goals>
+          </execution>
+        </executions>
+      </plugin>
+    </plugins>
+  </build>
+</project>

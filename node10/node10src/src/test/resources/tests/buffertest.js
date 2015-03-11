@@ -62,6 +62,10 @@ var testCount = new Buffer(32);
 testCount.write('Foo the bar');
 assert.equal(11, Buffer._charsWritten);
 
-console.log('Buffer tests completed successfully');
+var nb = new Buffer(8);
+assert.throws(function() {
+  nb.writeUInt32BE(0x80000004 | (3 << 16), 0);
+});
+nb.writeUInt32BE(0x80000004 | (3 << 16), 0, true);
 
 

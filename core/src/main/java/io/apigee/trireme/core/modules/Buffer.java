@@ -755,10 +755,12 @@ public class Buffer
         {
             BufferImpl b = (BufferImpl)thisObj;
             int value = intArg(args, 0);
-            if ((value > Byte.MAX_VALUE) || (value < Byte.MIN_VALUE)) {
+            boolean noAssert = booleanArg(args, 2, false);
+
+            if (!noAssert && ((value > Byte.MAX_VALUE) || (value < Byte.MIN_VALUE))) {
                 throw Utils.makeRangeError(cx, thisObj, "out of range");
             }
-            b.writeInt8Internal(args, value);
+            b.writeInt8Internal(args, value, noAssert);
         }
 
         @JSFunction
@@ -766,17 +768,18 @@ public class Buffer
         {
             BufferImpl b = (BufferImpl)thisObj;
             int value = intArg(args, 0);
-            if ((value > 0xff) || (value < 0)) {
+            boolean noAssert = booleanArg(args, 2, false);
+
+            if (!noAssert && ((value > 0xff) || (value < 0))) {
                 throw Utils.makeRangeError(cx, thisObj, "out of range");
             }
             value &= 0xff;
-            b.writeInt8Internal(args, value);
+            b.writeInt8Internal(args, value, noAssert);
         }
 
-        private void writeInt8Internal(Object[] args, int value)
+        private void writeInt8Internal(Object[] args, int value, boolean noAssert)
         {
             int offset = intArg(args, 1);
-            boolean noAssert = booleanArg(args, 2, false);
 
             if (inBounds(offset, offset, noAssert)) {
                 buf[bufOffset +offset] = (byte)value;
@@ -787,47 +790,54 @@ public class Buffer
         public static void writeInt16LE(Context cx, Scriptable thisObj, Object[] args, Function func)
         {
             int value = intArg(args, 0);
-            if ((value > Short.MAX_VALUE) || (value < Short.MIN_VALUE)) {
+            boolean noAssert = booleanArg(args, 2, false);
+
+            if (!noAssert && ((value > Short.MAX_VALUE) || (value < Short.MIN_VALUE))) {
                 throw Utils.makeRangeError(cx, thisObj, "out of range");
             }
-            writeInt16(cx, thisObj, args, func, ByteOrder.LITTLE_ENDIAN, value);
+            writeInt16(cx, thisObj, args, func, ByteOrder.LITTLE_ENDIAN, value, noAssert);
         }
 
         @JSFunction
         public static void writeInt16BE(Context cx, Scriptable thisObj, Object[] args, Function func)
         {
             int value = intArg(args, 0);
-            if ((value > Short.MAX_VALUE) || (value < Short.MIN_VALUE)) {
+            boolean noAssert = booleanArg(args, 2, false);
+
+            if (!noAssert && ((value > Short.MAX_VALUE) || (value < Short.MIN_VALUE))) {
                 throw Utils.makeRangeError(cx, thisObj, "out of range");
             }
-            writeInt16(cx, thisObj, args, func, ByteOrder.BIG_ENDIAN, value);
+            writeInt16(cx, thisObj, args, func, ByteOrder.BIG_ENDIAN, value, noAssert);
         }
 
         @JSFunction
         public static void writeUInt16LE(Context cx, Scriptable thisObj, Object[] args, Function func)
         {
             int value = intArg(args, 0);
-            if ((value > 0xffff) || (value < 0)) {
+            boolean noAssert = booleanArg(args, 2, false);
+
+            if (!noAssert && ((value > 0xffff) || (value < 0))) {
                 throw Utils.makeRangeError(cx, thisObj, "out of range");
             }
-            writeInt16(cx, thisObj, args, func, ByteOrder.LITTLE_ENDIAN, value & 0xffff);
+            writeInt16(cx, thisObj, args, func, ByteOrder.LITTLE_ENDIAN, value & 0xffff, noAssert);
         }
 
         @JSFunction
         public static void writeUInt16BE(Context cx, Scriptable thisObj, Object[] args, Function func)
         {
             int value = intArg(args, 0);
-            if ((value > 0xffff) || (value < 0)) {
+            boolean noAssert = booleanArg(args, 2, false);
+
+            if (!noAssert && ((value > 0xffff) || (value < 0))) {
                 throw Utils.makeRangeError(cx, thisObj, "out of range");
             }
-            writeInt16(cx, thisObj, args, func, ByteOrder.BIG_ENDIAN, value & 0xffff);
+            writeInt16(cx, thisObj, args, func, ByteOrder.BIG_ENDIAN, value & 0xffff, noAssert);
         }
 
         private static void writeInt16(Context cx, Scriptable thisObj, Object[] args, Function func,
-                                       ByteOrder order, int value)
+                                       ByteOrder order, int value, boolean noAssert)
         {
             int offset = intArg(args, 1);
-            boolean noAssert = booleanArg(args, 2, false);
 
             BufferImpl b = (BufferImpl)thisObj;
             if (b.inBounds(offset, offset + 1, noAssert)) {
@@ -845,47 +855,54 @@ public class Buffer
         public static void writeInt32LE(Context cx, Scriptable thisObj, Object[] args, Function func)
         {
             long value = longArg(args, 0);
-            if ((value > Integer.MAX_VALUE) || (value < Integer.MIN_VALUE)) {
+            boolean noAssert = booleanArg(args, 2, false);
+
+            if (!noAssert && ((value > Integer.MAX_VALUE) || (value < Integer.MIN_VALUE))) {
                 throw Utils.makeRangeError(cx, thisObj, "out of range");
             }
-            writeInt32(cx, thisObj, args, func, ByteOrder.LITTLE_ENDIAN, value);
+            writeInt32(cx, thisObj, args, func, ByteOrder.LITTLE_ENDIAN, value, noAssert);
         }
 
         @JSFunction
         public static void writeInt32BE(Context cx, Scriptable thisObj, Object[] args, Function func)
         {
             long value = longArg(args, 0);
-            if ((value > Integer.MAX_VALUE) || (value < Integer.MIN_VALUE)) {
+            boolean noAssert = booleanArg(args, 2, false);
+
+            if (!noAssert && ((value > Integer.MAX_VALUE) || (value < Integer.MIN_VALUE))) {
                 throw Utils.makeRangeError(cx, thisObj, "out of range");
             }
-            writeInt32(cx, thisObj, args, func, ByteOrder.BIG_ENDIAN, value);
+            writeInt32(cx, thisObj, args, func, ByteOrder.BIG_ENDIAN, value, noAssert);
         }
 
         @JSFunction
         public static void writeUInt32LE(Context cx, Scriptable thisObj, Object[] args, Function func)
         {
             long value = longArg(args, 0);
-            if ((value > 0xffffffffL) || (value < 0)) {
+            boolean noAssert = booleanArg(args, 2, false);
+
+            if (!noAssert && ((value > 0xffffffffL) || (value < 0))) {
                 throw Utils.makeRangeError(cx, thisObj, "out of range");
             }
-            writeInt32(cx, thisObj, args, func, ByteOrder.LITTLE_ENDIAN, value & 0xffffffffL);
+            writeInt32(cx, thisObj, args, func, ByteOrder.LITTLE_ENDIAN, value & 0xffffffffL, noAssert);
         }
 
         @JSFunction
         public static void writeUInt32BE(Context cx, Scriptable thisObj, Object[] args, Function func)
         {
             long value = longArg(args, 0);
-            if ((value > 0xffffffffL) || (value < 0)) {
+            boolean noAssert = booleanArg(args, 2, false);
+
+            if (!noAssert && ((value > 0xffffffffL) || (value < 0))) {
                 throw Utils.makeRangeError(cx, thisObj, "out of range");
             }
-            writeInt32(cx, thisObj, args, func, ByteOrder.BIG_ENDIAN, value & 0xffffffffL);
+            writeInt32(cx, thisObj, args, func, ByteOrder.BIG_ENDIAN, value & 0xffffffffL, noAssert);
         }
 
         private static void writeInt32(Context cx, Scriptable thisObj, Object[] args, Function func,
-                                       ByteOrder order, long value)
+                                       ByteOrder order, long value, boolean noAssert)
         {
             int offset = intArg(args, 1);
-            boolean noAssert = booleanArg(args, 2, false);
 
             BufferImpl b = (BufferImpl)thisObj;
             b.writeInt32(offset, value, noAssert, order);

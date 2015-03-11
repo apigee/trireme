@@ -1,0 +1,42 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<web-app version="2.5" xmlns="http://java.sun.com/xml/ns/javaee"
+xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+xsi:schemaLocation="http://java.sun.com/xml/ns/javaee http://java.sun.com/xml/ns/javaee/web-app_2_5.xsd">
+  <servlet>
+    <servlet-name>TriremeTest</servlet-name>
+    <servlet-class>io.apigee.trireme.servlet.TriremeServlet</servlet-class>
+    <init-param>
+      <param-name>TriremeScript</param-name>
+      <param-value>/WEB-INF/scripts/test.js</param-value>
+    </init-param>
+    <init-param>
+      <param-name>TriremeResponseTimeout</param-name>
+      <param-value>5</param-value>
+    </init-param>
+    <init-param>
+      <param-name>TriremeStartupTimeout</param-name>
+      <param-value>8</param-value>
+    </init-param>
+  </servlet>
+  <servlet>
+    <servlet-name>TriremeSandboxTest</servlet-name>
+    <servlet-class>io.apigee.trireme.servlet.TriremeServlet</servlet-class>
+    <init-param>
+      <param-name>TriremeScript</param-name>
+      <param-value>/WEB-INF/scripts/test.js</param-value>
+    </init-param>
+    <init-param>
+      <param-name>TriremeSandbox</param-name>
+      <param-value>true</param-value>
+    </init-param>
+  </servlet>
+
+  <servlet-mapping>
+    <servlet-name>TriremeTest</servlet-name>
+    <url-pattern>/test/*</url-pattern>
+  </servlet-mapping>
+  <servlet-mapping>
+    <servlet-name>TriremeSandboxTest</servlet-name>
+    <url-pattern>/sandbox/*</url-pattern>
+  </servlet-mapping>
+</web-app>

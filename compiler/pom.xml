@@ -14,7 +14,7 @@
 
   <dependencies>
     <dependency>
-      <groupId>io.apigee</groupId>
+      <groupId>org.mozilla</groupId>
       <artifactId>rhino</artifactId>
     </dependency>
     <dependency>

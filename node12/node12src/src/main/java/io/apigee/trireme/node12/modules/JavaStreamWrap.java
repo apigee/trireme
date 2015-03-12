@@ -23,12 +23,10 @@ package io.apigee.trireme.node12.modules;
 
 import io.apigee.trireme.core.InternalNodeModule;
 import io.apigee.trireme.core.NodeRuntime;
-import io.apigee.trireme.core.ScriptTask;
 import io.apigee.trireme.core.internal.AbstractIdObject;
 import io.apigee.trireme.core.internal.IdPropertyMap;
 import io.apigee.trireme.kernel.Charsets;
 import io.apigee.trireme.core.internal.ScriptRunner;
-import io.apigee.trireme.kernel.ErrorCodes;
 import io.apigee.trireme.core.modules.Buffer;
 import io.apigee.trireme.kernel.handles.Handle;
 import io.apigee.trireme.kernel.handles.IOCompletionHandler;
@@ -210,16 +208,16 @@ public class JavaStreamWrap
                 writeBuffer(args);
                 break;
             case Id_writeUcs2String:
-                writeString(cx, args, Charsets.UCS2);
+                writeString(args, Charsets.UCS2);
                 break;
             case Id_writeAsciiString:
-                writeString(cx, args, Charsets.ASCII);
+                writeString(args, Charsets.ASCII);
                 break;
             case Id_writeUtf8String:
-                writeString(cx, args, Charsets.UTF8);
+                writeString(args, Charsets.UTF8);
                 break;
             case Id_writeBinaryString:
-                writeString(cx, args, Charsets.NODE_BINARY);
+                writeString(args, Charsets.NODE_BINARY);
                 break;
             case Id_close:
                 close(args);
@@ -266,32 +264,50 @@ public class JavaStreamWrap
         {
             final StreamWrap.WriteWrap req = objArg(args, 0, StreamWrap.WriteWrap.class, true);
             Buffer.BufferImpl buf = objArg(args, 1, Buffer.BufferImpl.class, true);
+            Object handleArg = objArg(args, 2, Object.class, false);
 
-            int len = handle.write(buf.getBuffer(), new IOCompletionHandler<Integer>()
+            IOCompletionHandler<Integer> onComplete = new IOCompletionHandler<Integer>()
             {
                 @Override
                 public void ioComplete(int errCode, Integer value)
                 {
                     req.callOnComplete(Context.getCurrentContext(), StreamWrapImpl.this, StreamWrapImpl.this, errCode);
                 }
-            });
+            };
+
+            int len;
+
+            if (handleArg == null) {
+                len = handle.write(buf.getBuffer(), onComplete);
+            } else {
+                len = handle.writeHandle(buf.getBuffer(), handleArg, onComplete);
+            }
+
             updateByteCount(req, len);
         }
 
-        private void writeString(Context cx, Object[] args, Charset cs)
+        private void writeString(Object[] args, Charset cs)
         {
             final StreamWrap.WriteWrap req = objArg(args, 0, StreamWrap.WriteWrap.class, true);
             String s = stringArg(args, 1);
+            Object handleArg = objArg(args, 2, Object.class, false);
             final StreamWrapImpl self = this;
 
-            int len = handle.write(s, cs, new IOCompletionHandler<Integer>()
+            IOCompletionHandler<Integer> onComplete = new IOCompletionHandler<Integer>()
             {
                 @Override
                 public void ioComplete(int errCode, Integer value)
                 {
                     req.callOnComplete(Context.getCurrentContext(), self, self, errCode);
                 }
-            });
+            };
+
+            int len;
+            if (handleArg == null) {
+                len = handle.write(s, cs, onComplete);
+            } else {
+                len = handle.writeHandle(s, cs, handleArg, onComplete);
+            }
             // net.js updates the write count before the completion callback is made
             updateByteCount(req, len);
         }
@@ -302,24 +318,6 @@ public class JavaStreamWrap
             byteCount += len;
         }
 
-        protected void writeComplete(final int err, final int len, final Scriptable req)
-        {
-            // Have to make sure that this happens in the next tick, so always enqueue
-            runtime.enqueueTask(new ScriptTask() {
-                @Override
-                public void execute(Context cx, Scriptable scope)
-                {
-                    Object onComplete = ScriptableObject.getProperty(req, "oncomplete");
-                    if ((onComplete != null) && !Undefined.instance.equals(onComplete)) {
-                        Function afterWrite = (Function)onComplete;
-                        Object errStr = (err == 0 ? Undefined.instance : ErrorCodes.get().toString(err));
-                        afterWrite.call(cx, afterWrite, StreamWrapImpl.this,
-                                        new Object[] { errStr, StreamWrapImpl.this, req });
-                    }
-                }
-            });
-        }
-
         private void readStart()
         {
             if (!reading) {
@@ -328,7 +326,7 @@ public class JavaStreamWrap
                     @Override
                     public void ioComplete(int errCode, ByteBuffer value)
                     {
-                        onRead(errCode, value);
+                        onRead(errCode, value, Undefined.instance);
                     }
                 });
                 reading = true;
@@ -343,14 +341,15 @@ public class JavaStreamWrap
             }
         }
 
-        protected void onRead(int err, ByteBuffer buf)
+        protected void onRead(int err, ByteBuffer buf, Object handle)
         {
             // "onread" is set before starting reading so we don't need to re-enqueue here
             Context cx = Context.getCurrentContext();
             if (onRead != null) {
                 Buffer.BufferImpl jBuf = (buf == null ? null : Buffer.BufferImpl.newBuffer(cx, this, buf, false));
                 if (err == 0) {
-                    onRead.call(cx, onRead, this, new Object[]{(buf == null ? 0 : buf.remaining()), jBuf});
+                    onRead.call(cx, onRead, this,
+                                new Object[]{(buf == null ? 0 : buf.remaining()), jBuf, handle});
                 } else {
                     onRead.call(cx, onRead, this, new Object[]{err});
                 }

@@ -30,10 +30,14 @@ import io.apigee.trireme.core.internal.AbstractProcess;
 import io.apigee.trireme.core.internal.IdPropertyMap;
 import io.apigee.trireme.core.internal.ProcessManager;
 import io.apigee.trireme.core.internal.ScriptRunner;
+import io.apigee.trireme.core.internal.TriremeProcess;
 import io.apigee.trireme.kernel.ErrorCodes;
+import io.apigee.trireme.kernel.handles.Handle;
+import io.apigee.trireme.kernel.handles.IpcHandle;
 import io.apigee.trireme.kernel.util.PinState;
 import io.apigee.trireme.node12.internal.SpawnedOSProcess;
 import io.apigee.trireme.node12.internal.SpawnedProcess;
+import io.apigee.trireme.node12.internal.SpawnedTriremeProcess;
 import org.mozilla.javascript.Context;
 import org.mozilla.javascript.Function;
 import org.mozilla.javascript.Scriptable;
@@ -70,6 +74,7 @@ public class ProcessWrap
 
     public static class ProcessImpl
         extends AbstractIdObject<ProcessImpl>
+        implements TriremeProcess
     {
         public static final String CLASS_NAME = "Process";
 
@@ -82,6 +87,7 @@ public class ProcessWrap
 
         private int pid;
         private SpawnedProcess spawned;
+        private IpcHandle ipcHandle;
 
         private static final int
             Id_onExit = 1,
@@ -107,6 +113,21 @@ public class ProcessWrap
 
         public ScriptRunner getRuntime() {
             return runtime;
+        }
+
+        @Override
+        public IpcHandle getIpcHandle() {
+            return ipcHandle;
+        }
+
+        public void setIpcHandle(IpcHandle handle) {
+            this.ipcHandle = handle;
+        }
+
+        @Override
+        public Function getOnMessage()
+        {
+            throw new AssertionError("Not implemented in 0.12");
         }
 
         @Override
@@ -223,7 +244,7 @@ public class ProcessWrap
             String file = stringParam("file", options);
             String cwd = getCwdOption(options);
             Scriptable stdio = (Scriptable)objParam("stdio", options);
-            Scriptable envPairs = (Scriptable)objParam("env", options);
+            Scriptable envPairs = (Scriptable)objParam("envPairs", options);
             boolean detached = Boolean.valueOf(stringParam("detached", options));
 
             File cwdPath =
@@ -235,7 +256,7 @@ public class ProcessWrap
             String procName = execArgs.get(0);
             pid = mgr.getNextPid();
             if ("node".equals(procName) || AbstractProcess.EXECUTABLE_NAME.equals(procName)) {
-                throw new AssertionError("No forking yet");
+                spawned = new SpawnedTriremeProcess(execArgs, file, cwdPath, stdio, env, detached, this);
             } else {
                 spawned = new SpawnedOSProcess(execArgs, file, cwdPath, stdio, env, detached, this);
             }
@@ -247,7 +268,7 @@ public class ProcessWrap
             return (err == 0 ? Undefined.instance : err);
         }
 
-        public void callOnExit(Context cx, int exitCode)
+        public void callOnExit(int exitCode)
         {
             ProcessManager.get().removeProcess(pid);
             if (onExit != null) {
@@ -278,6 +299,12 @@ public class ProcessWrap
         private Object kill(Context cx, Object[] args)
         {
             return Undefined.instance;
+        }
+
+        @Override
+        public void kill(Context cx, Scriptable thisObj, int code, int signal)
+        {
+            // TODO!
         }
 
         private String getCwdOption(Scriptable s)

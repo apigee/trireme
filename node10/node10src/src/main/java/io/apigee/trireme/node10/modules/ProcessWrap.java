@@ -36,6 +36,8 @@ import io.apigee.trireme.core.internal.ProcessManager;
 import io.apigee.trireme.core.internal.TriremeProcess;
 import io.apigee.trireme.core.modules.Constants;
 import io.apigee.trireme.core.modules.Referenceable;
+import io.apigee.trireme.kernel.handles.Handle;
+import io.apigee.trireme.kernel.handles.IpcHandle;
 import io.apigee.trireme.kernel.streams.BitBucketInputStream;
 import io.apigee.trireme.kernel.streams.BitBucketOutputStream;
 import io.apigee.trireme.core.InternalNodeModule;
@@ -140,6 +142,7 @@ public class ProcessWrap
 
     public static class ProcessImpl
         extends Referenceable
+        implements TriremeProcess
     {
         public static final String CLASS_NAME = "_processClass";
 
@@ -248,6 +251,12 @@ public class ProcessWrap
             return 0;
         }
 
+        @Override
+        public void kill(Context cx, Scriptable thisObj, int code, int signal)
+        {
+            kill(String.valueOf(signal));
+        }
+
         @JSFunction
         @SuppressWarnings("unused")
         public static void send(Context cx, Scriptable thisObj, Object[] args, Function fn)
@@ -315,6 +324,12 @@ public class ProcessWrap
         @SuppressWarnings("unused")
         public Function getOnMessage() {
             return onMessage;
+        }
+
+        @Override
+        public IpcHandle getIpcHandle() {
+            // Not used in 0.10
+            return null;
         }
     }
 

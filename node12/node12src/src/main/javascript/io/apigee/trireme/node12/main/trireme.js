@@ -698,41 +698,6 @@
       process._submitTickCallback = submitDomainTick;
     }
     process._usingDomains = usingDomains;
-
-    if (process.connected) {
-      var childRef = 0;
-
-      // Pin and unpin the process depending on whether we are listening for events from the parent
-      process.on('disconnect', function() {
-        if (childRef > 0) {
-          process._unpin();
-          childRef = 0;
-        }
-      });
-
-      // This next logic only works if the previous listener is registered first!
-      process.on('newListener', function(event) {
-        if (!process.connected) {
-          return;
-        }
-        if ((event === 'message') || (event === 'disconnect')) {
-          if (++childRef === 1) {
-            process._pin();
-          }
-        }
-      });
-
-      process.on('removeListener', function(event) {
-        if (!process.connected) {
-          return;
-        }
-        if ((event === 'message') || (event === 'disconnect')) {
-          if (--childRef === 0) {
-            process._unpin();
-          }
-        }
-      });
-    }
   };
 
   /*

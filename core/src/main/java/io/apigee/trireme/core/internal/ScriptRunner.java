@@ -38,6 +38,7 @@ import io.apigee.trireme.core.modules.NativeModule;
 import io.apigee.trireme.kernel.PathTranslator;
 import io.apigee.trireme.kernel.fs.AdvancedFilesystem;
 import io.apigee.trireme.kernel.fs.BasicFilesystem;
+import io.apigee.trireme.kernel.handles.IpcHandle;
 import io.apigee.trireme.kernel.net.NetworkPolicy;
 import io.apigee.trireme.kernel.net.SelectorHandler;
 import org.mozilla.javascript.Context;

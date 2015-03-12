@@ -28,7 +28,11 @@ public interface Handle
 {
     int write(ByteBuffer buf, IOCompletionHandler<Integer> handler);
 
+    int writeHandle(ByteBuffer buf, Object handleArg, IOCompletionHandler<Integer> handler);
+
     int write(String s, Charset cs, IOCompletionHandler<Integer> handler);
+
+    int writeHandle(String s, Charset cs, Object handleArg, IOCompletionHandler<Integer> handler);
 
     int getWritesOutstanding();
 

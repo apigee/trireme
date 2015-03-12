@@ -36,11 +36,19 @@ public abstract class AbstractHandle
 {
     private boolean deliveredEof;
 
+    @Override
     public int write(ByteBuffer buf, IOCompletionHandler<Integer> handler)
     {
         throw new IllegalStateException("Handle not capable of writing");
     }
 
+    @Override
+    public int writeHandle(ByteBuffer buf, Object handleArg, IOCompletionHandler<Integer> handler)
+    {
+        throw new IllegalStateException("Handle does not support passing handles");
+    }
+
+    @Override
     public int write(String s, Charset cs, IOCompletionHandler<Integer> handler)
     {
         // Convert the string to a buffer, which may involve some re-allocating and copying if the
@@ -52,11 +60,20 @@ public abstract class AbstractHandle
         return write(buf, handler);
     }
 
+    @Override
+    public int writeHandle(String s, Charset cs, Object handleArg, IOCompletionHandler<Integer> handler)
+    {
+        ByteBuffer buf = StringUtils.stringToBuffer(s, cs);
+        return writeHandle(buf, handleArg, handler);
+    }
+
+    @Override
     public int getWritesOutstanding()
     {
         return 0;
     }
 
+    @Override
     public void startReading(IOCompletionHandler<ByteBuffer> handler)
     {
         // If we get here then we have nothing to read, so it's immediate EOF.
@@ -66,9 +83,11 @@ public abstract class AbstractHandle
         }
     }
 
+    @Override
     public void stopReading()
     {
     }
 
+    @Override
     public abstract void close();
 }

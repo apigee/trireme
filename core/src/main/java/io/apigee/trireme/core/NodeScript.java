@@ -50,7 +50,7 @@ public class NodeScript
     private ScriptRunner runner;
     private Object attachment;
     private Sandbox sandbox;
-    private Object parentProcess;
+    private TriremeProcess parentProcess;
     private boolean childProcess;
     private boolean pin;
     private boolean forceRepl;
@@ -110,7 +110,7 @@ public class NodeScript
             runner = new ScriptRunner(this, env, sandbox, scriptFile, args);
         }
         runner.setRegistry(registry);
-        runner.setParentProcess((TriremeProcess)parentProcess);
+        runner.setParentProcess(parentProcess);
         if (workingDir != null) {
             try {
                 runner.setWorkingDirectory(workingDir);
@@ -149,7 +149,7 @@ public class NodeScript
 
         runner = new ScriptRunner(this, env, sandbox, scriptName,
                                   makeModuleScript(), args);
-        runner.setParentProcess((TriremeProcess)parentProcess);
+        runner.setParentProcess(parentProcess);
         runner.setRegistry(registry);
         if (workingDir != null) {
             try {
@@ -340,11 +340,11 @@ public class NodeScript
     /**
      * An internal method to identify the child process argument of the parent who forked this script.
      */
-    public void _setParentProcess(Object parent)
+    public void _setParentProcess(TriremeProcess parent)
     {
         this.parentProcess = parent;
         if (runner != null) {
-            runner.setParentProcess((TriremeProcess)parent);
+            runner.setParentProcess(parent);
         }
     }
 

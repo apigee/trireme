@@ -140,10 +140,10 @@ public class SpawnedOSProcess
                     if (log.isDebugEnabled()) {
                         log.debug("Child process exited with {}", exitCode);
                     }
-                    parent.callOnExit(cx, exitCode);
+                    parent.callOnExit(exitCode);
                 } catch (InterruptedException ie) {
                     // TODO some signal?
-                    parent.callOnExit(cx, 0);
+                    parent.callOnExit(0);
                 }
             }
         });

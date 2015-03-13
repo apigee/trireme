@@ -28,9 +28,12 @@ import io.apigee.trireme.core.internal.AbstractIdObject;
 import io.apigee.trireme.core.internal.IdPropertyMap;
 import io.apigee.trireme.core.internal.ScriptRunner;
 import io.apigee.trireme.core.internal.TriremeProcess;
-import io.apigee.trireme.kernel.BiCallback;
 import io.apigee.trireme.kernel.Charsets;
+import io.apigee.trireme.kernel.TriCallback;
+import io.apigee.trireme.kernel.handles.ChildServerHandle;
 import io.apigee.trireme.kernel.handles.IpcHandle;
+import io.apigee.trireme.kernel.handles.NIOSocketHandle;
+import io.apigee.trireme.kernel.handles.SocketHandle;
 import io.apigee.trireme.kernel.util.StringUtils;
 import org.mozilla.javascript.Context;
 import org.mozilla.javascript.Function;
@@ -159,23 +162,55 @@ public class PipeWrap
             }
 
             // Set up a bi-directional pipe between both handles.
-            ipcHandle.setIpcCallback(new BiCallback<ByteBuffer, Object>()
+            ipcHandle.setIpcCallback(new TriCallback<Integer, ByteBuffer, Object>()
             {
                 @Override
-                public void call(ByteBuffer buf, Object handle)
+                public void call(Integer err, ByteBuffer buf, Object handle)
                 {
                     if (log.isDebugEnabled()) {
-                        log.debug("Got a request from the other side with a handle: {} : {}",
-                                  StringUtils.bufferToString(buf.duplicate(), Charsets.UTF8), handle);
+                        log.debug("Got a request from the other side with a handle: err = {} {} : {}",
+                                  err, StringUtils.bufferToString(buf.duplicate(), Charsets.UTF8), handle);
                     }
-                    // TODO need handle conversion code for all types of handles.
-                    // For instance, given a TCP handle, create a new one, etc.
-                    // "net.Server" will require the most handling.
-                    onRead(0, buf, handle);
+                    onRead(err, buf, convertHandle(handle));
                 }
             });
 
             ipcHandle.connect(parentHandle);
+        }
+
+        public void closePipe()
+        {
+            super.close(Context.emptyArgs);
+        }
+
+        /**
+         * Execute Java-specific and version-specific post-processing of the handle before we can hand
+         * it back to the JavaScript code.
+         */
+        private Object convertHandle(Object handle)
+        {
+            if (handle instanceof TCPWrap.TCPImpl) {
+                return convertTcpHandle((TCPWrap.TCPImpl)handle);
+            }
+            return handle;
+        }
+
+        private TCPWrap.TCPImpl convertTcpHandle(TCPWrap.TCPImpl tcp)
+        {
+            // For a server, we will create a new handle here, but since the client is already listening,
+            // we don't have to actually do anything to id.
+            NIOSocketHandle sockHandle = (NIOSocketHandle)tcp.getHandle();
+            SocketHandle childSockHandle;
+            if (sockHandle.isServerChannel()) {
+                childSockHandle = new ChildServerHandle(sockHandle, runtime);
+            } else {
+                childSockHandle = sockHandle;
+            }
+
+            TCPWrap.TCPImpl newHandle =
+                (TCPWrap.TCPImpl)Context.getCurrentContext().newObject(this, TCPWrap.TCPImpl.CLASS_NAME,
+                                                                       new Object[] { childSockHandle });
+            return newHandle;
         }
     }
 

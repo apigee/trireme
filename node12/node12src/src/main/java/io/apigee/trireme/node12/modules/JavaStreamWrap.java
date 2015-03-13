@@ -36,6 +36,8 @@ import org.mozilla.javascript.Function;
 import org.mozilla.javascript.Scriptable;
 import org.mozilla.javascript.ScriptableObject;
 import org.mozilla.javascript.Undefined;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.lang.reflect.InvocationTargetException;
 import java.nio.ByteBuffer;
@@ -52,6 +54,7 @@ import static io.apigee.trireme.core.ArgUtils.*;
 public class JavaStreamWrap
     implements InternalNodeModule
 {
+    private static final Logger log = LoggerFactory.getLogger(JavaStreamWrap.class);
 
     public static final String MODULE_NAME = "java_stream_wrap";
 
@@ -152,6 +155,10 @@ public class JavaStreamWrap
             this.runtime = runtime;
         }
 
+        public Handle getHandle() {
+            return handle;
+        }
+
         @Override
         protected Object getInstanceIdValue(int id)
         {
@@ -234,7 +241,7 @@ public class JavaStreamWrap
             return Undefined.instance;
         }
 
-        private void close(Object[] args)
+        protected void close(Object[] args)
         {
             Function cb = functionArg(args, 0, false);
 
@@ -353,6 +360,8 @@ public class JavaStreamWrap
                 } else {
                     onRead.call(cx, onRead, this, new Object[]{err});
                 }
+            } else {
+                log.debug("Dropped an incoming message because onRead was not set");
             }
         }
     }

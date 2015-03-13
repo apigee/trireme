@@ -672,7 +672,8 @@
       var fargs = copyArgs(arguments, 3);
       func.apply(thisObj, fargs);
       // node.cc always re-calls the ticks after executing a callback.
-      process._tickCallback();
+      // but we won't...
+      //process._tickCallback();
     }
     process._submitTickCallback = submitTick;
 
@@ -687,7 +688,7 @@
         domain.exit();
       }
       // node.cc always re-calls the ticks after executing a callback.
-      process._tickCallback();
+      //process._tickCallback();
     }
 
     // Called by the "domain" module when switching to domains -- we replace a few functions

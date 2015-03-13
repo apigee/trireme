@@ -4,6 +4,7 @@ import io.apigee.trireme.core.InternalNodeModule;
 import io.apigee.trireme.core.NodeRuntime;
 import io.apigee.trireme.core.internal.AbstractIdObject;
 import io.apigee.trireme.core.internal.IdPropertyMap;
+import io.apigee.trireme.core.internal.ScriptRunner;
 import org.mozilla.javascript.Context;
 import org.mozilla.javascript.Function;
 import org.mozilla.javascript.Scriptable;
@@ -69,11 +70,12 @@ public class StreamWrap
                 return;
             }
 
+            ScriptRunner runner =
+                (ScriptRunner)cx.getThreadLocal(ScriptRunner.RUNNER);
             int status = (err == 0 ? 0 : -1);
-            onComplete.call(cx, onComplete, thisObj,
-                            new Object[] {
-                                status, handle, this, err
-                            });
+            runner.executeCallback(cx, new Object[] {
+                status, handle, thisObj, err
+            }, onComplete, this);
         }
 
         public int getBytes() {
@@ -147,11 +149,13 @@ public class StreamWrap
                 return;
             }
 
+            ScriptRunner runner =
+                (ScriptRunner)cx.getThreadLocal(ScriptRunner.RUNNER);
             int status = (err == 0 ? 0 : -1);
-            onComplete.call(cx, onComplete, thisObj,
-                            new Object[] {
-                                status, handle, this
-                            });
+            runner.executeCallback(cx,
+                                   new Object[] {
+                                       status, handle, this
+                                   }, onComplete, thisObj);
         }
 
         @Override

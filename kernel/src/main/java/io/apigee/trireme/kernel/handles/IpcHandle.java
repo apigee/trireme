@@ -21,14 +21,16 @@
  */
 package io.apigee.trireme.kernel.handles;
 
-import io.apigee.trireme.kernel.BiCallback;
 import io.apigee.trireme.kernel.Charsets;
+import io.apigee.trireme.kernel.ErrorCodes;
 import io.apigee.trireme.kernel.GenericNodeRuntime;
+import io.apigee.trireme.kernel.TriCallback;
 import io.apigee.trireme.kernel.util.StringUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.nio.ByteBuffer;
+import java.nio.charset.Charset;
 import java.util.concurrent.ConcurrentLinkedQueue;
 
 /**
@@ -45,57 +47,74 @@ public class IpcHandle
 
     private IpcHandle partner;
     private IOCompletionHandler<ByteBuffer> handler;
-    private boolean reading;
-    private BiCallback<ByteBuffer, Object> ipcCallback;
+    private volatile boolean reading;
+    private TriCallback<Integer, ByteBuffer, Object> ipcCallback;
 
     public IpcHandle(GenericNodeRuntime runtime)
     {
         this.runtime = runtime;
     }
 
-    public BiCallback<ByteBuffer, Object> getIpcCallback() {
+    public TriCallback<Integer, ByteBuffer, Object> getIpcCallback() {
         return ipcCallback;
     }
 
-    public void setIpcCallback(BiCallback<ByteBuffer, Object> cb) {
+    public void setIpcCallback(TriCallback<Integer, ByteBuffer, Object> cb) {
         ipcCallback = cb;
     }
 
     @Override
     public int write(ByteBuffer buf, IOCompletionHandler<Integer> handler)
     {
-        return writeHandle(buf, null, handler);
+        return doWrite(buf, null, handler);
+    }
+
+    @Override
+    public int write(String s, Charset cs, IOCompletionHandler<Integer> handler)
+    {
+        return writeHandle(s, cs, null, handler);
+    }
+
+    @Override
+    public int writeHandle(String s, Charset cs, Object handleArg, IOCompletionHandler<Integer> handler)
+    {
+        // Skip the additional copy of the buffer that is coming up
+        return doWrite(StringUtils.stringToBuffer(s, cs), handleArg, handler);
     }
 
     @Override
     public int writeHandle(ByteBuffer buf, Object handleArg, IOCompletionHandler<Integer> handler)
+    {
+        // For safety within the same JVM, copy the buffer, because we don't know where it came from
+        ByteBuffer copy = ByteBuffer.allocate(buf.remaining());
+        copy.put(buf);
+        return doWrite(buf, handleArg, handler);
+    }
+
+    private int doWrite(ByteBuffer buf, Object handleArg, IOCompletionHandler<Integer> handler)
     {
         if (log.isDebugEnabled()) {
             log.debug("IpcHandle.write: " + StringUtils.bufferToString(buf.duplicate(), Charsets.UTF8));
         }
 
         int len = buf.remaining();
-        final QueuedWrite qw = new QueuedWrite(buf, handler);
+        QueuedWrite qw = new QueuedWrite();
+        qw.buf = buf;
+        qw.handler = handler;
         qw.handleArg = handleArg;
+        qw.handlerRuntime = runtime;
+        writeQueue.offer(qw);
+
+        if (log.isDebugEnabled()) {
+            log.debug("Queued {} bytes on the write queue", len);
+        }
 
         if ((partner != null) && partner.reading) {
             if (log.isDebugEnabled()) {
                 log.debug("Delivering {} bytes directly to partner handle", len);
             }
-            // This will be called from any thread -- need to run it on the correct one
-            partner.runtime.executeScriptTask(new Runnable() {
-                @Override
-                public void run()
-                {
-                    partner.deliverWrite(qw);
-                }
-            }, null);
-
-        } else {
-            if (log.isDebugEnabled()) {
-                log.debug("Queuing {} bytes for later deliver", len);
-            }
-            writeQueue.offer(qw);
+            // Tell the partner (in another script thread) to drain the queue
+            partner.drainWriteQueue(partner.runtime);
         }
         return len;
     }
@@ -103,27 +122,50 @@ public class IpcHandle
     @Override
     public int getWritesOutstanding()
     {
-        return writeQueue.size();
+        int len = 0;
+        for (QueuedWrite qw : writeQueue) {
+            ByteBuffer buf = qw.buf;
+            len += (buf == null ? 0 : buf.remaining());
+        }
+        return len;
     }
 
     @Override
     public void startReading(IOCompletionHandler<ByteBuffer> handler)
     {
+        log.debug("IpcHandle.startReading");
         reading = true;
         this.handler = handler;
-        drainWriteQueue();
+
+        // Drain the queue, but do it in the next tick.
+        // Startup assumes that we will not deliver any messages until "main" has finished running.
+        drainWriteQueue(runtime);
     }
 
-    private void drainWriteQueue()
+    private void drainWriteQueue(GenericNodeRuntime runner)
+    {
+        runner.executeScriptTask(new Runnable() {
+            @Override
+            public void run()
+            {
+                doDrain();
+            }
+        }, null);
+    }
+
+    private void doDrain()
     {
         if (partner != null) {
+            if (log.isDebugEnabled()) {
+                log.debug("Draining write queue. size = {}", partner.writeQueue.size());
+            }
             QueuedWrite qw;
             do {
                 qw = partner.writeQueue.poll();
                 if (qw != null) {
                     deliverWrite(qw);
                 }
-            } while (qw != null);
+            } while (reading && (qw != null));
         }
     }
 
@@ -135,14 +177,15 @@ public class IpcHandle
 
     public void connect(IpcHandle partner)
     {
+        log.debug("IpcHandle.connect");
         this.partner = partner;
         partner.partner = this;
 
         if (reading) {
-            drainWriteQueue();
+            drainWriteQueue(runtime);
         }
         if (partner.reading) {
-            partner.drainWriteQueue();
+            partner.drainWriteQueue(partner.runtime);
         }
     }
 
@@ -150,24 +193,46 @@ public class IpcHandle
     public void close()
     {
         stopReading();
+
+        if (partner != null) {
+            log.debug("Sending EOF to our partner");
+            QueuedWrite qw = new QueuedWrite();
+            qw.eof = true;
+            writeQueue.offer(qw);
+
+            if (partner.reading) {
+                partner.drainWriteQueue(partner.runtime);
+            }
+        }
+
         partner = null;
     }
 
-    private void deliverWrite(QueuedWrite qw)
+    private void deliverWrite(final QueuedWrite qw)
     {
-        if (handler != null) {
+        if ((handler != null) || (ipcCallback != null)) {
             if (log.isDebugEnabled()) {
                 log.debug("Delivering {} to the local script from the other side", qw.buf);
             }
 
-            int len = qw.buf.remaining();
+            final int len = qw.buf.remaining();
+            final int err = (qw.eof ? ErrorCodes.EOF : 0);
             if (ipcCallback == null) {
-                handler.ioComplete(0, qw.buf);
+                handler.ioComplete(err, qw.buf);
             } else {
-                ipcCallback.call(qw.buf, qw.handleArg);
+                ipcCallback.call(err, qw.buf, qw.handleArg);
             }
+
             if (qw.handler != null) {
-                qw.handler.ioComplete(0, len);
+                // Now let the caller know that the write completed -- but this has to go back
+                // to the original script!
+                qw.handlerRuntime.executeScriptTask(new Runnable() {
+                    @Override
+                    public void run()
+                    {
+                        qw.handler.ioComplete(err, len);
+                    }
+                }, null);
             }
         }
     }
@@ -177,11 +242,7 @@ public class IpcHandle
         ByteBuffer buf;
         IOCompletionHandler<Integer> handler;
         Object handleArg;
-
-        QueuedWrite(ByteBuffer buf, IOCompletionHandler<Integer> handler)
-        {
-            this.buf = buf;
-            this.handler = handler;
-        }
+        boolean eof;
+        GenericNodeRuntime handlerRuntime;
     }
 }

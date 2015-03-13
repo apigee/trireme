@@ -82,6 +82,10 @@ public class NIOSocketHandle
                                         });
     }
 
+    public boolean isServerChannel() {
+        return (svrChannel != null);
+    }
+
     private void clientInit()
         throws IOException, OSException
     {

@@ -276,6 +276,7 @@ public class ProcessWrap
                 runtime.enqueueCallback(onExit, onExit, this, runtime.getDomain(),
                                         new Object[]{exitCode});
             }
+            pinState.clearPin(runtime);
         }
 
         private Object objParam(String name, Scriptable s)

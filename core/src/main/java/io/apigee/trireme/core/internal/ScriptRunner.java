@@ -419,6 +419,16 @@ public class ScriptRunner
     }
 
     /**
+     * Immediately execute the specified callback. This function wraps up the function to be called,
+     * because certain types of anonymous functions in Rhino can't be called by just calling "call".
+     */
+    public void executeCallback(Context cx, Object[] args, Function function,
+                                Scriptable thisObj)
+    {
+        process.submitTick(cx, args, function, thisObj, process.getDomain());
+    }
+
+    /**
      * This method is used by the "child_process" module when sending an IPC message between child processes
      * in the same JVM.
      *

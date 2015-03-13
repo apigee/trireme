@@ -70,6 +70,7 @@ public class SpawnedTriremeProcess
     private final boolean detached;
 
     private ScriptFuture future;
+    private PipeWrap.PipeImpl ipcPipe;
 
     public SpawnedTriremeProcess(List<String> execArgs, String file, File cwd,
                                  Scriptable stdio, List<String> env, boolean detached,
@@ -171,6 +172,10 @@ public class SpawnedTriremeProcess
             {
                 if (log.isDebugEnabled()) {
                     log.debug("Child script exited with exit code {}", status.getExitCode());
+                }
+                if (ipcPipe != null) {
+                    // Unlike Linux the pipe doesn't close unless we tell it to close.
+                    ipcPipe.closePipe();
                 }
                 parent.callOnExit(status.getExitCode());
             }
@@ -315,8 +320,10 @@ public class SpawnedTriremeProcess
             throw Utils.makeError(cx, parent, "Only IPC supported for fd");
         }
 
-        PipeWrap.PipeImpl handle = (PipeWrap.PipeImpl)fdObj.get("handle", fdObj);
-        parent.setIpcHandle(handle.getIpcHandle());
+        ipcPipe = (PipeWrap.PipeImpl)fdObj.get("handle", fdObj);
+        // "Handle" now represents the parent side (the side doing the spawning) of a parent-child relationship.
+        // Stash it away because the child will ask for it once spawned to set up a channel.
+        parent.setIpcHandle(ipcPipe.getIpcHandle());
     }
 
     private void setEnvironment(List<String> pairs,

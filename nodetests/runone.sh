@@ -3,7 +3,7 @@
 CP=/tmp/cp.$$
 rm -f ${CP}
 
-mvn -DincludeScope=test -Dmdep.outputFile=${CP} dependency:build-classpath
+mvn -o -DincludeScope=test -Dmdep.outputFile=${CP} dependency:build-classpath
 
 CLASSPATH=$PWD/target/classes:$PWD/target/test-classes:`cat ${CP}`
 export CLASSPATH

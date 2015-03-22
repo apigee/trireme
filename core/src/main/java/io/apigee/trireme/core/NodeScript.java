@@ -343,6 +343,7 @@ public class NodeScript
     public void _setParentProcess(TriremeProcess parent)
     {
         this.parentProcess = parent;
+        this.childProcess = true;
         if (runner != null) {
             runner.setParentProcess(parent);
         }

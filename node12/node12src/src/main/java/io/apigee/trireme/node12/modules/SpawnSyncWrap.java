@@ -30,15 +30,13 @@ import io.apigee.trireme.core.internal.AbstractProcess;
 import io.apigee.trireme.core.internal.IdPropertyMap;
 import io.apigee.trireme.core.internal.ProcessManager;
 import io.apigee.trireme.core.internal.ScriptRunner;
-import io.apigee.trireme.core.internal.TriremeProcess;
+import io.apigee.trireme.core.modules.Buffer;
 import io.apigee.trireme.kernel.ErrorCodes;
-import io.apigee.trireme.kernel.handles.IpcHandle;
-import io.apigee.trireme.kernel.util.PinState;
 import io.apigee.trireme.node12.internal.SpawnedOSProcess;
 import io.apigee.trireme.node12.internal.SpawnedProcess;
 import io.apigee.trireme.node12.internal.SpawnedTriremeProcess;
 import org.mozilla.javascript.Context;
-import org.mozilla.javascript.Function;
+import org.mozilla.javascript.ScriptRuntime;
 import org.mozilla.javascript.Scriptable;
 import org.mozilla.javascript.ScriptableObject;
 import org.mozilla.javascript.Undefined;
@@ -50,182 +48,102 @@ import static io.apigee.trireme.core.ArgUtils.*;
 import java.io.File;
 import java.lang.reflect.InvocationTargetException;
 import java.util.List;
+import java.util.concurrent.TimeUnit;
 
-public class ProcessWrap
+public class SpawnSyncWrap
     implements InternalNodeModule
 {
-    protected static final Logger log = LoggerFactory.getLogger(ProcessWrap.class);
-
+    protected static final Logger log = LoggerFactory.getLogger(SpawnSyncWrap.class);
     @Override
     public String getModuleName() {
-        return "process_wrap";
+        return "spawn_sync";
     }
 
     @Override
     public Scriptable registerExports(Context cx, Scriptable global, NodeRuntime runtime)
         throws InvocationTargetException, IllegalAccessException, InstantiationException
     {
-        Scriptable exports = cx.newObject(global);
-        Function process = new ProcessImpl().exportAsClass(global);
-        exports.put(ProcessImpl.CLASS_NAME, exports, process);
-        return exports;
+        new SpawnSync().exportAsClass(global);
+        return cx.newObject(global, SpawnSync.CLASS_NAME);
     }
 
-    public static class ProcessImpl
-        extends AbstractIdObject<ProcessImpl>
-        implements TriremeProcess
+    public static class SpawnSync
+        extends AbstractIdObject<SpawnSync>
     {
-        public static final String CLASS_NAME = "Process";
+        public static final String CLASS_NAME = "_spawnSyncClass";
 
         private static final IdPropertyMap props = new IdPropertyMap(CLASS_NAME);
 
-        // exitCode, signalCode
-        private Function onExit;
-        private ScriptRunner runtime;
-        private final PinState pinState = new PinState();
-
-        private int pid;
-        private SpawnedProcess spawned;
-        private IpcHandle ipcHandle;
-
-        private static final int
-            Id_onExit = 1,
-            Id_close = 2,
-            Id_spawn = 3,
-            Id_kill = 4,
-            Id_ref = 5,
-            Id_unref = 6;
+        private static final int Id_spawn = 2;
 
         static {
-            props.addProperty("onexit", Id_onExit, 0);
-            props.addMethod("close", Id_close, 0);
             props.addMethod("spawn", Id_spawn, 1);
-            props.addMethod("kill", Id_kill, 1);
-            props.addMethod("ref", Id_ref, 0);
-            props.addMethod("unref", Id_unref, 0);
         }
 
-        public ProcessImpl()
+        private final ScriptRunner runtime;
+
+        public SpawnSync()
         {
             super(props);
+            this.runtime = null;
         }
 
-        public ScriptRunner getRuntime() {
-            return runtime;
-        }
-
-        @Override
-        public IpcHandle getIpcHandle() {
-            return ipcHandle;
-        }
-
-        public void setIpcHandle(IpcHandle handle) {
-            this.ipcHandle = handle;
-        }
-
-        @Override
-        public Function getOnMessage()
+        public SpawnSync(ScriptRunner runtime)
         {
-            throw new AssertionError("Not implemented in 0.12");
+            super(props);
+            this.runtime = runtime;
         }
 
         @Override
-        public ProcessImpl defaultConstructor(Context cx, Object[] args)
+        public SpawnSync defaultConstructor(Context cx, Object[] args)
         {
-            ProcessImpl ret = new ProcessImpl();
-            ret.runtime = (ScriptRunner)cx.getThreadLocal(ScriptRunner.RUNNER);
-            return ret;
+            return new SpawnSync((ScriptRunner)cx.getThreadLocal(ScriptRunner.RUNNER));
         }
 
         @Override
-        public ProcessImpl defaultConstructor()
+        public SpawnSync defaultConstructor()
         {
             throw new AssertionError();
-        }
-
-        @Override
-        protected Object getInstanceIdValue(int id)
-        {
-            switch (id) {
-            case Id_onExit:
-                return onExit;
-            default:
-                return super.getInstanceIdValue(id);
-            }
-        }
-
-        @Override
-        protected void setInstanceIdValue(int id, Object value)
-        {
-            switch (id) {
-            case Id_onExit:
-                onExit = (Function)value;
-                break;
-            default:
-                super.setInstanceIdValue(id, value);
-                break;
-            }
         }
 
         @Override
         protected Object prototypeCall(int id, Context cx, Scriptable scope, Object[] args)
         {
             switch (id) {
-            case Id_close:
-                close();
-                break;
             case Id_spawn:
                 return spawn(cx, args);
-            case Id_kill:
-                return kill(cx, args);
-            case Id_ref:
-                ref();
-                break;
-            case Id_unref:
-                unref();
-                break;
             default:
                 return super.prototypeCall(id, cx, scope, args);
             }
-            return Undefined.instance;
         }
 
-        private void ref()
+        private Scriptable spawn(Context cx, Object[] args)
         {
-            pinState.ref(runtime);
-        }
-
-        private void unref()
-        {
-            pinState.unref(runtime);
-        }
-
-        private void close()
-        {
-            pinState.clearPin(runtime);
-        }
-
-        private Object spawn(Context cx, Object[] args)
-        {
+            int timeout = -1;
             Scriptable options = objArg(args, 0, Scriptable.class, true);
+            Scriptable result = cx.newObject(this);
 
             if (objParam("uid", options) != null) {
                 log.debug("setuid not supported");
-                return ErrorCodes.EINVAL;
+                result.put("error", result, ErrorCodes.EINVAL);
+                return result;
             }
             if (objParam("gid", options) != null) {
                 log.debug("setgid not supported");
-                return ErrorCodes.EINVAL;
+                result.put("error", result, ErrorCodes.EINVAL);
+                return result;
             }
 
             if (!options.has("args", options)) {
                 log.debug("Missing args");
-                return ErrorCodes.EINVAL;
+                result.put("error", result, ErrorCodes.EINVAL);
+                return result;
             }
-            List<String> execArgs = Utils.toStringList((Scriptable)options.get("args", options));
+            List<String> execArgs = Utils.toStringList((Scriptable) options.get("args", options));
             if (execArgs.isEmpty()) {
                 log.debug("Empty args");
-                return ErrorCodes.EINVAL;
+                result.put("error", result, ErrorCodes.EINVAL);
+                return result;
             }
             for (int i = 0; i < execArgs.size(); i++) {
                 execArgs.set(i, Utils.unquote(execArgs.get(i)));
@@ -235,8 +153,19 @@ public class ProcessWrap
                 SubprocessPolicy policy = runtime.getSandbox().getSubprocessPolicy();
                 if ((policy != null) && !policy.allowSubprocess(execArgs)) {
                     log.debug("process start blocked by sandbox policy");
-                    return ErrorCodes.EPERM;
+                    result.put("error", result, ErrorCodes.EPERM);
+                    return result;
                 }
+            }
+
+            Object timeoutObj = objParam("timeout", options);
+            if (timeoutObj != null) {
+                timeout = ScriptRuntime.toInt32(timeoutObj);
+            }
+
+            String killSignal = stringParam("killSignal", options);
+            if (killSignal == null) {
+                killSignal = "SIGTERM";
             }
 
             // TODO: file??
@@ -251,31 +180,30 @@ public class ProcessWrap
             List<String> env =
                 (envPairs == null ? null : Utils.toStringList(envPairs));
 
+            SpawnedProcess spawned;
             ProcessManager mgr = ProcessManager.get();
             String procName = execArgs.get(0);
-            pid = mgr.getNextPid();
+            int pid = mgr.getNextPid();
             if ("node".equals(procName) || AbstractProcess.EXECUTABLE_NAME.equals(procName)) {
-                spawned = new SpawnedTriremeProcess(execArgs, file, cwdPath, stdio, env, detached, this);
+                spawned = new SpawnedTriremeProcess(execArgs, file, cwdPath, stdio, env, detached, null);
             } else {
-                spawned = new SpawnedOSProcess(execArgs, file, cwdPath, stdio, env, detached, this, runtime);
+                spawned = new SpawnedOSProcess(execArgs, file, cwdPath, stdio, env, detached, null, runtime);
             }
-            mgr.addProcess(pid, spawned);
 
-            pinState.requestPin(runtime);
+            SpawnedProcess.SpawnSyncResult spawnResult =
+                spawned.spawnSync(cx, timeout, TimeUnit.MILLISECONDS);
 
-            int err = spawned.spawn(cx);
-            return (err == 0 ? Undefined.instance : err);
-        }
+            result.put("error", result, spawnResult.getErrCode());
+            if (spawnResult.getErrCode() == 0) {
+                result.put("pid", result, pid);
+                result.put("status", result, spawnResult.getExitCode());
 
-        public void callOnExit(int exitCode)
-        {
-            ProcessManager.get().removeProcess(pid);
-            if (onExit != null) {
-                // Give scripts, especially tests, a chance to set up callbacks
-                runtime.enqueueCallback(onExit, onExit, this, runtime.getDomain(),
-                                        new Object[]{exitCode});
+                Scriptable output = cx.newArray(this, 3);
+                output.put(1, output, Buffer.BufferImpl.newBuffer(cx, this, spawnResult.getStdout(), false));
+                output.put(2, output, Buffer.BufferImpl.newBuffer(cx, this, spawnResult.getStderr(), false));
+                result.put("output", result, output);
             }
-            pinState.clearPin(runtime);
+            return result;
         }
 
         private Object objParam(String name, Scriptable s)
@@ -294,17 +222,6 @@ public class ProcessWrap
         {
             Object o = objParam(name, s);
             return (o == null ? null : Context.toString(o));
-        }
-
-        private Object kill(Context cx, Object[] args)
-        {
-            return Undefined.instance;
-        }
-
-        @Override
-        public void kill(Context cx, Scriptable thisObj, int code, int signal)
-        {
-            // TODO!
         }
 
         private String getCwdOption(Scriptable s)

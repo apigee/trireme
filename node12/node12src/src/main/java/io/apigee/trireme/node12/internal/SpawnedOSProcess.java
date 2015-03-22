@@ -22,24 +22,30 @@
 package io.apigee.trireme.node12.internal;
 
 import io.apigee.trireme.core.Utils;
+import io.apigee.trireme.core.internal.ScriptRunner;
+import io.apigee.trireme.core.modules.Buffer;
 import io.apigee.trireme.kernel.ErrorCodes;
 import io.apigee.trireme.kernel.handles.JavaInputStreamHandle;
 import io.apigee.trireme.kernel.handles.JavaOutputStreamHandle;
+import io.apigee.trireme.kernel.streams.BitBucketInputStream;
 import io.apigee.trireme.kernel.streams.BitBucketOutputStream;
 import io.apigee.trireme.kernel.streams.StreamPiper;
 import io.apigee.trireme.node12.modules.ProcessWrap;
 import org.mozilla.javascript.Context;
 import org.mozilla.javascript.Scriptable;
-import org.mozilla.javascript.Undefined;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.io.ByteArrayInputStream;
+import java.io.ByteArrayOutputStream;
 import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
+import java.nio.ByteBuffer;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.TimeUnit;
 import java.util.regex.Pattern;
 
 public class SpawnedOSProcess
@@ -55,12 +61,13 @@ public class SpawnedOSProcess
     private final List<String> env;
     private final Scriptable stdio;
     private final boolean detached;
+    private final ScriptRunner runtime;
 
     private Process proc;
 
     public SpawnedOSProcess(List<String> execArgs, String file, File cwd,
                             Scriptable stdio, List<String> env, boolean detached,
-                            ProcessWrap.ProcessImpl parent)
+                            ProcessWrap.ProcessImpl parent, ScriptRunner runtime)
     {
         super(parent);
         this.execArgs = execArgs;
@@ -69,10 +76,10 @@ public class SpawnedOSProcess
         this.stdio = stdio;
         this.env = env;
         this.detached = detached;
+        this.runtime = runtime;
     }
 
-    @Override
-    public int spawn(final Context cx)
+    private int startSpawn(Context cx)
     {
         if (log.isDebugEnabled()) {
             log.debug("About to exec " + execArgs);
@@ -103,6 +110,19 @@ public class SpawnedOSProcess
         if (log.isDebugEnabled()) {
             log.debug("Starting {}", proc);
         }
+        return 0;
+    }
+
+    /**
+     * Regular, async spawn. Go through "stdio" array to figure out how to handle input and output.
+     */
+    @Override
+    public int spawn(Context cx)
+    {
+        int err = startSpawn(cx);
+        if (err != 0) {
+            return err;
+        }
 
         // Java doesn't return the actual OS PID
         // TODO Something with it!
@@ -130,7 +150,7 @@ public class SpawnedOSProcess
             }
         }
 
-        parent.getRuntime().getUnboundedPool().submit(new Runnable()
+        runtime.getUnboundedPool().submit(new Runnable()
         {
             @Override
             public void run()
@@ -149,6 +169,58 @@ public class SpawnedOSProcess
         });
 
         return 0;
+    }
+
+    /**
+     * Spawn synchronously. Expect input and output to buffers. Then wait for process to complete,
+     * with a timeout.
+     */
+    @Override
+    public SpawnSyncResult spawnSync(Context cx, long timeout, TimeUnit unit)
+    {
+        SpawnSyncResult result = new SpawnSyncResult();
+
+        int err = startSpawn(cx);
+        if (err != 0) {
+            result.setErrCode(err);
+            return result;
+        }
+
+        // We have limited options for passing input to a subprocess in Java.
+        // Furthermore, all the "stdio" options don't make sense in this scenario, do they?
+        if (stdio.has(0, stdio)) {
+            Scriptable si = (Scriptable)stdio.get(0, stdio);
+            if (si.has("input", si)) {
+                // Spawn a thread to copy input buffer to process stdin -- need a thread in case
+                // there is a lot of data
+                Buffer.BufferImpl buffer = (Buffer.BufferImpl)si.get("input", si);
+                ByteArrayInputStream stdin =
+                    new ByteArrayInputStream(buffer.getArray(), buffer.getArrayOffset(), buffer.getLength());
+                StreamPiper piper = new StreamPiper(stdin, proc.getOutputStream(), true);
+                piper.start(runtime.getUnboundedPool());
+            }
+        }
+
+        ByteArrayOutputStream stdout = new ByteArrayOutputStream();
+        StreamPiper stdoutPiper = new StreamPiper(proc.getInputStream(), stdout, true);
+        stdoutPiper.start(runtime.getUnboundedPool());
+
+        ByteArrayOutputStream stderr = new ByteArrayOutputStream();
+        StreamPiper stderrPiper = new StreamPiper(proc.getErrorStream(), stderr, true);
+        stderrPiper.start(runtime.getUnboundedPool());
+
+        try {
+            // TODO Gonna have to start a timer thread for timeout
+            int exitCode = proc.waitFor();
+            result.setExitCode(exitCode);
+        } catch (InterruptedException ie) {
+            result.setErrCode(ErrorCodes.EINTR);
+        }
+
+        result.setStdout(ByteBuffer.wrap(stdout.toByteArray()));
+        result.setStderr(ByteBuffer.wrap(stderr.toByteArray()));
+
+        return result;
     }
 
     @Override

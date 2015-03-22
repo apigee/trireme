@@ -32,6 +32,7 @@ import io.apigee.trireme.node12.modules.PipeWrap;
 import io.apigee.trireme.node12.modules.Process;
 import io.apigee.trireme.node12.modules.ProcessWrap;
 import io.apigee.trireme.node12.modules.Smalloc;
+import io.apigee.trireme.node12.modules.SpawnSyncWrap;
 import io.apigee.trireme.node12.modules.StreamWrap;
 import io.apigee.trireme.node12.modules.TCPWrap;
 import io.apigee.trireme.node12.modules.TimerWrap;
@@ -127,6 +128,7 @@ public class Node12Implementation
         r.add(Process.class);
         r.add(ProcessWrap.class);
         r.add(Smalloc.class);
+        r.add(SpawnSyncWrap.class);
         r.add(StreamWrap.class);
         r.add(TCPWrap.class);
         r.add(TimerWrap.class);

@@ -168,8 +168,9 @@ public class PipeWrap
                 public void call(Integer err, ByteBuffer buf, Object handle)
                 {
                     if (log.isDebugEnabled()) {
+                        String msg = (buf == null ? "" : StringUtils.bufferToString(buf.duplicate(), Charsets.UTF8));
                         log.debug("Got a request from the other side with a handle: err = {} {} : {}",
-                                  err, StringUtils.bufferToString(buf.duplicate(), Charsets.UTF8), handle);
+                                  err, msg, handle);
                     }
                     onRead(err, buf, convertHandle(handle));
                 }

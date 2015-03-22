@@ -65,6 +65,7 @@ import java.lang.reflect.InvocationTargetException;
 import java.nio.ByteBuffer;
 import java.nio.channels.SelectionKey;
 import java.nio.channels.Selector;
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.IdentityHashMap;
 import java.util.Iterator;
@@ -801,30 +802,39 @@ public class ScriptRunner
         return status;
     }
 
+    /**
+     * To support various old NodeScript constructors, assemble the argv by including them. Also strip off
+     * any "vm" args here, like "--whatever".
+     * Resulting list will nearly always be "./node script.js arg0 arg1 arg2..."
+     */
     private void setArgv(String scriptName)
     {
-        String[] argv;
-        if (scriptName == null) {
-            argv = new String[args == null ? 1 : args.length + 1];
-        } else {
-            argv = new String[args == null ? 2 : args.length + 2];
+        ArrayList<String> argv = new ArrayList<String>(args == null ? 2 : args.length + 2);
+        argv.add(AbstractProcess.EXECUTABLE_NAME);
+        if (scriptName != null) {
+            argv.add(scriptName);
         }
 
-        int p = 0;
-        argv[p++] = AbstractProcess.EXECUTABLE_NAME;
-        if (scriptName != null) {
-            argv[p++] = scriptName;
-        }
         if (args != null) {
-            System.arraycopy(args, 0, argv, p, args.length);
-        }
-        
-        if (log.isDebugEnabled()) {
-            for (int i = 0; i < argv.length; i++) {
-                log.debug("argv[{}] = {}", i, argv[i]);
+            boolean vmArgsDone = true;
+            for (String arg : args) {
+                if (vmArgsDone) {
+                    argv.add(arg);
+                } else if (!arg.startsWith("--")) {
+                    argv.add(arg);
+                    vmArgsDone = true;
+                }
+                // else skip!
             }
         }
-        process.setArgv(argv);
+
+        String[] ret = argv.toArray(new String[argv.size()]);
+        if (log.isDebugEnabled()) {
+            for (int i = 0; i < ret.length; i++) {
+                log.debug("argv[{}] = {}", i, ret[i]);
+            }
+        }
+        process.setArgv(ret);
     }
 
     private ScriptStatus mainLoop(Context cx)
@@ -1122,11 +1132,6 @@ public class ScriptRunner
         } catch (InstantiationException e) {
             throw new NodeException(e);
         }
-    }
-
-    private static void copyProp(Scriptable src, Scriptable dest, String name)
-    {
-        dest.put(name, dest, src.get(name, src));
     }
 
     /**

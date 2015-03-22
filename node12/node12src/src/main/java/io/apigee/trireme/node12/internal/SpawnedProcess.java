@@ -28,13 +28,15 @@ import org.mozilla.javascript.Context;
 import org.mozilla.javascript.EvaluatorException;
 import org.mozilla.javascript.Scriptable;
 
+import java.nio.ByteBuffer;
+import java.util.concurrent.TimeUnit;
+
 public abstract class SpawnedProcess
     implements GenericProcess
 {
     public static final String STDIO_PIPE =      "pipe";
     public static final String STDIO_FD =        "fd";
     public static final String STDIO_IGNORE =    "ignore";
-    public static final String STDIO_IPC =       "ipc";
 
     protected static ProcessWrap.ProcessImpl parent;
 
@@ -44,6 +46,8 @@ public abstract class SpawnedProcess
     }
 
     public abstract int spawn(Context cx);
+
+    public abstract SpawnSyncResult spawnSync(Context cx, long timeout, TimeUnit unit);
 
     protected Scriptable createStreamHandle(Context cx, AbstractHandle handle)
     {
@@ -57,5 +61,46 @@ public abstract class SpawnedProcess
             throw new EvaluatorException("Missing fd in fd type stdio object");
         }
         return (Integer)Context.jsToJava(s.get("fd", s), Integer.class);
+    }
+
+    public static class SpawnSyncResult
+    {
+        /** ETIME or something if we timed out */
+        private int err;
+        private int exitCode;
+        private ByteBuffer stdout;
+        private ByteBuffer stderr;
+
+        public int getErrCode() {
+            return err;
+        }
+
+        public void setErrCode(int err) {
+            this.err = err;
+        }
+
+        public int getExitCode() {
+            return exitCode;
+        }
+
+        public void setExitCode(int exitCode) {
+            this.exitCode = exitCode;
+        }
+
+        public ByteBuffer getStdout() {
+            return stdout;
+        }
+
+        public void setStdout(ByteBuffer stdout) {
+            this.stdout = stdout;
+        }
+
+        public ByteBuffer getStderr() {
+            return stderr;
+        }
+
+        public void setStderr(ByteBuffer stderr) {
+            this.stderr = stderr;
+        }
     }
 }

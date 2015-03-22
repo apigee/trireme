@@ -215,7 +215,7 @@ public class IpcHandle
                 log.debug("Delivering {} to the local script from the other side", qw.buf);
             }
 
-            final int len = qw.buf.remaining();
+            final int len = (qw.buf == null ? 0 : qw.buf.remaining());
             final int err = (qw.eof ? ErrorCodes.EOF : 0);
             if (ipcCallback == null) {
                 handler.ioComplete(err, qw.buf);

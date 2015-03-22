@@ -110,6 +110,7 @@ public class JavaStreamWrap
         private Function onRead;
         protected ScriptRunner runtime;
         private Handle handle;
+        private boolean pinnable;
         private boolean reading;
         protected final PinState pinState = new PinState();
 
@@ -141,11 +142,12 @@ public class JavaStreamWrap
             super(p);
         }
 
-        protected StreamWrapImpl(Handle handle, ScriptRunner runtime)
+        protected StreamWrapImpl(Handle handle, ScriptRunner runtime, boolean pinnable)
         {
             super(props);
             this.handle = handle;
             this.runtime = runtime;
+            this.pinnable = pinnable;
         }
 
         protected StreamWrapImpl(Handle handle, ScriptRunner runtime, IdPropertyMap p)
@@ -192,7 +194,8 @@ public class JavaStreamWrap
         {
             ScriptRunner runtime = (ScriptRunner)cx.getThreadLocal(ScriptRunner.RUNNER);
             Handle handle = objArg(args, 0, Handle.class, true);
-            return new StreamWrapImpl(handle, runtime);
+            boolean pinnable = booleanArg(args, 1, false);
+            return new StreamWrapImpl(handle, runtime, pinnable);
         }
 
         @Override
@@ -333,10 +336,17 @@ public class JavaStreamWrap
                     @Override
                     public void ioComplete(int errCode, ByteBuffer value)
                     {
+                        if (log.isTraceEnabled()) {
+                            log.trace("read received {} bytes err = {} from {}",
+                                      (value == null ? null : value.remaining()), errCode, handle);
+                        }
                         onRead(errCode, value, Undefined.instance);
                     }
                 });
                 reading = true;
+                if (pinnable) {
+                    pinState.requestPin(runtime);
+                }
             }
         }
 
@@ -345,6 +355,9 @@ public class JavaStreamWrap
             if (reading) {
                 handle.stopReading();
                 reading = false;
+                if (pinnable) {
+                    pinState.clearPin(runtime);
+                }
             }
         }
 

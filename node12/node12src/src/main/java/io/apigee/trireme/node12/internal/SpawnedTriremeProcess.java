@@ -50,6 +50,7 @@ import java.io.PipedOutputStream;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.TimeUnit;
 import java.util.regex.Pattern;
 
 public class SpawnedTriremeProcess
@@ -95,7 +96,6 @@ public class SpawnedTriremeProcess
         Sandbox parentSb = parent.getRuntime().getSandbox();
         Sandbox sb = (parentSb == null ? new Sandbox() : new Sandbox(parentSb));
 
-        // The first argument should be "./node". We just need the rest.
         String[] argArray = new String[execArgs.size() - 1];
         for (int i = 0; i < argArray.length; i++) {
             argArray[i] = execArgs.get(i + 1);
@@ -124,8 +124,8 @@ public class SpawnedTriremeProcess
             if (env != null) {
                 HashMap<String, String> envPairs = new HashMap<String, String>();
                 setEnvironment(env, envPairs);
-                if (log.isDebugEnabled()) {
-                    log.debug("Spawn environment: {}", envPairs);
+                if (log.isTraceEnabled()) {
+                    log.trace("Spawn environment: {}", envPairs);
                 }
                 script.setEnvironment(envPairs);
             }
@@ -186,6 +186,12 @@ public class SpawnedTriremeProcess
         //options.put("pid", options, System.identityHashCode(proc) % 65536);
 
         return 0;
+    }
+
+    @Override
+    public SpawnSyncResult spawnSync(Context cx, long timeout, TimeUnit unit)
+    {
+        throw new AssertionError("spawnSync for Trireme not yet implemented");
     }
 
     @Override

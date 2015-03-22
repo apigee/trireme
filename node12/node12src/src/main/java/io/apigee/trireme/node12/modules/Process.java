@@ -525,10 +525,10 @@ public class Process
             }
         }
 
-        private Scriptable createStreamHandle(Context cx, AbstractHandle handle)
+        private Scriptable createStreamHandle(Context cx, AbstractHandle handle, boolean pinnable)
         {
             Scriptable module = (Scriptable)runner.requireInternal("java_stream_wrap", cx);
-            return cx.newObject(module, "JavaStream", new Object[] { handle });
+            return cx.newObject(module, "JavaStream", new Object[] { handle, pinnable });
         }
 
         private Scriptable createConsoleHandle(Context cx, AbstractHandle handle)
@@ -552,7 +552,7 @@ public class Process
                 return createConsoleHandle(cx, streamHandle);
             } else {
                 streamHandle = new JavaOutputStreamHandle(runner.getStdout());
-                return createStreamHandle(cx, streamHandle);
+                return createStreamHandle(cx, streamHandle, false);
             }
         }
 
@@ -560,7 +560,7 @@ public class Process
         {
             Context cx = Context.getCurrentContext();
             JavaOutputStreamHandle streamHandle = new JavaOutputStreamHandle(runner.getStderr());
-            return createStreamHandle(cx, streamHandle);
+            return createStreamHandle(cx, streamHandle, false);
         }
 
         /**
@@ -577,7 +577,7 @@ public class Process
                 return createConsoleHandle(cx, streamHandle);
             } else {
                 streamHandle = new JavaInputStreamHandle(runner.getStdin(), runner);
-                return createStreamHandle(cx, streamHandle);
+                return createStreamHandle(cx, streamHandle, runner.getScriptObject()._isChildProcess());
             }
         }
 

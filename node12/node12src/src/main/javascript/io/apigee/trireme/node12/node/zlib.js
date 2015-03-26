@@ -1,24 +1,3 @@
-/*
- * Copyright 2013 Apigee Corporation.
- *
- * Permission is hereby granted, free of charge, to any person obtaining a copy
- * of this software and associated documentation files (the "Software"), to deal
- * in the Software without restriction, including without limitation the rights
- * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
- * copies of the Software, and to permit persons to whom the Software is
- * furnished to do so, subject to the following conditions:
- *
- * The above copyright notice and this permission notice shall be included in
- * all copies or substantial portions of the Software.
- *
- * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
- * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
- * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
- * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
- * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
- * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
- * SOFTWARE.
- */
 // Copyright Joyent, Inc. and other Node contributors.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a
@@ -40,24 +19,12 @@
 // OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE
 // USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-/*
- * Copied from Node 0.10.18 and modified for Noderunner to more directly support what Java can easily do.
- */
-
 var Transform = require('_stream_transform');
 
 var binding = process.binding('zlib');
 var util = require('util');
+var Buffer = require('buffer').Buffer;
 var assert = require('assert').ok;
-
-var debug;
-var debugEnabled;
-if (process.env.NODE_DEBUG && /zlib/.test(process.env.NODE_DEBUG)) {
-  debugEnabled = true;
-  debug = function(x) { console.error('ZIP:', x); };
-} else {
-  debug = function() { };
-}
 
 // zlib doesn't provide these, so kludge them in following the same
 // const naming scheme zlib uses.
@@ -81,9 +48,11 @@ binding.Z_MAX_LEVEL = 9;
 binding.Z_DEFAULT_LEVEL = binding.Z_DEFAULT_COMPRESSION;
 
 // expose all the zlib constants
-Object.keys(binding).forEach(function(k) {
-  if (k.match(/^Z/)) exports[k] = binding[k];
-});
+var bkeys = Object.keys(binding);
+for (var bk = 0; bk < bkeys.length; bk++) {
+  var bkey = bkeys[bk];
+  if (bkey.match(/^Z/)) exports[bkey] = binding[bkey];
+}
 
 // translation table for return codes.
 exports.codes = {
@@ -98,9 +67,11 @@ exports.codes = {
   Z_VERSION_ERROR: binding.Z_VERSION_ERROR
 };
 
-Object.keys(exports.codes).forEach(function(k) {
-  exports.codes[exports.codes[k]] = k;
-});
+var ckeys = Object.keys(exports.codes);
+for (var ck = 0; ck < ckeys.length; ck++) {
+  var ckey = ckeys[ck];
+  exports.codes[exports.codes[ckey]] = ckey;
+}
 
 exports.Deflate = Deflate;
 exports.Inflate = Inflate;
@@ -138,34 +109,91 @@ exports.createUnzip = function(o) {
   return new Unzip(o);
 };
 
+
 // Convenience methods.
 // compress/decompress a string or buffer in one step.
-exports.deflate = function(buffer, callback) {
-  zlibBuffer(new Deflate(), buffer, callback);
+exports.deflate = function(buffer, opts, callback) {
+  if (util.isFunction(opts)) {
+    callback = opts;
+    opts = {};
+  }
+  return zlibBuffer(new Deflate(opts), buffer, callback);
 };
 
-exports.gzip = function(buffer, callback) {
-  zlibBuffer(new Gzip(), buffer, callback);
+exports.deflateSync = function(buffer, opts) {
+  return zlibBufferSync(new Deflate(opts), buffer);
 };
 
-exports.deflateRaw = function(buffer, callback) {
-  zlibBuffer(new DeflateRaw(), buffer, callback);
+exports.gzip = function(buffer, opts, callback) {
+  if (util.isFunction(opts)) {
+    callback = opts;
+    opts = {};
+  }
+  return zlibBuffer(new Gzip(opts), buffer, callback);
 };
 
-exports.unzip = function(buffer, callback) {
-  zlibBuffer(new Unzip(), buffer, callback);
+exports.gzipSync = function(buffer, opts) {
+  return zlibBufferSync(new Gzip(opts), buffer);
 };
 
-exports.inflate = function(buffer, callback) {
-  zlibBuffer(new Inflate(), buffer, callback);
+exports.deflateRaw = function(buffer, opts, callback) {
+  if (util.isFunction(opts)) {
+    callback = opts;
+    opts = {};
+  }
+  return zlibBuffer(new DeflateRaw(opts), buffer, callback);
 };
 
-exports.gunzip = function(buffer, callback) {
-  zlibBuffer(new Gunzip(), buffer, callback);
+exports.deflateRawSync = function(buffer, opts) {
+  return zlibBufferSync(new DeflateRaw(opts), buffer);
 };
 
-exports.inflateRaw = function(buffer, callback) {
-  zlibBuffer(new InflateRaw(), buffer, callback);
+exports.unzip = function(buffer, opts, callback) {
+  if (util.isFunction(opts)) {
+    callback = opts;
+    opts = {};
+  }
+  return zlibBuffer(new Unzip(opts), buffer, callback);
+};
+
+exports.unzipSync = function(buffer, opts) {
+  return zlibBufferSync(new Unzip(opts), buffer);
+};
+
+exports.inflate = function(buffer, opts, callback) {
+  if (util.isFunction(opts)) {
+    callback = opts;
+    opts = {};
+  }
+  return zlibBuffer(new Inflate(opts), buffer, callback);
+};
+
+exports.inflateSync = function(buffer, opts) {
+  return zlibBufferSync(new Inflate(opts), buffer);
+};
+
+exports.gunzip = function(buffer, opts, callback) {
+  if (util.isFunction(opts)) {
+    callback = opts;
+    opts = {};
+  }
+  return zlibBuffer(new Gunzip(opts), buffer, callback);
+};
+
+exports.gunzipSync = function(buffer, opts) {
+  return zlibBufferSync(new Gunzip(opts), buffer);
+};
+
+exports.inflateRaw = function(buffer, opts, callback) {
+  if (util.isFunction(opts)) {
+    callback = opts;
+    opts = {};
+  }
+  return zlibBuffer(new InflateRaw(opts), buffer, callback);
+};
+
+exports.inflateRawSync = function(buffer, opts) {
+  return zlibBufferSync(new InflateRaw(opts), buffer);
 };
 
 function zlibBuffer(engine, buffer, callback) {
@@ -201,6 +229,16 @@ function zlibBuffer(engine, buffer, callback) {
   }
 }
 
+function zlibBufferSync(engine, buffer) {
+  if (util.isString(buffer))
+    buffer = new Buffer(buffer);
+  if (!util.isBuffer(buffer))
+    throw new TypeError('Not a string or buffer');
+
+  var flushFlag = binding.Z_FINISH;
+
+  return engine._processChunk(buffer, flushFlag);
+}
 
 // generic zlib
 // minimal 2-byte header
@@ -310,39 +348,82 @@ function Zlib(opts, mode) {
   }
 
   if (opts.dictionary) {
-    if (!Buffer.isBuffer(opts.dictionary)) {
+    if (!util.isBuffer(opts.dictionary)) {
       throw new Error('Invalid dictionary: it should be a Buffer instance');
     }
   }
 
-  this._binding = binding.createZLib();
+  this._handle = new binding.Zlib(mode);
 
+  var self = this;
   this._hadError = false;
-  this.mode = mode;
+  this._handle.onerror = function(message, errno) {
+    // there is no way to cleanly recover.
+    // continuing only obscures problems.
+    self._handle = null;
+    self._hadError = true;
+
+    var error = new Error(message);
+    error.errno = errno;
+    error.code = exports.codes[errno];
+    self.emit('error', error);
+  };
 
   var level = exports.Z_DEFAULT_COMPRESSION;
-  if (typeof opts.level === 'number') level = opts.level;
+  if (util.isNumber(opts.level)) level = opts.level;
 
   var strategy = exports.Z_DEFAULT_STRATEGY;
-  if (typeof opts.strategy === 'number') strategy = opts.strategy;
+  if (util.isNumber(opts.strategy)) strategy = opts.strategy;
 
-  this._binding.init(mode,
-                     opts.windowBits || exports.Z_DEFAULT_WINDOWBITS,
-                     level,
-                     opts.memLevel || exports.Z_DEFAULT_MEMLEVEL,
-                     strategy,
-                     opts.dictionary);
+  this._handle.init(opts.windowBits || exports.Z_DEFAULT_WINDOWBITS,
+                    level,
+                    opts.memLevel || exports.Z_DEFAULT_MEMLEVEL,
+                    strategy,
+                    opts.dictionary);
 
+  this._buffer = new Buffer(this._chunkSize);
+  this._offset = 0;
   this._closed = false;
+  this._level = level;
+  this._strategy = strategy;
 
   this.once('end', this.close);
 }
 
 util.inherits(Zlib, Transform);
 
-Zlib.prototype.reset = function reset() {
-  debug('reset');
-  return this._binding.reset();
+Zlib.prototype.params = function(level, strategy, callback) {
+  if (level < exports.Z_MIN_LEVEL ||
+      level > exports.Z_MAX_LEVEL) {
+    throw new RangeError('Invalid compression level: ' + level);
+  }
+  if (strategy != exports.Z_FILTERED &&
+      strategy != exports.Z_HUFFMAN_ONLY &&
+      strategy != exports.Z_RLE &&
+      strategy != exports.Z_FIXED &&
+      strategy != exports.Z_DEFAULT_STRATEGY) {
+    throw new TypeError('Invalid strategy: ' + strategy);
+  }
+
+  if (this._level !== level || this._strategy !== strategy) {
+    var self = this;
+    this.flush(binding.Z_SYNC_FLUSH, function() {
+      assert(!self._closed, 'zlib binding closed');
+      self._handle.params(level, strategy);
+      if (!self._hadError) {
+        self._level = level;
+        self._strategy = strategy;
+        if (callback) callback();
+      }
+    });
+  } else {
+    process.nextTick(callback);
+  }
+};
+
+Zlib.prototype.reset = function() {
+  assert(!this._closed, 'zlib binding closed');
+  return this._handle.reset();
 };
 
 // This is the _flush function called by the transform class,
@@ -351,10 +432,13 @@ Zlib.prototype._flush = function(callback) {
   this._transform(new Buffer(0), '', callback);
 };
 
-// This is a bunch of stream-specific stuff here from Node.js -- continue to use this.
-Zlib.prototype.flush = function(callback) {
-  debug('flush');
+Zlib.prototype.flush = function(kind, callback) {
   var ws = this._writableState;
+
+  if (util.isFunction(kind) || (util.isUndefined(kind) && !callback)) {
+    callback = kind;
+    kind = binding.Z_FULL_FLUSH;
+  }
 
   if (ws.ended) {
     if (callback)
@@ -368,7 +452,7 @@ Zlib.prototype.flush = function(callback) {
       self.flush(callback);
     });
   } else {
-    this._flushFlag = binding.Z_FULL_FLUSH;
+    this._flushFlag = kind;
     this.write(new Buffer(0), '', callback);
   }
 };
@@ -382,8 +466,7 @@ Zlib.prototype.close = function(callback) {
 
   this._closed = true;
 
-  debug('close');
-  this._binding.close();
+  this._handle.close();
 
   var self = this;
   process.nextTick(function() {
@@ -391,28 +474,25 @@ Zlib.prototype.close = function(callback) {
   });
 };
 
-// This is the function that differs most from regular Node.js. Let the Java layer work in a way that
-// makes the most sense for it, which means that we give it some input and let it iterate
-// a few times until it is done.
 Zlib.prototype._transform = function(chunk, encoding, cb) {
-  if (chunk !== null && !Buffer.isBuffer(chunk)) {
-    return cb(new Error('invalid input'));
-  }
-
-  // Figure out whether this is the last chunk from stuff before
+  var flushFlag;
   var ws = this._writableState;
   var ending = ws.ending || ws.ended;
   var last = ending && (!chunk || ws.length === chunk.length);
+
+  if (!util.isNull(chunk) && !util.isBuffer(chunk))
+    return cb(new Error('invalid input'));
+
+  if (this._closed)
+    return cb(new Error('zlib binding closed'));
 
   // If it's the last chunk, or a final flush, we use the Z_FINISH flush flag.
   // If it's explicitly flushing at some other time, then we use
   // Z_FULL_FLUSH. Otherwise, use Z_NO_FLUSH for maximum compression
   // goodness.
-  // Problem is, Java 6 doesn't support FULL_FLUSH so we ignore for now.
-  // TODO un-ignore this.
-  if (last) {
+  if (last)
     flushFlag = binding.Z_FINISH;
-  } else {
+  else {
     flushFlag = this._flushFlag;
     // once we've flushed the last of the queue, stop flushing and
     // go back to the normal behavior.
@@ -421,40 +501,115 @@ Zlib.prototype._transform = function(chunk, encoding, cb) {
     }
   }
 
-  if (this._closed) {
-    return cb(new Error('zlib binding closed'));
-  }
+  this._processChunk(chunk, flushFlag, cb);
+};
 
-  // Add this input once for consumption.
-  // The binding will call us back once or more times to produce output
-  if (debugEnabled) {
-    debug('_transform(mode ' + this.mode + ' length ' + chunk.length +
-          ', flushFlag = ' + flushFlag + ')');
-  }
+Zlib.prototype._processChunk = function(chunk, flushFlag, cb) {
+  var availInBefore = chunk && chunk.length;
+  var availOutBefore = this._chunkSize - this._offset;
+  var inOff = 0;
+
   var self = this;
-  this._binding.transform(chunk, flushFlag, function(err, outChunk, allConsumed) {
-    if (err) {
-      if (debugEnabled) {
-        debug('transform error: ' + JSON.stringify(err));
-      }
-      self._hadError = true;
 
-      // Should we call cb instead?
-      self.emit('error', err);
+  var async = util.isFunction(cb);
 
-    } else {
-      if (outChunk) {
-        if (debugEnabled) {
-          debug('transform produced ' + outChunk.length + ' bytes');
-        }
-        self.push(outChunk);
-      }
-      if (allConsumed) {
-        debug('transform consumed all input');
-        cb();
+  if (!async) {
+    var buffers = [];
+    var nread = 0;
+
+    var error;
+    this.on('error', function(er) {
+      error = er;
+    });
+
+    assert(!this._closed, 'zlib binding closed');
+    do {
+      var res = this._handle.writeSync(flushFlag,
+                                       chunk, // in
+                                       inOff, // in_off
+                                       availInBefore, // in_len
+                                       this._buffer, // out
+                                       this._offset, //out_off
+                                       availOutBefore); // out_len
+    } while (!this._hadError && callback(res[0], res[1]));
+
+    if (this._hadError) {
+      throw error;
+    }
+
+    var buf = Buffer.concat(buffers, nread);
+    this.close();
+
+    return buf;
+  }
+
+  assert(!this._closed, 'zlib binding closed');
+  var req = this._handle.write(flushFlag,
+                               chunk, // in
+                               inOff, // in_off
+                               availInBefore, // in_len
+                               this._buffer, // out
+                               this._offset, //out_off
+                               availOutBefore); // out_len
+
+  req.buffer = chunk;
+  req.callback = callback;
+
+  function callback(availInAfter, availOutAfter) {
+    if (self._hadError)
+      return;
+
+    var have = availOutBefore - availOutAfter;
+    assert(have >= 0, 'have should not go down');
+
+    if (have > 0) {
+      var out = self._buffer.slice(self._offset, self._offset + have);
+      self._offset += have;
+      // serve some output to the consumer.
+      if (async) {
+        self.push(out);
+      } else {
+        buffers.push(out);
+        nread += out.length;
       }
     }
-  });
+
+    // exhausted the output buffer, or used all the input create a new one.
+    if (availOutAfter === 0 || self._offset >= self._chunkSize) {
+      availOutBefore = self._chunkSize;
+      self._offset = 0;
+      self._buffer = new Buffer(self._chunkSize);
+    }
+
+    if (availOutAfter === 0) {
+      // Not actually done.  Need to reprocess.
+      // Also, update the availInBefore to the availInAfter value,
+      // so that if we have to hit it a third (fourth, etc.) time,
+      // it'll have the correct byte counts.
+      inOff += (availInBefore - availInAfter);
+      availInBefore = availInAfter;
+
+      if (!async)
+        return true;
+
+      var newReq = self._handle.write(flushFlag,
+                                      chunk,
+                                      inOff,
+                                      availInBefore,
+                                      self._buffer,
+                                      self._offset,
+                                      self._chunkSize);
+      newReq.callback = callback; // this same function
+      newReq.buffer = chunk;
+      return;
+    }
+
+    if (!async)
+      return false;
+
+    // finished with the chunk.
+    cb();
+  }
 };
 
 util.inherits(Deflate, Zlib);

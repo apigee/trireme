@@ -37,6 +37,7 @@ import io.apigee.trireme.node12.modules.StreamWrap;
 import io.apigee.trireme.node12.modules.TCPWrap;
 import io.apigee.trireme.node12.modules.TimerWrap;
 import io.apigee.trireme.node12.modules.Uv;
+import io.apigee.trireme.node12.modules.ZlibWrap;
 
 import java.util.ArrayList;
 import java.util.Collection;
@@ -104,14 +105,14 @@ public class Node12Implementation
             { "timers",                P + "node.timers" },
             { "url",                   P + "node.url" },
             { "util",                  P + "node.util" },
+            { "zlib",                  P + "node.zlib" },
 
             { "http",                   P + "trireme.adaptorhttp" },
             { "https",                  P + "trireme.adaptorhttps" },
             { "crypto",                 P + "trireme.crypto" },
             { "tls",                    P + "trireme.tls" },
             { "tty",                    P + "trireme.tty" },
-            { "vm",                     P + "trireme.vm" },
-            { "zlib",                   P + "trireme.zlib" }
+            { "vm",                     P + "trireme.vm" }
         };
     }
 
@@ -133,6 +134,7 @@ public class Node12Implementation
         r.add(TCPWrap.class);
         r.add(TimerWrap.class);
         r.add(Uv.class);
+        r.add(ZlibWrap.class);
         return r;
     }
 }

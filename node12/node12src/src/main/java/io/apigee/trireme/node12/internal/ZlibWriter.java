@@ -35,6 +35,13 @@ public abstract class ZlibWriter
         INFLATERAW = 5,
         UNZIP = 6;
 
+    protected int mode;
+
+    protected ZlibWriter(int mode)
+    {
+        this.mode = mode;
+    }
+
     public abstract void setParams(int level, int strategy);
     public abstract void reset();
     public abstract void write(int flush, ByteBuffer in, ByteBuffer out)

@@ -22,6 +22,7 @@
 package io.apigee.trireme.node12.internal;
 
 import io.apigee.trireme.core.NodeException;
+import io.apigee.trireme.kernel.util.GZipHeader;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -34,35 +35,16 @@ public class Decompressor
 {
     private static final Logger log = LoggerFactory.getLogger(Compressor.class);
 
-    private final Inflater inflater;
+    private Inflater inflater;
+    private GZipHeader header;
+    private final ByteBuffer dictionary;
 
     public Decompressor(int mode, ByteBuffer dictionary)
         throws NodeException
     {
-        switch (mode) {
-        case INFLATE:
-            inflater = new Inflater();
-            break;
-        case DEFLATERAW:
-            inflater = new Inflater(true);
-            break;
-        default:
-            throw new NodeException("Invalid mode " + mode);
-        }
-
-        if (dictionary != null) {
-            if (dictionary.hasArray()) {
-                inflater.setDictionary(dictionary.array(),
-                                       dictionary.arrayOffset() + dictionary.position(),
-                                       dictionary.remaining());
-            } else {
-                byte[] dict = new byte[dictionary.remaining()];
-                dictionary.get(dict);
-                inflater.setDictionary(dict);
-            }
-        }
+        super(mode);
+        this.dictionary = dictionary;
     }
-
 
     @Override
     public void setParams(int level, int strategy)
@@ -82,6 +64,21 @@ public class Decompressor
     {
         if (log.isDebugEnabled()) {
             log.debug("Deflating {} into {} flush = {}", in, out, flush);
+        }
+
+        if (inflater == null) {
+            initInflater(in);
+            if (inflater == null) {
+                return;
+            }
+        }
+
+        if ((mode == GUNZIP) && (header == null)) {
+            header = GZipHeader.load(in);
+            if (header == null) {
+                // Not enough data to read the whole header
+                return;
+            }
         }
 
         addInput(in);
@@ -108,6 +105,52 @@ public class Decompressor
 
         in.position(in.position() + (int)numRead);
         out.position(out.position() + numWritten);
+    }
+
+    /**
+     * Peek at the header, if necessary, to determine the mode.
+     */
+    private void initInflater(ByteBuffer in)
+        throws DataFormatException
+    {
+        switch (mode) {
+        case INFLATE:
+            inflater = new Inflater();
+            break;
+        case DEFLATERAW:
+            inflater = new Inflater(true);
+            break;
+        case GUNZIP:
+            inflater = new Inflater(true);
+            break;
+        case UNZIP:
+            GZipHeader.Magic magic = GZipHeader.peekMagicNumber(in);
+            if (magic == GZipHeader.Magic.GZIP) {
+                mode = GUNZIP;
+                inflater = new Inflater(true);
+            } else if (magic == GZipHeader.Magic.UNDEFINED) {
+                mode = INFLATE;
+                inflater = new Inflater();
+            } else {
+                // Otherwise, not enough data -- fall through and we'll try again next time
+                return;
+            }
+            break;
+        default:
+            throw new DataFormatException("Invalid mode " + mode + " for decompression");
+        }
+
+        if (dictionary != null) {
+            if (dictionary.hasArray()) {
+                inflater.setDictionary(dictionary.array(),
+                                       dictionary.arrayOffset() + dictionary.position(),
+                                       dictionary.remaining());
+            } else {
+                byte[] dict = new byte[dictionary.remaining()];
+                dictionary.get(dict);
+                inflater.setDictionary(dict);
+            }
+        }
     }
 
     private void addInput(ByteBuffer in)

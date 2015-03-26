@@ -19,15 +19,14 @@
  * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
  * SOFTWARE.
  */
-package io.apigee.trireme.core.internal;
+package io.apigee.trireme.kernel.util;
 
-import io.apigee.trireme.core.Utils;
-import io.apigee.trireme.core.modules.ZLib;
 import io.apigee.trireme.kernel.Charsets;
 
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 import java.util.zip.DataFormatException;
+import java.util.zip.Deflater;
 
 /**
  * This class generates and parses a GZip header for use by the zlib module.
@@ -124,8 +123,8 @@ public class GZipHeader
 
     public ByteBuffer store()
     {
-        ByteBuffer nameBuf = (fileName == null ? null : Utils.stringToBuffer(fileName, Charsets.ASCII));
-        ByteBuffer commentBuf = (comment == null ? null : Utils.stringToBuffer(comment, Charsets.ASCII));
+        ByteBuffer nameBuf = (fileName == null ? null : StringUtils.stringToBuffer(fileName, Charsets.ASCII));
+        ByteBuffer commentBuf = (comment == null ? null : StringUtils.stringToBuffer(comment, Charsets.ASCII));
 
         ByteBuffer buf =
             ByteBuffer.allocate(HEADER_SIZE +
@@ -149,9 +148,9 @@ public class GZipHeader
         // Timestamp
         writeUInt32LE(timestamp / 1000L, buf);
         // Compression level hint
-        if (compressionLevel == ZLib.Z_BEST_COMPRESSION) {
+        if (compressionLevel == Deflater.BEST_COMPRESSION) {
             buf.put(BEST_COMPRESSION);
-        } else if (compressionLevel == ZLib.Z_BEST_SPEED) {
+        } else if (compressionLevel == Deflater.BEST_SPEED) {
             buf.put(FAST_COMPRESSION);
         } else {
             buf.put((byte)0);
@@ -300,7 +299,7 @@ public class GZipHeader
 
         ByteBuffer strBuf = buf.duplicate();
         strBuf.limit(pos - 1);
-        String ret = Utils.bufferToString(strBuf, Charsets.ASCII);
+        String ret = StringUtils.bufferToString(strBuf, Charsets.ASCII);
         buf.position(pos);
         return ret;
     }

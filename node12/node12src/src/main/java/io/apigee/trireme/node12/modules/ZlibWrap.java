@@ -132,7 +132,7 @@ public class ZlibWrap
     public static class ZlibImpl
         extends AbstractIdObject<ZlibImpl>
     {
-        public static final String CLASS_NAME = "ZLib";
+        public static final String CLASS_NAME = "Zlib";
 
         private static final IdPropertyMap props = new IdPropertyMap(CLASS_NAME);
 
@@ -157,7 +157,6 @@ public class ZlibWrap
 
         private final int mode;
         private ScriptRunner runtime;
-
         /** Callback: (message, errno) */
         private Function onError;
         private ZlibWriter writer;

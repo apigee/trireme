@@ -23,7 +23,7 @@ package io.apigee.trireme.core.modules;
 
 import io.apigee.trireme.kernel.streams.CircularOutputStream;
 import io.apigee.trireme.core.NodeRuntime;
-import io.apigee.trireme.core.internal.GZipHeader;
+import io.apigee.trireme.kernel.util.GZipHeader;
 import io.apigee.trireme.core.InternalNodeModule;
 import io.apigee.trireme.core.Utils;
 import org.mozilla.javascript.Context;
@@ -76,10 +76,10 @@ public class ZLib
     public static final int Z_BUF_ERROR     = (-5);
     public static final int Z_VERSION_ERROR = (-6);
 
-    public static final int Z_NO_COMPRESSION         = 0;
-    public static final int Z_BEST_SPEED             = 1;
-    public static final int Z_BEST_COMPRESSION       = 9;
-    public static final int Z_DEFAULT_COMPRESSION    = (-1);
+    public static final int Z_NO_COMPRESSION         = Deflater.NO_COMPRESSION;
+    public static final int Z_BEST_SPEED             = Deflater.BEST_SPEED;
+    public static final int Z_BEST_COMPRESSION       = Deflater.BEST_COMPRESSION;
+    public static final int Z_DEFAULT_COMPRESSION    = Deflater.DEFAULT_COMPRESSION;
 
     public static final int Z_FILTERED            = 1;
     public static final int Z_HUFFMAN_ONLY        = 2;

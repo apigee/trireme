@@ -1,6 +1,6 @@
 package io.apigee.trireme.core.test;
 
-import io.apigee.trireme.core.internal.GZipHeader;
+import io.apigee.trireme.kernel.util.GZipHeader;
 import org.junit.Test;
 
 import java.nio.ByteBuffer;

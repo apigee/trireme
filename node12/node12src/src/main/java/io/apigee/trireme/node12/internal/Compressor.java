@@ -22,10 +22,12 @@
 package io.apigee.trireme.node12.internal;
 
 import io.apigee.trireme.core.NodeException;
+import io.apigee.trireme.kernel.util.GZipHeader;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.nio.ByteBuffer;
+import java.util.zip.CRC32;
 import java.util.zip.Deflater;
 
 public class Compressor
@@ -34,10 +36,15 @@ public class Compressor
     private static final Logger log = LoggerFactory.getLogger(Compressor.class);
 
     private final Deflater deflater;
+    private ByteBuffer header;
+    private CRC32 checksum;
+
 
     public Compressor(int mode, int level, int strategy, ByteBuffer dictionary)
         throws NodeException
     {
+        super(mode);
+
         switch (mode) {
         case DEFLATE:
             deflater = new Deflater(level);
@@ -45,8 +52,16 @@ public class Compressor
         case DEFLATERAW:
             deflater = new Deflater(level, true);
             break;
+        case GZIP:
+            deflater = new Deflater(level, true);
+            GZipHeader hdr = new GZipHeader();
+            hdr.setTimestamp(System.currentTimeMillis());
+            hdr.setCompressionLevel(level);
+            header = hdr.store();
+            checksum = new CRC32();
+            break;
         default:
-            throw new NodeException("Invalid mode " + mode);
+            throw new NodeException("Invalid mode " + mode + " for compression");
         }
 
         deflater.setStrategy(strategy);
@@ -85,7 +100,12 @@ public class Compressor
             log.debug("Deflating {} into {} flush = {}", in, out, flush);
         }
 
-        addInput(in);
+        if ((mode == GZIP) && header.hasRemaining()) {
+            out.put(header);
+            if (!out.hasRemaining()) {
+                return;
+            }
+        }
 
         byte[] buf;
         int off;
@@ -101,6 +121,8 @@ public class Compressor
             off = 0;
             len = out.remaining();
         }
+
+        addInput(in);
 
         // TODO for Java 7, pass "flush" flag!
         long oldPos = deflater.getBytesRead();

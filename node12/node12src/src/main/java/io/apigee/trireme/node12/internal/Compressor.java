@@ -35,10 +35,10 @@ public class Compressor
 {
     private static final Logger log = LoggerFactory.getLogger(Compressor.class);
 
-    private final Deflater deflater;
+    protected final Deflater deflater;
     private ByteBuffer header;
+    private ByteBuffer trailer;
     private CRC32 checksum;
-
 
     public Compressor(int mode, int level, int strategy, ByteBuffer dictionary)
         throws NodeException
@@ -66,15 +66,23 @@ public class Compressor
 
         deflater.setStrategy(strategy);
 
+        if (log.isDebugEnabled()) {
+            log.debug("Going to deflate with strategy {}, level {}", strategy, level);
+        }
+
         if (dictionary != null) {
-            if (dictionary.hasArray()) {
-                deflater.setDictionary(dictionary.array(),
-                                       dictionary.arrayOffset() + dictionary.position(),
-                                       dictionary.remaining());
-            } else {
-                byte[] dict = new byte[dictionary.remaining()];
-                dictionary.get(dict);
-                deflater.setDictionary(dict);
+            try {
+                if (dictionary.hasArray()) {
+                    deflater.setDictionary(dictionary.array(),
+                                           dictionary.arrayOffset() + dictionary.position(),
+                                           dictionary.remaining());
+                } else {
+                    byte[] dict = new byte[dictionary.remaining()];
+                    dictionary.get(dict);
+                    deflater.setDictionary(dict);
+                }
+            } catch (IllegalArgumentException ie) {
+                throw new NodeException("Bad dictionary: " + ie.getMessage());
             }
         }
     }
@@ -83,6 +91,9 @@ public class Compressor
     @Override
     public void setParams(int level, int strategy)
     {
+        if (log.isDebugEnabled()) {
+            log.debug("Changing deflate paramst to  strategy {}, level {}", strategy, level);
+        }
         deflater.setLevel(level);
         deflater.setStrategy(strategy);
     }
@@ -91,6 +102,9 @@ public class Compressor
     public void reset()
     {
         deflater.reset();
+        if (checksum != null) {
+            checksum.reset();
+        }
     }
 
     @Override
@@ -100,9 +114,21 @@ public class Compressor
             log.debug("Deflating {} into {} flush = {}", in, out, flush);
         }
 
-        if ((mode == GZIP) && header.hasRemaining()) {
-            out.put(header);
-            if (!out.hasRemaining()) {
+        if (mode == GZIP) {
+            if (header != null) {
+                out.put(header);
+                if (header.hasRemaining()) {
+                    // Didn't even write the complete header yet
+                    return;
+                } else {
+                    header = null;
+                }
+            } else if (trailer != null) {
+                // Leftover trailer bytes -- just put
+                out.put(trailer);
+                if (!trailer.hasRemaining()) {
+                    trailer = null;
+                }
                 return;
             }
         }
@@ -124,13 +150,39 @@ public class Compressor
 
         addInput(in);
 
-        // TODO for Java 7, pass "flush" flag!
+        int flushFlag;
+        if (flush == FINISH) {
+            flushFlag = Deflater.NO_FLUSH;
+            deflater.finish();
+        } else {
+            flushFlag = flush;
+        }
+
         long oldPos = deflater.getBytesRead();
-        int numWritten  = deflater.deflate(buf, off, len);
+        int numWritten  = doDeflate(buf, off, len, flushFlag);
         int numRead = (int)(deflater.getBytesRead() - oldPos);
+
+        if (log.isDebugEnabled()) {
+            log.debug("Deflater: read {}, wrote {}", numRead, numWritten);
+        }
 
         in.position(in.position() + numRead);
         out.position(out.position() + numWritten);
+
+        if ((mode == GZIP) && deflater.finished()) {
+            trailer =
+                GZipHeader.writeGZipTrailer(checksum.getValue(), deflater.getBytesRead());
+            out.put(trailer);
+            if (!out.hasRemaining()) {
+                trailer = null;
+            }
+        }
+    }
+
+    // Override this in Java 7 so use the more complete API in that version of Java
+    protected int doDeflate(byte[] outBuf, int outOff, int outLen, int flags)
+    {
+        return deflater.deflate(outBuf, outOff, outLen);
     }
 
     private void addInput(ByteBuffer in)
@@ -154,11 +206,16 @@ public class Compressor
         }
 
         deflater.setInput(buf, off, len);
+        if (mode == GZIP) {
+            checksum.update(buf, off, len);
+        }
     }
 
     @Override
     public void close()
     {
-        deflater.end();
+        if (deflater != null) {
+            deflater.end();
+        }
     }
 }

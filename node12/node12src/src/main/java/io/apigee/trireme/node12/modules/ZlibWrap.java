@@ -28,8 +28,10 @@ import io.apigee.trireme.core.ScriptTask;
 import io.apigee.trireme.core.Utils;
 import io.apigee.trireme.core.internal.AbstractIdObject;
 import io.apigee.trireme.core.internal.IdPropertyMap;
+import io.apigee.trireme.core.internal.JavaVersion;
 import io.apigee.trireme.core.internal.ScriptRunner;
 import io.apigee.trireme.core.modules.Buffer;
+import io.apigee.trireme.node12.internal.AdvancedCompressor;
 import io.apigee.trireme.node12.internal.Compressor;
 import io.apigee.trireme.node12.internal.Decompressor;
 import io.apigee.trireme.node12.internal.ZlibWriter;
@@ -38,6 +40,8 @@ import org.mozilla.javascript.Function;
 import org.mozilla.javascript.Scriptable;
 import org.mozilla.javascript.ScriptableObject;
 import org.mozilla.javascript.Undefined;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import static io.apigee.trireme.core.ArgUtils.*;
 
@@ -49,11 +53,12 @@ import java.util.zip.Deflater;
 public class ZlibWrap
     implements InternalNodeModule
 {
+    protected static final Logger log = LoggerFactory.getLogger(ZlibWrap.class);
+
     public static final int
-        Z_PARTIAL_FLUSH = 1,
-        Z_FINISH = 4,
-        Z_BLOCK = 5,
-        Z_TREES = 6,
+        Z_PARTIAL_FLUSH = 10,
+        Z_BLOCK = 11,
+        Z_TREES = 12,
         Z_OK = 0,
         Z_STREAM_END = 1,
         Z_NEED_DICT = 2,
@@ -92,7 +97,7 @@ public class ZlibWrap
         setConstant("Z_PARTIAL_FLUSH", Z_PARTIAL_FLUSH, exports);
         setConstant("Z_SYNC_FLUSH", Deflater.SYNC_FLUSH, exports);
         setConstant("Z_FULL_FLUSH", Deflater.FULL_FLUSH, exports);
-        setConstant("Z_FINISH", Z_FINISH, exports);
+        setConstant("Z_FINISH", ZlibWriter.FINISH, exports);
         setConstant("Z_BLOCK", Z_BLOCK, exports);
         setConstant("Z_TREES", Z_TREES, exports);
         setConstant("Z_OK", Z_OK, exports);
@@ -137,13 +142,13 @@ public class ZlibWrap
         private static final IdPropertyMap props = new IdPropertyMap(CLASS_NAME);
 
         private static final int
-            Id_write = 1,
-            Id_writeSync = 2,
-            Id_init = 3,
-            Id_params = 4,
-            Id_reset = 5,
-            Id_close = 6,
-            Id_onerror = 2;
+            Id_write = 2,
+            Id_writeSync = 3,
+            Id_init = 4,
+            Id_params = 5,
+            Id_reset = 6,
+            Id_close = 7,
+            Id_onerror = 8;
 
         static {
             props.addMethod("write", Id_write, 7);
@@ -216,11 +221,9 @@ public class ZlibWrap
         {
             switch (id) {
             case Id_write:
-                write(cx, true, args);
-                break;
+                return write(cx, true, args);
             case Id_writeSync:
-                write(cx, false, args);
-                break;
+                return write(cx, false, args);
             case Id_init:
                 init(cx, args);
                 break;
@@ -254,7 +257,11 @@ public class ZlibWrap
                 case ZlibWriter.DEFLATE:
                 case ZlibWriter.DEFLATERAW:
                 case ZlibWriter.GZIP:
-                    writer = new Compressor(mode, level, strategy, dictBuf);
+                    if (JavaVersion.get().hasFlushFlags()) {
+                        writer = new AdvancedCompressor(mode, level, strategy, dictBuf);
+                    } else {
+                        writer = new Compressor(mode, level, strategy, dictBuf);
+                    }
                     break;
                 case ZlibWriter.INFLATE:
                 case ZlibWriter.INFLATERAW:
@@ -290,13 +297,17 @@ public class ZlibWrap
 
         private Scriptable write(Context cx, boolean async, Object[] args)
         {
-            final int flushFlag = intArg(args, 0);
+            int ff = intArg(args, 0);
             ensureArg(args, 1);
             int inOff = intArg(args, 2);
             int inLen = intArg(args, 3);
             Buffer.BufferImpl out = objArg(args, 4, Buffer.BufferImpl.class, true);
             int outOff = intArg(args, 5);
             int outLen = intArg(args, 6);
+
+            // Not all flags supported in Java
+            final int flushFlag =
+                ((ff == Z_PARTIAL_FLUSH) || (ff == Z_BLOCK) ? Deflater.NO_FLUSH : ff);
 
             // "in" could be null
             Buffer.BufferImpl in;
@@ -354,26 +365,32 @@ public class ZlibWrap
                                 final ByteBuffer inBuf, final ByteBuffer outBuf)
         {
             try {
-                try {
-                    writer.write(flushFlag, inBuf, outBuf);
-                    runtime.enqueueTask(new ScriptTask() {
-                        @Override
-                        public void execute(Context cx, Scriptable scope)
-                        {
-                            completeWrite(cx, response, inBuf, outBuf, null);
-                        }
-                    });
-                } catch (final DataFormatException dfe) {
-                    runtime.enqueueTask(new ScriptTask() {
-                        @Override
-                        public void execute(Context cx, Scriptable scope)
-                        {
-                            completeWrite(cx, response, inBuf, outBuf, dfe);
-                        }
-                    });
-                }
-            } finally {
-                runtime.unPin();
+                writer.write(flushFlag, inBuf, outBuf);
+                runtime.enqueueTask(new ScriptTask() {
+                    @Override
+                    public void execute(Context cx, Scriptable scope)
+                    {
+                        completeWrite(cx, response, inBuf, outBuf, null);
+                    }
+                });
+            } catch (final DataFormatException dfe) {
+                runtime.enqueueTask(new ScriptTask() {
+                    @Override
+                    public void execute(Context cx, Scriptable scope)
+                    {
+                        completeWrite(cx, response, inBuf, outBuf, dfe);
+                    }
+                });
+            } catch (final Throwable t) {
+                log.debug("Unexpected error: {}", t);
+                runtime.enqueueTask(new ScriptTask() {
+                    @Override
+                    public void execute(Context cx, Scriptable scope)
+                    {
+                        completeWrite(cx, response, inBuf, outBuf,
+                                      new DataFormatException(t.toString()));
+                    }
+                });
             }
         }
 
@@ -388,11 +405,17 @@ public class ZlibWrap
             // Once we get here, a callback should be set on the "response"
             Function cb = (Function)response.get("callback", response);
             if (cb != null) {
+                int inLeft = (inBuf == null ? 0 : inBuf.remaining());
+                if (log.isDebugEnabled()) {
+                    log.debug("Invoking callback({}, {})",
+                              inLeft, outBuf.remaining());
+                }
                 cb.call(cx, this, response, new Object[] {
-                    (inBuf == null ? 0 : inBuf.remaining()),
+                    inLeft,
                     outBuf.remaining()
                 });
             }
+            runtime.unPin();
         }
     }
 }

@@ -32,18 +32,26 @@ public class JavaVersion
     private static final JavaVersion myself = new JavaVersion();
 
     private boolean hasAsyncFileIO;
+    private boolean hasFlushFlags;
 
     private JavaVersion()
     {
         hasAsyncFileIO = hasClass("java.nio.channels.AsynchronousFileChannel");
+        hasFlushFlags = hasMethod("java.util.zip.Deflater", "deflate",
+                                  new Class<?>[] { byte[].class, Integer.TYPE,
+                                                   Integer.TYPE, Integer.TYPE });
     }
 
     public static JavaVersion get() {
         return myself;
     }
 
-    public Boolean hasAsyncFileIO() {
+    public boolean hasAsyncFileIO() {
         return hasAsyncFileIO;
+    }
+
+    public boolean hasFlushFlags() {
+        return hasFlushFlags;
     }
 
     private boolean hasClass(String name)
@@ -52,6 +60,19 @@ public class JavaVersion
             Class.forName(name);
             return true;
         } catch (ClassNotFoundException ce) {
+            return false;
+        }
+    }
+
+    private boolean hasMethod(String className, String methodName, Class<?>[] types)
+    {
+        try {
+            Class<?> klass = Class.forName(className);
+            klass.getMethod(methodName, types);
+            return true;
+        } catch (ClassNotFoundException ce) {
+            return false;
+        } catch (NoSuchMethodException nsme) {
             return false;
         }
     }

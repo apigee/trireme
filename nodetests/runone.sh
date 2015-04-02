@@ -19,7 +19,7 @@ ARGS=-Xmx1g
 
 if [ $1 == "-d" ]
 then
-  ARGS="-Xdebug -Xrunjdwp:server=y,suspend=y,transport=dt_socket,address=localhost:14000"
+  ARGS="-ea:io.apigee... -Xdebug -Xrunjdwp:server=y,suspend=y,transport=dt_socket,address=localhost:14000"
   cd `dirname $2`; java ${ARGS} io.apigee.trireme.test.TestRunner `basename $2` $3 $4 $5 $6 $7
 
 else 

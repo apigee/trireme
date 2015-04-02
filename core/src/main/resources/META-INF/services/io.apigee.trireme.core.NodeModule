@@ -9,4 +9,4 @@ io.apigee.trireme.core.modules.Natives
 io.apigee.trireme.core.modules.OS
 io.apigee.trireme.core.modules.TriremeNativeSupport
 io.apigee.trireme.core.modules.UDPWrap
-io.apigee.trireme.core.modules.ZLib
+

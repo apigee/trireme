@@ -19,8 +19,9 @@
  * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
  * SOFTWARE.
  */
-package io.apigee.trireme.core.modules;
+package io.apigee.trireme.node10.modules;
 
+import io.apigee.trireme.core.modules.Buffer;
 import io.apigee.trireme.kernel.streams.CircularOutputStream;
 import io.apigee.trireme.core.NodeRuntime;
 import io.apigee.trireme.kernel.util.GZipHeader;

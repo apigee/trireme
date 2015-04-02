@@ -11,6 +11,7 @@ import io.apigee.trireme.node10.modules.Process;
 import io.apigee.trireme.node10.modules.ProcessWrap;
 import io.apigee.trireme.node10.modules.TCPWrap;
 import io.apigee.trireme.node10.modules.TimerWrap;
+import io.apigee.trireme.node10.modules.ZLib;
 
 import java.util.ArrayList;
 import java.util.Collection;
@@ -92,6 +93,7 @@ public class Node10Implementation
         r.add(ProcessWrap.class);
         r.add(TCPWrap.class);
         r.add(TimerWrap.class);
+        r.add(ZLib.class);
         return r;
     }
 }

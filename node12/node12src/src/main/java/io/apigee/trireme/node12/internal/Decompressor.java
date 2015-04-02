@@ -22,22 +22,25 @@
 package io.apigee.trireme.node12.internal;
 
 import io.apigee.trireme.core.NodeException;
+import io.apigee.trireme.kernel.util.BufferUtils;
 import io.apigee.trireme.kernel.util.GZipHeader;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.nio.ByteBuffer;
+import java.util.zip.CRC32;
 import java.util.zip.DataFormatException;
 import java.util.zip.Inflater;
 
 public class Decompressor
     extends ZlibWriter
 {
-    private static final Logger log = LoggerFactory.getLogger(Compressor.class);
+    private static final Logger log = LoggerFactory.getLogger(Decompressor.class);
 
     private Inflater inflater;
     private GZipHeader header;
     private final ByteBuffer dictionary;
+    private CRC32 checksum;
 
     public Decompressor(int mode, ByteBuffer dictionary)
         throws NodeException
@@ -56,6 +59,9 @@ public class Decompressor
     public void reset()
     {
         inflater.reset();
+        if (checksum != null) {
+            checksum.reset();
+        }
     }
 
     @Override
@@ -63,21 +69,36 @@ public class Decompressor
         throws DataFormatException
     {
         if (log.isDebugEnabled()) {
-            log.debug("Deflating {} into {} flush = {}", in, out, flush);
+            log.debug("Deflating from {} into {}", in, out);
+        }
+
+        if (log.isDebugEnabled()) {
+            log.debug("Inflating {} into {} flush = {}", in, out, flush);
         }
 
         if (inflater == null) {
             initInflater(in);
             if (inflater == null) {
+                // Not enough data to read GZIP header, if necessary
                 return;
             }
         }
 
-        if ((mode == GUNZIP) && (header == null)) {
-            header = GZipHeader.load(in);
+        if (mode == GUNZIP) {
             if (header == null) {
-                // Not enough data to read the whole header
-                return;
+                header = GZipHeader.load(in);
+                if (header == null) {
+                    // Not enough data to read the whole header
+                    return;
+                }
+                checksum = new CRC32();
+            } else if (inflater.finished()) {
+                // Didn't yet read a complete trailer
+                if (in.remaining() >= GZipHeader.TRAILER_SIZE) {
+                    checkTrailer(in);
+                } else {
+                    return;
+                }
             }
         }
 
@@ -98,13 +119,37 @@ public class Decompressor
             len = out.remaining();
         }
 
-        // TODO for Java 7, pass "flush" flag!
         long oldPos = inflater.getBytesRead();
         int numWritten  = inflater.inflate(buf, off, len);
         long numRead = inflater.getBytesRead() - oldPos;
 
-        in.position(in.position() + (int)numRead);
+        if (log.isDebugEnabled()) {
+            log.debug("Inflater: read {}, wrote {}", numRead, numWritten);
+        }
+
+        if (mode == GUNZIP) {
+            checksum.update(buf, off, numWritten);
+        }
+
+        if (in != null) {
+            in.position(in.position() + (int)numRead);
+        }
         out.position(out.position() + numWritten);
+
+        if ((numWritten == 0) && inflater.needsDictionary()) {
+            if (dictionary == null) {
+                throw new DataFormatException("Missing dictionary");
+            } else {
+                addDictionary();
+                write(flush, null, out);
+                return;
+            }
+        }
+
+        if ((mode == GUNZIP) && inflater.finished() &&
+            (in.remaining() >= GZipHeader.TRAILER_SIZE)) {
+            checkTrailer(in);
+        }
     }
 
     /**
@@ -117,7 +162,7 @@ public class Decompressor
         case INFLATE:
             inflater = new Inflater();
             break;
-        case DEFLATERAW:
+        case INFLATERAW:
             inflater = new Inflater(true);
             break;
         case GUNZIP:
@@ -138,18 +183,6 @@ public class Decompressor
             break;
         default:
             throw new DataFormatException("Invalid mode " + mode + " for decompression");
-        }
-
-        if (dictionary != null) {
-            if (dictionary.hasArray()) {
-                inflater.setDictionary(dictionary.array(),
-                                       dictionary.arrayOffset() + dictionary.position(),
-                                       dictionary.remaining());
-            } else {
-                byte[] dict = new byte[dictionary.remaining()];
-                dictionary.get(dict);
-                inflater.setDictionary(dict);
-            }
         }
     }
 
@@ -173,12 +206,49 @@ public class Decompressor
             len = in.remaining();
         }
 
-        inflater.setInput(buf, off, len);
+        if (buf != null) {
+            inflater.setInput(buf, off, len);
+        }
+    }
+
+    private void addDictionary()
+        throws DataFormatException
+    {
+        if (log.isDebugEnabled()) {
+            log.debug("Adding dictionary {}", dictionary);
+        }
+        try {
+            if (dictionary.hasArray()) {
+                inflater.setDictionary(dictionary.array(),
+                                       dictionary.arrayOffset() + dictionary.position(),
+                                       dictionary.remaining());
+            } else {
+                byte[] dict = new byte[dictionary.remaining()];
+                dictionary.get(dict);
+                inflater.setDictionary(dict);
+            }
+        } catch (IllegalArgumentException ie) {
+            throw new DataFormatException("Bad dictionary: " + ie.getMessage());
+        }
+    }
+
+    private void checkTrailer(ByteBuffer in)
+        throws DataFormatException
+    {
+        GZipHeader.Trailer trailer = GZipHeader.readGZipTrailer(in);
+        if (trailer.getLength() != inflater.getBytesWritten()) {
+            throw new DataFormatException("GZip length does not match");
+        }
+        if (trailer.getChecksum() != checksum.getValue()) {
+            throw new DataFormatException("GZip checksum does not match");
+        }
     }
 
     @Override
     public void close()
     {
-        inflater.end();
+        if (inflater != null) {
+            inflater.end();
+        }
     }
 }

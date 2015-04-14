@@ -101,7 +101,12 @@ public class ArgUtils
     public static int intArg(Object[] args, int pos, int def)
     {
         if (pos < args.length) {
-            Number n = Context.toNumber(args[pos]);
+            Number n;
+            if (args[pos] instanceof Number) {
+                n = (Number)args[pos];
+            } else {
+                n = Context.toNumber(args[pos]);
+            }
             if (!n.equals(ScriptRuntime.NaN)) {
                 return n.intValue();
             }

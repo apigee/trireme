@@ -22,7 +22,6 @@
 package io.apigee.trireme.node12.modules;
 
 import io.apigee.trireme.core.InternalNodeModule;
-import io.apigee.trireme.core.NodeException;
 import io.apigee.trireme.core.NodeRuntime;
 import io.apigee.trireme.core.ScriptTask;
 import io.apigee.trireme.core.Utils;
@@ -31,10 +30,11 @@ import io.apigee.trireme.core.internal.IdPropertyMap;
 import io.apigee.trireme.core.internal.JavaVersion;
 import io.apigee.trireme.core.internal.ScriptRunner;
 import io.apigee.trireme.core.modules.Buffer;
-import io.apigee.trireme.node12.internal.AdvancedCompressor;
-import io.apigee.trireme.node12.internal.Compressor;
-import io.apigee.trireme.node12.internal.Decompressor;
-import io.apigee.trireme.node12.internal.ZlibWriter;
+import io.apigee.trireme.kernel.OSException;
+import io.apigee.trireme.kernel.zip.AdvancedCompressor;
+import io.apigee.trireme.kernel.zip.Compressor;
+import io.apigee.trireme.kernel.zip.Decompressor;
+import io.apigee.trireme.kernel.zip.ZlibWriter;
 import org.mozilla.javascript.Context;
 import org.mozilla.javascript.Function;
 import org.mozilla.javascript.Scriptable;
@@ -272,7 +272,7 @@ public class ZlibWrap
                 default:
                     throw Utils.makeError(cx, this, "Invalid compression mode " + mode);
                 }
-            } catch (NodeException ne) {
+            } catch (OSException ne) {
                 throw Utils.makeError(cx, this, "Error initializing compression: " + ne);
             }
         }

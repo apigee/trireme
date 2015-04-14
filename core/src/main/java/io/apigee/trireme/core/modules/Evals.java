@@ -172,11 +172,18 @@ public class Evals
         public static Object run(Context cx, Scriptable thisObj, Object[] args, Function func)
         {
             Scriptable context = objArg(args, 0, Scriptable.class, true);
-            ScriptableObject compiled = objArg(args, 1, ScriptableObject.class, true);
+            Object comp = objArg(args, 1, Object.class, true);
+
+            ScriptableObject compiled;
+            try {
+                compiled = (ScriptableObject)comp;
+            } catch (ClassCastException cce) {
+                throw Utils.makeTypeError(cx, thisObj, "Compiled script expected");
+            }
 
             String fileName = (String)compiled.getAssociatedValue(FILE_NAME_KEY);
             if (fileName == null) {
-                throw Utils.makeError(cx, thisObj, "Invalid compiled script argument");
+                throw Utils.makeTypeError(cx, thisObj, "Invalid compiled script argument");
             }
 
             Script compiledScript = (Script)compiled.getAssociatedValue(CODE_KEY);
@@ -184,7 +191,7 @@ public class Evals
                 // Must have been too big -- re-try with source
                 String scriptSource = (String)compiled.getAssociatedValue(SOURCE_KEY);
                 if (scriptSource == null) {
-                    throw Utils.makeError(cx, thisObj, "Invalid compiled script argument");
+                    throw Utils.makeTypeError(cx, thisObj, "Invalid compiled script argument");
                 }
                 return interpretScript(cx, context, scriptSource, fileName);
 

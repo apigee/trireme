@@ -19,33 +19,24 @@
  * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
  * SOFTWARE.
  */
-package io.apigee.trireme.node12.internal;
+package io.apigee.trireme.kernel.zip;
+
+import io.apigee.trireme.kernel.OSException;
 
 import java.nio.ByteBuffer;
-import java.util.zip.DataFormatException;
 
-public abstract class ZlibWriter
+public class AdvancedCompressor
+    extends Compressor
 {
-    public static final int
-        DEFLATE = 0,
-        INFLATE = 1,
-        GZIP = 2,
-        GUNZIP = 3,
-        DEFLATERAW = 4,
-        INFLATERAW = 5,
-        UNZIP = 6,
-        FINISH = 7;
-
-    protected int mode;
-
-    protected ZlibWriter(int mode)
+    public AdvancedCompressor(int mode, int level, int strategy, ByteBuffer dictionary)
+        throws OSException
     {
-        this.mode = mode;
+        super(mode, level, strategy, dictionary);
     }
 
-    public abstract void setParams(int level, int strategy);
-    public abstract void reset();
-    public abstract void write(int flush, ByteBuffer in, ByteBuffer out)
-        throws DataFormatException;
-    public abstract void close();
+    @Override
+    protected int doDeflate(byte[] outBuf, int outOff, int outLen, int flags)
+    {
+        return deflater.deflate(outBuf, outOff, outLen, flags);
+    }
 }

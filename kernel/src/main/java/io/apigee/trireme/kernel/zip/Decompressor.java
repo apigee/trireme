@@ -19,10 +19,9 @@
  * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
  * SOFTWARE.
  */
-package io.apigee.trireme.node12.internal;
+package io.apigee.trireme.kernel.zip;
 
-import io.apigee.trireme.core.NodeException;
-import io.apigee.trireme.kernel.util.BufferUtils;
+import io.apigee.trireme.kernel.OSException;
 import io.apigee.trireme.kernel.util.GZipHeader;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -43,7 +42,7 @@ public class Decompressor
     private CRC32 checksum;
 
     public Decompressor(int mode, ByteBuffer dictionary)
-        throws NodeException
+        throws OSException
     {
         super(mode);
         this.dictionary = dictionary;

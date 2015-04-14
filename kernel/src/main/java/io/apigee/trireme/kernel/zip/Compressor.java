@@ -19,9 +19,10 @@
  * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
  * SOFTWARE.
  */
-package io.apigee.trireme.node12.internal;
+package io.apigee.trireme.kernel.zip;
 
-import io.apigee.trireme.core.NodeException;
+import io.apigee.trireme.kernel.ErrorCodes;
+import io.apigee.trireme.kernel.OSException;
 import io.apigee.trireme.kernel.util.GZipHeader;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -41,7 +42,7 @@ public class Compressor
     private CRC32 checksum;
 
     public Compressor(int mode, int level, int strategy, ByteBuffer dictionary)
-        throws NodeException
+        throws OSException
     {
         super(mode);
 
@@ -61,7 +62,7 @@ public class Compressor
             checksum = new CRC32();
             break;
         default:
-            throw new NodeException("Invalid mode " + mode + " for compression");
+            throw new OSException(ErrorCodes.EINVAL, "Invalid mode " + mode + " for compression");
         }
 
         deflater.setStrategy(strategy);
@@ -82,7 +83,7 @@ public class Compressor
                     deflater.setDictionary(dict);
                 }
             } catch (IllegalArgumentException ie) {
-                throw new NodeException("Bad dictionary: " + ie.getMessage());
+                throw new OSException(ErrorCodes.EINVAL, "Bad dictionary: " + ie.getMessage());
             }
         }
     }

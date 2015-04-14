@@ -81,7 +81,7 @@ assert.equal(f.a, 2);
 
 assert.throws(function() {
   script.runInNewContext();
-}, /f is not defined/);
+}, /.?f.? is not defined/);
 
 console.error('invalid this');
 assert.throws(function() {

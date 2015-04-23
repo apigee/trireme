@@ -21,15 +21,11 @@
  */
 package io.apigee.trireme.core;
 
-import io.apigee.trireme.kernel.Charsets;
 import io.apigee.trireme.core.internal.NodeOSException;
+import io.apigee.trireme.kernel.Charsets;
 import io.apigee.trireme.kernel.ErrorCodes;
 import io.apigee.trireme.kernel.util.BufferUtils;
 import io.apigee.trireme.kernel.util.StringUtils;
-import org.mozilla.javascript.Context;
-import org.mozilla.javascript.JavaScriptException;
-import org.mozilla.javascript.RhinoException;
-import org.mozilla.javascript.Scriptable;
 
 import java.io.File;
 import java.io.FileInputStream;
@@ -42,6 +38,12 @@ import java.nio.CharBuffer;
 import java.nio.charset.Charset;
 import java.util.ArrayList;
 import java.util.List;
+
+import org.mozilla.javascript.Context;
+import org.mozilla.javascript.JavaScriptException;
+import org.mozilla.javascript.RhinoException;
+import org.mozilla.javascript.Script;
+import org.mozilla.javascript.Scriptable;
 
 /**
  * A few utility functions, mainly for Rhino, that are useful when writing Node modules in Java.
@@ -293,11 +295,64 @@ public class Utils
         return BufferUtils.duplicateBuffer(b);
     }
 
-    /**
-     * Remove leading and trailing strings from a quoted string that has both leading and trailing quotes on it.
-     */
-    public static String unquote(String s)
-    {
-        return StringUtils.unquote(s);
-    }
+	/**
+	 * Remove leading and trailing strings from a quoted string that has both
+	 * leading and trailing quotes on it.
+	 */
+	public static String unquote(String s) {
+		return StringUtils.unquote(s);
+	}
+
+	/**
+	 * 
+	 * Find script source by the fullname of script class. the script source
+	 * 
+	 * must ended with '.js' extension.
+	 * 
+	 * 
+	 * 
+	 * @param script
+	 * 
+	 *            script instance
+	 * 
+	 * @return if found script source, return source string. if not found,
+	 * 
+	 *         return null.
+	 */
+
+	public static String getScriptSource(Script script) {
+
+		Class<? extends Script> clazz = script.getClass();
+
+		String name = clazz.getSimpleName();
+
+		InputStream is = clazz.getResourceAsStream(name + ".js");
+
+		try {
+
+			if (is != null) {
+
+				String src = Utils.readStream(is);
+
+				return src;
+
+			}
+
+		} catch (IOException e) {
+
+		} finally {
+
+			try {
+
+				is.close();
+
+			} catch (IOException ignore) {
+
+			}
+
+		}
+
+		return null;
+
+	}
 }

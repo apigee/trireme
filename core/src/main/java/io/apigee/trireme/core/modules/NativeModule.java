@@ -198,22 +198,50 @@ public class NativeModule
             return null;
         }
 
-        private void runCompiledModule(Script compiled, Context cx, ModuleImpl mod)
-        {
-            Function requireFunc = new FunctionObject("require",
-                                                      Utils.findMethod(NativeImpl.class, "require"),
-                                                      this);
+		private void runCompiledModule(Script compiled, Context cx,
+				ModuleImpl mod) {
 
-            // The script code found in src/main/javascript is wrapped with a function by the Rhino compiler
-            // (see the pom.xml for the wrapper code). What we actually
-            // need to do here is to invoke the wrapper function after running the script.
+			Function requireFunc = new FunctionObject("require",
+					Utils.findMethod(NativeImpl.class, "require"), this);
 
-            Object ret = compiled.exec(cx, runner.getScriptScope());
-            Function fn = (Function)ret;
-            fn.call(cx, runner.getScriptScope(), null, new Object[] { mod.getExports(), requireFunc,
-                                                                      mod, mod.getFileName() });
-            mod.setLoaded(true);
-        }
+			Function fn = null;
+
+			if (runner.getScriptObject().isDebugging()) {
+				// try to find script source
+				String src = Utils.getScriptSource(compiled);
+				if (src != null) {
+					String finalSource = NativeImpl.WRAP_PREFIX + src
+							+ NativeImpl.WRAP_POSTFIX;
+					Object ret = cx
+							.evaluateString(runner.getScriptScope(),
+									finalSource, compiled.getClass().getName(),
+									1, null);
+
+					fn = (Function) ret;
+				} else {
+					// TODO how to find module script source defined by
+					// NodeScriptModule
+				}
+
+			}
+			if (fn == null) {
+				// The script code found in src/main/javascript is wrapped with
+				// a function by the Rhino compiler
+				// (see the pom.xml for the wrapper code). What we actually
+				// need to do here is to invoke the wrapper function after
+				// running the script.
+
+				Object ret = compiled.exec(cx, runner.getScriptScope());
+				fn = (Function) ret;
+			}
+			fn.call(cx,
+					runner.getScriptScope(),
+					null,
+					new Object[] { mod.getExports(), requireFunc, mod,
+							mod.getFileName() });
+
+			mod.setLoaded(true);
+		}
 
         @JSFunction
         public static Object getCached(Context cx, Scriptable thisObj, Object[] args, Function func)

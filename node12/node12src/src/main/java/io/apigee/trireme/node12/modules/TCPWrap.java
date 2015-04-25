@@ -266,7 +266,7 @@ public class TCPWrap
                 @Override
                 public void ioComplete(int errCode, Integer value)
                 {
-                    req.callOnComplete(Context.getCurrentContext(), self, req, errCode);
+                    req.callOnComplete(Context.getCurrentContext(), self, self, errCode);
                 }
             });
         }

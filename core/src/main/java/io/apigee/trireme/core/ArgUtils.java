@@ -161,6 +161,7 @@ public class ArgUtils
      * Return the argument at "pos" as an int, or throw an exception if the argument list is not long enough.
      * If the argument is not an integer (aka it is floating-point) then throw an exception.
      */
+    @Deprecated
     public static int intArgOnly(Object[] args, int pos)
     {
         Number n = numberArg(args, pos);
@@ -184,7 +185,7 @@ public class ArgUtils
             if (n.doubleValue() == (double)n.intValue()) {
                 return n.intValue();
             }
-            throw Utils.makeError(cx, scope, "Not an integer");
+            throw Utils.makeTypeError(cx, scope, "Not an integer");
         }
         return def;
     }
@@ -226,7 +227,7 @@ public class ArgUtils
             if (n.doubleValue() == (double)n.longValue()) {
                 return n.longValue();
             }
-            throw Utils.makeError(cx, scope, "Not an integer");
+            throw Utils.makeTypeError(cx, scope, "Not an integer");
         }
         return def;
     }
@@ -300,6 +301,7 @@ public class ArgUtils
     /**
      * Return the argument at "pos" as a Function, and throw an exception if "required" and the list is too short.
      */
+    @Deprecated
     public static Function functionArg(Object[] args, int pos, boolean required)
     {
         if (required) {
@@ -325,6 +327,7 @@ public class ArgUtils
      * if "required" and the list is too short. This is handy when passing Java objects back to JavaScript,
      * then getting them back and turning them back in to Java objects.
      */
+    @Deprecated
     public static <T> T objArg(Object[] args, int pos, Class<T> type, boolean required)
     {
         if (required) {
@@ -344,6 +347,39 @@ public class ArgUtils
                 if (required) {
                     throw new EvaluatorException("Object of type " + type + " expected");
                 } else {
+                    return null;
+                }
+            }
+        } else {
+            return null;
+        }
+    }
+
+    /**
+     * Return the argument at "pos" as a member of the specified Java class, and throw an exception
+     * if "required" and the list is too short. This is handy when passing Java objects back to JavaScript,
+     * then getting them back and turning them back in to Java objects.
+     */
+    public static <T> T objArg(Context cx, Scriptable scope, Object[] args, int pos, Class<T> type, boolean required)
+    {
+        if (required) {
+            ensureArg(args, pos);
+        }
+        if (pos < args.length) {
+            if (type.isInstance(args[pos])) {
+                return type.cast(args[pos]);
+            } else {
+                Object arg = args[pos];
+                while(arg instanceof org.mozilla.javascript.Wrapper) {
+                    arg = ((org.mozilla.javascript.Wrapper)arg).unwrap();
+                    if(type.isInstance(arg)) {
+                        return type.cast(arg);
+                    }
+                }
+                if (required) {
+                    throw Utils.makeTypeError(cx, scope, "Object of type " + type + " expected");
+                } else {
+                    // This will also catch Undefined
                     return null;
                 }
             }

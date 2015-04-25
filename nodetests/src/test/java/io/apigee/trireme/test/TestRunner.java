@@ -9,17 +9,26 @@ import org.mozilla.javascript.Context;
 import org.mozilla.javascript.JavaScriptException;
 import org.mozilla.javascript.RhinoException;
 
+import java.io.BufferedReader;
 import java.io.File;
+import java.io.FileReader;
+import java.io.IOException;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 public class TestRunner
 {
     public static final int TEST_TIMEOUT_SECS = 60;
 
+    private static final Pattern FLAGS_PATTERN = Pattern.compile("^//[\\s+]Flags:(.+)");
+    private static final Pattern WS_PATTERN = Pattern.compile("\\s");
+
     public static void main(String[] args)
+        throws IOException
     {
         if ((args.length < 1) || (args.length > 4)) {
             System.exit(10);
@@ -41,8 +50,35 @@ public class TestRunner
             version = args[3];
         }
 
+        // Read the whole test and look for GC flags.
+        // They will be in a comment in the form of: "// Flags: --expose-gc --whatever"
+        String[] argv = null;
+        BufferedReader rdr = new BufferedReader(new FileReader(fileName));
+        String line;
+        do {
+            line = rdr.readLine();
+            if (line == null) {
+                break;
+            }
+            Matcher flagMatch = FLAGS_PATTERN.matcher(line);
+            if (flagMatch.matches()) {
+                // Add everything in "flags" to the process args.
+                String vmFlags[] = WS_PATTERN.split(flagMatch.group(1).trim());
+                int p = 0;
+                argv = new String[vmFlags.length + 1];
+                for (String flag : vmFlags) {
+                    argv[p++] = flag.trim();
+                }
+                argv[p] = fileName.getName();
+            }
+        } while ((argv == null) && (line != null));
+
+        if (argv == null) {
+            argv = new String[] { fileName.getName() };
+        }
+
         try {
-            NodeScript script = env.createScript(fileName.getName(), fileName, null);
+            NodeScript script = env.createScript(argv, false);
             script.setNodeVersion(version);
 
             Future<ScriptStatus> exec;
@@ -53,12 +89,6 @@ public class TestRunner
                 if (status.hasCause()) {
                     Throwable cause = status.getCause();
 
-                    if (cause instanceof JavaScriptException) {
-                        Object value = ((JavaScriptException) cause).getValue();
-                        Context cx = Context.enter();
-                        System.err.println(Context.toString(value));
-                        Context.exit();
-                    }
                     if (cause instanceof RhinoException) {
                         System.err.println(((RhinoException) cause).getScriptStackTrace());
                     }

@@ -25,6 +25,7 @@ import io.apigee.trireme.core.NodeModule;
 import io.apigee.trireme.core.spi.NodeImplementation;
 import io.apigee.trireme.node12.modules.CaresWrap;
 import io.apigee.trireme.node12.modules.ConsoleWrap;
+import io.apigee.trireme.node12.modules.Contextify;
 import io.apigee.trireme.node12.modules.Filesystem;
 import io.apigee.trireme.node12.modules.HTTPParser;
 import io.apigee.trireme.node12.modules.JavaStreamWrap;
@@ -105,14 +106,14 @@ public class Node12Implementation
             { "timers",                P + "node.timers" },
             { "url",                   P + "node.url" },
             { "util",                  P + "node.util" },
+            { "vm",                    P + "node.vm" },
             { "zlib",                  P + "node.zlib" },
 
             { "http",                   P + "trireme.adaptorhttp" },
             { "https",                  P + "trireme.adaptorhttps" },
             { "crypto",                 P + "trireme.crypto" },
             { "tls",                    P + "trireme.tls" },
-            { "tty",                    P + "trireme.tty" },
-            { "vm",                     P + "trireme.vm" }
+            { "tty",                    P + "trireme.tty" }
         };
     }
 
@@ -122,6 +123,7 @@ public class Node12Implementation
         ArrayList<Class<? extends NodeModule>> r = new ArrayList<Class<? extends NodeModule>>();
         r.add(CaresWrap.class);
         r.add(ConsoleWrap.class);
+        r.add(Contextify.class);
         r.add(Filesystem.class);
         r.add(HTTPParser.class);
         r.add(JavaStreamWrap.class);

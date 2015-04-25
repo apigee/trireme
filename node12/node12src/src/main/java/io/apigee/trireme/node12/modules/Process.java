@@ -251,7 +251,7 @@ public class Process
             case Prop_argv:
                 return argv;
             case Prop_execArgv:
-                return getExecArgv();
+                return getJSExecArgv();
             case Prop_execPath:
                 return EXECUTABLE_NAME;
             case Prop_env:

@@ -32,6 +32,7 @@ import org.mozilla.javascript.Scriptable;
 import org.mozilla.javascript.ScriptableObject;
 
 import java.io.IOException;
+import java.util.List;
 
 import static io.apigee.trireme.core.ArgUtils.intArg;
 import static io.apigee.trireme.core.ArgUtils.octalOrHexIntArg;
@@ -61,6 +62,7 @@ public abstract class AbstractProcess
     protected Scriptable env;
     protected long startTime;
     protected int umask = DEFAULT_UMASK;
+    protected Object[] execArgv;
 
     protected AbstractProcess(IdPropertyMap props)
     {
@@ -199,9 +201,20 @@ public abstract class AbstractProcess
         return runner.getWorkingDirectory();
     }
 
-    protected Object getExecArgv()
+    public void setExecArgv(List<String> args)
     {
-        return Context.getCurrentContext().newArray(this, 0);
+        this.execArgv = new Object[args.size()];
+        args.toArray(execArgv);
+    }
+
+    public Object[] getExecArgv()
+    {
+        return execArgv;
+    }
+
+    protected Object getJSExecArgv()
+    {
+        return Context.getCurrentContext().newArray(this, execArgv);
     }
 
     protected Object getFeatures(Context cx)
@@ -291,5 +304,10 @@ public abstract class AbstractProcess
 
     public void setConnected(boolean connected) {
         this.connected = connected;
+    }
+
+    public static void JsGc()
+    {
+        System.gc();
     }
 }

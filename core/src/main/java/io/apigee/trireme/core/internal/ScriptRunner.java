@@ -46,6 +46,7 @@ import org.mozilla.javascript.ContextAction;
 import org.mozilla.javascript.EcmaError;
 import org.mozilla.javascript.EvaluatorException;
 import org.mozilla.javascript.Function;
+import org.mozilla.javascript.FunctionObject;
 import org.mozilla.javascript.JavaScriptException;
 import org.mozilla.javascript.RhinoException;
 import org.mozilla.javascript.Script;
@@ -62,6 +63,7 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.lang.reflect.InvocationTargetException;
+import java.lang.reflect.Method;
 import java.nio.ByteBuffer;
 import java.nio.channels.SelectionKey;
 import java.nio.channels.Selector;
@@ -568,7 +570,7 @@ public class ScriptRunner
     public Future<Boolean> createTimedTask(Runnable r, long delay, TimeUnit unit, boolean repeating, Object domain)
     {
         final RunnableTask t = new RunnableTask(r);
-        t.setDomain((Scriptable)domain);
+        t.setDomain((Scriptable) domain);
         t.setTimeout(System.currentTimeMillis() + unit.toMillis(delay));
         t.setRepeating(repeating);
         if (repeating) {
@@ -810,17 +812,20 @@ public class ScriptRunner
     private void setArgv(String scriptName)
     {
         ArrayList<String> argv = new ArrayList<String>(args == null ? 2 : args.length + 2);
+        ArrayList<String> vmArgs = new ArrayList<String>(0);
         argv.add(AbstractProcess.EXECUTABLE_NAME);
         if (scriptName != null) {
             argv.add(scriptName);
         }
 
         if (args != null) {
-            boolean vmArgsDone = true;
+            boolean vmArgsDone = false;
             for (String arg : args) {
                 if (vmArgsDone) {
                     argv.add(arg);
-                } else if (!arg.startsWith("--")) {
+                } else if (arg.startsWith("--")) {
+                    vmArgs.add(arg);
+                } else {
                     argv.add(arg);
                     vmArgsDone = true;
                 }
@@ -835,6 +840,9 @@ public class ScriptRunner
             }
         }
         process.setArgv(ret);
+        process.setExecArgv(vmArgs);
+
+        initVmArgs();
     }
 
     private ScriptStatus mainLoop(Context cx)
@@ -1131,6 +1139,17 @@ public class ScriptRunner
             throw new NodeException(e);
         } catch (InstantiationException e) {
             throw new NodeException(e);
+        }
+    }
+
+    private void initVmArgs()
+    {
+        for (Object arg : process.getExecArgv()) {
+            if ("--expose-gc".equals(arg)) {
+                Method gc = Utils.findMethod(AbstractProcess.class, "JsGc");
+                FunctionObject gcFunc = new FunctionObject("gc", gc, scope);
+                scope.put("gc", scope, gcFunc);
+            }
         }
     }
 

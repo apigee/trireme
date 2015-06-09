@@ -45,16 +45,10 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import javax.net.ssl.SSLContext;
-import javax.net.ssl.SSLEngine;
-import javax.net.ssl.SSLEngineResult;
 import javax.net.ssl.SSLException;
-import javax.net.ssl.SSLPeerUnverifiedException;
 
 import java.nio.ByteBuffer;
-import java.security.cert.Certificate;
-import java.security.cert.CertificateException;
 import java.security.cert.X509Certificate;
-import java.util.ArrayDeque;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import static io.apigee.trireme.core.ArgUtils.*;
@@ -502,7 +496,7 @@ public class ConnectionImpl
 
         SSLCiphers.Ciph cipher = SSLCiphers.get().getJavaCipher(cipherSuite);
         Scriptable c = cx.newObject(self);
-        c.put("name", c, cipher.getSslName());
+        c.put("name", c, (cipher == null ? "unknown" : cipher.getSslName()));
         c.put("version", c, self.processor.getProtocol());
         c.put("javaCipher", c, cipherSuite);
         return c;

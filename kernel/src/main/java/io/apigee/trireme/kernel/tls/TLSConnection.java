@@ -599,10 +599,11 @@ public class TLSConnection
 
         // Manually check trust
         try {
+            String algo = figureTrustAlgorithm();
             if (isServer) {
-                trustManager.checkClientTrusted((X509Certificate[]) certChain, "RSA");
+                trustManager.checkClientTrusted((X509Certificate[]) certChain, algo);
             } else {
-                trustManager.checkServerTrusted((X509Certificate[]) certChain, "RSA");
+                trustManager.checkServerTrusted((X509Certificate[]) certChain, algo);
             }
             if (log.isDebugEnabled()) {
                 log.debug("SSL peer {} is valid", engine.getSession());
@@ -613,6 +614,45 @@ public class TLSConnection
             }
             handleError(new SSLException(e));
         }
+    }
+
+    /**
+     * Figure out what algorithm to use for checking the trust of the cert. There is not a simple algorithm
+     * for this but the code below seems to cover all the known cases. If we choose the wrong algorithm,
+     * some cert validation might fail because this parameter causes the Sun trust manager to check for
+     * attributes of the certificate that might not be present.
+     */
+    private String figureTrustAlgorithm()
+    {
+        String suite = engine.getSession().getCipherSuite();
+        String protocol = engine.getSession().getProtocol();
+
+        String algo;
+        if (suite.startsWith("TLS_ECDHE_ECDSA")) {
+            algo = "ECDHE_ECDSA";
+        } else if (suite.startsWith("TLS_ECDHE_RSA")) {
+            algo = "ECDHE_RSA";
+        } else if (suite.startsWith("TLS_ECDH_ECDSA")) {
+            algo = "ECDH_ECDSA";
+        } else if (suite.startsWith("TLS_DHE_DSS")) {
+            algo = "DHE_DSS";
+        } else if (suite.startsWith("TLS_DHE_RSA")) {
+            algo = "DHE_RSA";
+        } else if (suite.startsWith("TLS_ECDH_RSA")) {
+            algo = "ECDH_RSA";
+        } else if (suite.startsWith("SSL_RSA_EXPORT")) {
+            algo = "RSA_EXPORT";
+        } else if (suite.startsWith("TLS_RSA") ||
+                   suite.startsWith("SSL_RSA")) {
+            algo = "RSA";
+        } else {
+            algo = "UNKNOWN";
+        }
+
+        if (log.isDebugEnabled()){
+            log.debug("Protocol = {}: suite = {}. Checking trust using {}", protocol, suite, algo);
+        }
+        return algo;
     }
 
     public X509Certificate getPeerCertificate()

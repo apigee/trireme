@@ -90,4 +90,12 @@
         <Name>test-child-process-spawn-loop.js</Name>
         <Description>Flaky, works locally</Description>
     </Excluded>
+    <Excluded>
+        <Name>test-fs-watch-file.js</Name>
+        <Description>Flaky, works locally</Description>
+    </Excluded>
+    <Excluded>
+        <Name>test-watch-file.js</Name>
+        <Description>Flaky, works locally</Description>
+    </Excluded>
 </ExcludedTests>

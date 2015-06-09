@@ -181,7 +181,7 @@ public class Utils
         Scriptable err = cx.newObject(scope, "Error", new Object[] { message });
         err.put("code", err, code);
         int errno = ErrorCodes.get().toInt(code);
-        if (errno >= 0) {
+        if (errno != 0) {
             err.put("errno", err, errno);
         }
         if (path != null) {

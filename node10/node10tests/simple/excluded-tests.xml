@@ -210,6 +210,10 @@
         <Name>test-abort-fatal-error.js</Name>
         <Description>Uses node.js command-line options.</Description>
     </Excluded>
+    <Excluded>
+        <Name>test-net-server-address.js</Name>
+        <Description>Node and Java don't agree how to describe localhost in IPv6</Description>
+    </Excluded>
 
     <!-- DIFFERENT TESTS
          We have different versions of these tests in the "noderunner" directory because they must

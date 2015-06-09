@@ -80,7 +80,7 @@ public class ErrorCodes
     public int toInt(String code)
     {
         Integer i = stringCodes.get(code);
-        return (i == null ? -1 : i);
+        return (i == null ? 0 : i);
     }
 
     public Map<Integer, String> getMap() {

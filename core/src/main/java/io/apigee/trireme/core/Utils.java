@@ -173,7 +173,7 @@ public class Utils
      * Create a JavaScript Error object, which may be passed to a function that is expecting one.
      *
      * @param code this will be used to set the "code" property of the new object.
-     *             "errno" will also be set if the code is a known error code from the "Constants" class.
+     *             "errno" will also be set if the code is a known error code from the "ErrorCodes" class.
      * @param path this will be used to set the "path" property of the new object
      */
     public static Scriptable makeErrorObject(Context cx, Scriptable scope, String message, String code, String path)

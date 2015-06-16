@@ -289,11 +289,29 @@ public class ScriptRunner
         return selector;
     }
 
+    /**
+     * This thread pool is a thread pool that has a fixed maximum size and a queue. It is intended to be used
+     * for tasks that would block the main thread, but that have a reasonable chance of completing in a
+     * timely fashion. For instance, filesystem operations, DNS requests, and certain TLS operations should
+     * operate in this pool. The thread pool is also configured with a "caller runs" error policy, which means
+     * that if the thread pool is full, operations will run in the main script thread. This will have the effect
+     * of slowing down the whole system so that the thread pool will start to catch up, and is preferable to
+     * the alternative of just throwing an unrecoverable error. But that means that any tasks that might run
+     * for an unreasonably long time, or never exit (like polling file) MUST NOT use this thread pool.
+     * In other words, this thread pool is for maintaining system performance.
+     */
     @Override
     public ExecutorService getAsyncPool() {
         return asyncPool;
     }
 
+    /**
+     * This thread pool is a "cached thread pool" with no maximum size, which means that any task submitted will
+     * run in its own thread until it completes. It is less efficient than the "async thread pool" because it
+     * does not queue anything. It should not be used for performance. However, any code that needs to allocate
+     * a long-running task, such as a file poller, must use this thread pool. We also use this thread pool
+     * to allocate a "main" thread for each script.
+     */
     @Override
     public ExecutorService getUnboundedPool() {
         return env.getScriptPool();

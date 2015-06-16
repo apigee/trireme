@@ -61,9 +61,9 @@ public class
      */
     public static final String DEFAULT_NODE_VERSION = "0.10.x";
 
-    public static final int CORE_POOL_SIZE    = 50;
-    public static final int MAX_POOL_SIZE     = 1000;
-    public static final int POOL_QUEUE_SIZE   = 8;
+    public static final int CORE_POOL_SIZE    = 10;
+    public static final int MAX_POOL_SIZE     = 100;
+    public static final int POOL_QUEUE_SIZE   = 32;
     public static final long POOL_TIMEOUT_SECS = 60L;
 
     public static final int DEFAULT_JS_VERSION = Context.VERSION_1_8;
@@ -81,6 +81,7 @@ public class
     private long                scriptTimeLimit;
     private ClassCache          classCache;
     private String              defaultNodeVersion;
+    private int                 maxAsyncPoolSize = MAX_POOL_SIZE;
 
     private int                 optLevel = DEFAULT_OPT_LEVEL;
 
@@ -270,6 +271,19 @@ public class
         return classCache;
     }
 
+    /**
+     * Set the maximum thread pool size of the "async pool," which will be used for running
+     * short-duration blocking tasks like file I/O, DNS lookups, and some TLS operations. The default is 100.
+     * It must be called before "execute" is called on the first script that uses this environment, or
+     * it will have no effect.
+     */
+    public void setMaxAsyncPoolSize(int size) {
+        this.maxAsyncPoolSize = size;
+    }
+
+    public int getMaxAsyncPoolSize() {
+        return maxAsyncPoolSize;
+    }
 
     /**
      * Internal: Get the thread pool for async tasks.
@@ -320,11 +334,12 @@ public class
                 // This pool is used for operations that must appear async to JavaScript but are synchronous
                 // in Java. Right now this means file I/O, at least in Java 6, plus DNS queries and certain
                 // SSLEngine functions.
+                int coreSize = Math.min(maxAsyncPoolSize, CORE_POOL_SIZE);
                 ThreadPoolExecutor pool =
-                    new ThreadPoolExecutor(CORE_POOL_SIZE, MAX_POOL_SIZE, POOL_TIMEOUT_SECS, TimeUnit.SECONDS,
+                    new ThreadPoolExecutor(coreSize, maxAsyncPoolSize, POOL_TIMEOUT_SECS, TimeUnit.SECONDS,
                                            new ArrayBlockingQueue<Runnable>(POOL_QUEUE_SIZE),
                                            new PoolNameFactory("Trireme Async Pool"),
-                                           new ThreadPoolExecutor.AbortPolicy());
+                                           new ThreadPoolExecutor.CallerRunsPolicy());
                 pool.allowCoreThreadTimeOut(true);
                 asyncPool = pool;
             }

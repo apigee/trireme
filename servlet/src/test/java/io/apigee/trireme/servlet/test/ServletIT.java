@@ -4,12 +4,14 @@ import org.junit.Test;
 
 import java.io.IOException;
 import java.io.InputStreamReader;
+import java.io.OutputStream;
 import java.io.OutputStreamWriter;
 import java.io.Reader;
 import java.io.Writer;
 import java.net.HttpURLConnection;
 import java.net.URL;
 import java.nio.charset.Charset;
+import java.util.Arrays;
 
 import static org.junit.Assert.*;
 
@@ -34,6 +36,64 @@ public class ServletIT
         String msg = "Hello to the server!";
         String hello = httpExchange("POST", BASE + "/test", msg, 200);
         assertEquals(msg, hello);
+    }
+
+    @Test
+    public void testPostBigEcho()
+        throws IOException
+    {
+        StringBuilder sb = new StringBuilder();
+        for (int i = 0; i < 1000; i++) {
+            sb.append("0123456789");
+        }
+        String msg = sb.toString();
+        String hello = httpExchange("POST", BASE + "/test", msg, 200);
+        assertEquals(msg, hello);
+    }
+
+    @Test
+    public void testPostHugeEcho()
+        throws IOException
+    {
+        StringBuilder sb = new StringBuilder();
+        for (int i = 0; i < 100000; i++) {
+            sb.append("0123456789");
+        }
+        String msg = sb.toString();
+        String hello = httpExchange("POST", BASE + "/test", msg, 200);
+        assertEquals(msg, hello);
+    }
+
+    @Test
+    public void testPostCount()
+        throws IOException
+    {
+        String msg = "Hello to the server!";
+        String len = httpExchange("POST", BASE + "/test/count", msg, 200);
+        int length = Integer.parseInt(len);
+        assertEquals(msg.length(), length);
+    }
+
+    @Test
+    public void testLargePostCount()
+        throws IOException
+    {
+        int chunkSize = 1;
+        int numChunks = 1000;
+        String len = httpLargeExchange("POST", BASE + "/test/count", chunkSize, numChunks, 200);
+        int length = Integer.parseInt(len);
+        assertEquals(chunkSize * numChunks, length);
+    }
+
+    @Test
+    public void testLargerPostCount()
+        throws IOException
+    {
+        int chunkSize = 10000;
+        int numChunks = 100;
+        String len = httpLargeExchange("POST", BASE + "/test/count", chunkSize, numChunks, 200);
+        int length = Integer.parseInt(len);
+        assertEquals(chunkSize * numChunks, length);
     }
 
     @Test
@@ -74,6 +134,29 @@ public class ServletIT
         URL url = new URL(urlStr);
         HttpURLConnection conn = (HttpURLConnection)url.openConnection();
         conn.setRequestMethod(method);
+
+        return returnResult(expectedStatus, conn);
+    }
+
+    private String httpLargeExchange(String method, String urlStr, int chunkSize, int numChunks, int expectedStatus)
+        throws IOException
+    {
+        URL url = new URL(urlStr);
+        HttpURLConnection conn = (HttpURLConnection)url.openConnection();
+        conn.setRequestMethod(method);
+        conn.setDoOutput(true);
+
+        byte[] buf = new byte[chunkSize];
+        Arrays.fill(buf, (byte)'1');
+        OutputStream out = conn.getOutputStream();
+
+        try {
+            for (int i = 0; i < numChunks; i++) {
+                out.write(buf);
+            }
+        } finally {
+            out.close();
+        }
 
         return returnResult(expectedStatus, conn);
     }

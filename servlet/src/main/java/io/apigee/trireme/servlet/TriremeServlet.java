@@ -197,11 +197,12 @@ public class TriremeServlet
         stub.onRequest(req, resp);
 
         // Read the stream in blocking mode (which works in all servlet engines) and pass to Node.
-        byte[] buf = new byte[BUFFER_SIZE];
         InputStream in = servletReq.getInputStream();
         int rc;
 
         do {
+            // Can't share this -- remember that "onData" happens asynchronously.
+            byte[] buf = new byte[BUFFER_SIZE];
             rc = in.read(buf);
             if (rc > 0) {
                 ByteBuffer chunk = ByteBuffer.wrap(buf, 0, rc);

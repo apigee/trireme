@@ -1,3 +1,16 @@
+* 0.8.6 18-Jun-2015:
+
+Upgrade to Rhino 1.7.7. This fixes a bug with calling "toJSON" on certain Error objects, and
+introduces support for native arrays, among many other things. (Native arrays like Int32Array are
+used in an increasing number of Node projects since V8 supports them even without the --harmony flag.
+
+[Issue 118](https://github.com/apigee/trireme/issues/118) Fix TLS verification so that it works properly
+with ECDH-derived cipher suites. This was causing TLS connections to "www.facebook.com" to fail.
+[Issue 119](https://github.com/apigee/trireme/issues/119) Handle thread pool exhaustion by blocking
+the main thread rather than by exiting the script. This slows things down but makes the whole system
+much more robust.
+
+
 * 0.8.5 14-Dec-2014:
 
 [Issue 98](https://github.com/apigee/trireme/issues/98) Add support for the "trireme-support"

@@ -255,9 +255,11 @@ public abstract class AbstractProcess
     {
         Runtime r = Runtime.getRuntime();
         Scriptable mem = cx.newObject(thisObj);
+        long used = r.totalMemory() - r.freeMemory();
         mem.put("rss", mem, r.totalMemory());
-        mem.put("heapTotal", mem, r.maxMemory());
-        mem.put("heapUsed", mem,  r.totalMemory());
+        mem.put("heapTotal", mem, r.totalMemory());
+        mem.put("heapUsed", mem,  used);
+        mem.put("heapMax", mem, r.maxMemory());
         return mem;
     }
 

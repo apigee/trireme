@@ -21,6 +21,7 @@
  */
 package io.apigee.trireme.core.modules;
 
+import io.apigee.trireme.core.modules.crypto.CryptoLoader;
 import io.apigee.trireme.kernel.Charsets;
 import io.apigee.trireme.kernel.crypto.CryptoAlgorithms;
 import io.apigee.trireme.kernel.crypto.CryptoService;
@@ -80,13 +81,6 @@ public class Crypto
     /** This is a maximum value for a byte buffer that seems to be part of V8. Used to make tests pass. */
     public static final long MAX_BUFFER_LEN = 0x3fffffffL;
 
-    protected static CryptoService cryptoService;
-    protected static Provider cryptoProvider;
-
-    static {
-        loadCryptoService();
-    }
-
     @Override
     public String getModuleName()
     {
@@ -136,27 +130,10 @@ public class Crypto
         ScriptableObject.defineClass(export, DHGroupImpl.class);
         ScriptableObject.defineClass(export, ConnectionImpl.class);
 
-        return export;
-    }
+        // We need to try and initialize BouncyCastle before all of these classes will work
+        CryptoLoader.get();
 
-    /**
-     * Load the crypto service using the service loader. This is in a separate jar and loaded using the service
-     * loader because it depends on Bouncy Castle and we don't want that required all the time. So, we load it
-     * lazily here. We also load the Bouncy Castle provider (if present) so that we can manually select it
-     * for certain algorithms if we wish.
-     */
-    private static void loadCryptoService()
-    {
-        ServiceLoader<CryptoService> loc = ServiceLoader.load(CryptoService.class);
-        if (loc.iterator().hasNext()) {
-            if (log.isDebugEnabled()) {
-                log.debug("Using crypto service implementation {}", cryptoService);
-            }
-            cryptoService = loc.iterator().next();
-            cryptoProvider = cryptoService.getProvider();
-        } else if (log.isDebugEnabled()) {
-            log.debug("No crypto service available");
-        }
+        return export;
     }
 
     public static ByteBuffer convertString(Object o, String encoding, Context cx, Scriptable scope)
@@ -173,17 +150,17 @@ public class Crypto
 
     public static void ensureCryptoService(Context cx, Scriptable scope)
     {
-        if (cryptoService == null) {
+        if (CryptoLoader.get().getCryptoService() == null) {
             throw Utils.makeError(cx, scope, "Crypto service not available");
         }
     }
 
     public static CryptoService getCryptoService() {
-        return cryptoService;
+        return CryptoLoader.get().getCryptoService();
     }
 
     public static Provider getCryptoProvider() {
-        return (cryptoService == null ? null : cryptoService.getProvider());
+        return CryptoLoader.get().getCryptoProvider();
     }
 
     public static class CryptoImpl

@@ -49,4 +49,31 @@
       <scope>test</scope>
     </dependency>
   </dependencies>
+
+  <build>
+    <plugins>
+      <plugin>
+        <groupId>io.apigee.trireme</groupId>
+        <artifactId>rhino-compiler</artifactId>
+        <version>${project.version}</version>
+        <executions>
+          <execution>
+            <!-- Scripts that we copied straight from node.js. Loaded as modules so we must wrap them as a function -->
+            <id>compile-util</id>
+            <configuration>
+              <optimizationLevel>9</optimizationLevel>
+              <debugInfo>true</debugInfo>
+              <pattern>io/apigee/trireme/util/scripts/*.js</pattern>
+              <codePrefix>(function (exports, require, module, __filename, __dirname) { </codePrefix>
+              <codePostfix>});</codePostfix>
+            </configuration>
+            <phase>compile</phase>
+            <goals>
+              <goal>compile</goal>
+            </goals>
+          </execution>
+        </executions>
+      </plugin>
+    </plugins>
+  </build>
 </project>

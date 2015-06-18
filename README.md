@@ -403,6 +403,7 @@ HTTP parsing, and many other things.
 ### Threading Model
 
 Each Trireme script runs in a single thread. In other words, when the script is executed, it spawns a new thread
+Each Trireme script runs in a single thread. In other words, when the script is executed, it spawns a new thread
 and occupies it until the script exits. Ticks and timers are implemented within that single thread. If the script
 exits (has no ticks or timers, is not "pinned" by a library like http, and falls off the bottom of the code)
 then the thread exits.

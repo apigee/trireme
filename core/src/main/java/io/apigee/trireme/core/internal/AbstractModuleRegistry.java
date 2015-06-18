@@ -24,6 +24,7 @@ package io.apigee.trireme.core.internal;
 import io.apigee.trireme.core.InternalNodeModule;
 import io.apigee.trireme.core.NativeNodeModule;
 import io.apigee.trireme.core.NodeModule;
+import io.apigee.trireme.core.NodePrecompiledModule;
 import io.apigee.trireme.core.NodeScriptModule;
 import io.apigee.trireme.core.Utils;
 import io.apigee.trireme.core.spi.NodeImplementation;
@@ -137,6 +138,18 @@ public abstract class AbstractModuleRegistry
             addNativeModule(mod);
         }
 
+        // Load all pre-compiled modules
+        ServiceLoader<NodePrecompiledModule> preLoader = ServiceLoader.load(NodePrecompiledModule.class, cl);
+        for (NodePrecompiledModule mod : preLoader) {
+            for (String[] script : mod.getCompiledScripts()) {
+                if (script.length != 2) {
+                    throw new AssertionError("Script module " + mod.getClass().getName() +
+                                             " returned script source arrays that do not have two elements");
+                }
+                loadAndAdd(mod, script[0], script[1]);
+            }
+        }
+
         // Load all JavaScript modules implemented using "NodeScriptModule"
         ServiceLoader<NodeScriptModule> scriptLoader = ServiceLoader.load(NodeScriptModule.class, cl);
         for (NodeScriptModule mod: scriptLoader) {
@@ -158,6 +171,26 @@ public abstract class AbstractModuleRegistry
             putNativeModule(mod.getModuleName(), (NativeNodeModule)mod);
         } else {
             putRegularModule(mod.getModuleName(), mod);
+        }
+    }
+
+    private void loadAndAdd(Object impl, String name, String className)
+    {
+        try {
+            Class<Script> klass = (Class<Script>)impl.getClass().getClassLoader().loadClass(className);
+            Script script = klass.newInstance();
+            putCompiledModule(name, script);
+        } catch (ClassNotFoundException e) {
+            throw new AssertionError("Cannot find " + className + " from module " + impl.getClass().getName());
+        } catch (ClassCastException cce) {
+            throw new AssertionError("Cannot load " + className + " from module " +
+                                     impl.getClass().getName() + ": " + cce);
+        } catch (InstantiationException e) {
+            throw new AssertionError("Cannot load " + className + " from module " +
+                                     impl.getClass().getName() + ": " + e);
+        } catch (IllegalAccessException e) {
+            throw new AssertionError("Cannot load " + className + " from module " +
+                                     impl.getClass().getName() + ": " + e);
         }
     }
 

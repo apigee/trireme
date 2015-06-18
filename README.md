@@ -149,7 +149,7 @@ although it may not necessarily pass all the node.js tests.
   <tr><td>crypto</td><td>Complete</td><td>node.js + Trireme</td></tr>
   <tr><td>debugger</td><td>Not Supported</td><td><NA/td></tr>
   <tr><td>dgram</td><td>Complete</td><td>node.js + Trireme</td></tr>
-  <tr><td>dns</td><td>Partial</td><td>Trireme</td></tr>
+  <tr><td>dns</td><td>Complete</td><td>Trireme</td></tr>
   <tr><td>domain</td><td>Complete</td><td>node.js + Trireme</td></tr>
   <tr><td>events</td><td>Complete</td><td>node.js</td></tr>
   <tr><td>fs</td><td>Complete</td><td>node.js + Trireme</td></tr>
@@ -375,8 +375,9 @@ Since Trireme is supposed to be highly embeddable, we try to minimize the depend
 
 ### Rhino
 
-This is the most mature framework for running JavaScript under Java. When some of the other efforts are
-closer to working, we may look at replacing it if, as anticipated, they are much faster.
+This is the most mature framework for running JavaScript under Java and it works all versions of Java.
+Nashorn (new in Java 8) is faster in nearly all cases, but making Trireme run on Nashorn is more of
+a re-write of Trireme than a simple "port."
 
 ### Slf4j
 
@@ -385,9 +386,7 @@ This is the de facto standard logging API for Java.
 ### Java SE 6
 
 Trireme runs on Java 6 and up. If Java 7 is available, it will use the new filesystem APIs, which allow a much wider
-range of filesystem features, like links and permissions that work the same way as regular Node. It also uses
-the asynchronous I/O interfaces for file I/O which are theoretically faster. (Although it turns out that on
-anything but Windows they are actually doing the same thing under the covers.)
+range of filesystem features, like links and permissions that work the same way as regular Node.
 
 ## Design
 

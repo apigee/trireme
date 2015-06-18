@@ -1,15 +1,29 @@
 * 0.8.6 18-Jun-2015:
 
-Upgrade to Rhino 1.7.7. This fixes a bug with calling "toJSON" on certain Error objects, and
-introduces support for native arrays, among many other things. (Native arrays like Int32Array are
-used in an increasing number of Node projects since V8 supports them even without the --harmony flag.
+In addition to a Rhino upgrade and the fixes below, this release is the first two support multiple versions
+of Node. The default version is based on Node 0.10.32, but there is an alternate version based on
+Node 0.11.15. Scripts based on both implementations may run at the same time in the same JVM,
+using the same instance of NodeEnvironment, or using different instances.
 
+To try the new version in embedded code, call "setNodeVersion" on NodeScript using the value "0.11.x",
+or call "setDefaultNodeVersion" on NodeEnvironment.
+
+We expect that the next version of Trireme will include support for 0.12, and it will be the default.
+
+[Issue 115](https://github.com/apigee/trireme/issues/115) Add mappings for new TLS ciphers
+introduced in Java 8.
+[Issue 116](https://github.com/apigee/trireme/issues/116) Change process.memoryUsage() so that it correctly
+reports a "heapUsed" number based on the amount of data that is actually free in the heap so that
+scripts can use it to take action when memory is growing short.
 [Issue 118](https://github.com/apigee/trireme/issues/118) Fix TLS verification so that it works properly
 with ECDH-derived cipher suites. This was causing TLS connections to "www.facebook.com" to fail.
 [Issue 119](https://github.com/apigee/trireme/issues/119) Handle thread pool exhaustion by blocking
 the main thread rather than by exiting the script. This slows things down but makes the whole system
 much more robust.
 
+Also, upgrade to Rhino 1.7.7. This fixes a bug with calling "toJSON" on certain Error objects, and
+introduces support for native arrays, among many other things. (Native arrays like Int32Array are
+used in an increasing number of Node projects since V8 supports them even without the --harmony flag.
 
 * 0.8.5 14-Dec-2014:
 

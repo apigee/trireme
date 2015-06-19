@@ -22,6 +22,7 @@ the main thread rather than by exiting the script. This slows things down but ma
 much more robust.
 [Issue 114](https://github.com/apigee/trireme/issues/114) Fix TriremeServlet so that it properly reads
 large bodies coming from the client without corruption.
+[Issue 120](https://github.com/apigee/trireme/issues/120) Speed up Trireme startup.
 
 Also, upgrade to Rhino 1.7.7. This fixes a bug with calling "toJSON" on certain Error objects, and
 introduces support for native arrays, among many other things. (Native arrays like Int32Array are

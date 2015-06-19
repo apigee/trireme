@@ -133,6 +133,14 @@ any native code.
 access to the XSLT processor inside your Java platform, which is faster and
 can support more of the XSLT standard than libxslt.
 
+## Logging
+
+Trireme uses slf4j for logging the stuff that is happening in Java. The pre-built JAR, and the NPM
+"trireme" wrapper, use "slf4j-simple". To turn on debug logging, set the system property
+"org.slf4j.simpleLogger.defaultLogLevel" to "debug". (Or "trace" for even more output.)
+
+When embedding trireme, you can use any SLF4J-compatible logging framework you wish, such as logback.
+
 ## How Complete is Trireme?
 
 Trireme supports most of the Node.js APIs and passes much of the Node.js test suite.
@@ -183,10 +191,12 @@ A few of the modules are different, some in major ways:
 ### JavaScript Language
 
 Trireme runs in the JVM on Rhino, which is the most complete JavaScript implementation for
-the JVM. Rhino currently implements version 1.8 of JavaScript, which means that a few things supported
-in later versions of JavaScript, such as the "trimLeft" method of the "String" object, are not supported.
+the JVM and the one that works on the largest variety of Java distributions. The latest version of Rhino
+has many of the new JavaScript language features that Node users are used to, but still does not
+have all the features that are supported when the "--harmony" flag is set.
 
-Also, newer features of V8, particularly the primitive array types, are not supported in Rhino.
+For specifics, see the [Rhino compatibility table](http://mozilla.github.io/rhino/compat/engines.html).
+Trireme is currently using RHino 1.7.7.
 
 Most of the time the differences between V8 and Rhino do not affect Node.js code, but occasionally
 there is a problem. We would love some help from the Rhino community to start to address these differences.
@@ -267,7 +277,7 @@ In addition, the following is also valid, and "trireme-crypto" will not be neede
 Like TLS, certain features (Sign/Verify in particular) only work if the "trireme-crypto" module and its
 dependencies are in the class path. If they are not present then these methods will throw an exception.
 This is primarily because the trireme-crypto module uses Bouncy Castle to implement PEM file reading
-and decryption.
+and decryption. It is possible to run Trireme without Bouncy Castle if these features are not needed.
 
 ### Child Process
 
@@ -351,6 +361,7 @@ This table will help keep them straight:
 <tr><td><b>module</b></td><td><b>Required?</b></td><td><b>Recommended?</b></td><td><b>Description</b></td></tr>
 <tr><td>trireme-core</td><td>X</td><td>X</td><td>The core module containing the guts of Trireme</td></tr>
 <tr><td>trireme-node10src</td><td>X</td><td>X</td><td>JavaScript code that makes Trireme implement Node.js 0.10</td></tr>
+<tr><td>trireme-node12src</td><td>X</td><td>X</td><td>JavaScript code that makes Trireme implement Node.js 0.12</td></tr>
 <tr><td>trireme-crypto</td><td/><td>X</td>
   <td>Support code for reading PEM files and some other crypto operations. Uses Bouncy Castle. If not in the classpath,
   certain crypto operations (notably PEM file support for TLS and HTTPS) will not work. Nonetheless, this is a separate

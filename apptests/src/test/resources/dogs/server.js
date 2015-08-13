@@ -1,5 +1,6 @@
 var express = require('express');
 var bodyParser = require('body-parser');
+var compression = require('compression');
 var app = express();
 
 var port;
@@ -10,6 +11,7 @@ if (process.argv.length > 2) {
 }
 
 app.use(bodyParser.json());
+app.use(compression({threshold: 0}));
 
 app.get('/dogs', function(req, res) {
   res.setHeader('Content-Type', 'text/plain');

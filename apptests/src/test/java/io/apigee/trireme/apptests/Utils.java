@@ -1,24 +1,35 @@
 package io.apigee.trireme.apptests;
 
 import java.io.IOException;
+import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.net.HttpURLConnection;
 import java.net.Socket;
 import java.net.URL;
+import java.util.zip.GZIPInputStream;
 
 import static org.junit.Assert.assertEquals;
 
 public class Utils
 {
-    public static  String getString(String url, int expectedResponse)
+    public static  String getString(String url, int expectedResponse, boolean compressed)
         throws IOException
     {
         URL u = new URL(url);
         HttpURLConnection http = (HttpURLConnection)u.openConnection();
+        if (compressed) {
+            http.setRequestProperty("Accept-Encoding", "gzip");
+        }
         assertEquals(expectedResponse, http.getResponseCode());
 
         StringBuilder sb = new StringBuilder();
-        InputStreamReader rdr = new InputStreamReader(http.getInputStream());
+        InputStream in;
+        if (compressed) {
+            in = new GZIPInputStream(http.getInputStream());
+        } else {
+            in = http.getInputStream();
+        }
+        InputStreamReader rdr = new InputStreamReader(in);
         char[] c = new char[1024];
         int read;
         do {
@@ -28,6 +39,12 @@ public class Utils
             }
         } while (read > 0);
         return sb.toString();
+    }
+
+    public static  String getString(String url, int expectedResponse)
+        throws IOException
+    {
+        return getString(url, expectedResponse, false);
     }
 
     public static  String postString(String url, String requestBody, String contentType, int expectedResponse)

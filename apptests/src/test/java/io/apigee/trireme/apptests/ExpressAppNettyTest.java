@@ -52,10 +52,19 @@ public class ExpressAppNettyTest
         throws IOException
     {
         String response = Utils.getString(BASEURL + "/dogs", 200);
-        assertNotNull(response);
+        assertEquals("I like dogs", response);
         assertTrue(response.length() > 0);
     }
 
+    @Test
+    public void testGetDogsCompressed()
+        throws IOException
+    {
+        String response = Utils.getString(BASEURL + "/dogs", 200, true);
+        System.out.println("Compressed response: " + response);
+        assertEquals("I like dogs", response);
+        assertTrue(response.length() > 0);
+    }
 
     @Test
     public void testSetDogs()
@@ -64,7 +73,8 @@ public class ExpressAppNettyTest
         final String body = "{ \"name\": \"Bo\" }";
 
         String response = Utils.postString(BASEURL+ "/dogs", body, "application/json", 200);
-        assertNotNull(response);
+        System.out.println("Set response: " + response);
+        assertEquals("{\"name\":\"Bo\"}", response);
         assertTrue(response.length() > 0);
     }
 
@@ -75,7 +85,6 @@ public class ExpressAppNettyTest
         final String body = "{ \"name\": \"Bo\" }";
 
         String response = Utils.postString(BASEURL+ "/dogs2", body, "text/plain", 200);
-        assertNotNull(response);
         assertTrue(response.length() > 0);
         assertEquals("ok", response);
     }

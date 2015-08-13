@@ -105,8 +105,18 @@ if (HttpWrap.hasServerAdapter()) {
   util.inherits(ServerResponse, stream.Writable);
   exports.ServerResponse = ServerResponse;
 
+  ServerResponse.prototype.statusCode = 200;
+
   ServerResponse.prototype.writeContinue = function() {
     throw Error('writeContinue not implemented');
+  };
+
+  ServerResponse.prototype._implicitHeader = function() {
+    this.writeHead(this.statusCode);
+  };
+
+  ServerResponse.prototype.writeHeader = function() {
+    this.writeHead.apply(this, arguments);
   };
 
   ServerResponse.prototype.writeHead = function(statusCode) {
@@ -177,7 +187,7 @@ if (HttpWrap.hasServerAdapter()) {
   };
 
   ServerResponse.prototype._send = function() {
-    // Nothing to do here -- included for test compatibility
+    return this.write(data, encoding);
   };
 
   ServerResponse.prototype.end = function(data, encoding) {

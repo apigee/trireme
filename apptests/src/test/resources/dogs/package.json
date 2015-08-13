@@ -6,6 +6,7 @@
   "main": "server.js",
   "dependencies": {
     "body-parser": "^1.13.3",
+    "compression": "^1.5.2",
     "express": "4.x"
   }
 }

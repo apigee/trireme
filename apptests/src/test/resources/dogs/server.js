@@ -1,4 +1,5 @@
 var express = require('express');
+var bodyParser = require('body-parser');
 var app = express();
 
 var port;
@@ -8,7 +9,7 @@ if (process.argv.length > 2) {
   port = 33333;
 }
 
-app.use(express.bodyParser());
+app.use(bodyParser.json());
 
 app.get('/dogs', function(req, res) {
   res.setHeader('Content-Type', 'text/plain');

@@ -40,7 +40,11 @@ function fresh(req, res) {
   if (noneMatch) noneMatch = noneMatch.split(/ *, */);
 
   // if-none-match
-  if (noneMatch) etagMatches = ~noneMatch.indexOf(etag) || '*' == noneMatch[0];
+  if (noneMatch) {
+    etagMatches = noneMatch.some(function (match) {
+      return match === '*' || match === etag || match === 'W/' + etag;
+    });
+  }
 
   // if-modified-since
   if (modifiedSince) {

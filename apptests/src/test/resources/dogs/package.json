@@ -3,7 +3,9 @@
   "description": "Dogs App",
   "version": "0.0.1",
   "private": true,
+  "main": "server.js",
   "dependencies": {
-    "express": "3.x"
+    "body-parser": "^1.13.3",
+    "express": "4.x"
   }
 }

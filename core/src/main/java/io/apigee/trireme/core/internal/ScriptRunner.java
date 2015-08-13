@@ -1196,7 +1196,7 @@ public class ScriptRunner
         throws NodeException
     {
         for (Object arg : process.getExecArgv()) {
-            if ("--expose-gc".equals(arg)) {
+            if ("--expose-gc".equals(arg) || "--expose_gc".equals(arg)) {
                 Method gc = Utils.findMethod(AbstractProcess.class, "JsGc");
                 FunctionObject gcFunc = new FunctionObject("gc", gc, scope);
                 scope.put("gc", scope, gcFunc);

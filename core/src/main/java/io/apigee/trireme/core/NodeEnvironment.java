@@ -158,8 +158,22 @@ public class
     }
 
     /**
+     * <p>
      * Create an instance of a script attached to this environment. Any "setters" that you wish to change
      * for this environment must be called before the first script is run.
+     * </p>
+     * <p>
+     * When this form of the script is used, all of the arguments will appear on the command line as
+     * if they were passed after the name of the script. So, if "foo" and "bar" are passed as
+     * arguments, and the script is called "baz.js", then the resulting process.argv will
+     * contain, in order:
+     * <ol>
+     *     <li>./node</li>
+     *     <li>baz.js</li>
+     *     <li>foo</li>
+     *     <li>bar</li>
+     * </ol>
+     * </p>
      */
     public NodeScript createScript(String scriptName, File script, String[] args)
         throws NodeException
@@ -169,8 +183,22 @@ public class
     }
 
     /**
+     * <p>
      * Create an instance of a script attached to this environment. Any "setters" that you wish to change
      * for this environment must be called before the first script is run.
+     * </p>
+     * <p>
+     * When this form of the script is used, all of the arguments will appear on the command line as
+     * if they were passed after the name of the script. So, if "foo" and "bar" are passed as
+     * arguments, and the script is called "baz.js", then the resulting process.argv will
+     * contain, in order:
+     * <ol>
+     *     <li>./node</li>
+     *     <li>baz.js</li>
+     *     <li>foo</li>
+     *     <li>bar</li>
+     * </ol>
+     * </p>
      */
     public NodeScript createScript(String scriptName, String script, String[] args)
         throws NodeException
@@ -180,9 +208,39 @@ public class
     }
 
     /**
+     * <p>
      * Create an instance of the script that will process command-line arguments from argv like regular
      * Node.js. This script will look at process.argv for a script file name, and if not found it will either
      * run the "repl" (if "forceRepl" is true or stdin is not a TTY) or it will read from standard input.
+     * </p>
+     * <p>
+     * When this form of the script is used, arguments passed before the script name are interpreted by
+     * Trireme and not passed to the script, just like regular Node.js. So for instance, if the following
+     * list of arguments is passed:
+     * <ol>
+     *     <li>--expose-gc</li>
+     *     <li>foo.js</li>
+     *     <li>bar</li>
+     *     <li>baz</li>
+     * </ol>
+     * then process.argv will contain:
+     * <ol>
+     *     <li>./node</li>
+     *     <li>baz.js</li>
+     *     <li>foo</li>
+     *     <li>bar</li>
+     * </ol>
+     * and "--expose-gc" will be interpreted by Trireme.
+     * </p>
+     * <p>
+     * Currently, only a small number of options are supported. They are:
+     * <ul>
+     *     <li>--expose-gc</li>
+     *     <li>--trace-deprecation</li>
+     *     <li>--throw-deprecation</li>
+     *     <li>--no-deprecation</li>
+     * </ul>
+     * </p>
      */
     public NodeScript createScript(String[] args, boolean forceRepl)
         throws NodeException

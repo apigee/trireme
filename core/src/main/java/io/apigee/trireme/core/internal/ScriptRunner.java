@@ -68,9 +68,11 @@ import java.nio.ByteBuffer;
 import java.nio.channels.SelectionKey;
 import java.nio.channels.Selector;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.IdentityHashMap;
 import java.util.Iterator;
+import java.util.List;
 import java.util.Map;
 import java.util.PriorityQueue;
 import java.util.concurrent.Callable;
@@ -744,16 +746,16 @@ public class ScriptRunner
             if ((scriptFile == null) && (script == null)) {
                 // Just have trireme.js process "process.argv"
                 process.setForceRepl(forceRepl);
-                setArgv(null);
+                setRawArgv();
             } else if (scriptFile == null) {
                 // If the script was passed as a string, pretend that "-e" was used to "eval" it.
                 // We also get here if we were called by "executeModule".
                 process.setEval(script);
                 process.setPrintEval(scriptObject.isPrintEval());
-                setArgv(scriptFileName);
+                setScriptFileArgv(scriptFileName);
             } else {
                 // Otherwise, assume that the script was the second argument to "argv".
-                setArgv(scriptFileName);
+                setScriptFileArgv(scriptFileName);
             }
 
             // Run "trireme.js," which is our equivalent of "node.js". It returns a function that takes
@@ -823,19 +825,22 @@ public class ScriptRunner
     }
 
     /**
-     * To support various old NodeScript constructors, assemble the argv by including them. Also strip off
-     * any "vm" args here, like "--whatever".
-     * Resulting list will nearly always be "./node script.js arg0 arg1 arg2..."
+     * Process args the way that "node" does -- the "args" array must be the args that any Node.js
+     * interpreter can accept, minus "node" at the beginning.
      */
-    private void setArgv(String scriptName)
+    private void setRawArgv()
+        throws NodeException
     {
+        // TODO: This will not allow us to support args that affect the Rhino environment, such
+        // as "--use-strict", "--harmony", and so on.
+        // We should consider changing when args are processed so that we can support them.
         ArrayList<String> argv = new ArrayList<String>(args == null ? 2 : args.length + 2);
         ArrayList<String> vmArgs = new ArrayList<String>(0);
         argv.add(AbstractProcess.EXECUTABLE_NAME);
-        if (scriptName != null) {
-            argv.add(scriptName);
-        }
 
+        // All args that start with "--" are considered args to the VM until we run into one that
+        // is not -- presumably that would be the file name. I suspect, however, that for "real node"
+        // compatibility we'll have to do even more.
         if (args != null) {
             boolean vmArgsDone = false;
             for (String arg : args) {
@@ -847,7 +852,6 @@ public class ScriptRunner
                     argv.add(arg);
                     vmArgsDone = true;
                 }
-                // else skip!
             }
         }
 
@@ -859,6 +863,34 @@ public class ScriptRunner
         }
         process.setArgv(ret);
         process.setExecArgv(vmArgs);
+
+        initVmArgs();
+    }
+
+    /**
+     * Assume that the script name was passed as an argument to one of the "createScript" functions.
+     * In this case, we just use everything in "args" as the command-line arguments, although
+     * we prepend "node" and the script name to make it compatible with other Node stuff.
+     */
+    private void setScriptFileArgv(String scriptName)
+        throws NodeException
+    {
+        String[] finalArgs = new String[args == null ? 2 : args.length + 2];
+        finalArgs[0] = AbstractProcess.EXECUTABLE_NAME;
+        finalArgs[1] = scriptName;
+
+        if (args != null) {
+            System.arraycopy(args, 0, finalArgs, 2, args.length);
+        }
+
+        if (log.isDebugEnabled()) {
+            for (int i = 0; i < finalArgs.length; i++) {
+                log.debug("argv[{}] = {}", i, finalArgs[i]);
+            }
+        }
+        process.setArgv(finalArgs);
+        List<String> empty = Collections.emptyList();
+        process.setExecArgv(empty);
 
         initVmArgs();
     }
@@ -1161,12 +1193,22 @@ public class ScriptRunner
     }
 
     private void initVmArgs()
+        throws NodeException
     {
         for (Object arg : process.getExecArgv()) {
             if ("--expose-gc".equals(arg)) {
                 Method gc = Utils.findMethod(AbstractProcess.class, "JsGc");
                 FunctionObject gcFunc = new FunctionObject("gc", gc, scope);
                 scope.put("gc", scope, gcFunc);
+            } else if ("--throw-deprecation".equals(arg)) {
+                process.put("throwDeprecation", process, true);
+            } else if ("--trace-deprecation".equals(arg)) {
+                process.put("traceDeprecation", process, true);
+            } else if ("--no-deprecation".equals(arg)) {
+                process.put("throwDeprecation", process, false);
+                process.put("traceDeprecation", process, false);
+            } else {
+                throw new NodeException("Unsupported command-line option " + arg);
             }
         }
     }

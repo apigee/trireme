@@ -36,6 +36,7 @@ import java.nio.file.AccessDeniedException;
 import java.nio.file.AtomicMoveNotSupportedException;
 import java.nio.file.DirectoryNotEmptyException;
 import java.nio.file.FileAlreadyExistsException;
+import java.nio.file.FileSystemException;
 import java.nio.file.FileSystems;
 import java.nio.file.FileVisitOption;
 import java.nio.file.FileVisitResult;
@@ -384,6 +385,10 @@ public class AdvancedFilesystem
             } else {
                 setModeNoPosix(f, mode, umask);
             }
+        } catch (FileSystemException fe) {
+            // This is a bit less generic -- we will use it to mean "no permission" to avoid other problems.
+            // NPM, for instance, depends on this
+            throw new OSException(ErrorCodes.EPERM, fe, origPath);
         } catch (IOException ioe) {
             throw new OSException(getErrorCode(ioe), ioe, origPath);
         }
@@ -420,6 +425,10 @@ public class AdvancedFilesystem
             } else {
                 Files.setOwner(path, user);
             }
+        } catch (FileSystemException fe) {
+            // This is a bit less generic -- we will use it to mean "no permission" to avoid other problems.
+            // NPM, for instance, depends on this
+            throw new OSException(ErrorCodes.EPERM, fe, origPath);
         } catch (IOException ioe) {
             throw new OSException(getErrorCode(ioe), ioe, origPath);
         }

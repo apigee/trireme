@@ -15,7 +15,10 @@ rm ${CP}
 
 rm -f ../node10/node10tests/tmp/*
 
-ARGS=-Xmx1g
+ARGS="-Xmx1g \
+  -Dorg.slf4j.simpleLogger.showThreadName=false \
+  -Dorg.slf4j.simpleLogger.showShortLogName=true \
+  -Dorg.slf4j.simpleLogger.defaultLogLevel=${LOGLEVEL:-info}"
 
 if [ $1 == "-d" ]
 then

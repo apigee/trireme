@@ -29,7 +29,6 @@ var tls = require('tls');
 var util = require('util');
 var listenerCount = require('events').listenerCount;
 var common = require('_tls_common');
-var constants = require('constants');
 
 var Timer = process.binding('timer_wrap').Timer;
 var tls_wrap = process.binding('tls_wrap');
@@ -723,21 +722,12 @@ Server.prototype.setOptions = function(options) {
   if (options.dhparam) this.dhparam = options.dhparam;
   if (options.sessionTimeout) this.sessionTimeout = options.sessionTimeout;
   if (options.ticketKeys) this.ticketKeys = options.ticketKeys;
-
-  var secureOptions = common._getSecureOptions(options.secureProtocol,
-                                               options.secureOptions);
-
-  if (options.honorCipherOrder) {
-    secureOptions |= constants.SSL_OP_CIPHER_SERVER_PREFERENCE;
-  }
-
+  var secureOptions = options.secureOptions || 0;
   if (options.honorCipherOrder)
     this.honorCipherOrder = true;
   else
     this.honorCipherOrder = false;
-
-  this.secureOptions = secureOptions;
-
+  if (secureOptions) this.secureOptions = secureOptions;
   if (options.NPNProtocols) tls.convertNPNProtocols(options.NPNProtocols, this);
   if (options.sessionIdContext) {
     this.sessionIdContext = options.sessionIdContext;
@@ -837,9 +827,6 @@ exports.connect = function(/* [port, host], options, cb */) {
   };
 
   options = util._extend(defaults, options || {});
-
-  options.secureOptions = common._getSecureOptions(options.secureProtocol,
-                                                   options.secureOptions);
 
   assert(typeof options.checkServerIdentity === 'function');
 

@@ -36,6 +36,7 @@ import io.apigee.trireme.node12.modules.Smalloc;
 import io.apigee.trireme.node12.modules.SpawnSyncWrap;
 import io.apigee.trireme.node12.modules.StreamWrap;
 import io.apigee.trireme.node12.modules.TCPWrap;
+import io.apigee.trireme.node12.modules.TLSWrap;
 import io.apigee.trireme.node12.modules.TimerWrap;
 import io.apigee.trireme.node12.modules.Uv;
 import io.apigee.trireme.node12.modules.ZlibWrap;
@@ -77,7 +78,6 @@ public class Node12Implementation
             { "_stream_transform",     P + "node._stream_transform" },
             { "_stream_writable",      P + "node._stream_writable" },
             { "_tls_common",           P + "node._tls_common" },
-            { "_tls_legacy",           P + "node._tls_legacy" },
             { "_tls_wrap",             P + "node._tls_wrap" },
             { "assert",                P + "node.assert" },
             { "child_process",         P + "node.child_process" },
@@ -104,15 +104,17 @@ public class Node12Implementation
             { "string_decoder",        P + "node.string_decoder" },
             { "sys",                   P + "node.sys" },
             { "timers",                P + "node.timers" },
+            { "tls",                   P + "node.tls" },
             { "url",                   P + "node.url" },
             { "util",                  P + "node.util" },
             { "vm",                    P + "node.vm" },
             { "zlib",                  P + "node.zlib" },
 
+
+            { "_tls_legacy",            P + "trireme._tls_legacy" },
             { "http",                   P + "trireme.adaptorhttp" },
             { "https",                  P + "trireme.adaptorhttps" },
             { "crypto",                 P + "trireme.crypto" },
-            { "tls",                    P + "trireme.tls" },
             { "tty",                    P + "trireme.tty" }
         };
     }
@@ -135,6 +137,7 @@ public class Node12Implementation
         r.add(StreamWrap.class);
         r.add(TCPWrap.class);
         r.add(TimerWrap.class);
+        r.add(TLSWrap.class);
         r.add(Uv.class);
         r.add(ZlibWrap.class);
         return r;

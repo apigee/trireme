@@ -29,6 +29,7 @@ import io.apigee.trireme.kernel.crypto.SSLCiphers;
 import io.apigee.trireme.core.internal.ScriptRunner;
 import io.apigee.trireme.core.modules.Buffer;
 import io.apigee.trireme.core.modules.Crypto;
+import io.apigee.trireme.kernel.tls.AllTrustingManager;
 import org.mozilla.javascript.Context;
 import org.mozilla.javascript.Function;
 import org.mozilla.javascript.Scriptable;
@@ -62,7 +63,6 @@ import java.security.cert.X509Certificate;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
-import java.util.regex.Pattern;
 
 import static io.apigee.trireme.core.ArgUtils.*;
 
@@ -74,7 +74,6 @@ public class SecureContextImpl
     public static final String CLASS_NAME = "SecureContext";
 
     private static final String DEFAULT_PROTO = "TLS";
-    private static final Pattern COLON = Pattern.compile(":");
     private static final String DEFAULT_KEY_ENTRY = "key";
 
     private KeyManager[] keyManagers;
@@ -86,8 +85,7 @@ public class SecureContextImpl
     private int trustedCertSequence = 0;
     private List<X509CRL> crls;
     private String protocol;
-    private String mainProtocol;
-    private String[] cipherSuites;
+    private String[] ciphers;
     private boolean initialized;
 
     @Override
@@ -106,38 +104,27 @@ public class SecureContextImpl
 
         if ("SSLv2_client_method".equals(protocol)) {
             self.protocol = "SSLv2";
-            self.mainProtocol = "SSL";
         } else if ("SSLv2_server_method".equals(protocol)) {
             self.protocol = "SSLv2";
-            self.mainProtocol = "SSL";
         } else if ("SSLv2_method".equals(protocol)) {
             self.protocol = "SSLv2";
-            self.mainProtocol = "SSL";
         } else if ("SSLv3_client_method".equals(protocol)) {
             self.protocol = "SSLv3";
-            self.mainProtocol = "SSL";
         } else if ("SSLv3_server_method".equals(protocol)) {
             self.protocol = "SSLv3";
-            self.mainProtocol = "SSL";
         } else if ("SSLv3_method".equals(protocol)) {
             self.protocol = "SSLv3";
-            self.mainProtocol = "SSL";
         } else if ("TLSv1_client_method".equals(protocol)) {
             self.protocol = "TLSv1";
-            self.mainProtocol = "TLS";
         } else if ("TLSv1_server_method".equals(protocol)) {
             self.protocol = "TLSv1";
-            self.mainProtocol = "TLS";
         } else if ("TLSv1_method".equals(protocol)) {
             self.protocol = "TLSv1";
-            self.mainProtocol = "TLS";
         } else if (protocol == null) {
             self.protocol = DEFAULT_PROTO;
-            self.mainProtocol = "TLS";
         } else {
             // Let people pass in Java protocol names too
             self.protocol = protocol;
-            self.mainProtocol = "TLS";
         }
 
         // Get a context now to check the protocol name but re-do it later based on what certs were selected.
@@ -312,20 +299,19 @@ public class SecureContextImpl
         SecureContextImpl self = (SecureContextImpl)thisObj;
         self.initialized = false;
 
-        ArrayList<String> finalList = new ArrayList<String>();
-        for (String cipher : COLON.split(cipherList)) {
-            SSLCiphers.Ciph c = SSLCiphers.get().getSslCipher(self.mainProtocol, cipher);
-            if (c == null) {
-                // Tests are expecting us to not throw right now, so try and use the suite later
-                finalList.add(cipher);
-            } else {
-                finalList.add(c.getJavaName());
-            }
-        }
+        // This class will produce a list of Java cipher names, in order, based on the
+        // openSSL spec that is passed to this method.
+        self.ciphers =
+            SSLCiphers.get().filterCipherList(cipherList);
+
         if (log.isDebugEnabled()) {
-            log.debug("Enabling cipher suites", finalList);
+            log.debug("Cipher filter: {}", cipherList);
+            StringBuilder sb = new StringBuilder();
+            for (String ciph : self.ciphers) {
+                sb.append(ciph).append(' ');
+            }
+            log.debug("Ciphers: {}", sb);
         }
-        self.cipherSuites = finalList.toArray(new String[finalList.size()]);
     }
 
     @JSFunction
@@ -338,6 +324,20 @@ public class SecureContextImpl
     @JSFunction
     @SuppressWarnings("unused")
     public static void setSessionIdContext(Context cx, Scriptable thisObj, Object[] args, Function func)
+    {
+        // Ignore this in Trireme.
+    }
+
+    @JSFunction
+    @SuppressWarnings("unused")
+    public static void setECDHCurve(Context cx, Scriptable thisObj, Object[] args, Function func)
+    {
+        // Ignore this in Trireme.
+    }
+
+    @JSFunction
+    @SuppressWarnings("unused")
+    public static void setDHParam(Context cx, Scriptable thisObj, Object[] args, Function func)
     {
         // Ignore this in Trireme.
     }
@@ -447,8 +447,8 @@ public class SecureContextImpl
         }
     }
 
-    public String[] getCipherSuites() {
-        return cipherSuites;
+    public String[] getCiphers() {
+        return ciphers;
     }
 
     public String getProtocol() {
@@ -559,35 +559,5 @@ public class SecureContextImpl
 
     public X509TrustManager getTrustManager() {
         return trustedCertManager;
-    }
-
-    /**
-     * A dummy trust manager that trusts everything no matter what. We instead explicitly call the trust manager
-     * after handshake to report the status back to "tls.js" which then decides what to do.
-     */
-    private static final class AllTrustingManager
-        implements X509TrustManager
-    {
-        static final AllTrustingManager INSTANCE = new AllTrustingManager();
-
-        private AllTrustingManager()
-        {
-        }
-
-        @Override
-        public void checkClientTrusted(X509Certificate[] x509Certificates, String s)
-        {
-        }
-
-        @Override
-        public void checkServerTrusted(X509Certificate[] x509Certificates, String s)
-        {
-        }
-
-        @Override
-        public X509Certificate[] getAcceptedIssuers()
-        {
-            return new X509Certificate[0];
-        }
     }
 }

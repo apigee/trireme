@@ -77,7 +77,7 @@ public class SocketHandleClientTest
     public static void init()
         throws IOException
     {
-        server = new SocketServer();
+        server = new SocketServer(null);
         runtime = new StubNodeRuntime();
     }
 

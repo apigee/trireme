@@ -161,6 +161,10 @@ public class JavaStreamWrap
             return handle;
         }
 
+        public void setHandle(Handle handle) {
+            this.handle = handle;
+        }
+
         @Override
         protected Object getInstanceIdValue(int id)
         {

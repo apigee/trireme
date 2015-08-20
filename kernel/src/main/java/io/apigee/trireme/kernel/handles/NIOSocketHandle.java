@@ -118,6 +118,16 @@ public class NIOSocketHandle
     }
 
     @Override
+    public IOCompletionHandler<ByteBuffer> getReadHandler() {
+        return readHandler;
+    }
+
+    @Override
+    public void setReadHandler(IOCompletionHandler<ByteBuffer> h) {
+        this.readHandler = h;
+    }
+
+    @Override
     public void bind(String address, int port)
         throws OSException
     {

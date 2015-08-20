@@ -22,6 +22,9 @@
  * This is the TLS code from Node 10.25. However, the "SecurePair" implementation is
  * different because Trireme uses SSLEngine which is a lot like OpenSSL but it is not
  * entirely the same.
+ *
+ * This code was further adapted for the 0.12 version of Trireme, and is only used by the
+ * legacy "securePair" class.
  */
 
 var crypto = require('crypto');

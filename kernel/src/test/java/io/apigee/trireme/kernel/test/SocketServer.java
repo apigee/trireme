@@ -2,6 +2,7 @@ package io.apigee.trireme.kernel.test;
 
 import io.apigee.trireme.kernel.util.BufferUtils;
 
+import javax.net.ssl.SSLContext;
 import java.io.IOException;
 import java.io.InputStream;
 import java.net.ServerSocket;
@@ -12,10 +13,14 @@ public class SocketServer
 {
     private final ServerSocket serverSock;
 
-    public SocketServer()
+    public SocketServer(SSLContext tls)
         throws IOException
     {
-        serverSock = new ServerSocket(0);
+        if (tls == null) {
+            serverSock = new ServerSocket(0);
+        } else {
+            serverSock = tls.getServerSocketFactory().createServerSocket(0);
+        }
         new Thread(new Runnable() {
             @Override
             public void run()

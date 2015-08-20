@@ -29,6 +29,7 @@ import io.apigee.trireme.core.internal.IdPropertyMap;
 import io.apigee.trireme.core.internal.ScriptRunner;
 import io.apigee.trireme.kernel.OSException;
 import io.apigee.trireme.kernel.handles.AbstractHandle;
+import io.apigee.trireme.kernel.handles.Handle;
 import io.apigee.trireme.kernel.handles.IOCompletionHandler;
 import io.apigee.trireme.kernel.handles.NIOSocketHandle;
 import io.apigee.trireme.kernel.handles.SocketHandle;
@@ -119,6 +120,12 @@ public class TCPWrap
         protected TCPImpl(SocketHandle handle, ScriptRunner runtime)
         {
             super(handle, runtime, props);
+            this.sockHandle = handle;
+        }
+
+        public void setSocketHandle(SocketHandle handle)
+        {
+            super.setHandle(handle);
             this.sockHandle = handle;
         }
 

@@ -581,8 +581,8 @@ public class HTTPWrap
             TLSParams t = new TLSParams();
             t.setContext(ctx);
 
-            if (sc.getCipherSuites() != null) {
-                t.setCiphers(sc.getCipherSuites());
+            if (sc.getCiphers() != null) {
+                t.setCiphers(sc.getCiphers());
             }
             if (requestCert) {
                 if (rejectUnauthorized) {

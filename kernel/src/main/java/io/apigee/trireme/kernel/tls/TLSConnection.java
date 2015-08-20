@@ -57,10 +57,11 @@ public class TLSConnection
 
     private final GenericNodeRuntime runtime;
     private final boolean isServer;
-    private final boolean requestCert;
-    private final boolean rejectUnauthorized;
     private final String serverName;
     private final int serverPort;
+
+    private boolean requestCert;
+    private boolean rejectUnauthorized;
 
     private TriCallback<ByteBuffer, Boolean, Object> writeCallback;
     private BiCallback<ByteBuffer, Boolean> readCallback;
@@ -82,18 +83,15 @@ public class TLSConnection
     private SSLException verifyError;
 
     public TLSConnection(GenericNodeRuntime runtime,
-                         boolean serverMode, boolean requestCert,
-                         boolean rejectUnauth, String serverName, int port)
+                         boolean serverMode, String serverName, int port)
     {
         this.runtime = runtime;
         this.isServer = serverMode;
-        this.requestCert = requestCert;
-        this.rejectUnauthorized = rejectUnauth;
         this.serverName = serverName;
         this.serverPort = port;
     }
 
-    public void init(SSLContext ctx, String[] cipherSuites,
+    public void init(SSLContext ctx, String ciphers[],
                      X509TrustManager trustManager)
     {
         this.trustManager = trustManager;
@@ -105,13 +103,7 @@ public class TLSConnection
         }
 
         engine.setUseClientMode(!isServer);
-        if (requestCert) {
-            if (rejectUnauthorized) {
-                engine.setNeedClientAuth(true);
-            } else {
-                engine.setWantClientAuth(true);
-            }
-        }
+
         if (log.isDebugEnabled()) {
             log.debug("Created SSLEngine {}", engine);
         }
@@ -124,16 +116,27 @@ public class TLSConnection
 
         // Do this last because we still want the previous initialization to succeed
         // to simplify error handling
-        if (cipherSuites != null) {
-            if (log.isDebugEnabled()) {
-                log.debug("Setting cipher suites {}", cipherSuites);
-            }
+        if (ciphers != null) {
             try {
-                engine.setEnabledCipherSuites(cipherSuites);
+                engine.setEnabledCipherSuites(ciphers);
             } catch (IllegalArgumentException iae) {
                 // Invalid cipher suites for some reason are not an SSLException.
                 // And don't throw because we handle this error later.
                 handleError(new SSLException(iae));
+            }
+        }
+    }
+
+    public void setVerificationMode(boolean requestCert, boolean rejectUnauthorized)
+    {
+        this.requestCert = requestCert;
+        this.rejectUnauthorized = rejectUnauthorized;
+
+        if (requestCert) {
+            if (rejectUnauthorized) {
+                engine.setNeedClientAuth(true);
+            } else {
+                engine.setWantClientAuth(true);
             }
         }
     }
@@ -178,6 +181,17 @@ public class TLSConnection
         return receivedShutdown;
     }
 
+    public int getWriteQueueLength()
+    {
+        int len = 0;
+        for (TLSChunk c : outgoing) {
+            if (c.getBuf() != null) {
+                len += c.getBuf().remaining();
+            }
+        }
+        return len;
+    }
+
     public void wrap(ByteBuffer buf, Callback<Object> cb)
     {
         outgoing.add(new TLSChunk(buf, false, cb));
@@ -199,7 +213,9 @@ public class TLSConnection
                 log.debug("Error closing inbound SSLEngine: {}", ssle);
             }
         }
-        cb.call(null);
+        if (cb != null) {
+            cb.call(null);
+        }
         // Force the "unwrap" callback to deliver EOF to the other side in Node.js land
         doUnwrap();
         // And run the regular encode loop because we still want to (futily) wrap in this case.

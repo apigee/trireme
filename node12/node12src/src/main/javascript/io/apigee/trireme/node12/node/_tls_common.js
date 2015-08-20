@@ -29,32 +29,6 @@ var crypto = null;
 var binding = process.binding('crypto');
 var NativeSecureContext = binding.SecureContext;
 
-var CONTEXT_DEFAULT_OPTIONS = undefined;
-
-function getSecureOptions(secureProtocol, secureOptions) {
-  if (CONTEXT_DEFAULT_OPTIONS === undefined) {
-    CONTEXT_DEFAULT_OPTIONS = 0;
-
-    if (!binding.SSL3_ENABLE)
-      CONTEXT_DEFAULT_OPTIONS |= constants.SSL_OP_NO_SSLv3;
-
-    if (!binding.SSL2_ENABLE)
-      CONTEXT_DEFAULT_OPTIONS |= constants.SSL_OP_NO_SSLv2;
-  }
-
-  if (secureOptions === undefined) {
-    if (secureProtocol === undefined ||
-        secureProtocol === 'SSLv23_method' ||
-        secureProtocol === 'SSLv23_server_method' ||
-        secureProtocol === 'SSLv23_client_method') {
-      secureOptions |= CONTEXT_DEFAULT_OPTIONS;
-    }
-  }
-
-  return secureOptions;
-}
-exports._getSecureOptions = getSecureOptions;
-
 function SecureContext(secureProtocol, flags, context) {
   if (!(this instanceof SecureContext)) {
     return new SecureContext(secureProtocol, flags, context);
@@ -72,9 +46,7 @@ function SecureContext(secureProtocol, flags, context) {
     }
   }
 
-  flags = getSecureOptions(secureProtocol, flags);
-
-  this.context.setOptions(flags);
+  if (flags) this.context.setOptions(flags);
 }
 
 exports.SecureContext = SecureContext;

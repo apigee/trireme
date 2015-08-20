@@ -148,6 +148,7 @@ public abstract class AbstractProcess
         env.put("node", env, runner.getRegistry().getImplementation().getVersion());
         if (Version.SSL_VERSION != null) {
             env.put("ssl", env, Version.SSL_VERSION);
+            env.put("openssl", env, Version.SSL_VERSION);
         }
         env.put("java", env, System.getProperty("java.version"));
         return env;

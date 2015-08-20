@@ -72,6 +72,9 @@ public class ConnectionImpl
 
     SecureContextImpl context;
 
+    private boolean requestCert;
+    private boolean rejectUnauthorized;
+
     private Function onHandshakeStart;
     private Function onHandshakeDone;
     private Function onWrap;
@@ -135,8 +138,9 @@ public class ConnectionImpl
                            boolean rejectUnauth, String serverName, int port)
     {
         this.runtime = runtime;
-        this.processor = new TLSConnection(runtime, serverMode, requestCert,
-                                           rejectUnauth, serverName, port);
+        this.requestCert = requestCert;
+        this.rejectUnauthorized = rejectUnauth;
+        this.processor = new TLSConnection(runtime, serverMode, serverName, port);
     }
 
     /**
@@ -152,8 +156,9 @@ public class ConnectionImpl
 
         SSLContext ctx = self.context.makeContext(cx, self);
 
-        self.processor.init(ctx, self.context.getCipherSuites(),
+        self.processor.init(ctx, self.context.getCiphers(),
                             self.context.getTrustManager());
+        self.processor.setVerificationMode(self.requestCert, self.rejectUnauthorized);
     }
 
     /**

@@ -1,30 +1,56 @@
 package io.apigee.trireme.kernel.test;
 
 import io.apigee.trireme.kernel.Charsets;
+import org.junit.After;
 import org.junit.AfterClass;
 import org.junit.BeforeClass;
 import org.junit.Test;
 
+import javax.net.SocketFactory;
+import javax.net.ssl.HandshakeCompletedListener;
+import javax.net.ssl.SSLContext;
+import javax.net.ssl.SSLSession;
+import javax.net.ssl.SSLSocket;
+import javax.net.ssl.SSLSocketFactory;
 import java.io.IOException;
 import java.io.InputStream;
-import java.io.OutputStream;
 import java.net.InetAddress;
 import java.net.Socket;
 import java.nio.ByteBuffer;
+import java.security.NoSuchAlgorithmException;
 
 import static org.junit.Assert.*;
 
 public class SocketServerTest
 {
-    private static SocketServer server;
+    private SocketServer server;
 
     @Test
     public void testEcho()
         throws IOException
     {
+        server = new SocketServer(null);
+        Socket sock = new Socket(InetAddress.getLocalHost(), server.getPort());
+        doTest(sock);
+    }
+
+    @Test
+    public void testTLSEcho()
+        throws IOException, NoSuchAlgorithmException
+    {
+        server = new SocketServer(TLSUtils.makeServerContext());
+        Socket sock =
+            TLSUtils.makeClientContext().getSocketFactory().createSocket(
+                InetAddress.getLocalHost(), server.getPort());
+        doTest(sock);
+    }
+
+    private void doTest(Socket sock)
+        throws IOException
+    {
         final String TEST = "Hello, Server!";
         byte[] testBytes = TEST.getBytes(Charsets.ASCII);
-        Socket sock = new Socket(InetAddress.getLocalHost(), server.getPort());
+
 
         ByteBuffer outCmd = ByteBuffer.allocate(testBytes.length + 8);
         outCmd.put("ECHO".getBytes(Charsets.ASCII));
@@ -50,16 +76,11 @@ public class SocketServerTest
         assertEquals(TEST, resultStr);
     }
 
-    @BeforeClass
-    public static void init()
-        throws IOException
+    @After
+    public void cleanup()
     {
-        server = new SocketServer();
-    }
-
-    @AfterClass
-    public static void terminate()
-    {
-        server.close();
+        if (server != null) {
+            server.close();
+        }
     }
 }

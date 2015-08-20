@@ -90,4 +90,13 @@ public abstract class AbstractHandle
 
     @Override
     public abstract void close();
+
+    @Override
+    public IOCompletionHandler<ByteBuffer> getReadHandler() {
+        return null;
+    }
+
+    @Override
+    public void setReadHandler(IOCompletionHandler<ByteBuffer> h) {
+    }
 }

@@ -1,5 +1,5 @@
 /**
- * Copyright 2014 Apigee Corporation.
+ * Copyright 2015 Apigee Corporation.
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -19,29 +19,38 @@
  * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
  * SOFTWARE.
  */
-package io.apigee.trireme.kernel.handles;
 
-import java.nio.ByteBuffer;
-import java.nio.charset.Charset;
+package io.apigee.trireme.kernel.tls;
 
-public interface Handle
+import javax.net.ssl.X509TrustManager;
+import java.security.cert.X509Certificate;
+
+/**
+ * A dummy trust manager that trusts everything no matter what. We instead explicitly call the trust manager
+ * after handshake to report the status back to "tls.js" which then decides what to do.
+ */
+public class AllTrustingManager
+    implements X509TrustManager
 {
-    int write(ByteBuffer buf, IOCompletionHandler<Integer> handler);
+    public static final AllTrustingManager INSTANCE = new AllTrustingManager();
 
-    int writeHandle(ByteBuffer buf, Object handleArg, IOCompletionHandler<Integer> handler);
+    private AllTrustingManager()
+    {
+    }
 
-    int write(String s, Charset cs, IOCompletionHandler<Integer> handler);
+    @Override
+    public void checkClientTrusted(X509Certificate[] x509Certificates, String s)
+    {
+    }
 
-    int writeHandle(String s, Charset cs, Object handleArg, IOCompletionHandler<Integer> handler);
+    @Override
+    public void checkServerTrusted(X509Certificate[] x509Certificates, String s)
+    {
+    }
 
-    int getWritesOutstanding();
-
-    void startReading(IOCompletionHandler<ByteBuffer> handler);
-
-    void stopReading();
-
-    IOCompletionHandler<ByteBuffer> getReadHandler();
-    void setReadHandler(IOCompletionHandler<ByteBuffer> h);
-
-    void close();
+    @Override
+    public X509Certificate[] getAcceptedIssuers()
+    {
+        return new X509Certificate[0];
+    }
 }

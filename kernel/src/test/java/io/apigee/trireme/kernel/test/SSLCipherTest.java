@@ -23,13 +23,13 @@ public class SSLCipherTest
     @Test
     public void testCipherParsing()
     {
-        SSLCiphers.Ciph c = SSLCiphers.get().getJavaCipher("TLS_RSA_WITH_AES_256_CBC_SHA");
+        SSLCiphers.Ciph c = SSLCiphers.get().getJavaCipher("TLS_ECDHE_ECDSA_WITH_AES_128_CBC_SHA");
         assertNotNull(c);
-        assertEquals("AES256-SHA", c.getSslName());
-        assertEquals("TLS_RSA_WITH_AES_256_CBC_SHA", c.getJavaName());
-        assertEquals("RSA", c.getKeyAlg());
+        assertEquals("ECDHE-ECDSA-AES128-SHA", c.getSslName());
+        assertEquals("TLS_ECDHE_ECDSA_WITH_AES_128_CBC_SHA", c.getJavaName());
+        assertEquals("ECDHE", c.getKeyAlg());
         assertEquals("AES", c.getCryptAlg());
-        assertEquals(256, c.getKeyLen());
+        assertEquals(128, c.getKeyLen());
     }
 
     @Test
@@ -54,7 +54,17 @@ public class SSLCipherTest
     {
         SSLEngine engine = SSLContext.getDefault().createSSLEngine();
         String[] defaults = engine.getEnabledCipherSuites();
-        String[] filtered = SSLCiphers.get().filterCipherList("");
+        String[] filtered = SSLCiphers.get().filterCipherList("DEFAULT");
+        assertArrayEquals(defaults, filtered);
+    }
+
+    @Test
+    public void testCipherFilterAll()
+        throws NoSuchAlgorithmException
+    {
+        SSLEngine engine = SSLContext.getDefault().createSSLEngine();
+        String[] defaults = engine.getSupportedCipherSuites();
+        String[] filtered = SSLCiphers.get().filterCipherList("ALL");
         assertArrayEquals(defaults, filtered);
     }
 }

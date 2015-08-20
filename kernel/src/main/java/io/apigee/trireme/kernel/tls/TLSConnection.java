@@ -23,6 +23,7 @@ package io.apigee.trireme.kernel.tls;
 
 import io.apigee.trireme.kernel.BiCallback;
 import io.apigee.trireme.kernel.Callback;
+import io.apigee.trireme.kernel.ErrorCodes;
 import io.apigee.trireme.kernel.GenericNodeRuntime;
 import io.apigee.trireme.kernel.TriCallback;
 import io.apigee.trireme.kernel.util.BufferUtils;
@@ -64,7 +65,7 @@ public class TLSConnection
     private boolean rejectUnauthorized;
 
     private TriCallback<ByteBuffer, Boolean, Object> writeCallback;
-    private BiCallback<ByteBuffer, Boolean> readCallback;
+    private BiCallback<ByteBuffer, Integer> readCallback;
     private Callback<Void> onHandshakeStart;
     private Callback<Void> onHandshakeDone;
     private Callback<SSLException> onError;
@@ -145,7 +146,7 @@ public class TLSConnection
         this.writeCallback = cb;
     }
 
-    public void setReadCallback(BiCallback<ByteBuffer, Boolean> cb) {
+    public void setReadCallback(BiCallback<ByteBuffer, Integer> cb) {
         this.readCallback = cb;
     }
 
@@ -216,6 +217,7 @@ public class TLSConnection
         if (cb != null) {
             cb.call(null);
         }
+
         // Force the "unwrap" callback to deliver EOF to the other side in Node.js land
         doUnwrap();
         // And run the regular encode loop because we still want to (futily) wrap in this case.
@@ -225,6 +227,15 @@ public class TLSConnection
     public void unwrap(ByteBuffer buf, Callback<Object> cb)
     {
         incoming.add(new TLSChunk(buf, false, cb));
+        encodeLoop();
+    }
+
+    public void inboundError(int err)
+    {
+        // Put a chunk on the queue. That will let us deliver the result in order.
+        TLSChunk c = new TLSChunk(null, false, null);
+        c.setInboundErr(err);
+        incoming.add(c);
         encodeLoop();
     }
 
@@ -351,8 +362,8 @@ public class TLSConnection
         TLSChunk qc = incoming.peek();
         ByteBuffer bb = (qc == null ? EMPTY : qc.getBuf());
 
-        SSLEngineResult result;
-        do {
+        SSLEngineResult result = null;
+        while (bb != null) {
             do {
                 if (log.isTraceEnabled()) {
                     log.trace("Unwrapping {}", bb);
@@ -395,15 +406,23 @@ public class TLSConnection
             } else {
                 break;
             }
-        } while (true);
-
-        boolean deliverShutdown = false;
-        if ((result.getStatus() == SSLEngineResult.Status.CLOSED) && !receivedShutdown) {
-            receivedShutdown = true;
-            deliverShutdown = true;
         }
 
-        if ((qc != null) && (!qc.getBuf().hasRemaining())) {
+        int err = (qc == null ? 0 : qc.getInboundErr());
+
+        if (err != 0) {
+            try {
+                engine.closeInbound();
+            } catch (SSLException ignore) {
+            }
+        }
+
+        if ((result != null) && (result.getStatus() == SSLEngineResult.Status.CLOSED) && !receivedShutdown) {
+            receivedShutdown = true;
+            err = ErrorCodes.EOF;
+        }
+
+        if ((qc != null) && ((qc.getBuf() == null) || !qc.getBuf().hasRemaining())) {
             incoming.poll();
             // Deliver the callback right now, because we are ready to consume more data right now
             Callback<Object> cb = qc.removeCallback();
@@ -412,16 +431,16 @@ public class TLSConnection
             }
         }
 
-        if (result.getHandshakeStatus() == SSLEngineResult.HandshakeStatus.FINISHED) {
+        if ((result != null) && (result.getHandshakeStatus() == SSLEngineResult.HandshakeStatus.FINISHED)) {
             // This only gets delivered once, and we can't check for it later
             processNotHandshaking();
         }
 
-        if ((result.bytesProduced() > 0) || deliverShutdown) {
-            deliverReadBuffer(deliverShutdown);
+        if (((result != null) && (result.bytesProduced() > 0)) || (err != 0)) {
+            deliverReadBuffer(err);
         }
 
-        return (result.getStatus() == SSLEngineResult.Status.OK);
+        return (result == null || result.getStatus() == SSLEngineResult.Status.OK);
     }
 
     private void deliverWriteBuffer(boolean shutdown, Callback<Object> cb)
@@ -451,7 +470,7 @@ public class TLSConnection
         }
     }
 
-    private void deliverReadBuffer(boolean shutdown)
+    private void deliverReadBuffer(int err)
     {
         if (readCallback != null) {
             ByteBuffer bb;
@@ -462,14 +481,14 @@ public class TLSConnection
                 bb.flip();
                 readBuf.clear();
                 if (log.isTraceEnabled()) {
-                    log.trace("Delivering {} bytes to the onunwrap callback. shutdown = {}",
-                              bb.remaining(), shutdown);
+                    log.trace("Delivering {} bytes to the onunwrap callback. err = {}",
+                              bb.remaining(), err);
                 }
             } else {
                 bb = null;
             }
 
-            readCallback.call(bb, shutdown);
+            readCallback.call(bb, err);
 
         } else {
             readBuf.clear();

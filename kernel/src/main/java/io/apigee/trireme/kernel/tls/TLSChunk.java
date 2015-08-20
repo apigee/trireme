@@ -26,13 +26,14 @@ import io.apigee.trireme.kernel.Callback;
 import java.nio.ByteBuffer;
 
 /**
- * A chunk of data on the queue to go out via TLS.
+ * A chunk of data on the queue to go out or in via TLS.
  */
 
 public class TLSChunk
 {
     private ByteBuffer buf;
     private final boolean shutdown;
+    private int inboundErr;
     private Callback<Object> callback;
 
     public TLSChunk(ByteBuffer buf, boolean shutdown, Callback<Object> cb)
@@ -56,6 +57,14 @@ public class TLSChunk
 
     public Callback<Object> getCallback() {
         return callback;
+    }
+
+    public int getInboundErr() {
+        return inboundErr;
+    }
+
+    public void setInboundErr(int inboundErr) {
+        this.inboundErr = inboundErr;
     }
 
     /**

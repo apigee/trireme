@@ -171,6 +171,18 @@
         <Description>Cipher ordering is not controled in SSLEngine the same way it is in OpenSSL.</Description>
     </Excluded>
     <Excluded>
+        <Name>test-tls-ticket.js</Name>
+        <Description>We don't support this feature</Description>
+    </Excluded>
+    <Excluded>
+        <Name>test-tls-ticket-cluster.js</Name>
+        <Description>We don't support this feature</Description>
+    </Excluded>
+    <Excluded>
+        <Name>test-tls-max-send-fragment.js</Name>
+        <Description>An OpenSSL feature we don't support</Description>
+    </Excluded>
+    <Excluded>
         <Name>test-stdout-close-unref.js</Name>
         <Description>Depends on undocumented _handle on stdout</Description>
     </Excluded>

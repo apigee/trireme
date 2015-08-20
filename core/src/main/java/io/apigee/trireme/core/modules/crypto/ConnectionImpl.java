@@ -26,6 +26,7 @@ import io.apigee.trireme.core.Utils;
 import io.apigee.trireme.core.internal.CertificateParser;
 import io.apigee.trireme.kernel.BiCallback;
 import io.apigee.trireme.kernel.Callback;
+import io.apigee.trireme.kernel.ErrorCodes;
 import io.apigee.trireme.kernel.TriCallback;
 import io.apigee.trireme.kernel.crypto.SSLCiphers;
 import io.apigee.trireme.core.internal.ScriptRunner;
@@ -270,10 +271,10 @@ public class ConnectionImpl
         if (f == null) {
             processor.setReadCallback(null);
         } else {
-            processor.setReadCallback(new BiCallback<ByteBuffer, Boolean>()
+            processor.setReadCallback(new BiCallback<ByteBuffer, Integer>()
             {
                 @Override
-                public void call(final ByteBuffer bb, final Boolean shutdown)
+                public void call(final ByteBuffer bb, final Integer err)
                 {
                     runtime.enqueueTask(new ScriptTask()
                     {
@@ -283,7 +284,7 @@ public class ConnectionImpl
                             ConnectionImpl self = ConnectionImpl.this;
                             Buffer.BufferImpl buf =
                                 (bb == null ? null : Buffer.BufferImpl.newBuffer(cx, self, bb, false));
-                            onUnwrap.call(cx, onUnwrap, self, new Object[]{buf, shutdown});
+                            onUnwrap.call(cx, onUnwrap, self, new Object[]{buf, (err == ErrorCodes.EOF)});
                         }
                     });
                 }

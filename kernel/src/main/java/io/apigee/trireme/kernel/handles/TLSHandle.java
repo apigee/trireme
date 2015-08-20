@@ -23,7 +23,6 @@ package io.apigee.trireme.kernel.handles;
 
 import io.apigee.trireme.kernel.BiCallback;
 import io.apigee.trireme.kernel.Callback;
-import io.apigee.trireme.kernel.ErrorCodes;
 import io.apigee.trireme.kernel.OSException;
 import io.apigee.trireme.kernel.TriCallback;
 import io.apigee.trireme.kernel.tls.TLSConnection;
@@ -49,6 +48,8 @@ public class TLSHandle
     private final SocketHandle handle;
     private final TLSConnection tls;
 
+    private IOCompletionHandler<ByteBuffer> readHandler;
+
     public TLSHandle(final SocketHandle handle, TLSConnection tls)
     {
         this.handle = handle;
@@ -56,16 +57,42 @@ public class TLSHandle
 
         tls.setWriteCallback(new TriCallback<ByteBuffer, Boolean, Object>() {
             @Override
-            public void call(ByteBuffer buf, Boolean isShutdown, Object cb)
+            public void call(ByteBuffer buf, final Boolean isShutdown, Object cb)
             {
                 final Callback<Object> callback = (Callback<Object>)cb;
 
                 if ((buf != null) && buf.hasRemaining()) {
-                    // Shutdown may come, but there is output data associated with it.
+                    // Shutdown may need to be sent, but there is output data associated with it.
                     if (log.isTraceEnabled()) {
                         log.trace("Delivering {} bytes to the network. wasShutdown = {}", buf, isShutdown);
                     }
                     handle.write(buf, new IOCompletionHandler<Integer>()
+                    {
+                        @Override
+                        public void ioComplete(int errCode, Integer value)
+                        {
+                            if (isShutdown) {
+                                handle.shutdown(new IOCompletionHandler<Integer>()
+                                {
+                                    @Override
+                                    public void ioComplete(int errCode, Integer value)
+                                    {
+                                        // TODO handle errors
+                                        if (callback != null) {
+                                            callback.call(value);
+                                        }
+                                    }
+                                });
+                            } else {
+                                // TODO handle errors
+                                if (callback != null) {
+                                    callback.call(value);
+                                }
+                            }
+                        }
+                    });
+                } else if (isShutdown) {
+                    handle.shutdown(new IOCompletionHandler<Integer>()
                     {
                         @Override
                         public void ioComplete(int errCode, Integer value)
@@ -114,19 +141,15 @@ public class TLSHandle
 
     private void setTlsReadCallback(final IOCompletionHandler<ByteBuffer> handler)
     {
-        tls.setReadCallback(new BiCallback<ByteBuffer, Boolean>()
+        tls.setReadCallback(new BiCallback<ByteBuffer, Integer>()
         {
             @Override
-            public void call(ByteBuffer buf, Boolean isShutdown)
+            public void call(ByteBuffer buf, Integer err)
             {
                 if (log.isTraceEnabled()) {
-                    log.trace("Received {} back from TLS. Shutdown = {}", buf, isShutdown);
+                    log.trace("Received {} back from TLS. err = {}", buf, err);
                 }
-                if (isShutdown) {
-                    handler.ioComplete(ErrorCodes.EOF, null);
-                } else {
-                    handler.ioComplete(0, buf);
-                }
+                handler.ioComplete(err, buf);
             }
         });
     }
@@ -136,17 +159,18 @@ public class TLSHandle
         return new IOCompletionHandler<ByteBuffer>()
         {
             @Override
-            public void ioComplete(int errCode, ByteBuffer buf)
+            public void ioComplete(final int errCode, ByteBuffer buf)
             {
                 if (log.isTraceEnabled()) {
                     log.trace("Received {} from the network for TLS. err = {}", buf, errCode);
                 }
-                if (errCode == ErrorCodes.EOF) {
-                    tls.shutdownInbound(null);
-                } else if (errCode == 0) {
+                if ((buf != null) && buf.hasRemaining()) {
                     tls.unwrap(buf, null);
                 }
-                // TODO what about other error codes?
+                if (errCode != 0) {
+                    // Tell TLS that the inbound closed, but don't try and use the socket again.
+                    tls.inboundError(errCode);
+                }
             }
         };
     }
@@ -155,6 +179,7 @@ public class TLSHandle
     public void startReading(IOCompletionHandler<ByteBuffer> handler)
     {
         setTlsReadCallback(handler);
+        readHandler = handler;
         handle.startReading(createReadCallback());
     }
 
@@ -166,8 +191,7 @@ public class TLSHandle
             @Override
             public void call(Object val)
             {
-                log.trace("Received TLS shutdown");
-               handle.shutdown(handler);
+                handler.ioComplete(0, 0);
             }
         });
     }
@@ -176,6 +200,7 @@ public class TLSHandle
     public void stopReading()
     {
         handle.stopReading();
+        readHandler = null;
     }
 
     @Override

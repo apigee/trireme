@@ -77,6 +77,8 @@ public class TLSWrapStream
         Id_newSessionDone = 19,
         Id_setOCSPResponse = 20,
         Id_requestOCSP = 21,
+        Id_setServerName = 22,
+        Id_getServerName = 23,
 
         Id_onhandshakestart = 1,
         Id_onhandshakedone = 2,
@@ -105,6 +107,8 @@ public class TLSWrapStream
         props.addMethod("newSessionDone", Id_newSessionDone, 0);
         props.addMethod("setOCSPResponse", Id_setOCSPResponse, 1);
         props.addMethod("requestOCSP", Id_requestOCSP, 0);
+        props.addMethod("setServername", Id_setServerName, 1);
+        props.addMethod("getServername", Id_getServerName, 0);
 
         props.addProperty("onhandshakestart", Id_onhandshakestart, 0);
         props.addProperty("onhandshakedone", Id_onhandshakedone, 0);
@@ -124,6 +128,7 @@ public class TLSWrapStream
     private Function onClientHello;
     private Function onNewSession;
     private Function onError;
+    private String serverName;
 
     @Override
     protected TLSWrapStream defaultConstructor()
@@ -286,6 +291,11 @@ public class TLSWrapStream
         case Id_shutdown:
             tls.shutdown(null);
             break;
+        case Id_setServerName:
+            this.serverName = stringArg(args, 0);
+            break;
+        case Id_getServerName:
+            return serverName;
 
         case Id_endParser:
         case Id_renegotiate:
@@ -346,7 +356,7 @@ public class TLSWrapStream
         if (cert == null) {
             return Undefined.instance;
         }
-        return CertificateParser.get().parse(cx, this, cert);
+        return CertificateParser.get().parseWithStrings(cx, this, cert);
     }
 
     private Object verifyError(Context cx)

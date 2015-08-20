@@ -52,12 +52,11 @@ public class SSLCiphers
     private static final Pattern WHITESPACE = Pattern.compile("[\\t ]+");
     private static final SSLCiphers myself = new SSLCiphers();
 
-    private final HashMap<String, Ciph> javaCiphers = new HashMap<String, Ciph>();
     private final ArrayList<Ciph> cipherInfo = new ArrayList<Ciph>();
     private final String[] defaultCipherList;
     private final HashSet<String> defaultCiphers;
     private final String[] allCipherList;
-    private final HashSet<String> allCiphers;
+    private final LinkedHashMap<String, Ciph> allCiphers;
 
     public static SSLCiphers get() {
         return myself;
@@ -72,12 +71,14 @@ public class SSLCiphers
             defaultCipherList = engine.getEnabledCipherSuites();
             defaultCiphers = new HashSet<String>(Arrays.asList(defaultCipherList));
             allCipherList = engine.getSupportedCipherSuites();
-            allCiphers = new HashSet<String>(Arrays.asList(allCipherList));
         } catch (NoSuchAlgorithmException e) {
             throw new AssertionError(e);
         }
 
-        // Read the list of additional information about all the ciphers
+        // Read the list of additional information about all the ciphers and
+        // store it in a hash map. This is our own table that lets us track other stuff
+        // about each one to make selection easier.
+        HashMap<String, Ciph> javaCiphers = new HashMap<String, Ciph>();
         try {
             BufferedReader rdr =
                 new BufferedReader(new InputStreamReader(SSLCiphers.class.getResourceAsStream("/ssl-ciphers.txt"),
@@ -115,6 +116,17 @@ public class SSLCiphers
         } catch (NumberFormatException nfe) {
             throw new AssertionError("Invalid line in SSL ciphers file", nfe);
         }
+
+        // Now iterate again through the list of all ciphers and put in the info.
+        // We need to do that because we want to keep the iteration of "allCiphers"
+        // in priority order as specified by SSLEngine.
+        allCiphers = new LinkedHashMap<String, Ciph>(allCipherList.length);
+        for (String cn : allCipherList) {
+            Ciph c = javaCiphers.get(cn);
+            if (c != null) {
+                allCiphers.put(cn, c);
+            }
+        }
     }
 
     /**
@@ -122,68 +134,74 @@ public class SSLCiphers
      */
     public Ciph getJavaCipher(String name)
     {
-        return javaCiphers.get(name);
+        return allCiphers.get(name);
     }
 
     /**
-     * This code produces an ordered list of Java cipher suites, in order. It starts with
-     * the ciphers supported by the default SSLEngine, and then it filters them according
-     * to the rules in the OpenSSL "ciphers(1)" man page.
+     * This code produces an ordered list of Java cipher suites, in order. It generally
+     * follows the ciphers listed in the rules in the OpenSSL "ciphers(1)" man page.
      */
     public String[] filterCipherList(String filter)
     {
         // Make a list of ciphers, from the default list, in order.
         // LinkedHashMap is the key to keeping stuff in order
-        LinkedHashMap<String, Ciph> ciphers = new LinkedHashMap<String, Ciph>(defaultCipherList.length);
-        for (String jc : defaultCipherList) {
-            Ciph c = getJavaCipher(jc);
-            assert(c != null);
-            ciphers.put(jc, c);
-        }
+        LinkedHashMap<String, Ciph> ciphers = new LinkedHashMap<String, Ciph>();
 
+        ArrayList<String> exclusions = new ArrayList<String>();
         for (String exp : COLON.split(filter)) {
-            if (exp.startsWith("!") || exp.startsWith("-")) {
+            if (exp.startsWith("-")) {
+                removeMatches(ciphers, exp.substring(1));
+            } else if (exp.startsWith("!")) {
+                exclusions.add(exp.substring(1));
                 removeMatches(ciphers, exp.substring(1));
             } else if (exp.startsWith("+")) {
-                moveMatchesToEnd(ciphers, exp.substring(1));
+                moveMatchesToEnd(ciphers, exclusions, exp.substring(1));
             } else {
-                appendMatches(ciphers, exp);
+                appendMatches(ciphers, exclusions, exp);
             }
         }
 
         return ciphers.keySet().toArray(new String[ciphers.size()]);
     }
 
+    private boolean excluded(Ciph c, List<String> exclusions)
+    {
+        for (String exp : exclusions) {
+            if (!matches(c, exp)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     private void removeMatches(Map<String, Ciph> ciphers, String exp)
     {
-        for (Ciph c : javaCiphers.values()) {
+        for (Ciph c : allCiphers.values()) {
             if (matches(c, exp)) {
                 ciphers.remove(c.getJavaName());
             }
         }
     }
 
-    private void appendMatches(Map<String, Ciph> ciphers, String exp)
+    private void appendMatches(Map<String, Ciph> ciphers, List<String> exclusions, String exp)
     {
-        for (Ciph c : javaCiphers.values()) {
-            if (matches(c, exp)) {
+        for (Ciph c : allCiphers.values()) {
+            if (matches(c, exp) && !excluded(c, exclusions)) {
                 // Add to the set, at the end, only if not already present
-                if (!ciphers.containsKey(c.getJavaName()) && allCiphers.contains(c.getJavaName())) {
+                if (!ciphers.containsKey(c.getJavaName())) {
                     ciphers.put(c.getJavaName(), c);
                 }
             }
         }
     }
 
-    private void moveMatchesToEnd(Map<String, Ciph> ciphers, String exp)
+    private void moveMatchesToEnd(Map<String, Ciph> ciphers, List<String> exclusions, String exp)
     {
-        for (Ciph c : javaCiphers.values()) {
-            if (matches(c, exp)) {
+        for (Ciph c : allCiphers.values()) {
+            if (matches(c, exp) && !excluded(c, exclusions)) {
                 // Move to the end, even if already present
                 ciphers.remove(c.getJavaName());
-                if (allCiphers.contains(c.getJavaName())) {
-                    ciphers.put(c.getJavaName(), c);
-                }
+                ciphers.put(c.getJavaName(), c);
             }
         }
     }
@@ -194,11 +212,10 @@ public class SSLCiphers
             return (defaultCiphers.contains(c.getJavaName()));
         }
         if ("COMPLEMENTOFDEFAULT".equals(exp)) {
-            return (allCiphers.contains(c.getJavaName()) &&
-                    !defaultCiphers.contains(c.getJavaName()));
+            return (!defaultCiphers.contains(c.getJavaName()));
         }
         if ("ALL".equals(exp)) {
-            return (allCiphers.contains(c.getJavaName()));
+            return true;
         }
 
         if ("HIGH".equals(exp)) {
@@ -261,21 +278,6 @@ public class SSLCiphers
 
         // Otherwise we are really just matching the name!
         return (exp.equals(c.getSslName()));
-    }
-
-    /**
-     * Given a list of Java cipher suites, return a list of OpenSSL cipher suite names, restricted by protocol
-     */
-    public List<String> getSslCiphers(String protocol, List<String> javaCiphers)
-    {
-        ArrayList<String> l = new ArrayList<String>(javaCiphers.size());
-        for (String jc : javaCiphers) {
-            Ciph c = getJavaCipher(jc);
-            if ((c != null) && protocol.equals(c.getProtocol())) {
-                l.add(c.getSslName());
-            }
-        }
-        return l;
     }
 
     public static final class Ciph

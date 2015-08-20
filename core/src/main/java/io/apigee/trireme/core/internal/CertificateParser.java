@@ -83,6 +83,28 @@ public class CertificateParser
         return ret;
     }
 
+    public Scriptable parseWithStrings(Context cx, Scriptable scope, X509Certificate cert)
+    {
+        if (log.isDebugEnabled()) {
+            log.debug("Returning subject " + cert.getSubjectX500Principal());
+        }
+        Scriptable ret = cx.newObject(scope);
+        ret.put("subject", ret, makeStringPrincipal(cert.getSubjectX500Principal()));
+        ret.put("issuer", ret, makeStringPrincipal(cert.getIssuerX500Principal()));
+        ret.put("valid_from", ret, formatDate(cert.getNotBefore()));
+        ret.put("valid_to", ret, formatDate(cert.getNotAfter()));
+        //ret.put("fingerprint", ret, null);
+
+        try {
+            addAltNames(ret, "subjectaltname", cert.getSubjectAlternativeNames());
+            addAltNames(ret, "issueraltname", cert.getIssuerAlternativeNames());
+            addExtendedUsage(cx, scope, ret, cert.getExtendedKeyUsage());
+        } catch (CertificateParsingException e) {
+            log.debug("Error getting all the cert names: {}", e);
+        }
+        return ret;
+    }
+
     private Scriptable makePrincipal(Context cx, Scriptable scope, X500Principal principal)
     {
         Scriptable p = cx.newObject(scope);
@@ -108,6 +130,35 @@ public class CertificateParser
             addCertEntry(p, unescapeCommas(name.substring(start)));
         }
         return p;
+    }
+
+    private String makeStringPrincipal(X500Principal principal)
+    {
+        StringBuilder sb = new StringBuilder();
+        String name = principal.getName(X500Principal.RFC2253);
+
+        // Split the name by commas, except that backslashes escape the commas, otherwise we'd use a regexp
+        int cp = 0;
+        int start = 0;
+        boolean wasSlash = false;
+        while (cp < name.length()) {
+            if (name.charAt(cp) == '\\') {
+                wasSlash = true;
+            } else if ((name.charAt(cp) == ',') && !wasSlash) {
+                wasSlash = false;
+                sb.append(unescapeCommas(name.substring(start, cp)));
+                sb.append('\n');
+                start = cp + 1;
+            } else {
+                wasSlash = false;
+            }
+            cp++;
+        }
+        if (cp > start) {
+            sb.append(unescapeCommas(name.substring(start)));
+            sb.append('\n');
+        }
+        return sb.toString();
     }
 
     private String unescapeCommas(String s)

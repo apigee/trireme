@@ -263,9 +263,12 @@ public class NIOSocketHandle
             try {
                 written = clientChannel.write(qw.buf);
             } catch (IOException ioe) {
-                // Hacky? We failed the immediate write, but the callback isn't set yet,
-                // so go back and do it later
-                queueWrite(qw);
+                if (log.isDebugEnabled()) {
+                    log.debug("Write error: {}", ioe.toString());
+                }
+                if (qw.getHandler() != null) {
+                    qw.getHandler().ioComplete(ErrorCodes.EIO, 0);
+                }
                 return;
             }
             if (log.isDebugEnabled()) {

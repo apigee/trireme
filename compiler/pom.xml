@@ -4,12 +4,12 @@
   <parent>
     <groupId>io.apigee.trireme</groupId>
     <artifactId>trireme</artifactId>
-    <version>0.8.7</version>
+    <version>0.8.8-SNAPSHOT</version>
   </parent>
 
   <name>rhino-compiler</name>
   <artifactId>rhino-compiler</artifactId>
-  <version>0.8.7</version>
+  <version>0.8.8-SNAPSHOT</version>
   <packaging>maven-plugin</packaging>
 
   <dependencies>

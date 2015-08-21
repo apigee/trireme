@@ -1,3 +1,10 @@
+* 0.8.7 08-20-2015:
+
+[Issue 124](https://github.com/apigee/trireme/issues/124) Add the "_implicitHeader" to the HTTP adapter,
+because this undocumented function is used in some very common Compress middleware.
+[Issue 125](https://github.com/apigee/trireme/issues/125) Fix command-line processing, which was swallowing
+arguments that start with "--" even if they appear after the name of the script. This broke NPM.
+
 * 0.8.6 18-Jun-2015:
 
 In addition to a Rhino upgrade and the fixes below, this release is the first two support multiple versions

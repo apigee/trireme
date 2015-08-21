@@ -28,7 +28,8 @@ var kOnTimeout = Timer.kOnTimeout | 0;
 // Timeout values > TIMEOUT_MAX are set to 1.
 var TIMEOUT_MAX = 2147483647; // 2^31-1
 
-var debug = require('util').debuglog('timer');
+var util = require('util');
+var debug = util.debuglog('timer');
 
 
 // IDLE TIMEOUTS
@@ -78,10 +79,19 @@ function listOnTimeout() {
   debug('timeout callback %d', msecs);
 
   var now = Timer.now();
-  debug('now: %s', now);
+  debug('now: %d', now);
 
   var diff, first, threw;
   while (first = L.peek(list)) {
+    // If the previous iteration caused a timer to be added,
+    // update the value of "now" so that timing computations are
+    // done correctly. See test/simple/test-timers-blocking-callback.js
+    // for more information.
+    if (now < first._idleStart) {
+      now = Timer.now();
+      debug('now: %d', now);
+    }
+
     diff = now - first._idleStart;
     if (diff < msecs) {
       list.start(msecs - diff, 0);
@@ -151,13 +161,21 @@ var unenroll = exports.unenroll = function(item) {
 
 // Does not start the time, just sets up the members needed.
 exports.enroll = function(item, msecs) {
+  if (!util.isNumber(msecs)) {
+    throw new TypeError('msecs must be a number');
+  }
+
+  if (msecs < 0 || !isFinite(msecs)) {
+    throw new RangeError('msecs must be a non-negative finite number');
+  }
+
   // if this item was already in a list somewhere
   // then we should unenroll it from that
   if (item._idleNext) unenroll(item);
 
   // Ensure that msecs fits into signed int32
-  if (msecs > 0x7fffffff) {
-    msecs = 0x7fffffff;
+  if (msecs > TIMEOUT_MAX) {
+    msecs = TIMEOUT_MAX;
   }
 
   item._idleTimeout = msecs;

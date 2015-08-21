@@ -21,32 +21,24 @@
 
 var common = require('../common');
 var assert = require('assert');
+var fork = require('child_process').fork;
+var N = 4 << 20;  // 4 MB
 
-var complete = 0;
+for (var big = '*'; big.length < N; big += big);
 
-process.nextTick(function() {
-  complete++;
-  process.nextTick(function() {
-    complete++;
-    process.nextTick(function() {
-      complete++;
-    });
-  });
-});
+if (process.argv[2] === 'child') {
+  process.send(big);
+  process.exit(42);
+}
 
-setTimeout(function() {
-  process.nextTick(function() {
-    complete++;
-  });
-}, 50);
+var proc = fork(__filename, ['child']);
 
-process.nextTick(function() {
-  complete++;
-});
+proc.on('message', common.mustCall(function(msg) {
+  assert.equal(typeof msg, 'string');
+  assert.equal(msg.length, N);
+  assert.equal(msg, big);
+}));
 
-process.on('exit', function() {
-  assert.equal(5, complete);
-  process.nextTick(function() {
-    throw new Error('this should not occur');
-  });
-});
+proc.on('exit', common.mustCall(function(exitCode) {
+  assert.equal(exitCode, 42);
+}));

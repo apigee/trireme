@@ -19,34 +19,37 @@
 // OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE
 // USE OR OTHER DEALINGS IN THE SOFTWARE.
 
+if (!process.versions.openssl) process.exit();
+
 var common = require('../common');
 var assert = require('assert');
+var net = require('net');
+var tls = require('tls');
+var fs = require('fs');
 
-var complete = 0;
+var options = {
+  key: fs.readFileSync(common.fixturesDir + '/keys/agent1-key.pem'),
+  cert: fs.readFileSync(common.fixturesDir + '/keys/agent1-cert.pem')
+};
 
-process.nextTick(function() {
-  complete++;
-  process.nextTick(function() {
-    complete++;
-    process.nextTick(function() {
-      complete++;
+var server = tls.createServer(options, function(c) {
+  setTimeout(function() {
+    c.write('hello');
+    setTimeout(function() {
+      c.destroy();
+      server.close();
+    }, 75);
+  }, 75);
+});
+
+server.listen(common.PORT, function() {
+  var socket = net.connect(common.PORT, function() {
+    socket.setTimeout(500, assert.fail);
+
+    var tsocket = tls.connect({
+      socket: socket,
+      rejectUnauthorized: false
     });
-  });
-});
-
-setTimeout(function() {
-  process.nextTick(function() {
-    complete++;
-  });
-}, 50);
-
-process.nextTick(function() {
-  complete++;
-});
-
-process.on('exit', function() {
-  assert.equal(5, complete);
-  process.nextTick(function() {
-    throw new Error('this should not occur');
+    tsocket.resume();
   });
 });

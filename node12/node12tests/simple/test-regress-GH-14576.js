@@ -19,34 +19,39 @@
 // OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE
 // USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-var common = require('../common');
+/*
+ * Tests for sampler deadlock regression. 
+ * Issue https://github.com/joyent/node/issues/14576
+ */
+
 var assert = require('assert');
+var cp = require('child_process');
 
-var complete = 0;
+var child = undefined;
 
-process.nextTick(function() {
-  complete++;
-  process.nextTick(function() {
-    complete++;
-    process.nextTick(function() {
-      complete++;
-    });
+if (process.platform !== 'win32') {
+  process.on('SIGTERM', function() {
+    if(child) {
+      process.kill(child.pid, 'SIGKILL');
+    }
+
+    process.exit();
   });
-});
+}
 
-setTimeout(function() {
-  process.nextTick(function() {
-    complete++;
+var testScript = "var i = 0; function r() { if(++i > 25) return; " +
+                 "setTimeout(r, 1); }; r();"
+var nodeCmd = process.execPath + 
+              ' --prof --nologfile_per_isolate' + 
+              ' -e "' + testScript + '"';
+var runs = 0;
+
+function runTestScript() {
+  child = cp.exec(nodeCmd, function(err, stdout, stderr) {
+    if (++runs > 50) return;
+
+    runTestScript();
   });
-}, 50);
+}
 
-process.nextTick(function() {
-  complete++;
-});
-
-process.on('exit', function() {
-  assert.equal(5, complete);
-  process.nextTick(function() {
-    throw new Error('this should not occur');
-  });
-});
+runTestScript();

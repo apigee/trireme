@@ -140,6 +140,7 @@ function Socket(options) {
   this._connecting = false;
   this._hadError = false;
   this._handle = null;
+  this._parent = null;
   this._host = null;
 
   if (util.isNumber(options))
@@ -154,9 +155,9 @@ function Socket(options) {
   } else if (!util.isUndefined(options.fd)) {
     this._handle = createHandle(options.fd);
     this._handle.open(options.fd);
-    if ((options.fd == 1 || options.fd == 2) &&
-        (this._handle instanceof Pipe) &&
-        process.platform === 'win32') {
+    // this._handle.open() puts the file descriptor in non-blocking
+    // mode but it must be synchronous for backwards compatibility.
+    if ((options.fd == 1 || options.fd == 2) && this._handle instanceof Pipe) {
       // Make stdout and stderr blocking on Windows
       var err = this._handle.setBlocking(true);
       if (err)
@@ -198,6 +199,13 @@ function Socket(options) {
   }
 }
 util.inherits(Socket, stream.Duplex);
+
+
+Socket.prototype._unrefTimer = function unrefTimer() {
+  for (var s = this; s !== null; s = s._parent)
+    timers._unrefActive(s);
+};
+
 
 // the user has called .end(), and all the bytes have been
 // sent out to the other side.
@@ -320,16 +328,16 @@ Socket.prototype.listen = function() {
 
 
 Socket.prototype.setTimeout = function(msecs, callback) {
-  if (msecs > 0 && isFinite(msecs)) {
+  if (msecs === 0) {
+    timers.unenroll(this);
+    if (callback) {
+      this.removeListener('timeout', callback);
+    }
+  } else {
     timers.enroll(this, msecs);
     timers._unrefActive(this);
     if (callback) {
       this.once('timeout', callback);
-    }
-  } else if (msecs === 0) {
-    timers.unenroll(this);
-    if (callback) {
-      this.removeListener('timeout', callback);
     }
   }
 };
@@ -464,7 +472,8 @@ Socket.prototype._destroy = function(exception, cb) {
 
   this.readable = this.writable = false;
 
-  timers.unenroll(this);
+  for (var s = this; s !== null; s = s._parent)
+    timers.unenroll(s);
 
   debug('close');
   if (this._handle) {
@@ -509,7 +518,7 @@ function onread(nread, buffer) {
   var self = handle.owner;
   assert(handle === self._handle, 'handle != self._handle');
 
-  timers._unrefActive(self);
+  self._unrefTimer();
 
   debug('onread', nread);
 
@@ -641,7 +650,7 @@ Socket.prototype._writeGeneric = function(writev, data, encoding, cb) {
   this._pendingData = null;
   this._pendingEncoding = '';
 
-  timers._unrefActive(this);
+  this._unrefTimer();
 
   if (!this._handle) {
     this._destroy(new Error('This socket is closed.'), cb);
@@ -769,7 +778,7 @@ function afterWrite(status, handle, req, err) {
     return;
   }
 
-  timers._unrefActive(self);
+  self._unrefTimer();
 
   if (self !== process.stderr && self !== process.stdout)
     debug('afterWrite call cb');
@@ -872,7 +881,7 @@ Socket.prototype.connect = function(options, cb) {
     self.once('connect', cb);
   }
 
-  timers._unrefActive(this);
+  this._unrefTimer();
 
   self._connecting = true;
   self.writable = true;
@@ -883,7 +892,7 @@ Socket.prototype.connect = function(options, cb) {
   } else {
     var dns = require('dns');
     var host = options.host || 'localhost';
-    var port = options.port | 0;
+    var port = 0;
     var localAddress = options.localAddress;
     var localPort = options.localPort;
     var dnsopts = {
@@ -897,11 +906,29 @@ Socket.prototype.connect = function(options, cb) {
     if (localPort && !util.isNumber(localPort))
       throw new TypeError('localPort should be a number: ' + localPort);
 
-    if (port <= 0 || port > 65535)
-      throw new RangeError('port should be > 0 and < 65536: ' + port);
+    if (typeof options.port === 'number')
+      port = options.port;
+    else if (typeof options.port === 'string')
+      port = options.port.trim() === '' ? -1 : +options.port;
+    else if (options.port !== undefined)
+      throw new TypeError('port should be a number or string: ' + options.port);
 
-    if (dnsopts.family !== 4 && dnsopts.family !== 6)
-      dnsopts.hints = dns.ADDRCONFIG | dns.V4MAPPED;
+    if (port < 0 || port > 65535 || isNaN(port))
+      throw new RangeError('port should be >= 0 and < 65536: ' +
+                           options.port);
+
+    if (dnsopts.family !== 4 && dnsopts.family !== 6) {
+      dnsopts.hints = dns.ADDRCONFIG;
+      // The AI_V4MAPPED hint is not supported on FreeBSD, and getaddrinfo
+      // returns EAI_BADFLAGS. However, it seems to be supported on most other
+      // systems. See
+      // http://lists.freebsd.org/pipermail/freebsd-bugs/2008-February/028260.html
+      // and
+      // https://svnweb.freebsd.org/base/head/lib/libc/net/getaddrinfo.c?r1=172052&r2=175955
+      // for more information on the lack of support for FreeBSD.
+      if (process.platform !== 'freebsd')
+        dnsopts.hints |= dns.V4MAPPED;
+    }
 
     debug('connect: find host ' + host);
     debug('connect: dns options ' + dnsopts);
@@ -924,7 +951,7 @@ Socket.prototype.connect = function(options, cb) {
           self._destroy();
         });
       } else {
-        timers._unrefActive(self);
+        self._unrefTimer();
         connect(self,
                 ip,
                 port,
@@ -969,7 +996,7 @@ function afterConnect(status, handle, req, readable, writable) {
   if (status == 0) {
     self.readable = readable;
     self.writable = writable;
-    timers._unrefActive(self);
+    self._unrefTimer();
 
     self.emit('connect');
 

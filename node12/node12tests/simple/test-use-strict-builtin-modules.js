@@ -19,34 +19,16 @@
 // OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE
 // USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-var common = require('../common');
-var assert = require('assert');
+/*
+ * This test makes sure that every builtin module can be loaded
+ * when the V8's --use-strict command line option is passed to node.
+ */
 
-var complete = 0;
+var child_process = require('child_process');
 
-process.nextTick(function() {
-  complete++;
-  process.nextTick(function() {
-    complete++;
-    process.nextTick(function() {
-      complete++;
-    });
-  });
-});
-
-setTimeout(function() {
-  process.nextTick(function() {
-    complete++;
-  });
-}, 50);
-
-process.nextTick(function() {
-  complete++;
-});
-
-process.on('exit', function() {
-  assert.equal(5, complete);
-  process.nextTick(function() {
-    throw new Error('this should not occur');
-  });
-});
+if (process.argv[2] !== 'child') {
+  child_process.fork(__filename, ['child'], { execArgv: ['--use-strict']});
+} else {
+  var natives = process.binding('natives');
+  Object.keys(natives).forEach(require);
+}

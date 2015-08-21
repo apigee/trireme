@@ -19,34 +19,20 @@
 // OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE
 // USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-var common = require('../common');
-var assert = require('assert');
-
-var complete = 0;
-
-process.nextTick(function() {
-  complete++;
-  process.nextTick(function() {
-    complete++;
-    process.nextTick(function() {
-      complete++;
-    });
-  });
-});
-
-setTimeout(function() {
-  process.nextTick(function() {
-    complete++;
-  });
-}, 50);
-
-process.nextTick(function() {
-  complete++;
-});
-
-process.on('exit', function() {
-  assert.equal(5, complete);
-  process.nextTick(function() {
-    throw new Error('this should not occur');
-  });
-});
+/*
+ * This is a regression test for the issue described at:
+ * https://github.com/joyent/node/issues/9113.
+ *
+ * This problem has been fixed by floating a patch on V8, this test makes
+ * sure that the appropriate patch is floated even after future V8 upgrades.
+ *
+ * If the bug is reproduced, this test stalls and the tests suite makes it
+ * time out eventually (currently after one minute). Otherwise it exits after
+ * the for loop completes its execution.
+ */
+var spawn = require('child_process').spawn;
+var args = ['--harmony',
+            '--use-strict',
+            '-e',
+            'for (let i = 0; i < 3; ++i) { if (i == 1) { continue; } }'];
+var child = spawn(process.execPath, args);

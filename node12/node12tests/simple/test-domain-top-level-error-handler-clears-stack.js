@@ -19,34 +19,23 @@
 // OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE
 // USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-var common = require('../common');
 var assert = require('assert');
+var domain = require('domain');
 
-var complete = 0;
+/*
+ * Make sure that the domains stack is cleared after a top-level domain
+ * error handler exited gracefully.
+ */
+var d = domain.create();
 
-process.nextTick(function() {
-  complete++;
+d.on('error', function() {
   process.nextTick(function() {
-    complete++;
-    process.nextTick(function() {
-      complete++;
-    });
+    if (domain._stack.length !== 1) {
+      process.exit(1);
+    }
   });
 });
 
-setTimeout(function() {
-  process.nextTick(function() {
-    complete++;
-  });
-}, 50);
-
-process.nextTick(function() {
-  complete++;
-});
-
-process.on('exit', function() {
-  assert.equal(5, complete);
-  process.nextTick(function() {
-    throw new Error('this should not occur');
-  });
+d.run(function() {
+  throw new Error('Error from domain');
 });

@@ -19,34 +19,18 @@
 // OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE
 // USE OR OTHER DEALINGS IN THE SOFTWARE.
 
+// Regression test for https://github.com/joyent/node/issues/25324.
+
 var common = require('../common');
 var assert = require('assert');
+var array = ['foo', 'bar', 'baz'];
+var iterator = array.values();
 
-var complete = 0;
+var nbValues = array.length;
+var nbIterated = 0;
 
-process.nextTick(function() {
-  complete++;
-  process.nextTick(function() {
-    complete++;
-    process.nextTick(function() {
-      complete++;
-    });
-  });
-});
+for (var letter of iterator) {
+  ++nbIterated;
+}
 
-setTimeout(function() {
-  process.nextTick(function() {
-    complete++;
-  });
-}, 50);
-
-process.nextTick(function() {
-  complete++;
-});
-
-process.on('exit', function() {
-  assert.equal(5, complete);
-  process.nextTick(function() {
-    throw new Error('this should not occur');
-  });
-});
+assert.equal(nbIterated, nbValues);

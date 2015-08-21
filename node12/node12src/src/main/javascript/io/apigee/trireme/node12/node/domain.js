@@ -28,23 +28,25 @@ var inherits = util.inherits;
 // a few side effects.
 EventEmitter.usingDomains = true;
 
-// TRIREME: This is a slightly different way to handle domain state.
-// We will switch back to the original code when we get indexed properties into Rhino
-var kDomain = 0;
-var kIndex = 1;
-var _domain_info = process._setupDomainUse();
-
 // overwrite process.domain with a getter/setter that will allow for more
 // effective optimizations
+var _domain = [null];
 Object.defineProperty(process, 'domain', {
   enumerable: true,
   get: function() {
-    return _domain_info[kDomain];
+    return _domain[0];
   },
   set: function(arg) {
-    return _domain_info[kDomain] = arg;
+    return _domain[0] = arg;
   }
 });
+
+// objects with external array data are excellent ways to communicate state
+// between js and c++ w/o much overhead
+var _domain_flag = {};
+
+// let the process know we're using domains
+process._setupDomainUse(_domain, _domain_flag);
 
 exports.Domain = Domain;
 
@@ -131,7 +133,7 @@ Domain.prototype.enter = function() {
   // to push it onto the stack so that we can pop it later.
   exports.active = process.domain = this;
   stack.push(this);
-  _domain_info[kIndex] = stack.length;
+  _domain_flag[0] = stack.length;
 };
 
 
@@ -143,7 +145,7 @@ Domain.prototype.exit = function() {
 
   // exit all domains until this one.
   stack.splice(index);
-  _domain_info[kIndex] = stack.length;
+  _domain_flag[0] = stack.length;
 
   exports.active = stack[stack.length - 1];
   process.domain = exports.active;

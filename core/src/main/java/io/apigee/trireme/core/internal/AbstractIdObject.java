@@ -21,6 +21,7 @@
  */
 package io.apigee.trireme.core.internal;
 
+import io.apigee.trireme.core.Utils;
 import org.mozilla.javascript.Context;
 import org.mozilla.javascript.Function;
 import org.mozilla.javascript.IdFunctionObject;
@@ -79,7 +80,7 @@ public abstract class AbstractIdObject<T extends AbstractIdObject>
      */
     protected Object anonymousCall(int id, Context cx, Scriptable scope, Object thisObj, Object[] args)
     {
-        throw new IllegalArgumentException(String.valueOf(id));
+        throw Utils.makeTypeError(cx, scope, "Invalid method " + id);
     }
 
     /**

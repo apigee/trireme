@@ -231,7 +231,9 @@ public class HTTPParsingMachine
                 state = Status.ERROR;
                 return true;
             }
-            if (m.groupCount() > 4) {
+            if (m.group(4) == null) {
+                reasonPhrase = "";
+            } else {
                 reasonPhrase = m.group(4).trim();
             }
             break;
@@ -693,6 +695,11 @@ public class HTTPParsingMachine
         public int getStatusCode()
         {
             return statusCode;
+        }
+
+        public String getStatusMessage()
+        {
+            return reasonPhrase;
         }
 
         public List<Map.Entry<String, String>> getHeaders()

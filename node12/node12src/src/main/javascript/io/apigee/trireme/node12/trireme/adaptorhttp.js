@@ -43,6 +43,7 @@ if (process.env.NODE_DEBUG && /http/.test(process.env.NODE_DEBUG)) {
 function toNumber(x) { return (x = Number(x)) >= 0 ? x : false; }
 
 var STATUS_CODES = exports.STATUS_CODES = NodeHttp.STATUS_CODES;
+exports.METHODS = NodeHttp.METHODS;
 
 exports.IncomingMessage = NodeHttp.IncomingMessage;
 exports.OutgoingMessage = NodeHttp.OutgoingMessage;

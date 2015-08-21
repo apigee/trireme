@@ -43,6 +43,7 @@ import static io.apigee.trireme.core.ArgUtils.*;
 
 import java.lang.reflect.InvocationTargetException;
 import java.nio.ByteBuffer;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -86,6 +87,7 @@ public class HTTPParser
         private static final int kOnHeadersComplete = 1;
         private static final int kOnBody = 2;
         private static final int kOnMessageComplete = 3;
+        private static final HashMap<String, Integer> methodMap;
 
         private static final int
             // Methods
@@ -98,15 +100,6 @@ public class HTTPParser
 
         private static final IdPropertyMap props = new IdPropertyMap(CLASS_NAME);
 
-        static {
-            props.addMethod("close", Id_close, 0);
-            props.addMethod("execute", Id_execute, 1);
-            props.addMethod("finish", Id_finish, 0);
-            props.addMethod("reinitialize", Id_reinitialize, 1);
-            props.addMethod("pause", Id_pause, 0);
-            props.addMethod("resume", Id_resume, 0);
-        }
-
         private static final String[] HTTP_METHODS = {
             "DELETE", "GET", "HEAD", "POST", "PUT",
             "CONNECT", "OPTIONS", "TRACE",
@@ -116,6 +109,20 @@ public class HTTPParser
             "MSEARCH", "NOTIFY", "SUBSCRIBE", "UNSUBSCRIBE",
             "PATCH", "PURGE"
         };
+
+        static {
+            props.addMethod("close", Id_close, 0);
+            props.addMethod("execute", Id_execute, 1);
+            props.addMethod("finish", Id_finish, 0);
+            props.addMethod("reinitialize", Id_reinitialize, 1);
+            props.addMethod("pause", Id_pause, 0);
+            props.addMethod("resume", Id_resume, 0);
+
+            methodMap = new HashMap<String, Integer>(HTTP_METHODS.length);
+            for (int i = 0; i < HTTP_METHODS.length; i++) {
+                methodMap.put(HTTP_METHODS[i], i);
+            }
+        }
 
         private HTTPParsingMachine parser;
         private boolean sentPartialHeaders;
@@ -358,6 +365,12 @@ public class HTTPParser
                 return false;
             }
             Scriptable info = cx.newObject(this);
+
+            if (result.getMethod() != null) {
+                Integer mn = methodMap.get(result.getMethod());
+                info.put("method", info, (mn == null ? -1 : mn));
+            }
+
             if (!sentPartialHeaders) {
                 Scriptable headers = buildHeaders(cx, result);
                 info.put("headers", info, headers);
@@ -365,8 +378,8 @@ public class HTTPParser
             info.put("url", info, result.getUri());
             info.put("versionMajor", info, result.getMajor());
             info.put("versionMinor", info, result.getMinor());
-            info.put("method", info, result.getMethod());
             info.put("statusCode", info, result.getStatusCode());
+            info.put("statusMessage", info, result.getStatusMessage());
             // HTTP code requires this hint to handle upgrade and connect requests
             info.put("upgrade", info, result.isUpgradeRequested() || ("connect".equalsIgnoreCase(result.getMethod())));
             info.put("shouldKeepAlive", info, result.shouldKeepAlive());

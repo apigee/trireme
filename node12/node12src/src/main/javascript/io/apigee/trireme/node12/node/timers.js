@@ -304,8 +304,11 @@ var Timeout = function(after) {
 
 
 function unrefdHandle() {
-  this.owner._onTimeout();
-  if (!this.owner._repeat)
+  // TRIREME: We needed to put this fix in to fix tests. Not sure why.
+  if (this.owner._onTimeout) {
+    this.owner._onTimeout();
+  }
+  if (!this.owner._repeat && this.owner.close)
     this.owner.close();
 }
 

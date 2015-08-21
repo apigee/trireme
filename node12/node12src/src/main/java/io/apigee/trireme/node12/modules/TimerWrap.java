@@ -181,13 +181,17 @@ public class TimerWrap
                 }
 
                 // Rhino is not smart enough to turn a Long literal into a Number so do it here
+                if (runtime.getLoopTimestamp() <= Integer.MAX_VALUE) {
+                    return Integer.valueOf((int)runtime.getLoopTimestamp());
+                }
                 return Long.valueOf(runtime.getLoopTimestamp());
             default:
-                return anonymousCall(id, cx, scope, thisObj, args);
+                return super.anonymousCall(id, cx, scope, thisObj, args);
             }
         }
 
-        // Node 0.12 uses an indexed property to efficiently get and set this value
+        // Node 0.12 uses an indexed property to efficiently get and set this value.
+        // We won't used a typed array here because the value needs to be a function.
 
         @Override
         public Object get(int i, Scriptable scope)

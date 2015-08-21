@@ -43,7 +43,7 @@ public class ShellTest
     {
         String out = launcher.execute(new String[] { "-v" });
         assertFalse(out.isEmpty());
-        assertTrue(out.contains('v' + env.getDefaultNodeVersion()));
+        assertTrue(out.contains(env.getDefaultNodeVersion()));
         assertTrue(out.contains(Version.TRIREME_VERSION));
     }
 
@@ -53,7 +53,7 @@ public class ShellTest
     {
         String out = launcher.execute(new String[] { "--version" });
         assertFalse(out.isEmpty());
-        assertTrue(out.contains('v' + env.getDefaultNodeVersion()));
+        assertTrue(out.contains(env.getDefaultNodeVersion()));
         assertTrue(out.contains(Version.TRIREME_VERSION));
     }
 

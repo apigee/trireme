@@ -21,7 +21,6 @@
  */
 package io.apigee.trireme.container.netty;
 
-import io.apigee.trireme.kernel.crypto.SSLCiphers;
 import io.apigee.trireme.net.spi.HttpServerAdapter;
 import io.apigee.trireme.net.spi.HttpServerStub;
 import io.apigee.trireme.net.spi.TLSParams;
@@ -163,9 +162,8 @@ public class NettyHttpServer
     private SSLEngine makeSSLEngine(TLSParams p)
     {
         SSLEngine eng = p.getContext().createSSLEngine();
-        if (p.getCipherFilter() != null) {
-            String[] newCiphers = SSLCiphers.get().filterCipherList(eng.getEnabledCipherSuites(), p.getCipherFilter());
-            eng.setEnabledCipherSuites(newCiphers);
+        if (p.getCiphers() != null) {
+            eng.setEnabledCipherSuites(p.getCiphers());
         }
         if (p.isClientAuthRequired()) {
             eng.setNeedClientAuth(true);

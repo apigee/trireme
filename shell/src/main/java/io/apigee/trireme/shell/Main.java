@@ -35,6 +35,8 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Future;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 /**
  * This is the "main," which runs the script.
@@ -45,6 +47,10 @@ public class Main
     private boolean runRepl;
     private boolean printEval;
     private String[] scriptArgs;
+    private String nodeVersion = NodeEnvironment.DEFAULT_NODE_VERSION;
+
+    private static final Pattern NODE_VERSION_PATTERN =
+        Pattern.compile("--node[_-]version=(.+)");
 
     private static void printUsage()
     {
@@ -56,6 +62,7 @@ public class Main
         System.err.println("  -p, --print          Evaluate script and print result");
         System.err.println("  -i, --interactive    Enter the REPL even if stdin doesn't appear to be a terminal");
         System.err.println();
+        System.err.println("  --node-version=V     Use version V of the Node.js code inside Trireme");
         System.err.println("  --debug              Enable detailed debugging of Trireme internals");
         System.err.println("  --trace              Enable very detailed debugging of Trireme internals");
         System.err.println("  --no-deprecation     Silence deprecation warnings");
@@ -67,8 +74,14 @@ public class Main
     private static void printVersion()
     {
         NodeEnvironment env = new NodeEnvironment();
-        System.err.println("Trireme " + Version.TRIREME_VERSION +
-                           " node v" + env.getDefaultNodeVersion());
+        System.err.println("Trireme " + Version.TRIREME_VERSION);
+        for (String vn : env.getNodeVersions()) {
+            if (vn.equals(env.getDefaultNodeVersion())) {
+                System.out.println("node " + vn + " (default)");
+            } else {
+                System.out.println("node " + vn);
+            }
+        }
     }
 
     public static void main(String[] args)
@@ -109,6 +122,19 @@ public class Main
             i++;
         }
 
+        boolean processingOptions = true;
+
+        for (int ia = i; ia < args.length; ia++) {
+            if (processingOptions) {
+                Matcher m = NODE_VERSION_PATTERN.matcher(args[ia]);
+                if (m.matches()) {
+                    nodeVersion = m.group(1);
+                } else if (!args[ia].startsWith("--")) {
+                    processingOptions = false;
+                }
+            }
+        }
+
         if (i < args.length) {
             scriptArgs = new String[args.length - i];
             System.arraycopy(args, i, scriptArgs, 0, scriptArgs.length);
@@ -139,6 +165,7 @@ public class Main
 
             ScriptStatus status;
             try {
+                ns.setNodeVersion(nodeVersion);
                 Future<ScriptStatus> future = ns.execute();
                 status = future.get();
             } finally {

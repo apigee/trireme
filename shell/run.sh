@@ -14,7 +14,10 @@ CLASSPATH=./target/classes:./target/test-classes:`cat ${CP}`
 export CLASSPATH
 rm ${CP}
 
-JARGS="-Xmx1g"
+JARGS="-Xmx1g \
+  -Dorg.slf4j.simpleLogger.showThreadName=false \
+  -Dorg.slf4j.simpleLogger.showShortLogName=true \
+  -Dorg.slf4j.simpleLogger.defaultLogLevel=${LOGLEVEL:-info}"
 #JARGS="-Xmx1g -DHttpAdapter=netty"
 #JARGS="-Xmx1g -DSealRoot=false -DOptLevel=1"
 #JARGS="-Xdebug -Xrunjdwp:server=y,suspend=n,transport=dt_socket,address=localhost:14000"

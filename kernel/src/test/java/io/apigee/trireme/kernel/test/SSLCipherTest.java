@@ -67,4 +67,16 @@ public class SSLCipherTest
         String[] filtered = SSLCiphers.get().filterCipherList("ALL");
         assertArrayEquals(defaults, filtered);
     }
+
+    /* Uncomment to see what ciphers are enabled
+    @Test
+    public void dumpDefaultCiphers()
+    {
+        String[] defaults = SSLCiphers.get().filterCipherList("DEFAULT");
+        for (String jn : defaults) {
+            SSLCiphers.Ciph c = SSLCiphers.get().getJavaCipher(jn);
+            System.out.println(jn + "\t\t" + c.getSslName());
+        }
+    }
+    */
 }

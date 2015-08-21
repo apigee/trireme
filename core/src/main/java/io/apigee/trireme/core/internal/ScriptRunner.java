@@ -1196,6 +1196,7 @@ public class ScriptRunner
         throws NodeException
     {
         for (Object arg : process.getExecArgv()) {
+            String sa = (String)arg;
             if ("--expose-gc".equals(arg) || "--expose_gc".equals(arg)) {
                 Method gc = Utils.findMethod(AbstractProcess.class, "JsGc");
                 FunctionObject gcFunc = new FunctionObject("gc", gc, scope);
@@ -1207,6 +1208,8 @@ public class ScriptRunner
             } else if ("--no-deprecation".equals(arg)) {
                 process.put("throwDeprecation", process, false);
                 process.put("traceDeprecation", process, false);
+            } else if (sa.startsWith("--node-version") || sa.startsWith("--node_version")) {
+                // Ignore version number -- it is processed by the shell.
             } else if ("--debug".equals(arg) || "--trace".equals(arg)) {
                 // Actual processing happens elsewhere
             } else {

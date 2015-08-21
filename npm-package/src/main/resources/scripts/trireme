@@ -94,10 +94,29 @@ getNpmPrefix(function(err, prefix) {
     }
 
     var args = [];
+    // Leave space for debug flag
+    args.push('');
+    args.push('-Dorg.slf4j.simpleLogger.showThreadName=false');
+    args.push('-Dorg.slf4j.simpleLogger.showShortLogName=true');
     args.push('io.apigee.trireme.shell.Main');
+
+    var logLevel = 'info';
+    var passVmOpts = false;
     for (var i = 2; i < process.argv.length; i++) {
+      if (!passVmOpts) {
+        // pre-process arg list to get log level
+        if (process.argv[i] === '--debug') {
+          logLevel = 'debug';
+        } else if (process.argv[i] === '--trace') {
+          logLevel = 'trace';
+        } else if (!/^--.+/.test(process.argv[i])) {
+          passVmOpts = true;
+        }
+      }
       args.push(process.argv[i]);
     }
+
+    args[0] = '-Dorg.slf4j.simpleLogger.defaultLogLevel=' + logLevel;
 
     var env = process.env;
     env.CLASSPATH = classpath;

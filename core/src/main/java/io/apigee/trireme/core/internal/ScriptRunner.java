@@ -1207,6 +1207,8 @@ public class ScriptRunner
             } else if ("--no-deprecation".equals(arg)) {
                 process.put("throwDeprecation", process, false);
                 process.put("traceDeprecation", process, false);
+            } else if ("--debug".equals(arg) || "--trace".equals(arg)) {
+                // Actual processing happens elsewhere
             } else {
                 throw new NodeException("Unsupported command-line option " + arg);
             }

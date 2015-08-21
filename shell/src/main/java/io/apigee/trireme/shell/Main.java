@@ -55,7 +55,13 @@ public class Main
         System.err.println("  -e, --eval script    Evaluate script");
         System.err.println("  -p, --print          Evaluate script and print result");
         System.err.println("  -i, --interactive    Enter the REPL even if stdin doesn't appear to be a terminal");
-        // TODO --no-deprecation, --trace-deprecation
+        System.err.println();
+        System.err.println("  --debug              Enable detailed debugging of Trireme internals");
+        System.err.println("  --trace              Enable very detailed debugging of Trireme internals");
+        System.err.println("  --no-deprecation     Silence deprecation warnings");
+        System.err.println("  --throw-deprecation  Throw an exception anytime a deprecated function is used");
+        System.err.println("  --trace-deprecation  Show stack traces on deprecations");
+        System.err.println("  --expose_gc          Export global \"gc\" function");
     }
 
     private static void printVersion()

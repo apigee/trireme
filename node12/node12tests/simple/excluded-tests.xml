@@ -106,14 +106,6 @@
         <Description>Not implemented. Supposed to return the compilation params.</Description>
     </Excluded>
     <Excluded>
-        <Name>test-typed-arrays.js</Name>
-        <Description>Not supported in Rhino.</Description>
-    </Excluded>
-    <Excluded>
-        <Name>test-arraybuffer.*\.js</Name>
-        <Description>Not supported in Rhino.</Description>
-    </Excluded>
-    <Excluded>
         <Name>test-listen-fd.*\.js</Name>
         <Description>No network IO on fds or pipes.</Description>
     </Excluded>
@@ -207,10 +199,6 @@
         <Description>Not entirely sure what this is but we haven't figured it out yet.</Description>
     </Excluded>
     <Excluded>
-        <Name>test-event-emitter-memory-leak.js</Name>
-        <Description>Requires --expose-gc</Description>
-    </Excluded>
-    <Excluded>
         <Name>test-crypto-padding-aes256.js</Name>
         <Description>Default Java installations do not support 256-bit AES</Description>
     </Excluded>
@@ -271,10 +259,6 @@
         to 100 ms and it works fine.</Description>
     </Excluded>
     <Excluded>
-        <Name>test-domain.js</Name>
-        <Description>Needs slightly different error messages to be tested, look in "noderunner".</Description>
-    </Excluded>
-    <Excluded>
         <Name>test-util-inspect.js</Name>
         <Description>Checks for specific error messages that are differnet in Rhino.</Description>
     </Excluded>
@@ -289,14 +273,6 @@
     <Excluded>
         <Name>test-http-upgrade-server.js</Name>
         <Description>Assumes that all data on the socket after the upgrade comes in in one chunk.</Description>
-    </Excluded>
-    <Excluded>
-        <Name>test-tls-getcipher.js</Name>
-        <Description>Java 7 has a different set of cipher suites than the OpenSSL ones in the test suite.</Description>
-    </Excluded>
-    <Excluded>
-        <Name>test-tls-set-ciphers.js</Name>
-        <Description>Java 7 has a different set of cipher suites than the OpenSSL ones in the test suite.</Description>
     </Excluded>
     <Excluded>
         <Name>test-tls-honorcipherorder.js</Name>
@@ -321,10 +297,6 @@
     <Excluded>
         <Name>test-stream2-stderr-sync.js</Name>
         <Description>Depends on undocumented parts of the TTY module</Description>
-    </Excluded>
-    <Excluded>
-        <Name>test-next-tick-starvation.js</Name>
-        <Description>Recursive next tick -- doesn't work on node either.</Description>
     </Excluded>
     <Excluded>
         <Name>test-http-client-parse-error.js</Name>
@@ -369,10 +341,6 @@
     <Excluded>
         <Name>test-tls-server-slab.js</Name>
         <Description>Depends on internal "slab buffer size"</Description>
-    </Excluded>
-    <Excluded>
-        <Name>test-tls-client-abort3.js</Name>
-        <Description>Messes too much with the "ssl.shutdown" method.</Description>
     </Excluded>
     <Excluded>
         <Name>test-https-no-reader.js</Name>

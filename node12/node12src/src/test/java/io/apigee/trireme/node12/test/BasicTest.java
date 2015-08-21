@@ -32,7 +32,7 @@ import java.util.concurrent.TimeoutException;
 
 public class BasicTest
 {
-    public static final String NODE_VERSION = "0.11.x";
+    public static final String NODE_VERSION = "0.12.x";
 
     private NodeEnvironment env;
 

@@ -21,7 +21,7 @@ import java.util.concurrent.TimeoutException;
 
 public class SandboxingTest
 {
-    public static final String NODE_VERSION = "0.11.x";
+    public static final String NODE_VERSION = "0.12.x";
     public static final long SCRIPT_TIMEOUT_SECS = 10L;
     private static final Charset UTF8 = Charset.forName("UTF8");
 

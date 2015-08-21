@@ -17,7 +17,7 @@ import static org.junit.Assert.*;
 
 public class JarLoadingTest
 {
-    public static final String NODE_VERSION = "0.11.x";
+    public static final String NODE_VERSION = "0.12.x";
 
     private static NodeEnvironment env;
 

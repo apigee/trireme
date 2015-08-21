@@ -51,7 +51,7 @@ public class Node12Implementation
     @Override
     public String getVersion()
     {
-        return "0.11.15";
+        return "0.12.7";
     }
 
     @Override

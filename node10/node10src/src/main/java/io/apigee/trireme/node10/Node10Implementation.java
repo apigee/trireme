@@ -69,6 +69,7 @@ public class Node10Implementation
             { "url",                   P + "node.url" },
             { "util",                  P + "node.util" },
 
+            { "_trireme_buffer",        P + "trireme.buffer" },
             { "http",                   P + "trireme.adaptorhttp" },
             { "https",                  P + "trireme.adaptorhttps" },
             { "child_process",          P + "trireme.child_process" },

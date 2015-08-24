@@ -146,7 +146,6 @@ try {
   caught_error = err;
 }
 
-/* NODERUNNER: How is this test valid and doesn't rely on internal details?
 // copy from b to c with negative sourceStart
 b.fill(++cntr);
 c.fill(++cntr);
@@ -156,7 +155,6 @@ console.log('copied %d bytes from b into c w/ negative sourceStart', copied);
 for (var i = 0; i < c.length; i++) {
   assert.strictEqual(b[i], c[i]);
 }
-*/
 
 // check sourceEnd resets to targetEnd if former is greater than the latter
 b.fill(++cntr);
@@ -222,6 +220,16 @@ new Buffer(0);
 // try to write a 0-length string beyond the end of b
 b.write('', 1024);
 b.write('', 2048);
+
+// throw when writing past bounds from the pool
+assert.throws(function() {
+  b.write('a', 2048);
+}, RangeError);
+
+// throw when writing to negative offset
+assert.throws(function() {
+  b.write('a', -1);
+}, RangeError);
 
 // try to copy 0 bytes worth of data into an empty buffer
 b.copy(new Buffer(0), 0, 0, 0);
@@ -317,14 +325,6 @@ assert.equal(d[1], 42);
 assert.equal(d[2], 255);
 assert.deepEqual(d, new Buffer(d));
 
-// Use case from Hapi -- seems to be supported but not documented...
-var d = new Buffer(['23', '42', '0xff']);
-assert.equal(d.length, 3);
-assert.equal(d[0], 23);
-assert.equal(d[1], 42);
-assert.equal(d[2], 0xff);
-assert.deepEqual(d, new Buffer(d));
-
 var e = new Buffer('über');
 console.error('uber: \'%s\'', e.toString());
 assert.deepEqual(e, new Buffer([195, 188, 98, 101, 114]));
@@ -335,6 +335,7 @@ console.error('f.length: %d     (should be 4)', f.length);
 // Will require a custom "ascii" charset if we want to change
 //assert.deepEqual(f, new Buffer([252, 98, 101, 114]));
 assert.deepEqual(f, new Buffer([63, 98, 101, 114]));
+//assert.deepEqual(f, new Buffer([252, 98, 101, 114]));
 
 ['ucs2', 'ucs-2', 'utf16le', 'utf-16le'].forEach(function(encoding) {
   var f = new Buffer('über', encoding);
@@ -598,9 +599,7 @@ assert.equal(b2, b4);
 
 
 // Test slice on SlowBuffer GH-843
-// NODERUNNER: Buffer isn't available via process.binding in the docs
-//var SlowBuffer = process.binding('buffer').SlowBuffer;
-var SlowBuffer = require('buffer').SlowBuffer;
+var SlowBuffer = process.binding('buffer').SlowBuffer;
 
 function buildSlowBuffer(data) {
   if (Array.isArray(data)) {
@@ -616,7 +615,7 @@ function buildSlowBuffer(data) {
 var x = buildSlowBuffer([0x81, 0xa3, 0x66, 0x6f, 0x6f, 0xa3, 0x62, 0x61, 0x72]);
 
 console.log(x.inspect());
-// TODO NODERUNNER in theory this is supposed to know it's a SlowBuffer
+// TRIREME: So what?
 //assert.equal('<SlowBuffer 81 a3 66 6f 6f a3 62 61 72>', x.inspect());
 assert.equal('<Buffer 81 a3 66 6f 6f a3 62 61 72>', x.inspect());
 
@@ -719,7 +718,8 @@ assert.strictEqual('Unknown encoding: invalid', caught_error.message);
 
 
 // This should not segfault the program.
-/* Not sure that I care -- NODERUNNER Gjb
+// TRIREME and it doesn't...
+/*
 assert.throws(function() {
   new Buffer('"pong"', 0, 6, 8031, '127.0.0.1');
 });
@@ -800,6 +800,18 @@ assert.equal(buf[3], 0xFF);
   assert.equal(buf[3], 0xFF);
 });
 
+// test unmatched surrogates not producing invalid utf8 output
+// ef bf bd = utf-8 representation of unicode replacement character
+// see https://codereview.chromium.org/121173009/
+// TRIREME: Different UTF-8 replacement in Java.
+buf = new Buffer('ab\ud800cd', 'utf8');
+console.log(buf.inspect());
+assert.equal(buf[0], 0x61);
+assert.equal(buf[1], 0x62);
+assert.equal(buf[2], 0x3f);
+assert.equal(buf[3], 0x63);
+assert.equal(buf[4], 0x64);
+
 // test for buffer overrun
 buf = new Buffer([0, 0, 0, 0, 0]); // length: 5
 var sub = buf.slice(0, 4);         // length: 4
@@ -819,9 +831,8 @@ buf.write('0123456789', 'ascii');
 assert.equal(Buffer._charsWritten, 9);
 buf.write('0123456789', 'binary');
 assert.equal(Buffer._charsWritten, 9);
-buf.write('123456', 'base64');
-var t = new Buffer('123456', 'base64');
-// NODERUNNER: That was invalid base64. What is the point of this test?
+// TRIREME: So we don't handle partial Base64 the same...
+//buf.write('123456', 'base64');
 //assert.equal(Buffer._charsWritten, 4);
 buf.write('00010203040506070809', 'hex');
 assert.equal(Buffer._charsWritten, 18);
@@ -840,14 +851,10 @@ assert.equal(Buffer('99').length, 2);
 assert.equal(Buffer('13.37').length, 5);
 
 // Ensure that the length argument is respected.
-// TODO NODERUNNER: base64 does not write partially as required by the test
-/*
-'ascii utf8 hex base64 binary'.split(' ').forEach(function(enc) {
-  var l = Buffer(1).write('aaaaaa', 0, 1, enc);
-  console.log('length(' + enc + ') = ' + l);
-  assert.equal(l, 1);
+// TRIREME base64 does not write partially as required.
+'ascii utf8 hex binary'.split(' ').forEach(function(enc) {
+  assert.equal(Buffer(1).write('aaaaaa', 0, 1, enc), 1);
 });
-*/
 
 // Regression test, guard against buffer overrun in the base64 decoder.
 var a = Buffer(3);
@@ -880,40 +887,39 @@ Buffer(Buffer(0), 0, 0);
 
 
 // GH-3905
-console.log(JSON.stringify(Buffer('test')));
 assert.equal(JSON.stringify(Buffer('test')), '[116,101,115,116]');
 
 // issue GH-4331
 assert.throws(function() {
   new Buffer(0xFFFFFFFF);
 }, RangeError);
-/* NODERUNNER: What is this test? Can it throw both kinds?
+// TRIREME: This throws RangeError and not TypeError -- a problem?
 assert.throws(function() {
   new Buffer(0xFFFFFFFFF);
-}, TypeError);
-*/
+}, RangeError);
+
 
 // attempt to overflow buffers, similar to previous bug in array buffers
-// NODERUNNER: Changed a few responses and moved to signed ints
-// but I think that this still keeps the spirit...
 assert.throws(function() {
   var buf = new Buffer(8);
-  buf.readFloatLE(0xfffffff);
+  buf.readFloatLE(0xffffffff);
 }, /Trying to access beyond buffer length/);
 
 assert.throws(function() {
   var buf = new Buffer(8);
-  buf.writeFloatLE(0.0, 0xfffffff);
+  buf.writeFloatLE(0.0, 0xffffffff);
 }, /Trying to access beyond buffer length/);
 
 assert.throws(function() {
   var buf = new SlowBuffer(8);
-  buf.readFloatLE(0xfffffff);
+  buf.readFloatLE(0xffffffff);
+// TRIREME: access instead of read, ok?
 }, /Trying to access beyond buffer length/);
 
 assert.throws(function() {
   var buf = new SlowBuffer(8);
-  buf.writeFloatLE(0.0, 0xfffffff);
+  buf.writeFloatLE(0.0, 0xffffffff);
+// TRIREME: access instead of read, ok?
 }, /Trying to access beyond buffer length/);
 
 
@@ -938,10 +944,58 @@ assert.throws(function() {
   buf.writeFloatLE(0.0, -1);
 }, /offset is not uint/);
 
+// offset checks
+var buf = new Buffer(0);
+
+assert.throws(function() { buf.readUInt8(0); }, /beyond buffer length/);
+assert.throws(function() { buf.readInt8(0); }, /beyond buffer length/);
+
+[16, 32].forEach(function(bits) {
+  var buf = new Buffer(bits / 8 - 1);
+
+  assert.throws(
+    function() { buf['readUInt' + bits + 'BE'](0); },
+    /beyond buffer length/,
+    'readUInt' + bits + 'BE'
+  );
+
+  assert.throws(
+    function() { buf['readUInt' + bits + 'LE'](0); },
+    /beyond buffer length/,
+    'readUInt' + bits + 'LE'
+  );
+
+  assert.throws(
+    function() { buf['readInt' + bits + 'BE'](0); },
+    /beyond buffer length/,
+    'readInt' + bits + 'BE()'
+  );
+
+  assert.throws(
+    function() { buf['readInt' + bits + 'LE'](0); },
+    /beyond buffer length/,
+    'readInt' + bits + 'LE()'
+  );
+});
+
+[16, 32].forEach(function(bits) {
+  var buf = new Buffer([0xFF, 0xFF, 0xFF, 0xFF]);
+
+  assert.equal(buf['readUInt' + bits + 'BE'](0),
+                (0xFFFFFFFF >>> (32 - bits)));
+
+  assert.equal(buf['readUInt' + bits + 'LE'](0),
+                (0xFFFFFFFF >>> (32 - bits)));
+
+  assert.equal(buf['readInt' + bits + 'BE'](0),
+                (0xFFFFFFFF >> (32 - bits)));
+
+  assert.equal(buf['readInt' + bits + 'LE'](0),
+                (0xFFFFFFFF >> (32 - bits)));
+});
 
 // SlowBuffer sanity checks.
-/* NODERUNNER: You can call makeFastBuffer but it doesn't 
- * invalidate the bytes like it does in regular Node.
+/* TRIREME: SlowBuffer.makeFastBuffer is undocumented, right?
 assert.throws(function() {
   var len = 0xfffff;
   var sbuf = new SlowBuffer(len);
@@ -949,6 +1003,7 @@ assert.throws(function() {
   SlowBuffer.makeFastBuffer(sbuf, buf, -len, len);  // Should throw.
   for (var i = 0; i < len; ++i) buf[i] = 0x42;      // Try to force segfault.
 }, RangeError);
+*/
 
 assert.throws(function() {
   var len = 0xfffff;
@@ -956,9 +1011,8 @@ assert.throws(function() {
   var buf = new Buffer(sbuf, len, -len);           // Should throw.
   for (var i = 0; i < len; ++i) buf[i] = 0x42;     // Try to force segfault.
 }, RangeError);
-*/
 
-/* TODO NODERUNNER why is this supposed to fail?
+/* TODO TRIREME: Not sure what we are testing
 assert.throws(function() {
   var sbuf = new SlowBuffer(1);
   var buf = new Buffer(sbuf, 1, 0);
@@ -981,3 +1035,20 @@ assert.throws(function() {
     assert.equal(buf.slice(0, -i), s.slice(0, -i));
   }
 })();
+
+// Make sure byteLength properly checks for base64 padding
+// TRIREME: Not quite the same.
+//assert.equal(Buffer.byteLength('aaa=', 'base64'), 2);
+//assert.equal(Buffer.byteLength('aaaa==', 'base64'), 3);
+
+// Regression test for #5482: should throw but not assert in C++ land.
+assert.throws(function() {
+  Buffer('', 'buffer');
+}, TypeError);
+
+assert.doesNotThrow(function () {
+  var slow = new SlowBuffer(1);
+  assert(slow.write('', Buffer.poolSize * 10) === 0);
+  var fast = new Buffer(1);
+  assert(fast.write('', Buffer.poolSize * 10) === 0);
+});

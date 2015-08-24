@@ -38,7 +38,6 @@ import io.apigee.trireme.core.modules.NativeModule;
 import io.apigee.trireme.kernel.PathTranslator;
 import io.apigee.trireme.kernel.fs.AdvancedFilesystem;
 import io.apigee.trireme.kernel.fs.BasicFilesystem;
-import io.apigee.trireme.kernel.handles.IpcHandle;
 import io.apigee.trireme.kernel.net.NetworkPolicy;
 import io.apigee.trireme.kernel.net.SelectorHandler;
 import org.mozilla.javascript.Context;
@@ -126,7 +125,6 @@ public class ScriptRunner
     // Globals that are set up for the process
     private NativeModule.NativeImpl nativeModule;
     protected AbstractProcess    process;
-    private Buffer.BufferModuleImpl buffer;
     private String              workingDirectory;
     private String              scriptFileName;
     private TriremeProcess      parentProcess;
@@ -280,10 +278,6 @@ public class ScriptRunner
 
     public NativeModule.NativeImpl getNativeModule() {
         return nativeModule;
-    }
-
-    public Buffer.BufferModuleImpl getBufferModule() {
-        return buffer;
     }
 
     @Override
@@ -1179,9 +1173,6 @@ public class ScriptRunner
             // Check if we are connected to a parent via API
             process.setConnected(parentProcess != null);
             scope.put("process", scope, process);
-
-            // The buffer module needs special handling because of the "charsWritten" variable
-            buffer = (Buffer.BufferModuleImpl)require("buffer", cx);
 
         } catch (InvocationTargetException e) {
             throw new NodeException(e);

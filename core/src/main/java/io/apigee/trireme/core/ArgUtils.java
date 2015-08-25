@@ -430,7 +430,7 @@ public class ArgUtils
             if (dVal > (double)Integer.MAX_VALUE) {
                 return -1;
             }
-            return (int)Math.ceil(dVal);
+            return (int)Math.floor(dVal);
         }
         if (val instanceof Number) {
             Number num = (Number)val;

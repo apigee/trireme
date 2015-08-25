@@ -39,69 +39,9 @@ function clamp(index, len, defaultValue) {
   return 0;
 }
 
-
 function toHex(n) {
   if (n < 16) return '0' + n.toString(16);
   return n.toString(16);
-}
-
-// Buffer
-function constructBuffer(buf, subject, encoding, offset) {
-  var type;
-
-  // Are we slicing?
-  if (typeof offset === 'number') {
-    if (!Buffer.isBuffer(subject)) {
-      throw new TypeError('First argument must be a Buffer when slicing');
-    }
-
-    buf.length = +encoding > 0 ? Math.ceil(encoding) : 0;
-    buf.offset = offset;
-    buf._slice(subject);
-
-  } else {
-    // Find the length
-    switch (type = typeof subject) {
-      case 'number':
-        buf.length = +subject > 0 ? Math.ceil(subject) : 0;
-        break;
-
-      case 'string':
-        buf.length = Buffer.byteLength(subject, encoding);
-        break;
-
-      case 'object': // Assume object is array-ish
-        buf.length = +subject.length > 0 ? Math.ceil(subject.length) : 0;
-        break;
-
-      default:
-        throw new TypeError('First argument needs to be a number, ' +
-                            'array or string.');
-    }
-
-    buf.offset = 0;
-    buf._allocate();
-
-    // optimize by branching logic for new allocations
-    if (typeof subject !== 'number') {
-      if (type === 'string') {
-        // We are a string
-        buf.length = buf.write(subject, 0, encoding);
-      // if subject is buffer then use built-in copy method
-      } else if (Buffer.isBuffer(subject)) {
-        buf._copy(subject);
-      } else if (isArrayIsh(subject)) {
-        for (var i = 0; i < buf.length; i++)
-          buf[i + buf.offset] = subject[i];
-      }
-    }
-  }
-}
-
-function isArrayIsh(subject) {
-  return Array.isArray(subject) ||
-         subject && typeof subject === 'object' &&
-         typeof subject.length === 'number';
 }
 
 nativeBuf.isEncoding = function(encoding) {
@@ -617,14 +557,14 @@ nativeBuf.prototype.readFloatBE = function(offset, noAssert) {
 nativeBuf.prototype.readDoubleLE = function(offset, noAssert) {
   if (!noAssert)
     checkOffset(offset, 8, this.length);
-  return this._readDoubleLE(this.offset + offset);
+  return this._readDoubleLE(offset);
 };
 
 
 nativeBuf.prototype.readDoubleBE = function(offset, noAssert) {
   if (!noAssert)
     checkOffset(offset, 8, this.length);
-  return this._readDoubleBE(this.offset + offset);
+  return this._readDoubleBE(offset);
 };
 
 
@@ -780,7 +720,7 @@ nativeBuf.prototype.writeFloatLE = function(value, offset, noAssert) {
   if (!noAssert)
     checkOffset(offset, 4, this.length);
   var i = nativeBuf._fromFloat(value);
-  this.writeInt32LE(i, this.offset + offset, !!noAssert);
+  this.writeInt32LE(i, offset, !!noAssert);
 };
 
 
@@ -788,21 +728,21 @@ nativeBuf.prototype.writeFloatBE = function(value, offset, noAssert) {
   if (!noAssert)
     checkOffset(offset, 4, this.length);
   var i = nativeBuf._fromFloat(value);
-  this.writeInt32BE(i, this.offset + offset, !!noAssert);
+  this.writeInt32BE(i, offset, !!noAssert);
 };
 
 
 nativeBuf.prototype.writeDoubleLE = function(value, offset, noAssert) {
   if (!noAssert)
     checkOffset(offset, 8, this.length);
-  this._writeDoubleLE(value, this.offset + offset);
+  this._writeDoubleLE(value, offset);
 };
 
 
 nativeBuf.prototype.writeDoubleBE = function(value, offset, noAssert) {
   if (!noAssert)
     checkOffset(offset, 8, this.length);
-  this._writeDoubleBE(value, this.offset + offset);
+  this._writeDoubleBE(value, offset);
 };
 };
 

@@ -92,7 +92,7 @@ nativeBuf.concat = function(list, length) {
   var pos = 0;
   for (var i = 0; i < list.length; i++) {
     var buf = list[i];
-    buf._copy(buffer, pos);
+    buf.copy(buffer, pos);
     pos += buf.length;
   }
 
@@ -119,7 +119,7 @@ nativeBuf.byteLength = function(str, enc) {
       ret = str.length >>> 1;
       break;
     default:
-      ret = Buffer._byteLength(str, enc);
+      ret = nativeBuf._byteLength(str, enc);
   }
   return ret;
 };
@@ -136,6 +136,9 @@ nativeBuf.prototype.toString = function(encoding, start, end) {
   if (start < 0) start = 0;
   if (end > this.length) end = this.length;
   if (end <= start) return '';
+
+  start = start + this.offset;
+  end = end + this.offset;
 
   while (true) {
     switch (encoding) {
@@ -182,7 +185,7 @@ nativeBuf.prototype.equals = function equals(b) {
 // Inspect
 nativeBuf.prototype.inspect = function inspect() {
   var str = '';
-  var max = exports.INSPECT_MAX_BYTES;
+  var max = nativeBuf.INSPECT_MAX_BYTES;
   if (this.length > 0) {
     str = this.toString('hex', 0, max).match(/.{2}/g).join(' ');
     if (this.length > max)
@@ -217,7 +220,7 @@ nativeBuf.prototype.fill = function fill(val, start, end) {
       val = code;
   }
 
-  this._fill(val, start, end);
+  this._fill(val, start + this.offset, end + this.offset);
 
   return this;
 };
@@ -228,7 +231,7 @@ nativeBuf.prototype.get = util.deprecate(function get(offset) {
   offset = ~~offset;
   if (offset < 0 || offset >= this.length)
     throw new RangeError('index out of range');
-  return this[offset];
+  return this[this.offset + offset];
 }, '.get() is deprecated. Access using array indexes instead.');
 
 
@@ -237,7 +240,7 @@ nativeBuf.prototype.set = util.deprecate(function set(offset, v) {
   offset = ~~offset;
   if (offset < 0 || offset >= this.length)
     throw new RangeError('index out of range');
-  return this[offset] = v;
+  return this[this.offset + offset] = v;
 }, '.set() is deprecated. Set using array indexes instead.');
 
 
@@ -297,36 +300,38 @@ nativeBuf.prototype.write = function(string, offset, length, encoding) {
 
   if (string.length > 0 && (length < 0 || offset < 0))
     throw new RangeError('attempt to write outside buffer bounds');
+  if (offset >= this.length)
+    throw new RangeError('attempt to write past end of buffer');
 
   var ret;
   switch (encoding) {
     case 'hex':
-      ret = this.hexWrite(string, offset, length, nativeBuf);
+      ret = this.hexWrite(string, this.offset + offset, length, nativeBuf);
       break;
 
     case 'utf8':
     case 'utf-8':
-      ret = this.utf8Write(string, offset, length, nativeBuf);
+      ret = this.utf8Write(string, this.offset + offset, length, nativeBuf);
       break;
 
     case 'ascii':
-      ret = this.asciiWrite(string, offset, length, nativeBuf);
+      ret = this.asciiWrite(string, this.offset + offset, length, nativeBuf);
       break;
 
     case 'binary':
-      ret = this.binaryWrite(string, offset, length, nativeBuf);
+      ret = this.binaryWrite(string, this.offset + offset, length, nativeBuf);
       break;
 
     case 'base64':
       // Warning: maxLength not taken into account in base64Write
-      ret = this.base64Write(string, offset, length, nativeBuf);
+      ret = this.base64Write(string, this.offset + offset, length, nativeBuf);
       break;
 
     case 'ucs2':
     case 'ucs-2':
     case 'utf16le':
     case 'utf-16le':
-      ret = this.ucs2Write(string, offset, length, nativeBuf);
+      ret = this.ucs2Write(string, this.offset + offset, length, nativeBuf);
       break;
 
     default:
@@ -344,6 +349,41 @@ nativeBuf.prototype.toJSON = function() {
   };
 };
 
+// TRIREME TODO: Could be replaced with smalloc.copy
+// copy(targetBuffer, targetStart=0, sourceStart=0, sourceEnd=buffer.length)
+nativeBuf.prototype.copy = function(target, target_start, start, end) {
+  // set undefined/NaN or out of bounds values equal to their default
+  if (start < 0)
+    throw new RangeError('negative source start');
+  if (!(start >= 0)) start = 0;
+
+  if (!(target_start >= 0)) target_start = 0;
+
+  if (end < 0)
+    throw new RangeError('negative source end');
+  if (!(end < this.length)) end = this.length;
+
+  // Copy 0 bytes; we're done
+  if (end === start ||
+      target.length === 0 ||
+      this.length === 0 ||
+      start > this.length)
+    return 0;
+
+  if (end < start)
+    return 0;
+
+  if (target_start >= target.length)
+    return 0;
+
+  if (target.length - target_start < end - start)
+    end = target.length - target_start + start;
+
+  return this._copy(target,
+                    target_start + (target.offset || 0),
+                    start + this.offset,
+                    end + this.offset);
+};
 
 // TODO(trevnorris): currently works like Array.prototype.slice(), which
 // doesn't follow the new standard for throwing on out of range indexes.
@@ -371,13 +411,11 @@ nativeBuf.prototype.slice = function(start, end) {
   if (end < start)
     end = start;
 
-  var buf = new NativeBuffer();
-  sliceOnto(this, buf, start, end);
-  buf.length = end - start;
-  if (buf.length > 0)
-    buf.parent = util.isUndefined(this.parent) ? this : this.parent;
-
-  return buf;
+  var ret = new Buffer(this, end - start, start + this.offset);
+  if ((end - start) > 0) {
+    ret.parent = this;
+  }
+  return ret;
 };
 
 
@@ -558,19 +596,13 @@ nativeBuf.prototype.readInt32BE = function(offset, noAssert) {
 
 
 nativeBuf.prototype.readFloatLE = function readFloatLE(offset, noAssert) {
-  offset = offset >>> 0;
-  if (!noAssert)
-    checkOffset(offset, 4, this.length);
-  var i = this.readInt32LE(this, offset);
+  var i = this.readInt32LE(offset, noAssert);
   return nativeBuf._toFloat(i);
 };
 
 
 nativeBuf.prototype.readFloatBE = function readFloatBE(offset, noAssert) {
-  offset = offset >>> 0;
-  if (!noAssert)
-    checkOffset(offset, 4, this.length);
-  var i = this.readInt32BE(this, offset);
+  var i = this.readInt32BE(offset, noAssert);
   return nativeBuf._toFloat(i);
 };
 
@@ -579,7 +611,7 @@ nativeBuf.prototype.readDoubleLE = function readDoubleLE(offset, noAssert) {
   offset = offset >>> 0;
   if (!noAssert)
     checkOffset(offset, 8, this.length);
-  return this._readDoubleLE(this, offset);
+  return this._readDoubleLE(offset);
 };
 
 
@@ -587,7 +619,7 @@ nativeBuf.prototype.readDoubleBE = function readDoubleBE(offset, noAssert) {
   offset = offset >>> 0;
   if (!noAssert)
     checkOffset(offset, 8, this.length);
-  return this._readDoubleBE(this, offset);
+  return this._readDoubleBE(offset);
 };
 
 

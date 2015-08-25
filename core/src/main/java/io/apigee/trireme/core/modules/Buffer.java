@@ -200,43 +200,32 @@ public class Buffer
             } else if (args[0] instanceof Scriptable) {
                 // Array of integers, or apparently in some cases an array of strings containing integers...
                 Scriptable s = (Scriptable)args[0];
-                if (s.getPrototype().equals(ScriptableObject.getArrayPrototype(this))) {
-                    // An array of integers -- use that, from the docs
-                    Object[] ids = s.getIds();
-                    buf.buf = new byte[ids.length];
-                    int pos = 0;
-                    for (Object id : ids) {
-                        Object e;
-                        if (id instanceof Number) {
-                            e = s.get(((Number)id).intValue(), s);
-                        } else if (id instanceof String) {
-                            e = s.get(((String)id), s);
-                        } else {
-                            throw Utils.makeTypeError(cx, this, "Invalid argument type in array");
-                        }
-                        buf.putByte(pos++, (int)Context.toNumber(e));
-                    }
-                } else {
+                if (s.has("type", s) && s.has("data", s) &&
+                    "Buffer".equals(s.get("type", s)) && (s.get("data", s) instanceof Scriptable)) {
+                    buf.fromArrayInternal(cx, (Scriptable)s.get("data", s));
+
+                } else if (s.getPrototype().equals(ScriptableObject.getArrayPrototype(this))) {
+                    buf.fromArrayInternal(cx, s);
+
+                } else if (s.has("length", s)) {
                     // An object with the field "length" -- use that, from the tests but not the docs
-                    if (s.has("length", s)) {
-                        int len = parseUnsignedIntForgiveably(s.get("length", s));
-                        if ((len < 0) || (len > MAX_LENGTH)) {
-                            throw Utils.makeRangeError(cx, this, "Length out of range");
-                        }
-                        buf.buf = new byte[len];
-                        for (Object id : s.getIds()) {
-                            if (id instanceof Number) {
-                                int iid = ((Number)id).intValue();
-                                Object v = s.get(iid, s);
-                                if (iid < len) {
-                                    int val = (Integer)Context.jsToJava(v, Integer.class);
-                                    buf.buf[iid] = (byte)(val & 0xff);
-                                }
+                    int len = parseUnsignedIntForgiveably(s.get("length", s));
+                    if ((len < 0) || (len > MAX_LENGTH)) {
+                        throw Utils.makeRangeError(cx, this, "Length out of range");
+                    }
+                    buf.buf = new byte[len];
+                    for (Object id : s.getIds()) {
+                        if (id instanceof Number) {
+                            int iid = ((Number)id).intValue();
+                            Object v = s.get(iid, s);
+                            if (iid < len) {
+                                int val = (Integer)Context.jsToJava(v, Integer.class);
+                                buf.buf[iid] = (byte)(val & 0xff);
                             }
                         }
-                    } else {
-                        buf.buf = new byte[0];
                     }
+                } else {
+                    buf.buf = new byte[0];
                 }
                 buf.bufOffset = 0;
                 buf.bufLength = buf.buf.length;
@@ -389,9 +378,9 @@ public class Buffer
             int cmp = bb1.compareTo(bb2);
 
             if (cmp == 0) {
-                if (bb1.remaining() < bb2.remaining()) {
+                if (b1.bufLength < b2.bufLength) {
                     return -1;
-                } else if (bb1.remaining() > bb2.remaining()) {
+                } else if (b1.bufLength > b2.bufLength) {
                     return 1;
                 }
                 return 0;
@@ -463,10 +452,29 @@ public class Buffer
                 Arrays.fill(buf, start, end,
                             ((Boolean)val).booleanValue() ? (byte)1 : (byte)0);
             } else if (val instanceof String) {
-                Arrays.fill(buf, start, end,
-                            (byte)(((String)val).charAt(0)));
+                fillString((String)val, start, end);
             } else {
                 throw Utils.makeTypeError(cx, this, "Invalid value argument");
+            }
+        }
+
+        private void fillString(String s, int start, int end)
+        {
+            if (s.isEmpty()) {
+                Arrays.fill(buf, start, end, (byte)0);
+            } else {
+                byte[] tmp = s.getBytes(Charsets.UTF8);
+                if (tmp.length == 1) {
+                    Arrays.fill(buf, start, end, tmp[0]);
+                } else {
+                    int pos = start;
+                    while ((pos + tmp.length) <= end) {
+                        System.arraycopy(tmp, 0, buf, pos, tmp.length);
+                        pos += tmp.length;
+                    }
+                    int len = Math.min(tmp.length, end - pos);
+                    System.arraycopy(tmp, 0, buf, pos, len);
+                }
             }
         }
 
@@ -481,7 +489,7 @@ public class Buffer
             return end - start;
         }
 
-        private double toFloat(Object[] args)
+        private Object toFloat(Object[] args)
         {
             int i = intArg(args, 0);
             return Float.intBitsToFloat(i);
@@ -504,7 +512,7 @@ public class Buffer
             if ((off + 8) > bufLength) {
                 return 0.0;
             }
-            long l = readInt64LE(off);
+            long l = readInt64LE(off + bufOffset);
             return Double.longBitsToDouble(l);
         }
 
@@ -514,7 +522,7 @@ public class Buffer
             if ((off + 8) > bufLength) {
                 return 0.0;
             }
-            long l = readInt64BE(off);
+            long l = readInt64BE(off + bufOffset);
             return Double.longBitsToDouble(l);
         }
 
@@ -532,9 +540,9 @@ public class Buffer
             if ((off + 8) <= bufLength) {
                 long l = Double.doubleToLongBits(val);
                 if (bigEndian) {
-                    writeInt64BE(l, off);
+                    writeInt64BE(l, off + bufOffset);
                 } else {
-                    writeInt64LE(l, off);
+                    writeInt64LE(l, off + bufOffset);
                 }
             }
         }
@@ -678,7 +686,7 @@ public class Buffer
         {
             int index = i + bufOffset;
             if ((index >= 0) && (index < bufLength)) {
-                int val = (Integer)Context.jsToJava(value, Integer.class);
+                int val = ScriptRuntime.toInt32(value);
                 putByte(index, val);
             } else {
                 throw Utils.makeRangeError(Context.getCurrentContext(), this, "index out of range");
@@ -707,6 +715,25 @@ public class Buffer
             buf = writeBuf.array();
             bufOffset = writeBuf.arrayOffset();
             bufLength = writeBuf.remaining();
+        }
+
+        private void fromArrayInternal(Context cx, Scriptable s)
+        {
+            // An array of integers -- use that, from the docs
+            Object[] ids = s.getIds();
+            buf = new byte[ids.length];
+            int pos = 0;
+            for (Object id : ids) {
+                Object e;
+                if (id instanceof Number) {
+                    e = s.get(((Number)id).intValue(), s);
+                } else if (id instanceof String) {
+                    e = s.get(((String)id), s);
+                } else {
+                    throw Utils.makeTypeError(cx, this, "Invalid argument type in array");
+                }
+                putByte(pos++, (int)Context.toNumber(e));
+            }
         }
 
         private static Charset resolveEncoding(Object[] args, int pos)

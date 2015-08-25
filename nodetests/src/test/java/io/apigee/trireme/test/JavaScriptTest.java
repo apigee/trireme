@@ -40,7 +40,10 @@ public class JavaScriptTest
                        "../node10/node10tests/xml",
                        "../node10/node10tests/internet" };
     public static final String[] BASE_DIRS_12 =
-        new String[] { "../node12/node12tests/simple" };
+        new String[] {
+            "../node12/node12tests/simple",
+            "../node12/node12tests/trireme"
+        };
     public static final String[] TEMP_DIRS = { "target/test-classes/test/tmp",
                                                "../node10/node10tests/tmp",
                                                "../node12/node12tests/tmp"};

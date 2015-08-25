@@ -117,7 +117,7 @@ public class JavaScriptTest
             }
         }
         // Add back "version == null" in order to test Node 12 along with Node 10 every time.
-        if ("12".equals(version)) {
+        if ((version == null) || "12".equals(version)) {
             for (String bd : BASE_DIRS_12) {
                 addDirectory(ret, bd, namePattern, adapter, NODE_VERSION_12);
             }

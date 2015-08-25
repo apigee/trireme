@@ -112,6 +112,7 @@ public class Node12Implementation
 
 
             { "_tls_legacy",            P + "trireme._tls_legacy" },
+            { "_trireme_buffer",        P + "trireme.buffer" },
             { "http",                   P + "trireme.adaptorhttp" },
             { "https",                  P + "trireme.adaptorhttps" },
             { "crypto",                 P + "trireme.crypto" },

@@ -60,6 +60,7 @@ assert.equal(expected, encoded);
 
 var testCount = new Buffer(32);
 testCount.write('Foo the bar');
+console.log('charsWritten should be 11 and is %s', Buffer._charsWritten);
 assert.equal(11, Buffer._charsWritten);
 
 var nb = new Buffer(8);

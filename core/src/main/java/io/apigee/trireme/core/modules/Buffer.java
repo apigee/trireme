@@ -98,6 +98,8 @@ public class Buffer
         private static final int
           Id_byteLength = -1,
           Id_compare = -2,
+          Id_toFloat = -3,
+          Id_fromFloat = -4,
           Id_hexSlice = 2,
           Id_utf8Slice = 3,
           Id_asciiSlice = 4,
@@ -112,12 +114,10 @@ public class Buffer
           Id_ucs2Write = 13,
           Id_fill = 14,
           Id_copy = 15,
-          Id_toFloat = 16,
-          Id_fromFloat = 17,
-          Id_readDoubleLE = 18,
-          Id_readDoubleBE = 19,
-          Id_writeDoubleLE = 20,
-          Id_writeDoubleBE = 21,
+          Id_readDoubleLE = 16,
+          Id_readDoubleBE = 17,
+          Id_writeDoubleLE = 18,
+          Id_writeDoubleBE = 19,
           Prop_length = 1,
           Prop_offset = 2;
 
@@ -136,8 +136,6 @@ public class Buffer
             props.addMethod("ucs2Write", Id_ucs2Write, 4);
             props.addMethod("_fill", Id_fill, 3);
             props.addMethod("_copy", Id_copy, 4);
-            props.addMethod("_toFloat", Id_toFloat, 1);
-            props.addMethod("_fromFloat", Id_fromFloat, 1);
             props.addMethod("_readDoubleLE", Id_readDoubleLE, 1);
             props.addMethod("_readDoubleBE", Id_readDoubleBE, 1);
             props.addMethod("_writeDoubleLE", Id_writeDoubleLE, 2);
@@ -253,6 +251,8 @@ public class Buffer
         {
             addIdFunctionProperty(c, CLASS_NAME, Id_byteLength, "_byteLength", 2);
             addIdFunctionProperty(c, CLASS_NAME, Id_compare, "_compare", 2);
+            addIdFunctionProperty(c, CLASS_NAME, Id_toFloat, "_toFloat", 1);
+            addIdFunctionProperty(c, CLASS_NAME, Id_fromFloat, "_fromFloat", 1);
         }
 
         @Override
@@ -317,10 +317,6 @@ public class Buffer
                 break;
             case Id_copy:
                 return copy(cx, args);
-            case Id_toFloat:
-                return toFloat(args);
-            case Id_fromFloat:
-                return fromFloat(args);
             case Id_readDoubleBE:
                 return readDoubleBE(args);
             case Id_readDoubleLE:
@@ -345,6 +341,10 @@ public class Buffer
                 return byteLength(args);
             case Id_compare:
                 return compare(cx, scope, args);
+            case Id_toFloat:
+                return toFloat(args);
+            case Id_fromFloat:
+                return fromFloat(args);
             default:
                 return super.anonymousCall(id, cx, scope, thisObj, args);
             }

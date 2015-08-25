@@ -604,13 +604,13 @@ nativeBuf.prototype.readInt32BE = function(offset, noAssert) {
 
 nativeBuf.prototype.readFloatLE = function(offset, noAssert) {
   var i = this.readInt32LE(offset, noAssert);
-  return this._toFloat(i);
+  return nativeBuf._toFloat(i);
 };
 
 
 nativeBuf.prototype.readFloatBE = function(offset, noAssert) {
   var i = this.readInt32BE(offset, noAssert);
-  return this._toFloat(i);
+  return nativeBuf._toFloat(i);
 };
 
 
@@ -779,7 +779,7 @@ nativeBuf.prototype.writeInt32BE = function(value, offset, noAssert) {
 nativeBuf.prototype.writeFloatLE = function(value, offset, noAssert) {
   if (!noAssert)
     checkOffset(offset, 4, this.length);
-  var i = this._fromFloat(value);
+  var i = nativeBuf._fromFloat(value);
   this.writeInt32LE(i, this.offset + offset, !!noAssert);
 };
 
@@ -787,7 +787,7 @@ nativeBuf.prototype.writeFloatLE = function(value, offset, noAssert) {
 nativeBuf.prototype.writeFloatBE = function(value, offset, noAssert) {
   if (!noAssert)
     checkOffset(offset, 4, this.length);
-  var i = this._fromFloat(value);
+  var i = nativeBuf._fromFloat(value);
   this.writeInt32BE(i, this.offset + offset, !!noAssert);
 };
 

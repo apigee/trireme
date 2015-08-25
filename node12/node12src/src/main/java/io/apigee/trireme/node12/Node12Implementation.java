@@ -109,6 +109,7 @@ public class Node12Implementation
             { "vm",                    P + "node.vm" },
             { "zlib",                  P + "node.zlib" },
 
+            { "_trireme_buffer",        P + "trireme.buffer" },
             { "http",                   P + "trireme.adaptorhttp" },
             { "https",                  P + "trireme.adaptorhttps" },
             { "crypto",                 P + "trireme.crypto" },

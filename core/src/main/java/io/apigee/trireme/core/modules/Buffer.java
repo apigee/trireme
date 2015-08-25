@@ -427,7 +427,7 @@ public class Buffer
             int len = intArg(args, 2);
             // The caller can easily pass the "Buffer" class object to us so that we
             // can update "_charsWritten," which resides there.
-            Scriptable proto = objArg(args, 3, Scriptable.class, true);
+            Scriptable proto = objArg(args, 3, Scriptable.class, false);
 
             if (s.isEmpty()) {
                 return 0;
@@ -443,7 +443,9 @@ public class Buffer
             CharBuffer chars = CharBuffer.wrap(s);
             encoder.encode(chars, writeBuf, true);
             encoder.flush(writeBuf);
-            proto.put("_charsWritten", proto, chars.position());
+            if (proto != null) {
+                proto.put("_charsWritten", proto, chars.position());
+            }
             return writeBuf.position() - off;
         }
 

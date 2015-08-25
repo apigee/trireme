@@ -126,14 +126,14 @@ nativeBuf.prototype.inspect = function inspect() {
 nativeBuf.prototype.get = function get(offset) {
   if (offset < 0 || offset >= this.length)
     throw new RangeError('offset is out of bounds');
-  return this[this.offset + offset];
+  return this[offset];
 };
 
 
 nativeBuf.prototype.set = function set(offset, v) {
   if (offset < 0 || offset >= this.length)
     throw new RangeError('offset is out of bounds');
-  return this[this.offset + offset] = v;
+  return this[offset] = v;
 };
 
 
@@ -171,32 +171,32 @@ nativeBuf.prototype.write = function(string, offset, length, encoding) {
   var ret;
   switch (encoding) {
     case 'hex':
-      ret = this.hexWrite(string, this.offset + offset, length, nativeBuf);
+      ret = this.hexWrite(string, offset, length, nativeBuf);
       break;
 
     case 'utf8':
     case 'utf-8':
-      ret = this.utf8Write(string, this.offset + offset, length, nativeBuf);
+      ret = this.utf8Write(string, offset, length, nativeBuf);
       break;
 
     case 'ascii':
-      ret = this.asciiWrite(string, this.offset + offset, length, nativeBuf);
+      ret = this.asciiWrite(string, offset, length, nativeBuf);
       break;
 
     case 'binary':
-      ret = this.binaryWrite(string, this.offset + offset, length, nativeBuf);
+      ret = this.binaryWrite(string, offset, length, nativeBuf);
       break;
 
     case 'base64':
       // Warning: maxLength not taken into account in base64Write
-      ret = this.base64Write(string, this.offset + offset, length, nativeBuf);
+      ret = this.base64Write(string, offset, length, nativeBuf);
       break;
 
     case 'ucs2':
     case 'ucs-2':
     case 'utf16le':
     case 'utf-16le':
-      ret = this.ucs2Write(string, this.offset + offset, length, nativeBuf);
+      ret = this.ucs2Write(string, offset, length, nativeBuf);
       break;
 
     default:
@@ -226,9 +226,6 @@ nativeBuf.prototype.toString = function(encoding, start, end) {
   } else if (end < 0) {
     end = 0;
   }
-
-  start = start + this.offset;
-  end = end + this.offset;
 
   switch (encoding) {
     case 'hex':
@@ -286,9 +283,7 @@ nativeBuf.prototype.fill = function fill(value, start, end) {
     throw new RangeError('end out of bounds');
   }
 
-  return this._fill(value,
-                    start + this.offset,
-                    end + this.offset);
+  return this._fill(value, start, end);
 };
 
 
@@ -349,8 +344,7 @@ nativeBuf.prototype.copy = function(target, target_start, start, end) {
 
   return this._copy(target,
                     target_start + (target.offset || 0),
-                    start + this.offset,
-                    end + this.offset);
+                    start, end);
 };
 
 
@@ -359,7 +353,7 @@ nativeBuf.prototype.slice = function(start, end) {
   var len = this.length;
   start = clamp(start, len, 0);
   end = clamp(end, len, len);
-  return new Buffer(this, end - start, start + this.offset);
+  return new Buffer(this, end - start, start);
 };
 
 /*
@@ -408,37 +402,17 @@ nativeBuf.prototype.readUInt16BE = function(offset, noAssert) {
   return readUInt16(this, offset, true, noAssert);
 };
 
-
-function readUInt32(buffer, offset, isBigEndian, noAssert) {
-  var val = 0;
-
-  if (isBigEndian) {
-    val = buffer[offset + 1] << 16;
-    val |= buffer[offset + 2] << 8;
-    val |= buffer[offset + 3];
-    val = val + (buffer[offset] << 24 >>> 0);
-  } else {
-    val = buffer[offset + 2] << 16;
-    val |= buffer[offset + 1] << 8;
-    val |= buffer[offset];
-    val = val + (buffer[offset + 3] << 24 >>> 0);
-  }
-
-  return val;
-}
-
-
 nativeBuf.prototype.readUInt32LE = function(offset, noAssert) {
   if (!noAssert)
     checkOffset(offset, 4, this.length);
-  return readUInt32(this, offset, false, noAssert);
+  return this._readUint32(offset, false);
 };
 
 
 nativeBuf.prototype.readUInt32BE = function(offset, noAssert) {
   if (!noAssert)
     checkOffset(offset, 4, this.length);
-  return readUInt32(this, offset, true, noAssert);
+  return this._readUint32(offset, true);
 };
 
 
@@ -519,27 +493,17 @@ nativeBuf.prototype.readInt16BE = function(offset, noAssert) {
   return readInt16(this, offset, true);
 };
 
-
-function readInt32(buffer, offset, isBigEndian) {
-  var val = readUInt32(buffer, offset, isBigEndian);
-
-  if (!(val & 0x80000000))
-    return (val);
-  return (0xffffffff - val + 1) * -1;
-}
-
-
 nativeBuf.prototype.readInt32LE = function(offset, noAssert) {
   if (!noAssert)
     checkOffset(offset, 4, this.length);
-  return readInt32(this, offset, false);
+  return this._readInt32(offset, false);
 };
 
 
 nativeBuf.prototype.readInt32BE = function(offset, noAssert) {
   if (!noAssert)
     checkOffset(offset, 4, this.length);
-  return readInt32(this, offset, true);
+  return this._readInt32(offset, true);
 };
 
 nativeBuf.prototype.readFloatLE = function(offset, noAssert) {
@@ -609,33 +573,17 @@ nativeBuf.prototype.writeUInt16BE = function(value, offset, noAssert) {
   writeUInt16(this, value, offset, true);
 };
 
-
-function writeUInt32(buffer, value, offset, isBigEndian) {
-  if (isBigEndian) {
-    buffer[offset] = (value >>> 24) & 0xff;
-    buffer[offset + 1] = (value >>> 16) & 0xff;
-    buffer[offset + 2] = (value >>> 8) & 0xff;
-    buffer[offset + 3] = value & 0xff;
-  } else {
-    buffer[offset + 3] = (value >>> 24) & 0xff;
-    buffer[offset + 2] = (value >>> 16) & 0xff;
-    buffer[offset + 1] = (value >>> 8) & 0xff;
-    buffer[offset] = value & 0xff;
-  }
-}
-
-
 nativeBuf.prototype.writeUInt32LE = function(value, offset, noAssert) {
   if (!noAssert)
     checkInt(this, value, offset, 4, 0xffffffff, 0);
-  writeUInt32(this, value, offset, false);
+  this._writeUint32(offset, value, false);
 };
 
 
 nativeBuf.prototype.writeUInt32BE = function(value, offset, noAssert) {
   if (!noAssert)
     checkInt(this, value, offset, 4, 0xffffffff, 0);
-  writeUInt32(this, value, offset, true);
+  this._writeUint32(offset, value, true);
 };
 
 
@@ -703,16 +651,14 @@ nativeBuf.prototype.writeInt16BE = function(value, offset, noAssert) {
 nativeBuf.prototype.writeInt32LE = function(value, offset, noAssert) {
   if (!noAssert)
     checkInt(this, value, offset, 4, 0x7fffffff, -0x80000000);
-  if (value < 0) value = 0xffffffff + value + 1;
-  writeUInt32(this, value, offset, false);
+  this._writeInt32(offset, value, false);
 };
 
 
 nativeBuf.prototype.writeInt32BE = function(value, offset, noAssert) {
   if (!noAssert)
     checkInt(this, value, offset, 4, 0x7fffffff, -0x80000000);
-  if (value < 0) value = 0xffffffff + value + 1;
-  writeUInt32(this, value, offset, true);
+  this._writeInt32(offset, value, true);
 };
 
 
@@ -720,7 +666,7 @@ nativeBuf.prototype.writeFloatLE = function(value, offset, noAssert) {
   if (!noAssert)
     checkOffset(offset, 4, this.length);
   var i = nativeBuf._fromFloat(value);
-  this.writeInt32LE(i, offset, !!noAssert);
+  this._writeInt32(offset, i, false);
 };
 
 
@@ -728,7 +674,7 @@ nativeBuf.prototype.writeFloatBE = function(value, offset, noAssert) {
   if (!noAssert)
     checkOffset(offset, 4, this.length);
   var i = nativeBuf._fromFloat(value);
-  this.writeInt32BE(i, offset, !!noAssert);
+  this._writeInt32(offset, i, true);
 };
 
 

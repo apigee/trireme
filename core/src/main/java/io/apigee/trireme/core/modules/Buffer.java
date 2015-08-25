@@ -118,6 +118,10 @@ public class Buffer
           Id_readDoubleBE = 17,
           Id_writeDoubleLE = 18,
           Id_writeDoubleBE = 19,
+          Id_readInt32 = 20,
+          Id_readUint32 = 21,
+          Id_writeInt32 = 22,
+          Id_writeUint32 = 23,
           Prop_length = 1,
           Prop_offset = 2;
 
@@ -140,8 +144,12 @@ public class Buffer
             props.addMethod("_readDoubleBE", Id_readDoubleBE, 1);
             props.addMethod("_writeDoubleLE", Id_writeDoubleLE, 2);
             props.addMethod("_writeDoubleBE", Id_writeDoubleBE, 2);
-            props.addProperty("length", Prop_length, 0);
-            props.addProperty("offset", Prop_offset, 0);
+            props.addMethod("_readInt32", Id_readInt32, 2);
+            props.addMethod("_readUint32", Id_readUint32, 2);
+            props.addMethod("_writeInt32", Id_writeInt32, 3);
+            props.addMethod("_writeUint32", Id_writeUint32, 3);
+            props.addProperty("length", Prop_length, ScriptableObject.READONLY);
+            props.addProperty("offset", Prop_offset, ScriptableObject.READONLY);
         }
 
         private byte[] buf;
@@ -195,7 +203,8 @@ public class Buffer
                 BufferImpl src = (BufferImpl)args[0];
                 buf.buf = src.buf;
                 buf.bufLength = intArg(args, 1, src.bufLength);
-                buf.bufOffset = intArg(args, 2, src.bufOffset);
+                buf.bufOffset = intArg(args, 2, 0);
+                buf.bufOffset += src.bufOffset;
 
             } else if (args[0] instanceof Scriptable) {
                 // Array of integers, or apparently in some cases an array of strings containing integers...
@@ -258,22 +267,6 @@ public class Buffer
         }
 
         @Override
-        protected void setInstanceIdValue(int id, Object val)
-        {
-            switch (id) {
-            case Prop_length:
-                bufLength = ScriptRuntime.toInt32(val);
-                break;
-            case Prop_offset:
-                bufOffset = ScriptRuntime.toInt32(val);
-                break;
-            default:
-                super.setInstanceIdValue(id, val);
-                break;
-            }
-        }
-
-        @Override
         protected Object prototypeCall(int id, Context cx, Scriptable scope, Object[] args)
         {
             switch (id) {
@@ -290,17 +283,17 @@ public class Buffer
             case Id_ucs2Slice:
                 return slice(args, Charsets.UCS2);
             case Id_hexWrite:
-                return write(args, Charsets.NODE_HEX);
+                return write(cx, args, Charsets.NODE_HEX);
             case Id_asciiWrite:
-                return write(args, Charsets.ASCII);
+                return write(cx, args, Charsets.ASCII);
             case Id_utf8Write:
-                return write(args, Charsets.UTF8);
+                return write(cx, args, Charsets.UTF8);
             case Id_binaryWrite:
-                return write(args, Charsets.NODE_BINARY);
+                return write(cx, args, Charsets.NODE_BINARY);
             case Id_base64Write:
-                return write(args, Charsets.BASE64);
+                return write(cx, args, Charsets.BASE64);
             case Id_ucs2Write:
-                return write(args, Charsets.UCS2);
+                return write(cx, args, Charsets.UCS2);
             case Id_fill:
                 fill(cx, args);
                 break;
@@ -315,6 +308,16 @@ public class Buffer
                 break;
             case Id_writeDoubleLE:
                 writeDouble(args, false);
+                break;
+            case Id_readInt32:
+                return readInt32(args);
+            case Id_readUint32:
+                return readUint32(args);
+            case Id_writeInt32:
+                writeInt32(args);
+                break;
+            case Id_writeUint32:
+                writeUint32(args);
                 break;
             default:
                 return super.prototypeCall(id, cx, scope, args);
@@ -400,28 +403,27 @@ public class Buffer
                 return "";
             }
 
-            try {
+            start += bufOffset;
+            end += bufOffset;
+
             ByteBuffer bb = ByteBuffer.wrap(buf, start, len);
             return StringUtils.bufferToString(bb, cs);
-            } catch (IndexOutOfBoundsException ibe) {
-                throw Utils.makeError(Context.getCurrentContext(), this,
-                                      "Out of bounds: start = " + start + " end = " + end);
-            }
         }
 
-        private int write(Object[] args, Charset cs)
+        private int write(Context cx, Object[] args, Charset cs)
         {
             String s = stringArg(args, 0);
             int off = intArg(args, 1);
             int len = intArg(args, 2);
             // The caller can easily pass the "Buffer" class object to us so that we
             // can update "_charsWritten," which resides there.
-            Scriptable proto = objArg(args, 3, Scriptable.class, false);
+            Scriptable proto = objArg(cx, this, args, 3, Scriptable.class, false);
 
             if (s.isEmpty()) {
                 return 0;
             }
 
+            off += bufOffset;
             ByteBuffer writeBuf = ByteBuffer.wrap(buf, off, len);
 
             // When encoding, it's important that we stop on any incomplete character
@@ -444,6 +446,9 @@ public class Buffer
             Object val = args[0];
             int start = intArg(args, 1);
             int end = intArg(args, 2);
+
+            start += bufOffset;
+            end += bufOffset;
 
             if (val instanceof Number) {
                 Arrays.fill(buf, start, end,
@@ -485,6 +490,9 @@ public class Buffer
             int start = intArg(args, 2);
             int end = intArg(args, 3);
 
+            start += bufOffset;
+            end += bufOffset;
+
             System.arraycopy(buf, start, target.buf, targetStart, end - start);
             return end - start;
         }
@@ -504,6 +512,68 @@ public class Buffer
 
             float f = floatArg(args, 0);
             return Float.floatToIntBits(f);
+        }
+
+        private Object readUint32(Object[] args)
+        {
+            int off = intArg(args, 0);
+            boolean be = booleanArg(args, 1);
+
+            if ((off + 4) > bufLength) {
+                return Context.toNumber(0);
+            }
+
+            int iv = (be ? readInt32BE(off) : readInt32LE(off));
+            long lv = (long)iv & 0xffffffffL;
+            return Context.toNumber(lv);
+        }
+
+        private int readInt32(Object[] args)
+        {
+            int off = intArg(args, 0);
+            boolean be = booleanArg(args, 1);
+
+            if ((off + 4) > bufLength) {
+                return 0;
+            }
+
+            return (be ? readInt32BE(off) : readInt32LE(off));
+        }
+
+        private void writeUint32(Object[] args)
+        {
+            int off = intArg(args, 0);
+            long val = longArg(args, 1);
+            boolean be = booleanArg(args, 2);
+
+            if ((off + 4) > bufLength) {
+                return;
+            }
+
+            long lv = val & 0xffffffffL;
+            if (be) {
+                writeInt32BE(lv, off);
+            } else {
+                writeInt32LE(lv, off);
+            }
+        }
+
+        private void writeInt32(Object[] args)
+        {
+            int off = intArg(args, 0);
+            int val = intArg(args, 1);
+            boolean be = booleanArg(args, 2);
+
+            if ((off + 4) > bufLength) {
+                return;
+            }
+
+            long lv = (long)val;
+            if (be) {
+                writeInt32BE(lv, off);
+            } else {
+                writeInt32LE(lv, off);
+            }
         }
 
         private double readDoubleLE(Object[] args)
@@ -571,6 +641,22 @@ public class Buffer
                 (((long)buf[offset + 7] & 0xffL) << 56L);
         }
 
+        private int readInt32BE(int offset)
+        {
+            return (((int)buf[bufOffset +offset] & 0xff) << 24) |
+                (((int)buf[bufOffset +offset + 1] & 0xff) << 16) |
+                (((int)buf[bufOffset +offset + 2] & 0xff) << 8) |
+                ((int)buf[bufOffset +offset + 3] & 0xff);
+        }
+
+        private int readInt32LE(int offset)
+        {
+            return ((int)buf[bufOffset +offset] & 0xff) |
+                (((int)buf[bufOffset +offset + 1] & 0xff) << 8) |
+                (((int)buf[bufOffset +offset + 2] & 0xff) << 16) |
+                (((int)buf[bufOffset +offset + 3] & 0xff) << 24);
+        }
+
         private void writeInt64BE(long value, int offset)
         {
             buf[bufOffset + offset] = (byte)((value >>> 56L) & 0xffL);
@@ -593,6 +679,22 @@ public class Buffer
             buf[bufOffset +offset + 5] = (byte)((value >>> 40L) & 0xffL);
             buf[bufOffset +offset + 6] = (byte)((value >>> 48L) & 0xffL);
             buf[bufOffset +offset + 7] = (byte)((value >>> 56L) & 0xffL);
+        }
+
+        private void writeInt32BE(long value, int offset)
+        {
+            buf[bufOffset +offset] = (byte)((value >>> 24L) & 0xffL);
+            buf[bufOffset +offset + 1] = (byte)((value >>> 16L) & 0xffL);
+            buf[bufOffset +offset + 2] = (byte)((value >>> 8L) & 0xffL);
+            buf[bufOffset +offset + 3] = (byte)(value & 0xffL);
+        }
+
+        private void writeInt32LE(long value, int offset)
+        {
+            buf[bufOffset +offset] = (byte)(value & 0xffL);
+            buf[bufOffset +offset + 1] = (byte)((value >>> 8L) & 0xffL);
+            buf[bufOffset +offset + 2] = (byte)((value >>> 16L) & 0xffL);
+            buf[bufOffset +offset + 3] = (byte)((value >>> 24L) & 0xffL);
         }
 
         /**

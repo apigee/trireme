@@ -25,16 +25,19 @@ public class ArgoAppNettyTest
     private static final String BASEURL = "http://localhost:";
 
     private boolean useNetty;
+    private String version;
 
     @Parameterized.Parameters
     public static Collection<Object[]> getParameters()
     {
-        return Arrays.asList(new Object[][]{{true}, {false}});
+        return Arrays.asList(new Object[][]{{true, "0.10"}, {true, "0.10"},
+                                            {false, "0.12"}, {false, "0.12"}});
     }
 
-    public ArgoAppNettyTest(boolean useNetty)
+    public ArgoAppNettyTest(boolean useNetty, String version)
     {
         this.useNetty = useNetty;
+        this.version = version;
     }
 
     @Test
@@ -49,8 +52,9 @@ public class ArgoAppNettyTest
         int port = PORT + (useNetty ? 1 : 0);
         NodeScript script = env.createScript("server.js", new File("./target/test-classes/argo/server.js"),
                                              new String[] { String.valueOf(port) });
+        script.setNodeVersion(version);
         ScriptFuture scriptFuture = script.execute();
-        System.out.println("Waiting for the port to open. useNetty = " + useNetty);
+        System.out.println("Waiting for the port to open. version = " + version + " useNetty = " + useNetty);
         Utils.awaitPortOpen(port);
 
         System.out.println("Port " + port + " is open");

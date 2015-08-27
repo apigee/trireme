@@ -93,13 +93,14 @@ public class JavaStreamWrap
             Id_ref = 9,
             Id_unref = 10,
             Id_writeBinaryString = 11,
+            Id_setBlocking = 12,
 
             Id_bytes = 1,
             Id_writeQueueSize = 2,
             Id_onRead = 3;
 
         protected static final int
-            MAX_METHOD = Id_writeBinaryString,
+            MAX_METHOD = Id_setBlocking,
             MAX_PROPERTY = Id_onRead;
 
         static {
@@ -126,6 +127,7 @@ public class JavaStreamWrap
             p.addMethod("close", Id_close, 1);
             p.addMethod("ref", Id_ref, 0);
             p.addMethod("unref", Id_unref, 0);
+            p.addMethod("setBlocking", Id_setBlocking, 1);
 
             p.addProperty("bytes", Id_bytes, ScriptableObject.READONLY);
             p.addProperty("writeQueueSize", Id_writeQueueSize, ScriptableObject.READONLY);
@@ -241,6 +243,9 @@ public class JavaStreamWrap
                 break;
             case Id_unref:
                 unref();
+                break;
+            case Id_setBlocking:
+                // TODO: We don't currently do anything with this
                 break;
             default:
                 return super.prototypeCall(id, cx, scope, args);

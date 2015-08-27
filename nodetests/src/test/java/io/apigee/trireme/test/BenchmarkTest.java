@@ -22,9 +22,11 @@ public class BenchmarkTest
     public static final int TEST_TIMEOUT = 900;
 
     private static final String BASE_DIR = "target/test-classes/benchmark";
-    public static final String RESULT_FILE = "target/benchmark.out";
+    public static final String RESULT_FILE_10 = "target/benchmark-10.out";
+    public static final String RESULT_FILE_12 = "target/benchmark-12.out";
 
-    private static OutputStream resultWriter;
+    private static OutputStream resultWriter10;
+    private static OutputStream resultWriter12;
 
     private static final String[] TESTS = {
         "buffers/buffer-base64-encode.js",
@@ -66,39 +68,46 @@ public class BenchmarkTest
     public static void init()
         throws IOException
     {
-        resultWriter = new FileOutputStream(RESULT_FILE);
+        resultWriter10 = new FileOutputStream(RESULT_FILE_10);
+        resultWriter12 = new FileOutputStream(RESULT_FILE_12);
     }
 
     @AfterClass
     public static void cleanup()
         throws IOException
     {
-        resultWriter.close();
+        resultWriter10.close();
+        resultWriter12.close();
     }
 
-    @Parameterized.Parameters(name="{index}: {0} ({1}, {2})")
+    @Parameterized.Parameters(name="{index}: {0} ({1}, {2}, {3})")
     public static Collection<Object[]> enumerateTests()
     {
         ArrayList<Object[]> ret = new ArrayList<Object[]>();
         for (String tf : TESTS) {
-            ret.add(new Object[] { new File(BASE_DIR, tf), DEFAULT_ADAPTER, "default" });
+            ret.add(new Object[] {
+                new File(BASE_DIR, tf), DEFAULT_ADAPTER, "default", JavaScriptTest.NODE_VERSION_10 });
+            ret.add(new Object[] {
+                new File(BASE_DIR, tf), DEFAULT_ADAPTER, "default", JavaScriptTest.NODE_VERSION_12 });
         }
         return ret;
     }
 
-    public BenchmarkTest(File f, String adapter, String version)
+    public BenchmarkTest(File f, String adapter, String version, String nodeVersion)
     {
-        super(f, adapter, version, JavaScriptTest.NODE_VERSION_10);
+        super(f, adapter, version, nodeVersion);
     }
 
     @Test
     public void benchmarkTest()
         throws IOException, InterruptedException
     {
-        System.out.println("Benchmark: " + fileName.getName());
-        int exitCode = launchTest(TEST_TIMEOUT, resultWriter, false);
+        System.out.println("Benchmark: " + fileName.getName() + " (" + nodeVersion + ')');
+        OutputStream rw =
+            JavaScriptTest.NODE_VERSION_10.equals(nodeVersion) ? resultWriter10 : resultWriter12;
+        int exitCode = launchTest(TEST_TIMEOUT, rw, false);
         System.out.println("  = " + exitCode);
-        assertEquals(fileName.getName() + " (" + adapter + ", " + javaVersion + ") failed with =" + exitCode,
+        assertEquals(fileName.getName() + " (" + adapter + ", " + nodeVersion + ") failed with =" + exitCode,
                      0, exitCode);
     }
 }

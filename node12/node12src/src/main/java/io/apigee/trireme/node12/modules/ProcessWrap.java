@@ -89,15 +89,17 @@ public class ProcessWrap
         private IpcHandle ipcHandle;
 
         private static final int
-            Id_onExit = 1,
             Id_close = 2,
             Id_spawn = 3,
             Id_kill = 4,
             Id_ref = 5,
-            Id_unref = 6;
+            Id_unref = 6,
+            Id_onExit = 1,
+            Id_pid = 2;
 
         static {
             props.addProperty("onexit", Id_onExit, 0);
+            props.addProperty("pid", Id_pid, ScriptableObject.READONLY);
             props.addMethod("close", Id_close, 0);
             props.addMethod("spawn", Id_spawn, 1);
             props.addMethod("kill", Id_kill, 1);
@@ -149,6 +151,8 @@ public class ProcessWrap
             switch (id) {
             case Id_onExit:
                 return onExit;
+            case Id_pid:
+                return pid;
             default:
                 return super.getInstanceIdValue(id);
             }

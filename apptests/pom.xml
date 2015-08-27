@@ -30,6 +30,12 @@
       <version>0.8.8-SNAPSHOT</version>
       <scope>test</scope>
     </dependency>
+    <dependency>
+      <groupId>io.apigee.trireme</groupId>
+      <artifactId>trireme-node12src</artifactId>
+      <version>0.8.8-SNAPSHOT</version>
+      <scope>test</scope>
+    </dependency>
 
     <dependency>
       <groupId>junit</groupId>

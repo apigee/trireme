@@ -4,6 +4,7 @@ import io.apigee.trireme.container.netty.NettyHttpContainer;
 import io.apigee.trireme.core.NodeEnvironment;
 import io.apigee.trireme.core.NodeException;
 import io.apigee.trireme.core.NodeScript;
+import io.apigee.trireme.core.Sandbox;
 import io.apigee.trireme.core.ScriptStatus;
 import org.mozilla.javascript.Context;
 import org.mozilla.javascript.JavaScriptException;
@@ -13,6 +14,7 @@ import java.io.BufferedReader;
 import java.io.File;
 import java.io.FileReader;
 import java.io.IOException;
+import java.io.OutputStream;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
@@ -36,7 +38,7 @@ public class TestRunner
 
         File fileName = new File(args[0]);
         NodeEnvironment env = new NodeEnvironment();
-        int exitCode = 101;
+
         int timeout = TEST_TIMEOUT_SECS;
         String version = NodeEnvironment.DEFAULT_NODE_VERSION;
 
@@ -50,6 +52,15 @@ public class TestRunner
             version = args[3];
         }
 
+        int exitCode = runTest(env, null, fileName, null, version, timeout);
+        System.exit(exitCode);
+    }
+
+    public static int runTest(NodeEnvironment env, OutputStream stdout, File fileName, File cwd,
+                              String version, int timeout)
+        throws IOException
+    {
+        int exitCode = 101;
         // Read the whole test and look for GC flags.
         // They will be in a comment in the form of: "// Flags: --expose-gc --whatever"
         String[] argv = null;
@@ -80,6 +91,15 @@ public class TestRunner
         try {
             NodeScript script = env.createScript(argv, false);
             script.setNodeVersion(version);
+            if (stdout != null) {
+                Sandbox sb = new Sandbox();
+                sb.setStdout(stdout);
+                sb.setStderr(stdout);
+                script.setSandbox(sb);
+            }
+            if (cwd != null) {
+                script.setWorkingDirectory(cwd.getPath());
+            }
 
             Future<ScriptStatus> exec;
             try {
@@ -126,6 +146,6 @@ public class TestRunner
             env.close();
         }
 
-        System.exit(exitCode);
+        return exitCode;
     }
 }

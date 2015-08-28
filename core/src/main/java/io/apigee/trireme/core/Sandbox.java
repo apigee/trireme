@@ -55,6 +55,7 @@ public class Sandbox
     private boolean         hideOsDetails;
     private ClassShutter    extraClassShutter;
     private boolean         allowJarLoading = true;
+    private ClassLoader     classLoader = null;
 
     /**
      * Create a new sandbox that will not affect anything in any way.
@@ -84,6 +85,7 @@ public class Sandbox
             this.hideOsDetails = parent.hideOsDetails;
             this.extraClassShutter = parent.extraClassShutter;
             this.allowJarLoading = parent.allowJarLoading;
+            this.classLoader = parent.classLoader;
             if (parent.mounts != null) {
                 this.mounts = new ArrayList<Map.Entry<String, String>>(parent.mounts);
             }
@@ -274,5 +276,18 @@ public class Sandbox
 
     public boolean isAllowJarLoading() {
         return allowJarLoading;
+    }
+
+    /**
+     * Allows specifying the ClassLoader that will be used by the "trireme-support" module's
+     * "loadJars" method to load JAR files into the currently-running script.
+     */
+    public Sandbox setClassLoader(ClassLoader classLoader) {
+        this.classLoader = classLoader;
+        return this;
+    }
+
+    public ClassLoader getClassLoader() {
+        return classLoader;
     }
 }

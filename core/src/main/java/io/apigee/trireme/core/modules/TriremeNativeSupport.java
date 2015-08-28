@@ -2,6 +2,7 @@ package io.apigee.trireme.core.modules;
 
 import io.apigee.trireme.core.InternalNodeModule;
 import io.apigee.trireme.core.NodeRuntime;
+import io.apigee.trireme.core.Sandbox;
 import io.apigee.trireme.core.Utils;
 import io.apigee.trireme.core.internal.ScriptRunner;
 import org.mozilla.javascript.Context;
@@ -99,7 +100,14 @@ public class TriremeNativeSupport
                 }
             }
 
-            URLClassLoader loader = new URLClassLoader(urls.toArray(new URL[urls.size()]));
+            Sandbox sandbox = self.runtime.getSandbox();
+            ClassLoader loader = null;
+            if (sandbox != null) { // use custom class loader if specified
+                loader = sandbox.getClassLoader();
+            }
+            if (loader == null) { // fallback
+                loader = new URLClassLoader(urls.toArray(new URL[urls.size()]));
+            }
 
             // Load the classes in to the module registry for this script only.
             // After this they will appear in "require" depending on what kind of

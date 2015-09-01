@@ -57,8 +57,8 @@ public abstract class TestBase
          */
         forkPatterns = new Pattern[] {
             Pattern.compile("^test-child.*"),
-            Pattern.compile("^test-chdir.*")
-            //Pattern.compile("^test-regress.*")
+            Pattern.compile("^test-chdir.*"),
+            Pattern.compile("^test-regress.*892.*")
         };
     }
 
@@ -83,11 +83,11 @@ public abstract class TestBase
         this.nodeEnvironment = new NodeEnvironment();
     }
 
-    protected int launchTest(int timeout, OutputStream o, boolean coverage)
+    protected int launchTest(int timeout, OutputStream o, boolean coverage, boolean alwaysFork)
         throws IOException, InterruptedException
     {
         String command;
-        boolean fork = false;
+        boolean fork = alwaysFork;
         if ("6".equals(javaVersion)) {
             command = java6Command;
             fork = true;

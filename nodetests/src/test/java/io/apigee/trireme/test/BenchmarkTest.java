@@ -80,8 +80,11 @@ public class BenchmarkTest
     public static Collection<Object[]> enumerateTests()
     {
         ArrayList<Object[]> ret = new ArrayList<Object[]>();
-        for (String tf : TESTS) {
-            ret.add(new Object[] { new File(BASE_DIR, tf), DEFAULT_ADAPTER, "default" });
+        String rb = System.getProperty("runBenchmarks");
+        if ((rb != null) && Boolean.valueOf(rb)) {
+            for (String tf : TESTS) {
+                ret.add(new Object[] { new File(BASE_DIR, tf), DEFAULT_ADAPTER, "default" });
+            }
         }
         return ret;
     }
@@ -96,7 +99,7 @@ public class BenchmarkTest
         throws IOException, InterruptedException
     {
         System.out.println("Benchmark: " + fileName.getName());
-        int exitCode = launchTest(TEST_TIMEOUT, resultWriter, false);
+        int exitCode = launchTest(TEST_TIMEOUT, resultWriter, false, true);
         System.out.println("  = " + exitCode);
         assertEquals(fileName.getName() + " (" + adapter + ", " + javaVersion + ") failed with =" + exitCode,
                      0, exitCode);

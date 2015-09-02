@@ -8,15 +8,21 @@ import io.apigee.trireme.core.ScriptStatus;
 import org.junit.AfterClass;
 import org.junit.BeforeClass;
 import org.junit.Test;
+import org.junit.runner.RunWith;
+import org.junit.runners.Parameterized;
 
 import static org.junit.Assert.*;
 
 import java.io.File;
+import java.util.Arrays;
+import java.util.Collection;
 import java.util.concurrent.ExecutionException;
 
+@RunWith(Parameterized.class)
 public class NpmTest
 {
     private static NodeEnvironment env;
+    private String version;
 
     @BeforeClass
     public static void init()
@@ -31,6 +37,17 @@ public class NpmTest
         env.close();
     }
 
+    public NpmTest(String version)
+    {
+        this.version = version;
+    }
+
+    @Parameterized.Parameters
+    public static Collection<Object[]> getParameters()
+    {
+        return Arrays.asList(new Object[][]{{"0.10"}});
+    }
+
     @Test
     public void testNpmOutdated()
         throws NodeException, InterruptedException, ExecutionException
@@ -41,6 +58,7 @@ public class NpmTest
         NodeScript script = env.createScript("npmoutdated.js",
                                              new File(npmTests, "npmoutdated.js"),
                                              new String[] { npmTestsDir, cacheDir });
+        script.setNodeVersion(version);
         ScriptFuture future = script.execute();
         ScriptStatus status = future.get();
         assertTrue(status.isOk());
@@ -56,6 +74,7 @@ public class NpmTest
         NodeScript script = env.createScript("npmupdate.js",
                                              new File(npmTests, "npmupdate.js"),
                                              new String[] { npmTestsDir, cacheDir });
+        script.setNodeVersion(version);
         ScriptFuture future = script.execute();
         ScriptStatus status = future.get();
         assertTrue(status.isOk());
@@ -71,6 +90,7 @@ public class NpmTest
         NodeScript script = env.createScript("npmupdate.js",
                                              new File(npmTests, "npmupdate.js"),
                                              new String[] { npmTestsDir, cacheDir });
+        script.setNodeVersion(version);
         ScriptFuture future = script.execute();
         ScriptStatus status = future.get();
         assertTrue(status.isOk());

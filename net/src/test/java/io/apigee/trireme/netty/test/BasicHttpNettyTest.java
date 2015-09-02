@@ -5,19 +5,27 @@ import io.apigee.trireme.core.NodeEnvironment;
 import io.apigee.trireme.core.NodeException;
 import io.apigee.trireme.core.NodeScript;
 import io.apigee.trireme.core.ScriptStatus;
+import org.junit.AfterClass;
 import org.junit.BeforeClass;
 import org.junit.Test;
+import org.junit.runner.RunWith;
+import org.junit.runners.Parameterized;
 
 import java.io.File;
+import java.util.Arrays;
+import java.util.Collection;
 import java.util.HashMap;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
 
 import static org.junit.Assert.*;
 
+@RunWith(Parameterized.class)
 public class BasicHttpNettyTest
 {
     private static NodeEnvironment env;
+
+    private final String version;
 
     private static final int TIME_LIMIT = 5;
     private static final String ATTACHMENT_VAL = "basichttptest";
@@ -28,6 +36,23 @@ public class BasicHttpNettyTest
         env = new NodeEnvironment();
         env.setHttpContainer(new NettyHttpContainer());
         env.setScriptTimeLimit(TIME_LIMIT, TimeUnit.SECONDS);
+    }
+
+    @AfterClass
+    public static void terminate()
+    {
+        env.close();
+    }
+
+    @Parameterized.Parameters
+    public static Collection<Object[]> getParameters()
+    {
+        return Arrays.asList(new Object[][]{{"0.10"}});
+    }
+
+    public BasicHttpNettyTest(String version)
+    {
+        this.version = version;
     }
 
     @Test
@@ -157,6 +182,7 @@ public class BasicHttpNettyTest
         NodeScript script = env.createScript(name,
                                              new File("./target/test-classes/tests/" + name),
                                              null);
+        script.setNodeVersion(version);
         script.setEnvironment(scriptEnv);
         ScriptStatus status = script.execute().get();
         assertEquals(0, status.getExitCode());

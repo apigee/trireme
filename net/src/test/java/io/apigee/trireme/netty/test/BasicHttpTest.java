@@ -4,22 +4,47 @@ import io.apigee.trireme.core.NodeEnvironment;
 import io.apigee.trireme.core.NodeException;
 import io.apigee.trireme.core.NodeScript;
 import io.apigee.trireme.core.ScriptStatus;
+import org.junit.AfterClass;
 import org.junit.BeforeClass;
 import org.junit.Test;
+import org.junit.runner.RunWith;
+import org.junit.runners.Parameterized;
 
 import java.io.File;
+import java.util.Arrays;
+import java.util.Collection;
 import java.util.concurrent.ExecutionException;
 
 import static org.junit.Assert.*;
 
+@RunWith(Parameterized.class)
 public class BasicHttpTest
 {
     private static NodeEnvironment env;
+
+    private final String version;
 
     @BeforeClass
     public static void init()
     {
         env = new NodeEnvironment();
+    }
+
+    @AfterClass
+    public static void terminate()
+    {
+        env.close();
+    }
+
+    @Parameterized.Parameters
+    public static Collection<Object[]> getParameters()
+    {
+        return Arrays.asList(new Object[][]{{"0.10"}, {"0.12"}});
+    }
+
+    public BasicHttpTest(String version)
+    {
+        this.version = version;
     }
 
     @Test
@@ -120,6 +145,7 @@ public class BasicHttpTest
         NodeScript script = env.createScript(name,
                                              new File("./target/test-classes/tests/" + name),
                                              null);
+        script.setNodeVersion(version);
         ScriptStatus status = script.execute().get();
         System.out.println("  " + name + " returned " + status.getExitCode());
         assertEquals(0, status.getExitCode());

@@ -23,9 +23,8 @@ var svr = http.createServer(function(req, resp) {
     resp.writeHead(200, { 'Content-Type': 'text/plain' });
 
     var rs = fs.createReadStream(sampleName, { flags: 'r', bufferSize: 16, autoClose: true });
-    rs.setEncoding('utf8');
-    rs.on('readable', function() {
-      resp.write(rs.read());
+    rs.on('data', function(chunk) {
+      resp.write(chunk);
     });
     rs.on('end', function() {
       resp.end();

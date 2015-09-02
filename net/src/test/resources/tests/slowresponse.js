@@ -11,8 +11,16 @@ var svr = http.createServer(function(req, resp) {
   resp.write('Partial output');
 
   setTimeout(function() {
-    resp.write('End of output');
+    try {
+      resp.write('End of output');
+    } catch (e) {
+      console.log('Got expected exception %s on late write', e);
+    }
   }, TIMEOUT * 2);
+  resp.on('error', function(e) {
+    // THIS is OK -- should get a write after end error, actually!
+    console.log('Got response error %s', e);
+  });
 
   resp.setTimeout(TIMEOUT, function() {
     resp.end();

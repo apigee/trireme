@@ -30,8 +30,8 @@ public class ArgoAppNettyTest
     @Parameterized.Parameters
     public static Collection<Object[]> getParameters()
     {
-        return Arrays.asList(new Object[][]{{true, "0.10"}, {true, "0.10"},
-                                            {false, "0.12"}, {false, "0.12"}});
+        return Arrays.asList(new Object[][]{{true, "0.10"}, {false, "0.10"},
+                                            /*{true, "0.12"}, */ {false, "0.12"}});
     }
 
     public ArgoAppNettyTest(boolean useNetty, String version)
@@ -49,7 +49,7 @@ public class ArgoAppNettyTest
             env.setHttpContainer(new NettyHttpContainer());
         }
         // Use separate ports between netty and non-netty because netty might take a while to close them
-        int port = PORT + (useNetty ? 1 : 0);
+        int port = PORT + (useNetty ? 1 : 0) + ("0.12".equals(version) ? 10 : 0);
         NodeScript script = env.createScript("server.js", new File("./target/test-classes/argo/server.js"),
                                              new String[] { String.valueOf(port) });
         script.setNodeVersion(version);

@@ -1,28 +1,32 @@
 package io.apigee.trireme.test;
 
+import io.apigee.trireme.core.NodeEnvironment;
+
 import java.io.File;
 import java.io.IOException;
 import java.io.OutputStream;
 import java.util.ArrayList;
 import java.util.Map;
+import java.util.regex.Pattern;
 
 public abstract class TestBase
 {
-    public static final int DEFAULT_TIMEOUT = 60;
+    public static final int DEFAULT_TIMEOUT = 30;
     public static final String HEAP_SIZE = "-Xmx1g";
 
     protected final File fileName;
     protected final String adapter;
     protected final String javaVersion;
     protected final String nodeVersion;
+    protected final NodeEnvironment nodeEnvironment;
 
     private static String java6Command;
     private static String java7Command;
     private static String javaCommand;
     protected static String[] javaVersions;
+    protected static Pattern[] forkPatterns;
 
     public static final String DEFAULT_ADAPTER = "default";
-    public static final String RESULT_FILE = "target/benchmark.out";
 
     static {
         java6Command = findJava("JAVA_HOME_6");
@@ -45,6 +49,17 @@ public abstract class TestBase
         } else {
             javaVersions = new String[] { "default" };
         }
+
+        /*
+         * A few of the tests don't work unless Trireme is run in a separate, forked, JVM.
+         * Given the nature of those tests, that is not necessarily a bug ;-).
+         * These patterns override whatever Java version is set so that they fork.
+         */
+        forkPatterns = new Pattern[] {
+            Pattern.compile("^test-child.*"),
+            Pattern.compile("^test-chdir.*"),
+            Pattern.compile("^test-regress.*892.*")
+        };
     }
 
     private static String findJava(String javaHome)
@@ -65,20 +80,39 @@ public abstract class TestBase
         this.adapter = adapter;
         this.javaVersion = javaVersion;
         this.nodeVersion = nodeVersion;
+        this.nodeEnvironment = new NodeEnvironment();
     }
 
-    protected int launchTest(int timeout, OutputStream o, boolean coverage)
+    protected int launchTest(int timeout, OutputStream o, boolean coverage, boolean alwaysFork)
         throws IOException, InterruptedException
     {
         String command;
+        boolean fork = alwaysFork;
         if ("6".equals(javaVersion)) {
             command = java6Command;
+            fork = true;
         } else if ("7".equals(javaVersion)) {
             command = java7Command;
+            fork = true;
         } else {
             command = javaCommand;
         }
 
+        for (Pattern fp : forkPatterns) {
+            if (fp.matcher(fileName.getName()).matches()) {
+                fork = true;
+            }
+        }
+
+        if (fork) {
+            return launchForkedTest(command, timeout, o, coverage);
+        }
+        return launchLocalTest(timeout, o);
+    }
+
+    private int launchForkedTest(String command, int timeout, OutputStream o, boolean coverage)
+        throws IOException, InterruptedException
+    {
         OutputStream stdout = (o == null ? System.out : o);
 
         ArrayList<String> args = new ArrayList<String>();
@@ -111,5 +145,11 @@ public abstract class TestBase
         } while (r > 0);
 
         return proc.waitFor();
+    }
+
+    private int launchLocalTest(int timeout, OutputStream o)
+        throws IOException
+    {
+        return TestRunner.runTest(nodeEnvironment, o, fileName, fileName.getParentFile(), nodeVersion, timeout);
     }
 }

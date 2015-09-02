@@ -13,6 +13,7 @@
 
   <properties>
     <skipTests>true</skipTests>
+    <runBenchmarks>false</runBenchmarks>
   </properties>
 
   <dependencies>

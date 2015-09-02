@@ -93,9 +93,9 @@ public class BenchmarkTest
         return ret;
     }
 
-    public BenchmarkTest(File f, String adapter, String version, String nodeVersion)
+    public BenchmarkTest(File f, String adapter, String version)
     {
-        super(f, adapter, version, nodeVersion);
+        super(f, adapter, version, JavaScriptTest.NODE_VERSION_10);
     }
 
     @Test
@@ -105,7 +105,7 @@ public class BenchmarkTest
         System.out.println("Benchmark: " + fileName.getName() + " (" + nodeVersion + ')');
         OutputStream rw =
             JavaScriptTest.NODE_VERSION_10.equals(nodeVersion) ? resultWriter10 : resultWriter12;
-        int exitCode = launchTest(TEST_TIMEOUT, rw, false);
+        int exitCode = launchTest(TEST_TIMEOUT, rw, false, true);
         System.out.println("  = " + exitCode);
         assertEquals(fileName.getName() + " (" + adapter + ", " + nodeVersion + ") failed with =" + exitCode,
                      0, exitCode);

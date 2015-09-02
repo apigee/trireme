@@ -1,4 +1,4 @@
-var argo = require('argo-server');
+var argo = require('argo');
 
 var port = 33334;
 if (process.argv.length >= 3) {

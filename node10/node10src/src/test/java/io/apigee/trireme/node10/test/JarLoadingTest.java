@@ -106,7 +106,7 @@ public class JarLoadingTest
     public void testLoadingUsingCustomClassLoader()
             throws NodeException, InterruptedException, ExecutionException {
 
-        ArrayList<URL> urls = new ArrayList<URL>();
+        final ArrayList<URL> urls = new ArrayList<URL>();
         String[] jarNames = {"target/test-classes/testjar.jar", "target/test-classes/depjar.jar"};
         for (String jn : jarNames) {
             File jarFile = new File(jn);
@@ -121,9 +121,11 @@ public class JarLoadingTest
             }
         }
 
-        Sandbox sb = new Sandbox().setClassLoader(
-                new URLClassLoader(urls.toArray(new URL[urls.size()]))
-        );
+        Sandbox sb = new Sandbox().setClassLoaderSupplier(new Sandbox.ClassLoaderSupplier() {
+            public ClassLoader getClassLoader(URL[] urlArray) {
+                return new URLClassLoader(urls.toArray(new URL[urls.size()]));
+            }
+        });
         NodeScript script = env.createScript("jarload.js",
                 new File("target/test-classes/tests/jarload.js"),
                 new String[]{"Foo", "25"});
@@ -139,8 +141,12 @@ public class JarLoadingTest
     public void testLoadingFailsUsingInvalidCustomClassLoader()
             throws NodeException, InterruptedException, ExecutionException {
 
-        URL empty[] = new URL[0];
-        Sandbox sb = new Sandbox().setClassLoader(new URLClassLoader(empty));
+        final URL empty[] = new URL[0];
+        Sandbox sb = new Sandbox().setClassLoaderSupplier(new Sandbox.ClassLoaderSupplier() {
+            public ClassLoader getClassLoader(URL[] urlArray) {
+                return new URLClassLoader(empty);
+            }
+        });
         NodeScript script = env.createScript("jarload.js",
                 new File("target/test-classes/tests/jarload.js"),
                 new String[]{"Foo", "25"});

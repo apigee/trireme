@@ -99,14 +99,18 @@ public class TriremeNativeSupport
                     throw Utils.makeError(cx, thisObj, "Cannot get URL for JAR file :" + e);
                 }
             }
+            URL[] urlArray = urls.toArray(new URL[urls.size()]);
 
             Sandbox sandbox = self.runtime.getSandbox();
             ClassLoader loader = null;
             if (sandbox != null) { // use custom class loader if specified
-                loader = sandbox.getClassLoader();
+                Sandbox.ClassLoaderSupplier supplier = sandbox.getClassLoaderSupplier();
+                if (supplier != null) {
+                    loader = supplier.getClassLoader(urlArray);
+                }
             }
             if (loader == null) { // fallback
-                loader = new URLClassLoader(urls.toArray(new URL[urls.size()]));
+                loader = new URLClassLoader(urlArray);
             }
 
             // Load the classes in to the module registry for this script only.

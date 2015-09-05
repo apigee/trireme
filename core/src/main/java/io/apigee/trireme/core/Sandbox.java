@@ -21,11 +21,14 @@
  */
 package io.apigee.trireme.core;
 
+import io.apigee.trireme.kernel.net.NetworkPolicy;
 import org.mozilla.javascript.ClassShutter;
 import org.mozilla.javascript.Scriptable;
 
 import java.io.InputStream;
 import java.io.OutputStream;
+import java.net.URL;
+import java.net.URLClassLoader;
 import java.util.AbstractMap;
 import java.util.ArrayList;
 import java.util.List;
@@ -54,6 +57,7 @@ public class Sandbox
     private boolean         hideOsDetails;
     private ClassShutter    extraClassShutter;
     private boolean         allowJarLoading = true;
+    private ClassLoaderSupplier classLoaderSupplier = null;
 
     /**
      * Create a new sandbox that will not affect anything in any way.
@@ -83,6 +87,7 @@ public class Sandbox
             this.hideOsDetails = parent.hideOsDetails;
             this.extraClassShutter = parent.extraClassShutter;
             this.allowJarLoading = parent.allowJarLoading;
+            this.classLoaderSupplier = parent.classLoaderSupplier;
             if (parent.mounts != null) {
                 this.mounts = new ArrayList<Map.Entry<String, String>>(parent.mounts);
             }
@@ -274,4 +279,38 @@ public class Sandbox
     public boolean isAllowJarLoading() {
         return allowJarLoading;
     }
+
+    /**
+     * A Supplier that returns an instance of a ClassLoader to be used
+     * for loading Java classes into the currently-running script.
+     * <p/>
+     * The Supplier should return a new instance for every invocation of this method
+     * if it is desired that classes loaded by any one invocation of the
+     * "trireme-support" module's "loadJars" method are isolated from classes loaded
+     * from another invocation of the "loadJars" method.
+     * <p/>
+     * The Supplier may return the same instance for every invocation of this method
+     * if such isolation is not desired.
+     */
+    public interface ClassLoaderSupplier {
+        ClassLoader getClassLoader(URL[] urlArray);
+    }
+
+    /**
+     * Allows specifying the Supplier that will return an instance of a ClassLoader
+     * that will be used by the "trireme-support" module's "loadJars" method to load JAR files
+     * into the currently-running script.
+     */
+    public Sandbox setClassLoaderSupplier(ClassLoaderSupplier classLoaderSupplier) {
+        this.classLoaderSupplier = classLoaderSupplier;
+        return this;
+    }
+
+    /**
+     * Returns the ClassLoaderSupplier if set, null otherwise.
+     */
+    public ClassLoaderSupplier getClassLoaderSupplier() {
+        return classLoaderSupplier;
+    }
+
 }

@@ -5,12 +5,15 @@ import io.apigee.trireme.core.NodeException;
 import io.apigee.trireme.core.NodeScript;
 import io.apigee.trireme.core.Sandbox;
 import io.apigee.trireme.core.ScriptStatus;
-import org.junit.Before;
 import org.junit.BeforeClass;
 import org.junit.Test;
 import org.mozilla.javascript.JavaScriptException;
 
 import java.io.File;
+import java.net.MalformedURLException;
+import java.net.URL;
+import java.net.URLClassLoader;
+import java.util.ArrayList;
 import java.util.concurrent.ExecutionException;
 
 import static org.junit.Assert.*;
@@ -91,6 +94,67 @@ public class JarLoadingTest
         try {
             script.execute().get();
             assertTrue("Expected an exception due to missing classes", false);
+        } catch (ExecutionException ee) {
+            assertTrue("Expected a JavaScriptException", (ee.getCause() instanceof JavaScriptException));
+        } finally {
+            script.close();
+        }
+    }
+
+    // Make sure that we can load a script using a custom class loader
+    @Test
+    public void testLoadingUsingCustomClassLoader()
+            throws NodeException, InterruptedException, ExecutionException {
+
+        final ArrayList<URL> urls = new ArrayList<URL>();
+        String[] jarNames = {"target/test-classes/testjar.jar", "target/test-classes/depjar.jar"};
+        for (String jn : jarNames) {
+            File jarFile = new File(jn);
+            if (!jarFile.exists() || !jarFile.canRead() || !jarFile.isFile()) {
+                throw new NodeException("Cannot read JAR file " + jarFile.getPath());
+            }
+
+            try {
+                urls.add(new URL("file:" + jarFile.getPath()));
+            } catch (MalformedURLException e) {
+                throw new NodeException("Cannot get URL for JAR file :" + e);
+            }
+        }
+
+        Sandbox sb = new Sandbox().setClassLoaderSupplier(new Sandbox.ClassLoaderSupplier() {
+            public ClassLoader getClassLoader(URL[] urlArray) {
+                return new URLClassLoader(urls.toArray(new URL[urls.size()]));
+            }
+        });
+        NodeScript script = env.createScript("jarload.js",
+                new File("target/test-classes/tests/jarload.js"),
+                new String[]{"Foo", "25"});
+        script.setSandbox(sb);
+
+        ScriptStatus status = script.execute().get();
+        assertEquals(0, status.getExitCode());
+        script.close();
+    }
+
+    // Make sure that loading a script fails using an invalid custom class loader
+    @Test
+    public void testLoadingFailsUsingInvalidCustomClassLoader()
+            throws NodeException, InterruptedException, ExecutionException {
+
+        final URL empty[] = new URL[0];
+        Sandbox sb = new Sandbox().setClassLoaderSupplier(new Sandbox.ClassLoaderSupplier() {
+            public ClassLoader getClassLoader(URL[] urlArray) {
+                return new URLClassLoader(empty);
+            }
+        });
+        NodeScript script = env.createScript("jarload.js",
+                new File("target/test-classes/tests/jarload.js"),
+                new String[]{"Foo", "25"});
+        script.setSandbox(sb);
+
+        try {
+            script.execute().get();
+            assertTrue("Expected an exception due to invalid class loader", false);
         } catch (ExecutionException ee) {
             assertTrue("Expected a JavaScriptException", (ee.getCause() instanceof JavaScriptException));
         } finally {

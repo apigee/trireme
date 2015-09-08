@@ -29,7 +29,6 @@ import io.apigee.trireme.core.internal.IdPropertyMap;
 import io.apigee.trireme.core.internal.ScriptRunner;
 import io.apigee.trireme.kernel.OSException;
 import io.apigee.trireme.kernel.handles.AbstractHandle;
-import io.apigee.trireme.kernel.handles.Handle;
 import io.apigee.trireme.kernel.handles.IOCompletionHandler;
 import io.apigee.trireme.kernel.handles.NIOSocketHandle;
 import io.apigee.trireme.kernel.handles.SocketHandle;
@@ -121,6 +120,7 @@ public class TCPWrap
         {
             super(handle, runtime, props);
             this.sockHandle = handle;
+            this.pinnable = true;
         }
 
         public void setSocketHandle(SocketHandle handle)
@@ -133,16 +133,12 @@ public class TCPWrap
         protected JavaStreamWrap.StreamWrapImpl defaultConstructor(Context cx, Object[] args)
         {
             ScriptRunner runner = (ScriptRunner)cx.getThreadLocal(ScriptRunner.RUNNER);
-            SocketHandle handle = objArg(args, 0, SocketHandle.class, false);
+            SocketHandle handle = objArg(cx, this, args, 0, SocketHandle.class, false);
             if (handle == null) {
                 handle = new NIOSocketHandle(runner);
             }
 
-            // Unlike other types of handles, every open socket "pins" the server explicitly and keeps it
-            // running until it is either closed or "unref" is called.
-            TCPImpl tcp = new TCPImpl(handle, runner);
-            tcp.pinState.requestPin(runner);
-            return tcp;
+            return new TCPImpl(handle, runner);
         }
 
         @Override
@@ -180,15 +176,15 @@ public class TCPWrap
                 return listen(args);
             case Id_connect:
             case Id_connect6:
-                return connect(args);
+                return connect(cx, args);
             case Id_shutdown:
-                shutdown(args);
+                shutdown(cx, args);
                 break;
             case Id_getsockname:
-                getsockname(args);
+                getsockname(cx, args);
                 break;
             case Id_getpeername:
-                getpeername(args);
+                getpeername(cx, args);
                 break;
             case Id_setnodelay:
                 setNoDelay(cx, args);
@@ -226,6 +222,7 @@ public class TCPWrap
                         onConnection(errCode, value);
                     }
                 });
+                pinState.incrementPinRequest(runtime);
                 return Undefined.instance;
             } catch (OSException ose) {
                 return ose.getCode();
@@ -239,12 +236,13 @@ public class TCPWrap
                 TCPImpl sock = (TCPImpl)cx.newObject(this, CLASS_NAME, new Object[] { handle });
                 onConnection.call(cx, onConnection, this,
                                   new Object[] { (errCode == 0 ? Undefined.instance : errCode), sock });
+                sock.pinState.incrementPinRequest(runtime);
             }
         }
 
-        private Object connect(Object[] args)
+        private Object connect(Context cx, Object[] args)
         {
-            final ConnectImpl req = objArg(args, 0, ConnectImpl.class, true);
+            final ConnectImpl req = objArg(cx, this, args, 0, ConnectImpl.class, true);
             String host = stringArg(args, 1);
             int port = intArg(args, 2);
 
@@ -254,18 +252,20 @@ public class TCPWrap
                     @Override
                     public void ioComplete(int errCode, Integer value)
                     {
+                        pinState.decrementPinRequest(runtime);
                         req.callOnComplete(Context.getCurrentContext(), TCPWrap.TCPImpl.this, errCode);
                     }
                 });
+                pinState.incrementPinRequest(runtime);
             } catch (OSException ose) {
                 return ose.getCode();
             }
             return Undefined.instance;
         }
 
-        private void shutdown(Object[] args)
+        private void shutdown(Context cx, Object[] args)
         {
-            final StreamWrap.ShutdownWrap req = objArg(args, 0, StreamWrap.ShutdownWrap.class, true);
+            final StreamWrap.ShutdownWrap req = objArg(cx, this, args, 0, StreamWrap.ShutdownWrap.class, true);
             final TCPImpl self = this;
 
             sockHandle.shutdown(new IOCompletionHandler<Integer>()
@@ -278,18 +278,18 @@ public class TCPWrap
             });
         }
 
-        private void getsockname(Object[] args)
+        private void getsockname(Context cx, Object[] args)
         {
-            Scriptable out = objArg(args, 0, Scriptable.class, true);
+            Scriptable out = objArg(cx, this, args, 0, Scriptable.class, true);
             InetSocketAddress addr = sockHandle.getSockName();
             if (addr != null) {
                 formatAddress(addr, out);
             }
         }
 
-        private void getpeername(Object[] args)
+        private void getpeername(Context cx, Object[] args)
         {
-            Scriptable out = objArg(args, 0, Scriptable.class, true);
+            Scriptable out = objArg(cx, this, args, 0, Scriptable.class, true);
             InetSocketAddress addr = sockHandle.getPeerName();
             if (addr != null) {
                 formatAddress(addr, out);

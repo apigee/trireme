@@ -50,7 +50,6 @@ public class ErrorCodes
     public static final int EISDIR = -21;
     public static final int ENFILE = -23;
     public static final int EMFILE = -24;
-    public static final int ENOTFOUND = -2;
     public static final int ENOTEMPTY = -66;
     public static final int ENOENT = -2;
     public static final int ENOTDIR = -20;
@@ -66,6 +65,7 @@ public class ErrorCodes
     public static final int ESERVFAIL = -202;
     public static final int EREFUSED = -203;
     public static final int EBADRESP = -204;
+    public static final int ENOTFOUND = -205;
 
     public static ErrorCodes get() {
         return myself;

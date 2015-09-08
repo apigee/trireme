@@ -39,6 +39,7 @@ public class PinState
     private static final int PINNABLE = PIN_REQUESTED | PIN_ALLOWED;
 
     private int pinState = PIN_ALLOWED;
+    private int requestCount;
 
     private void updatePinState(int newState, GenericNodeRuntime runtime)
     {
@@ -86,5 +87,26 @@ public class PinState
     public void clearPin(GenericNodeRuntime runtime)
     {
         updatePinState(pinState & ~PIN_REQUESTED, runtime);
+    }
+
+    /**
+     * This is a wrapper that calls "requestPin" only the first time, and
+     * "clearPin" only the last time. It's for code that might have multiple paths that
+     * need to manage pinning.
+     */
+    public void incrementPinRequest(GenericNodeRuntime runtime)
+    {
+        if (requestCount == 0) {
+            requestPin(runtime);
+        }
+        requestCount++;
+    }
+
+    public void decrementPinRequest(GenericNodeRuntime runtime)
+    {
+        requestCount--;
+        if (requestCount == 0) {
+            clearPin(runtime);
+        }
     }
 }

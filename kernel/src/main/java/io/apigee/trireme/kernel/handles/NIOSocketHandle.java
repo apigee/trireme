@@ -131,6 +131,9 @@ public class NIOSocketHandle
     public void bind(String address, int port)
         throws OSException
     {
+        if (log.isDebugEnabled()) {
+            log.debug("Client binding to {}:{}", address, port);
+        }
         boundAddress = new InetSocketAddress(address, port);
         if (boundAddress.isUnresolved()) {
             throw new OSException(ErrorCodes.ENOENT);
@@ -325,22 +328,43 @@ public class NIOSocketHandle
                 throw new OSException(ErrorCodes.EINVAL);
             }
 
-            if (log.isDebugEnabled()) {
-                log.debug("Client connecting to {}:{}", host, port);
-            }
-            if (boundAddress == null) {
-                newChannel = SocketChannel.open();
-            } else {
-                newChannel = SocketChannel.open(boundAddress);
+            newChannel = SocketChannel.open();
+            if (boundAddress != null) {
+                if (log.isDebugEnabled()) {
+                    log.debug("Client binding locally to {}", boundAddress);
+                }
+                newChannel.bind(boundAddress);
             }
 
             runtime.registerCloseable(newChannel);
             clientChannel = newChannel;
             clientInit();
             this.clientConnectionHandler = handler;
-            newChannel.connect(targetAddress);
+
+            if (log.isDebugEnabled()) {
+                log.debug("Client connecting to {}:{}", host, port);
+            }
+            boolean connected = newChannel.connect(targetAddress);
+            int interest = 0;
+            if (connected) {
+                log.debug("Client connected immediately");
+                interest = SelectionKey.OP_WRITE;
+                runtime.executeScriptTask(new Runnable() {
+                    @Override
+                    public void run()
+                    {
+                        clientConnectionHandler.ioComplete(0, 0);
+                    }
+                }, null);
+            } else {
+                interest = SelectionKey.OP_CONNECT;
+            }
+
+            if (log.isDebugEnabled()) {
+                log.debug("Registering socket with interest {}", interest);
+            }
             selKey = newChannel.register(runtime.getSelector(),
-                                                    SelectionKey.OP_CONNECT,
+                                                    interest,
                                                     new SelectorHandler()
                                                     {
                                                         @Override

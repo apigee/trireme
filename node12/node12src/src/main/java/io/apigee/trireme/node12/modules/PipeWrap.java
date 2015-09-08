@@ -101,7 +101,7 @@ public class PipeWrap
             this.ipc = ipc;
             this.ipcHandle = handle;
             if (ipc) {
-                pinState.requestPin(runtime);
+                pinState.incrementPinRequest(runtime);
             }
         }
 

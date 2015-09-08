@@ -111,7 +111,7 @@ public class JavaStreamWrap
         private Function onRead;
         protected ScriptRunner runtime;
         private Handle handle;
-        private boolean pinnable;
+        protected boolean pinnable;
         private boolean reading;
         protected final PinState pinState = new PinState();
 
@@ -354,7 +354,7 @@ public class JavaStreamWrap
                 });
                 reading = true;
                 if (pinnable) {
-                    pinState.requestPin(runtime);
+                    pinState.incrementPinRequest(runtime);
                 }
             }
         }
@@ -365,7 +365,7 @@ public class JavaStreamWrap
                 handle.stopReading();
                 reading = false;
                 if (pinnable) {
-                    pinState.clearPin(runtime);
+                    pinState.decrementPinRequest(runtime);
                 }
             }
         }

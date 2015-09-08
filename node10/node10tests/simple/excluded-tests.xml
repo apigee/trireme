@@ -664,6 +664,9 @@
         <Name>test-http-blank-header.js</Name>
         <Description>Looks like we are handling this properly despite the tests.</Description>
     </Excluded>
+    <Excluded>
+        <Name>test-process-argv-0.js</Name>
+    </Excluded>
 
     <!--
          JUST BROKEN

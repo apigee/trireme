@@ -387,7 +387,9 @@ public class ConnectionImpl
             @Override
             public void call(Object val)
             {
-                cb.call(cx, cb, self, new Object[] { val });
+                if (cb != null) {
+                    cb.call(cx, cb, self, new Object[] { val });
+                }
             }
         });
     }

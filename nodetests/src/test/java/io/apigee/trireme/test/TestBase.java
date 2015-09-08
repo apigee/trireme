@@ -58,7 +58,8 @@ public abstract class TestBase
         forkPatterns = new Pattern[] {
             Pattern.compile("^test-child.*"),
             Pattern.compile("^test-chdir.*"),
-            Pattern.compile("^test-regress.*892.*")
+            Pattern.compile("^test-regress.*892.*"),
+            Pattern.compile("^test-regress.*4027.*")
         };
     }
 

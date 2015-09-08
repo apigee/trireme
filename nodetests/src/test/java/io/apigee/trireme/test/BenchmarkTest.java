@@ -84,18 +84,27 @@ public class BenchmarkTest
     public static Collection<Object[]> enumerateTests()
     {
         ArrayList<Object[]> ret = new ArrayList<Object[]>();
-        for (String tf : TESTS) {
-            ret.add(new Object[] {
-                new File(BASE_DIR, tf), DEFAULT_ADAPTER, "default", JavaScriptTest.NODE_VERSION_10 });
-            ret.add(new Object[] {
-                new File(BASE_DIR, tf), DEFAULT_ADAPTER, "default", JavaScriptTest.NODE_VERSION_12 });
+        boolean runThem = false;
+
+        String rb = System.getProperty("runBenchmarks");
+        if (rb != null) {
+            runThem = Boolean.valueOf(rb);
+        }
+        
+        if (runThem) {
+            for (String tf : TESTS) {
+                ret.add(new Object[] {
+                    new File(BASE_DIR, tf), DEFAULT_ADAPTER, "default", JavaScriptTest.NODE_VERSION_10 });
+                ret.add(new Object[] {
+                    new File(BASE_DIR, tf), DEFAULT_ADAPTER, "default", JavaScriptTest.NODE_VERSION_12 });
+            }
         }
         return ret;
     }
 
-    public BenchmarkTest(File f, String adapter, String version)
+    public BenchmarkTest(File f, String adapter, String javaVersion, String nodeVersion)
     {
-        super(f, adapter, version, JavaScriptTest.NODE_VERSION_10);
+        super(f, adapter, javaVersion, nodeVersion);
     }
 
     @Test

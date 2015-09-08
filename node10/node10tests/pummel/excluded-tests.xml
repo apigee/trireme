@@ -98,4 +98,8 @@
         <Name>test-watch-file.js</Name>
         <Description>Flaky, works locally</Description>
     </Excluded>
+    <Excluded>
+        <Name>test-fs-watch-file-slow.js</Name>
+        <Description>Flaky.</Description>
+    </Excluded>
 </ExcludedTests>

@@ -21,14 +21,12 @@
  */
 package io.apigee.trireme.core;
 
-import io.apigee.trireme.kernel.net.NetworkPolicy;
 import org.mozilla.javascript.ClassShutter;
 import org.mozilla.javascript.Scriptable;
 
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.net.URL;
-import java.net.URLClassLoader;
 import java.util.AbstractMap;
 import java.util.ArrayList;
 import java.util.List;

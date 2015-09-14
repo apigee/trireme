@@ -15,7 +15,7 @@ rm ${CP}
 
 rm -f ../node10/node10tests/tmp/*
 
-ARGS="-Xmx1g \
+ARGS="-Xmx256m \
   -Dorg.slf4j.simpleLogger.showThreadName=false \
   -Dorg.slf4j.simpleLogger.showShortLogName=true \
   -Dorg.slf4j.simpleLogger.defaultLogLevel=${LOGLEVEL:-info}"

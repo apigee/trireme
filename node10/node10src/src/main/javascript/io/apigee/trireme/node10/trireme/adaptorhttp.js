@@ -174,16 +174,21 @@ if (HttpWrap.hasServerAdapter()) {
              ' data = ' + (data ? data.length : 0));
       }
       // We should always get a buffer with no encoding in this case
-      this._adapter.send(this.statusCode, this.sendDate, this._savedHeaders, data, encoding, null, false);
+      this._adapter.send(this.statusCode, this.sendDate, this._savedHeaders,
+                         data, encoding, undefined, false, function(err) {
+          debug('Header write complete');
+          cb(err);
+      });
       this.headersSent = true;
     } else {
       if (debugOn) {
         debug('Sending data = ' + (data ? data.length : 0));
       }
-      this._adapter.sendChunk(data, encoding, false);
+      this._adapter.sendChunk(data, encoding, undefined, false, function(err) {
+        debug('Chunk write complete');
+        cb(err);
+      });
     }
-    // TODO register a future rather than accepting everything
-    cb();
   };
 
   ServerResponse.prototype._send = function() {
@@ -301,6 +306,7 @@ if (HttpWrap.hasServerAdapter()) {
     this.httpVersion = adapter.requestMajorVersion + '.' + adapter.requestMinorVersion;
     this.url = adapter.requestUrl;
     this.complete = false;
+    this.reading = false;
 
     Object.defineProperty(this, '_adapter', {
       value: adapter,
@@ -321,11 +327,16 @@ if (HttpWrap.hasServerAdapter()) {
     if (debugOn) {
       debug('Pushing ' + chunk.length + ' bytes to the request stream');
     }
+    var ret;
     if (chunk === END_OF_FILE) {
-      return self.push(null);
+      ret = self.push(null);
     } else {
-      return self.push(chunk);
+      ret = self.push(chunk);
     }
+    if (debugOn) {
+      debug('Push result = ' + ret);
+    }
+    return ret;
   }
 
   ServerRequest.prototype.setTimeout = function(timeout, cb) {
@@ -334,6 +345,14 @@ if (HttpWrap.hasServerAdapter()) {
 
   ServerRequest.prototype.clearTimeout = function(cb) {
     this.connection.clearTimeout(cb);
+  };
+
+  ServerRequest.prototype._read = function(size) {
+    if (!this.reading) {
+      debug('Resuming request stream read');
+      this.reading = true;
+      this._adapter.resume();
+    }
   };
 
   function Server(requestListener) {
@@ -523,9 +542,15 @@ if (HttpWrap.hasServerAdapter()) {
   function onBody(request, b) {
     debug('onBody');
     timers.active(request.connection);
+    var keepReading;
     request._adapter.domain.run(function() {
-      addPending(request, b);
+      keepReading = addPending(request, b);
     });
+    if (!keepReading && request.reading) {
+      debug('Pausing further reads');
+      request.reading = false;
+      request._adapter.pause();
+    }
   }
 
   /*

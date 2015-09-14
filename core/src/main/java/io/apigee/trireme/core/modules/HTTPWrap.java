@@ -27,10 +27,10 @@ import io.apigee.trireme.kernel.Charsets;
 import io.apigee.trireme.core.InternalNodeModule;
 import io.apigee.trireme.core.Utils;
 import io.apigee.trireme.core.modules.crypto.SecureContextImpl;
+import io.apigee.trireme.kernel.handles.IOCompletionHandler;
 import io.apigee.trireme.net.internal.AdapterHandleDelegate;
 import io.apigee.trireme.net.internal.UpgradedSocketDelegate;
 import io.apigee.trireme.net.spi.HttpDataAdapter;
-import io.apigee.trireme.net.spi.HttpFuture;
 import io.apigee.trireme.net.spi.HttpRequestAdapter;
 import io.apigee.trireme.net.spi.HttpResponseAdapter;
 import io.apigee.trireme.net.spi.HttpServerAdapter;
@@ -43,7 +43,7 @@ import org.mozilla.javascript.Function;
 import org.mozilla.javascript.RhinoException;
 import org.mozilla.javascript.Scriptable;
 import org.mozilla.javascript.ScriptableObject;
-import org.mozilla.javascript.ScriptRuntime;
+import org.mozilla.javascript.Undefined;
 import org.mozilla.javascript.annotations.JSFunction;
 import org.mozilla.javascript.annotations.JSGetter;
 import org.mozilla.javascript.annotations.JSSetter;
@@ -265,27 +265,28 @@ public class HTTPWrap
                 public void execute(Context cx, Scriptable scope)
                 {
                     RequestAdapter reqAdapter =
-                        (RequestAdapter)cx.newObject(ServerContainer.this, RequestAdapter.CLASS_NAME);
+                        (RequestAdapter) cx.newObject(ServerContainer.this, RequestAdapter.CLASS_NAME);
                     reqAdapter.init(request);
 
                     ResponseAdapter respAdapter =
-                        (ResponseAdapter)cx.newObject(ServerContainer.this, ResponseAdapter.CLASS_NAME);
+                        (ResponseAdapter) cx.newObject(ServerContainer.this, ResponseAdapter.CLASS_NAME);
                     respAdapter.init(response, ServerContainer.this);
 
                     AdapterHandleDelegate handle =
-                         new AdapterHandleDelegate(request, response);
+                        new AdapterHandleDelegate(request, response);
 
-                    Scriptable socketObj = (Scriptable)makeSocket.call(cx, makeSocket, null,
-                                                                       new Object[] { handle });
-                    Scriptable requestObj = (Scriptable)makeRequest.call(cx, makeRequest, null,
-                                                                         new Object[] { reqAdapter, socketObj });
-                    Scriptable responseObj = (Scriptable)makeResponse.call(cx, makeResponse, null,
-                                                                           new Object[] { respAdapter, socketObj, timeoutOpts });
+                    Scriptable socketObj = (Scriptable) makeSocket.call(cx, makeSocket, null,
+                                                                        new Object[]{handle});
+                    Scriptable requestObj = (Scriptable) makeRequest.call(cx, makeRequest, null,
+                                                                          new Object[]{reqAdapter, socketObj});
+                    Scriptable responseObj = (Scriptable) makeResponse.call(cx, makeResponse, null,
+                                                                            new Object[]{respAdapter, socketObj,
+                                                                                         timeoutOpts});
 
                     request.setScriptObject(requestObj);
                     response.setScriptObject(responseObj);
 
-                    onHeaders.call(cx, onHeaders, ServerContainer.this, new Object[] { requestObj, responseObj });
+                    onHeaders.call(cx, onHeaders, ServerContainer.this, new Object[]{requestObj, responseObj});
                 }
             });
 
@@ -352,14 +353,21 @@ public class HTTPWrap
             if (log.isDebugEnabled()) {
                 log.debug("Received HTTP onData for {} with {}", request, data);
             }
-            final ByteBuffer requestData =
-                    (data.hasData() ? data.getData() : null);
+            final ByteBuffer requestData = (data.hasData() ? data.getData() : null);
+            final int len = (requestData == null ? 0 : requestData.remaining());
+
+            request.incrementQueueLength(len);
+
             runner.enqueueTask(new ScriptTask()
             {
                 @Override
                 public void execute(Context cx, Scriptable scope)
                 {
-                    callOnData(cx, scope, request, requestData);
+                    try {
+                        callOnData(cx, scope, request, requestData);
+                    } finally {
+                        request.incrementQueueLength(-len);
+                    }
                 }
             });
             if (data.isLastChunk()) {
@@ -374,8 +382,6 @@ public class HTTPWrap
             }
         }
 
-
-
         private void callOnComplete(Context cx, HttpRequestAdapter request)
         {
             Scriptable incoming = request.getScriptObject();
@@ -383,7 +389,7 @@ public class HTTPWrap
                 log.debug("Calling onComplete with {}", incoming);
             }
             onComplete.call(cx, onComplete, this,
-                            new Object[] { incoming });
+                            new Object[]{incoming});
         }
 
         private void callOnData(Context cx, Scriptable scope,
@@ -666,6 +672,10 @@ public class HTTPWrap
             return cx.newArray(thisObj, headers.toArray());
         }
 
+        /**
+         * adapterhttp.js calls this method when the "push" method on the request stream returns
+         * "false" to indicate that the queue is too large.
+         */
         @JSFunction
         @SuppressWarnings("unused")
         public void pause()
@@ -673,6 +683,9 @@ public class HTTPWrap
             request.pause();
         }
 
+        /**
+         * adapterhttp.js calls this method when _read is called and we had previously paused.
+         */
         @JSFunction
         @SuppressWarnings("unused")
         public void resume()
@@ -764,16 +777,28 @@ public class HTTPWrap
 
         @JSFunction
         @SuppressWarnings("unused")
-        public boolean send(int statusCode, boolean sendDate, Scriptable headers,
-                            Object data, Object encoding, Scriptable trailers, boolean last)
+        public static void send(Context cx, Scriptable thisObj, Object[] args, Function func)
         {
+            int statusCode = intArg(args, 0);
+            boolean sendDate = booleanArg(args, 1);
+            Scriptable headers = objArg(cx, thisObj, args, 2, Scriptable.class, true);
+            ensureArg(args, 3);
+            Object data = args[3];
+            ensureArg(args, 4);
+            Object encoding = args[4];
+            ensureArg(args, 5);
+            Object trailers = args[5];
+            boolean last = booleanArg(args, 6);
+            Function cb = objArg(cx, thisObj, args, 7, Function.class, false);
+            ResponseAdapter self = (ResponseAdapter)thisObj;
+
             if (last) {
-                server.requestComplete(this);
+                self.server.requestComplete(self);
             }
 
-            ByteBuffer buf = gatherData(data, encoding);
+            ByteBuffer buf = self.gatherData(data, encoding);
 
-            response.setStatusCode(statusCode);
+            self.response.setStatusCode(statusCode);
 
             boolean hasDate = false;
             if (headers != null) {
@@ -788,54 +813,93 @@ public class HTTPWrap
                         if ("Date".equalsIgnoreCase(nameVal)) {
                             hasDate = true;
                         }
-                        response.addHeader(nameVal, Context.toString(value));
+                        self.response.addHeader(nameVal, Context.toString(value));
                     }
                 }
                 while ((name != Scriptable.NOT_FOUND) && (value != Scriptable.NOT_FOUND));
             }
 
             if (sendDate && !hasDate) {
-                addDateHeader(response);
+                self.addDateHeader(self.response);
             }
 
-            HttpFuture future;
+            IOCompletionHandler<Integer> handler = self.makeHandler(cb);
+
             if (last) {
                 // Send everything in one big message
-                addTrailers(trailers, response);
+                self.addTrailers(trailers, self.response);
                 if (buf != null) {
-                    response.setData(buf);
+                    self.response.setData(buf);
                 }
-                future = response.send(true);
+                self.response.send(true, handler);
             } else {
-                future = response.send(false);
+                 self.response.send(false, null);
                 if (buf != null) {
-                    future = response.sendChunk(buf, false);
+                    self.response.sendChunk(buf, false, handler);
                 }
             }
-
-            setListener(future);
-            return future.isDone();
         }
 
         @JSFunction
         @SuppressWarnings("unused")
-        public boolean sendChunk(Object data, Object encoding, Scriptable trailers, boolean last)
+        public static void sendChunk(Context cx, Scriptable thisObj, Object[] args, Function func)
         {
+            ensureArg(args, 0);
+            Object data = args[0];
+            ensureArg(args, 1);
+            Object encoding = args[1];
+            ensureArg(args, 2);
+            Object trailers = args[2];
+            boolean last = booleanArg(args, 3);
+            Function cb = objArg(cx, thisObj, args, 4, Function.class, false);
+            ResponseAdapter self = (ResponseAdapter)thisObj;
+
             if (last) {
-                server.requestComplete(this);
+                self.server.requestComplete(self);
             }
 
-            ByteBuffer buf = gatherData(data, encoding);
+            ByteBuffer buf = self.gatherData(data, encoding);
             if (last) {
-                addTrailers(trailers, response);
+                self.addTrailers(trailers, self.response);
             }
-            HttpFuture future = response.sendChunk(buf, last);
-
-            setListener(future);
-            return future.isDone();
+            self.response.sendChunk(buf, last, self.makeHandler(cb));
         }
 
+        /**
+         * Make a completion handler that the adapter implementation can call directly as soon
+         * as write is complete. Since it will likely be running in another thread, dispatch
+         * it to the script thread first.
+         */
+        private IOCompletionHandler<Integer> makeHandler(final Function cb)
+        {
+            if (cb == null) {
+                return null;
+            } else {
+                final NodeRuntime runtime = server.getRunner();
+                final Object domain = runtime.getDomain();
 
+                return new IOCompletionHandler<Integer>()
+                {
+                    @Override
+                    public void ioComplete(final int errCode, final Integer value)
+                    {
+                        runtime.enqueueTask(new ScriptTask() {
+                            @Override
+                            public void execute(Context cx, Scriptable scope)
+                            {
+                                Object err;
+                                if (errCode == 0) {
+                                    err = Undefined.instance;
+                                } else {
+                                    err = Utils.makeErrorObject(cx, ResponseAdapter.this, errCode);
+                                }
+                                cb.call(cx, cb, ResponseAdapter.this, new Object[] { err, value });
+                            }
+                        }, domain);
+                    }
+                };
+            }
+        }
 
         @JSFunction
         @SuppressWarnings("unused")
@@ -856,9 +920,10 @@ public class HTTPWrap
             response.fatalError(message, stackStr);
         }
 
-        private void addTrailers(Scriptable trailers, HttpResponseAdapter response)
+        private void addTrailers(Object t, HttpResponseAdapter response)
         {
-            if (trailers != null) {
+            if ((t != null) && !Undefined.instance.equals(t)) {
+                Scriptable trailers = (Scriptable)t;
                 int i = 0;
                 Object name;
                 Object value;
@@ -876,41 +941,6 @@ public class HTTPWrap
         private void addDateHeader(HttpResponseAdapter response)
         {
             response.addHeader("Date", server.formatDate());
-        }
-
-        private void setListener(HttpFuture future)
-        {
-            future.setListener(new HttpFuture.Listener() {
-                @Override
-                public void onComplete(final boolean success, final boolean closed, final Throwable cause)
-                {
-                    if (log.isDebugEnabled()) {
-                        log.debug("Write complete: success = {} closed = {} cause = {}", success, closed, cause);
-                    }
-                    Object domain = server.getRunner().getDomain();
-                    server.getRunner().enqueueTask(new ScriptTask()
-                    {
-                        @Override
-                        public void execute(Context cx, Scriptable scope)
-                        {
-                            Scriptable err = null;
-                            // on an HTTP response, no need to get all upset about a close
-                            if (closed) {
-                                ResponseAdapter.this.onChannelClosed.call(cx, ResponseAdapter.this.onChannelClosed,
-                                                                          ResponseAdapter.this, ScriptRuntime.emptyArgs);
-                            } else {
-                                if (!success) {
-                                    err = Utils.makeErrorObject(cx, ResponseAdapter.this,
-                                                                (cause == null) ? null : cause.toString());
-                                }
-                                ResponseAdapter.this.onWriteComplete.call(cx, ResponseAdapter.this.onWriteComplete,
-                                                                          ResponseAdapter.this,
-                                                                          new Object[] { err });
-                            }
-                        }
-                    }, domain);
-                }
-            });
         }
     }
 }

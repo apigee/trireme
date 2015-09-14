@@ -1,5 +1,5 @@
 /**
- * Copyright 2013 Apigee Corporation.
+ * Copyright 2015 Apigee Corporation.
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to deal
@@ -19,37 +19,40 @@
  * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
  * SOFTWARE.
  */
-package io.apigee.trireme.net.spi;
+package io.apigee.trireme.servlet.internal;
 
-import java.util.concurrent.Future;
+import io.apigee.trireme.net.spi.PauseHelper;
 
-public abstract class HttpFuture
-    implements Future<Boolean>
+/**
+ * This class is used when reading data from a servlet. We read synchronously so that we can
+ * block the thread, but we don't want to read so fast that we overwhelm the servlet itself.
+ */
+
+public class FlowController
+    implements PauseHelper.FlowControl
 {
-    private Listener listener;
+    public static final long MAX_PAUSE = 60L * 1000L;
 
-    public void setListener(Listener l)
-    {
-        this.listener = l;
-        listenerRegistered();
-    }
+    private boolean paused;
 
-    protected void invokeListener(boolean success, boolean closed, Throwable cause)
+    public synchronized void pause()
+        throws InterruptedException
     {
-        if (listener != null) {
-            listener.onComplete(success, closed,  cause);
+        while (paused) {
+            wait(MAX_PAUSE);
         }
     }
 
-    protected abstract void listenerRegistered();
-
-    public interface Listener
+    @Override
+    public synchronized void doPause()
     {
-        /**
-         * Implement this to be notified when an HTTP operation completes. Callers must set "closed" if
-         * the operation fails because the connection was closed -- the server may need to handle this
-         * differently than a client.
-         */
-        void onComplete(boolean success, boolean closed, Throwable cause);
+        paused = true;
+    }
+
+    @Override
+    public synchronized void doResume()
+    {
+        paused = false;
+        notifyAll();
     }
 }

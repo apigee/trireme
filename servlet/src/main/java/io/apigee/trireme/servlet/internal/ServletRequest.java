@@ -22,6 +22,7 @@
 package io.apigee.trireme.servlet.internal;
 
 import io.apigee.trireme.net.spi.HttpRequestAdapter;
+import io.apigee.trireme.net.spi.PauseHelper;
 import org.mozilla.javascript.Scriptable;
 
 import javax.servlet.http.HttpServletRequest;
@@ -39,11 +40,15 @@ public class ServletRequest
     extends AbstractRequest
     implements HttpRequestAdapter
 {
-    private final HttpServletRequest request;
+    public static final int HIGH_WATER = 16 * 1024;
 
-    public ServletRequest(HttpServletRequest req)
+    private final HttpServletRequest request;
+    private final PauseHelper pauser;
+
+    public ServletRequest(HttpServletRequest req, FlowController control)
     {
         this.request = req;
+        this.pauser = new PauseHelper(control, HIGH_WATER);
     }
 
     @Override
@@ -77,13 +82,19 @@ public class ServletRequest
     @Override
     public void pause()
     {
-        // Nothing yet
+        pauser.pause();
     }
 
     @Override
     public void resume()
     {
-        // Nothing yet
+        pauser.resume();
+    }
+
+    @Override
+    public void incrementQueueLength(int delta)
+    {
+        pauser.incrementQueueLength(delta);
     }
 
     @Override

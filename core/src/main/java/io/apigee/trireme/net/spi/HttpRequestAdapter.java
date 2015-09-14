@@ -30,6 +30,23 @@ public interface HttpRequestAdapter
     String getMethod();
     void setMethod(String method);
 
+    /**
+     * Handle a request from "http.js" to pause the flow of data to this HTTP request.
+     * This happens when the a particular request has too much data in its queue already.
+     * Implementations should pause the transport when this method is called.
+     */
     void pause();
+
+    /**
+     * Handle a request from "http.js" to resume the flow of data that was previously paused.
+     */
     void resume();
+
+    /**
+     * Increment a counter of bytes delivered to this request that have not yet been forwarded
+     * to the actual Node.js script yet, but are waiting in the task queue. Implementations should
+     * pause the transport when the queue length passes a reasonable threshold.
+     * The "PauseHelper" class in the "net.spi" module is designed to help implement this.
+     */
+    void incrementQueueLength(int delta);
 }

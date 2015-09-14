@@ -22,15 +22,23 @@
 package io.apigee.trireme.container.netty;
 
 import io.apigee.trireme.net.spi.HttpRequestAdapter;
+import io.apigee.trireme.net.spi.PauseHelper;
 import io.netty.channel.socket.SocketChannel;
 import io.netty.handler.codec.http.HttpMethod;
 import io.netty.handler.codec.http.HttpRequest;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 public class NettyHttpRequest
     extends NettyHttpMessage
-    implements HttpRequestAdapter
+    implements HttpRequestAdapter, PauseHelper.FlowControl
 {
+    public static final int HIGH_WATER_MARK = 16 * 1024;
+
+    private static final Logger log = LoggerFactory.getLogger(NettyHttpRequest.class);
+
     private final HttpRequest req;
+    private final PauseHelper pauser = new PauseHelper(this, HIGH_WATER_MARK);
 
     public NettyHttpRequest(HttpRequest req, SocketChannel channel)
     {
@@ -65,12 +73,34 @@ public class NettyHttpRequest
     @Override
     public void pause()
     {
-        channel.config().setAutoRead(false);
+        log.debug("Received pause from http.js");
+        pauser.pause();
     }
 
     @Override
     public void resume()
     {
+        log.debug("Received resume from http.js");
+        pauser.resume();
+    }
+
+    @Override
+    public void incrementQueueLength(int delta)
+    {
+        pauser.incrementQueueLength(delta);
+    }
+
+    @Override
+    public void doPause()
+    {
+        log.debug("Pausing HTTP stream");
+        channel.config().setAutoRead(false);
+    }
+
+    @Override
+    public void doResume()
+    {
+        log.debug("Resuming HTTP stream");
         channel.config().setAutoRead(true);
     }
 

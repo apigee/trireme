@@ -28,9 +28,11 @@ import io.apigee.trireme.core.Sandbox;
 import io.apigee.trireme.core.ScriptFuture;
 import io.apigee.trireme.core.ScriptStatus;
 import io.apigee.trireme.core.ScriptStatusListener;
+import io.apigee.trireme.kernel.ErrorCodes;
 import io.apigee.trireme.kernel.net.NetworkPolicy;
 import io.apigee.trireme.net.spi.HttpServerStub;
 import io.apigee.trireme.servlet.internal.EnvironmentManager;
+import io.apigee.trireme.servlet.internal.FlowController;
 import io.apigee.trireme.servlet.internal.ResponseChunk;
 import io.apigee.trireme.servlet.internal.ResponseError;
 import io.apigee.trireme.servlet.internal.ScriptState;
@@ -189,7 +191,8 @@ public class TriremeServlet
             return;
         }
 
-        ServletRequest req = new ServletRequest(servletReq);
+        FlowController control = new FlowController();
+        ServletRequest req = new ServletRequest(servletReq, control);
         ServletResponse resp = new ServletResponse(servletResp);
         HttpServerStub stub = state.getStub();
 
@@ -200,15 +203,22 @@ public class TriremeServlet
         InputStream in = servletReq.getInputStream();
         int rc;
 
-        do {
-            // Can't share this -- remember that "onData" happens asynchronously.
-            byte[] buf = new byte[BUFFER_SIZE];
-            rc = in.read(buf);
-            if (rc > 0) {
-                ByteBuffer chunk = ByteBuffer.wrap(buf, 0, rc);
-                stub.onData(req, resp, new ServletChunk(chunk, false));
-            }
-        } while (rc >= 0);
+        try {
+            do {
+                // Give Node code a chance to breathe and apply backpressure
+                control.pause();
+                // Can't share this -- remember that "onData" happens asynchronously.
+                byte[] buf = new byte[BUFFER_SIZE];
+                rc = in.read(buf);
+                if (rc > 0) {
+                    ByteBuffer chunk = ByteBuffer.wrap(buf, 0, rc);
+                    stub.onData(req, resp, new ServletChunk(chunk, false));
+                }
+            } while (rc >= 0);
+        } catch (InterruptedException ie) {
+            returnError(servletResp, 500, "Interrupted while reading request");
+            return;
+        }
 
         // Send the "end".
         stub.onData(req, resp, new ServletChunk(null, true));
@@ -235,22 +245,26 @@ public class TriremeServlet
                 chunk = (ResponseChunk)next;
                 if (chunk.getBuffer() == ServletResponse.LAST_CHUNK) {
                     out.close();
-                    chunk.getFuture().setSuccess();
+                    chunk.invokeCallback(0);
                 } else if (chunk.getBuffer() != null) {
                     ByteBuffer bb = chunk.getBuffer();
                     if (bb.hasArray()) {
                         out.write(bb.array(), bb.arrayOffset() + bb.position(), bb.remaining());
-                        chunk.getFuture().setSuccess();
+                        chunk.invokeCallback(0);
                     } else {
                         byte[] tmp = new byte[bb.remaining()];
                         bb.get(tmp);
                         out.write(tmp);
-                        chunk.getFuture().setSuccess();
+                        chunk.invokeCallback(0);
                     }
                 }
             } catch (InterruptedException e) {
-                returnError(servletResp, 500, "Interrupted while reading");
+                drainQueue(resp, ErrorCodes.EINTR);
+                returnError(servletResp, 500, "Interrupted while writing response");
                 return;
+            } catch (IOException ioe) {
+                drainQueue(resp, ErrorCodes.EIO);
+                throw ioe;
             }
         } while (chunk.getBuffer() != ServletResponse.LAST_CHUNK);
     }
@@ -263,5 +277,28 @@ public class TriremeServlet
         PrintWriter pw = resp.getWriter();
         pw.write(msg);
         pw.close();
+    }
+
+    private void drainQueue(ServletResponse resp, int errCode)
+    {
+        while (true) {
+            Object next;
+            try {
+                next = resp.getNextChunk();
+            } catch (InterruptedException ie) {
+                break;
+            }
+
+            if (next instanceof ResponseError) {
+                break;
+            }
+            if (next instanceof ResponseChunk) {
+                ResponseChunk rc = (ResponseChunk)next;
+                rc.invokeCallback(errCode);
+                if (rc.getBuffer() == ServletResponse.LAST_CHUNK) {
+                    break;
+                }
+            }
+        }
     }
 }

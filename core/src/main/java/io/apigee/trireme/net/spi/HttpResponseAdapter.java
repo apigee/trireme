@@ -21,6 +21,8 @@
  */
 package io.apigee.trireme.net.spi;
 
+import io.apigee.trireme.kernel.handles.IOCompletionHandler;
+
 import java.nio.ByteBuffer;
 
 public interface HttpResponseAdapter
@@ -32,14 +34,18 @@ public interface HttpResponseAdapter
     /**
      * Send the headers, and optionally the data if the data was already
      * set on this object. Return true if the I/O completed right away.
+     * If "cb" is not null, then the caller must call it once the
+     * data has been written to the network. If "cb" is null, then ignore it.
      */
-    HttpFuture send(boolean lastChunk);
+    void send(boolean lastChunk, IOCompletionHandler<Integer> cb);
 
     /**
      * Send just a chunk of data. If "send" was not called first, then
      * the behavior is undefined. Return true if the I/O completed right away.
+     * If "cb" is not null, then the caller must call it once the
+     * data has been written to the network.
      */
-    HttpFuture sendChunk(ByteBuffer data, boolean lastChunk);
+    void sendChunk(ByteBuffer data, boolean lastChunk, IOCompletionHandler<Integer> cb);
 
     /**
      * A fatal error occurred while processing the associated request. The adapter should respond with

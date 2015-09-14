@@ -21,23 +21,31 @@
  */
 package io.apigee.trireme.servlet.internal;
 
+import io.apigee.trireme.kernel.handles.IOCompletionHandler;
+
 import java.nio.ByteBuffer;
 
 public class ResponseChunk
 {
-    private final ChunkStatus future = new ChunkStatus();
     private final ByteBuffer buf;
+    private final int len;
+    private final IOCompletionHandler<Integer> cb;
 
-    public ResponseChunk(ByteBuffer buf)
+    public ResponseChunk(ByteBuffer buf, IOCompletionHandler<Integer> cb)
     {
         this.buf = buf;
-    }
-
-    public ChunkStatus getFuture() {
-        return future;
+        this.cb = cb;
+        this.len = (buf == null ? 0 : buf.remaining());
     }
 
     public ByteBuffer getBuffer() {
         return buf;
+    }
+
+    public void invokeCallback(int errCode)
+    {
+        if (cb != null) {
+            cb.ioComplete(errCode, len);
+        }
     }
 }

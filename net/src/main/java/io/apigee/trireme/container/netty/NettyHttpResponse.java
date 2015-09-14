@@ -22,17 +22,18 @@
 package io.apigee.trireme.container.netty;
 
 import io.apigee.trireme.kernel.Charsets;
-import io.apigee.trireme.net.spi.HttpFuture;
+import io.apigee.trireme.kernel.ErrorCodes;
+import io.apigee.trireme.kernel.handles.IOCompletionHandler;
 import io.apigee.trireme.net.spi.HttpResponseAdapter;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
 import io.netty.channel.ChannelFuture;
-import io.netty.channel.DefaultChannelPromise;
 import io.netty.channel.socket.SocketChannel;
 import io.netty.handler.codec.http.DefaultHttpContent;
 import io.netty.handler.codec.http.DefaultLastHttpContent;
 import io.netty.handler.codec.http.HttpResponse;
 import io.netty.handler.codec.http.HttpResponseStatus;
+import io.netty.util.concurrent.GenericFutureListener;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -129,16 +130,20 @@ public class NettyHttpResponse
     }
 
     @Override
-    public HttpFuture send(boolean lastChunk)
+    public void send(boolean lastChunk, IOCompletionHandler<Integer> cb)
     {
         calculateKeepAlive(lastChunk);
         if (log.isDebugEnabled()) {
             log.debug("send: sending HTTP response {}", response);
         }
 
+        int len;
         ChannelFuture future = channel.write(response);
 
-        if (data != null) {
+        if (data == null) {
+            len = 0;
+        } else {
+            len = data.remaining();
             if (log.isDebugEnabled()) {
                 log.debug("send: Sending HTTP chunk with data {}", data);
             }
@@ -150,19 +155,25 @@ public class NettyHttpResponse
         if (lastChunk) {
             future = sendLastChunk();
         }
+
+        addListener(future, len, cb);
+
         channel.flush();
         if (lastChunk && !keepAlive) {
             shutDown();
         }
-
-        return new NettyHttpFuture(future);
     }
 
     @Override
-    public HttpFuture sendChunk(ByteBuffer buf, boolean lastChunk)
+    public void sendChunk(ByteBuffer buf, boolean lastChunk, IOCompletionHandler<Integer> cb)
     {
         ChannelFuture future = null;
-        if (buf != null) {
+        int len;
+
+        if (buf == null) {
+            len = 0;
+        } else {
+            len = buf.remaining();
             if (log.isDebugEnabled()) {
                 log.debug("sendChunk: Sending HTTP chunk {}", buf);
             }
@@ -174,17 +185,37 @@ public class NettyHttpResponse
         if (lastChunk) {
             future = sendLastChunk();
         }
+
+        if (future == null) {
+            cb.ioComplete(0, 0);
+        } else {
+            addListener(future, len, cb);
+        }
+
         channel.flush();
         if (lastChunk && !keepAlive) {
             shutDown();
         }
+    }
 
-        if (future == null) {
-            DefaultChannelPromise doneFuture = new DefaultChannelPromise(channel);
-            doneFuture.setSuccess();
-            future = doneFuture;
+    private void addListener(ChannelFuture future,
+                              final int len, final IOCompletionHandler<Integer> cb)
+    {
+        if (cb == null) {
+            return;
         }
-        return new NettyHttpFuture(future);
+
+        future.addListener(new GenericFutureListener<ChannelFuture>() {
+            @Override
+            public void operationComplete(ChannelFuture f)
+            {
+                if (f.isSuccess()) {
+                    cb.ioComplete(0, len);
+                } else {
+                    cb.ioComplete(ErrorCodes.EIO, 0);
+                }
+            }
+        });
     }
 
     @Override
@@ -228,8 +259,7 @@ public class NettyHttpResponse
                 chunk.trailingHeaders().add(t.getKey(), t.getValue());
             }
         }
-        ChannelFuture ret = channel.write(chunk);
-        return ret;
+        return channel.write(chunk);
     }
 
     @Override

@@ -21,7 +21,7 @@
  */
 package io.apigee.trireme.servlet.internal;
 
-import io.apigee.trireme.net.spi.HttpFuture;
+import io.apigee.trireme.kernel.handles.IOCompletionHandler;
 import io.apigee.trireme.net.spi.HttpResponseAdapter;
 
 import javax.servlet.http.HttpServletResponse;
@@ -64,31 +64,27 @@ public class ServletResponse
     }
 
     @Override
-    public HttpFuture send(boolean lastChunk)
+    public void send(boolean lastChunk, IOCompletionHandler<Integer> cb)
     {
         if (lastChunk) {
-            ResponseChunk chunk = new ResponseChunk(LAST_CHUNK);
+            ResponseChunk chunk = new ResponseChunk(LAST_CHUNK, cb);
             responseQueue.offer(chunk);
-            return chunk.getFuture();
         }
-
-        ChunkStatus done = new ChunkStatus();
-        done.setSuccess();
-        return done;
     }
 
     @Override
-    public HttpFuture sendChunk(ByteBuffer data, boolean lastChunk)
+    public void sendChunk(ByteBuffer data, boolean lastChunk, IOCompletionHandler<Integer> cb)
     {
-        ResponseChunk chunk = new ResponseChunk(data);
-        responseQueue.offer(chunk);
-
         if (lastChunk) {
-            chunk = new ResponseChunk(LAST_CHUNK);
+            ResponseChunk chunk = new ResponseChunk(data, null);
+            responseQueue.offer(chunk);
+            chunk = new ResponseChunk(LAST_CHUNK, cb);
+            responseQueue.offer(chunk);
+
+        } else {
+            ResponseChunk chunk = new ResponseChunk(data, cb);
             responseQueue.offer(chunk);
         }
-
-        return chunk.getFuture();
     }
 
     @Override

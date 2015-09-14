@@ -97,6 +97,17 @@ public class ServletIT
     }
 
     @Test
+    public void testHumongousPostCount()
+        throws IOException
+    {
+        int chunkSize = 10000;
+        int numChunks = 25000;
+        String len = httpLargeExchange("POST", BASE + "/test/count", chunkSize, numChunks, 200);
+        int length = Integer.parseInt(len);
+        assertEquals(chunkSize * numChunks, length);
+    }
+
+    @Test
     public void testHelloDelay()
         throws IOException
     {

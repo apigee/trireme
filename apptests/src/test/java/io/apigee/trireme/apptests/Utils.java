@@ -12,6 +12,8 @@ import static org.junit.Assert.assertEquals;
 
 public class Utils
 {
+    public static final int READ_TIMEOUT = 1000;
+
     public static  String getString(String url, int expectedResponse, boolean compressed)
         throws IOException
     {
@@ -20,6 +22,7 @@ public class Utils
         if (compressed) {
             http.setRequestProperty("Accept-Encoding", "gzip");
         }
+        http.setReadTimeout(READ_TIMEOUT);
         assertEquals(expectedResponse, http.getResponseCode());
 
         StringBuilder sb = new StringBuilder();
@@ -54,6 +57,7 @@ public class Utils
         HttpURLConnection http = (HttpURLConnection)u.openConnection();
         http.setDoOutput(true);
         http.setRequestMethod("POST");
+        http.setReadTimeout(READ_TIMEOUT);
 
         byte[] bodyBytes = requestBody.getBytes();
         http.setRequestProperty("Content-Length", String.valueOf(bodyBytes.length));
@@ -89,5 +93,6 @@ public class Utils
                 // System.out.println("Port " + port + " not open yet: " + ioe);
             }
         }
+        throw new IOException("Port did not open in time");
     }
 }

@@ -667,6 +667,10 @@
     <Excluded>
         <Name>test-process-argv-0.js</Name>
     </Excluded>
+    <Excluded>
+        <Description>Subject to race conditions</Description>
+        <Name>test-child-process-fork-ref.js</Name>
+    </Excluded>
 
     <!--
          JUST BROKEN

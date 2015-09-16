@@ -32,6 +32,10 @@
       <groupId>org.mozilla</groupId>
       <artifactId>rhino</artifactId>
     </dependency>
+    <dependency>
+      <groupId>org.slf4j</groupId>
+      <artifactId>slf4j-api</artifactId>
+    </dependency>
 
     <dependency>
       <groupId>junit</groupId>
@@ -61,7 +65,7 @@
               <pattern>io/apigee/trireme/node12/node/*.js</pattern>
               <codePrefix>(function (exports, require, module, __filename, __dirname) { </codePrefix>
               <codePostfix>});</codePostfix>
-	      <macroFile>${projectDirectory}/macros.txt</macroFile>
+	      <macroFile>${project.projectDirectory}/macros.txt</macroFile>
             </configuration>
             <phase>compile</phase>
             <goals>
@@ -78,7 +82,7 @@
               <!-- When precompiling, wrap native module code in a function as the Node code expects. -->
               <codePrefix>(function (exports, require, module, __filename, __dirname) { </codePrefix>
               <codePostfix>});</codePostfix>
-	      <macroFile>${projectDirectory}/macros.txt</macroFile>
+	      <macroFile>${project.projectDirectory}/macros.txt</macroFile>
             </configuration>
             <phase>compile</phase>
             <goals>
@@ -92,7 +96,7 @@
               <optimizationLevel>9</optimizationLevel>
               <debugInfo>true</debugInfo>
               <pattern>io/apigee/trireme/node12/main/*.js</pattern>
-	      <macroFile>${projectDirectory}/macros.txt</macroFile>
+	      <macroFile>${project.projectDirectory}/macros.txt</macroFile>
             </configuration>
             <phase>compile</phase>
             <goals>

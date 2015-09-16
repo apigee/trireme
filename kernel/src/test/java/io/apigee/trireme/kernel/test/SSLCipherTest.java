@@ -68,6 +68,63 @@ public class SSLCipherTest
         assertArrayEquals(defaults, filtered);
     }
 
+    @Test
+    public void testAllCiphers()
+    {
+        checkSupport("ALL");
+    }
+
+    @Test
+    public void testDefaultCiphers()
+    {
+        checkSupport("DEFAULT");
+    }
+
+    @Test
+    public void testSSLDefaults()
+    {
+        String[] filtered = checkSupport("RC4:HIGH:!MD5:!aNULL");
+        for (String c : filtered) {
+            assertFalse("Should not contain any MD5 ciphers", c.contains("MD5"));
+            assertFalse("Should not contain any NULL ciphers", c.contains("NULL"));
+        }
+    }
+
+    @Test
+    public void testTLSDefaults()
+    {
+        String[] filtered = checkSupport("ECDHE-RSA-AES128-SHA256:DHE-RSA-AES128-SHA256:AES128-GCM-SHA256:RC4:HIGH:!MD5:!aNULL");
+        for (String c : filtered) {
+            assertFalse("Should not contain any MD5 ciphers", c.contains("MD5"));
+            assertFalse("Should not contain any NULL ciphers", c.contains("NULL"));
+        }
+    }
+
+    @Test
+    public void testStripeLibrary()
+    {
+        String[] filtered = checkSupport("DEFAULT:!aNULL:!eNULL:!LOW:!EXPORT:!SSLv2:!MD5");
+        for (String c : filtered) {
+            assertFalse("Should not contain any MD5 ciphers", c.contains("MD5"));
+            assertFalse("Should not contain any NULL ciphers", c.contains("NULL"));
+            assertFalse("Should not contain any RC4_40 ciphers", c.contains("RC4_40"));
+            assertFalse("Should not contain any single DES ciphers", c.contains("_DES_"));
+        }
+    }
+
+    private String[] checkSupport(String spec)
+    {
+        String[] filtered = SSLCiphers.get().filterCipherList(spec);
+        assertTrue(filtered.length > 0);
+        /*
+        System.out.println("Ciphers for " + spec + ": ");
+        for (String c : filtered) {
+            System.out.println("  " + c);
+        }
+        */
+        return filtered;
+    }
+
     /* Uncomment to see what ciphers are enabled
     @Test
     public void dumpDefaultCiphers()

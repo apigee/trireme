@@ -235,11 +235,15 @@ if (HttpWrap.hasServerAdapter()) {
 
       if (self.headersSent) {
         debug('Sending end of response');
-        self._adapter.sendChunk(null, null, self._trailers, true, responseEndComplete);
+        self._adapter.sendChunk(null, null, self._trailers, true, function() {
+          responseEndComplete(self);
+        });
       } else {
         // We will only get here if we are sending an empty response
         self._adapter.send(self.statusCode, self.sendDate, self._savedHeaders,
-                           null, null, self._trailers, true, responseEndComplete);
+                           null, null, self._trailers, true, function() {
+          responseEndComplete(self);
+        });
       }
     });
   };

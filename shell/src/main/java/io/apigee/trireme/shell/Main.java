@@ -27,6 +27,7 @@ import io.apigee.trireme.core.NodeScript;
 import io.apigee.trireme.core.ScriptStatus;
 import io.apigee.trireme.core.Utils;
 import io.apigee.trireme.core.internal.Version;
+import io.apigee.trireme.net.spi.HttpServerContainer;
 import org.mozilla.javascript.Context;
 import org.mozilla.javascript.JavaScriptException;
 import org.mozilla.javascript.RhinoException;
@@ -43,14 +44,21 @@ import java.util.regex.Pattern;
  */
 public class Main
 {
+    public static final String DEFAULT_ADAPTER = "default";
+    public static final String NETTY_ADAPTER = "netty";
+    public static final String NETTY_ADAPTER_CLASS = "io.apigee.trireme.container.netty.NettyHttpContainer";
+
     private String scriptSource;
     private boolean runRepl;
     private boolean printEval;
     private String[] scriptArgs;
     private String nodeVersion = NodeEnvironment.DEFAULT_NODE_VERSION;
+    private String httpAdapter = DEFAULT_ADAPTER;
 
     private static final Pattern NODE_VERSION_PATTERN =
         Pattern.compile("--node[_-]version=(.+)");
+    private static final Pattern HTTP_ADAPTER_PATTERN =
+        Pattern.compile("--http-adapter=(.+)");
 
     private static void printUsage()
     {
@@ -69,6 +77,7 @@ public class Main
         System.err.println("  --throw-deprecation  Throw an exception anytime a deprecated function is used");
         System.err.println("  --trace-deprecation  Show stack traces on deprecations");
         System.err.println("  --expose_gc          Export global \"gc\" function");
+        System.err.println("  --http-adapter=A     Use the specified HTTP adapter: \"default\", \"netty\", or class name");
     }
 
     private static void printVersion()
@@ -126,9 +135,14 @@ public class Main
 
         for (int ia = i; ia < args.length; ia++) {
             if (processingOptions) {
-                Matcher m = NODE_VERSION_PATTERN.matcher(args[ia]);
-                if (m.matches()) {
-                    nodeVersion = m.group(1);
+                Matcher nv = NODE_VERSION_PATTERN.matcher(args[ia]);
+                Matcher ha = HTTP_ADAPTER_PATTERN.matcher(args[ia]);
+                if (nv.matches()) {
+                    nodeVersion = nv.group(1);
+                } else if (ha.matches()) {
+                    httpAdapter = ha.group(1);
+                } else if (ha.matches()) {
+
                 } else if (!args[ia].startsWith("--")) {
                     processingOptions = false;
                 }
@@ -144,7 +158,18 @@ public class Main
 
     private int run()
     {
+        setDebug();
+
         NodeEnvironment env = new NodeEnvironment();
+        try {
+            HttpServerContainer adapter = loadHttpAdapter();
+            if (adapter != null) {
+                env.setHttpContainer(adapter);
+            }
+        } catch (NodeException ne) {
+            System.err.println(ne.getMessage());
+            return 96;
+        }
 
         if ((scriptArgs == null) || (scriptArgs.length == 0)) {
             runRepl = true;
@@ -193,6 +218,31 @@ public class Main
         }
     }
 
+    private HttpServerContainer loadHttpAdapter()
+        throws NodeException
+    {
+        if (DEFAULT_ADAPTER.equals(httpAdapter)) {
+            return null;
+        }
+
+        String className =
+            (NETTY_ADAPTER.equals(httpAdapter) ? NETTY_ADAPTER_CLASS : httpAdapter);
+
+        try {
+            Class<HttpServerContainer> adapterClass = (Class<HttpServerContainer>)Class.forName(className);
+            return adapterClass.newInstance();
+
+        } catch (ClassNotFoundException cnfe) {
+            throw new NodeException("HTTP Adapter " + httpAdapter + " not found in class path");
+        } catch (ClassCastException cce) {
+            throw new NodeException("HTTP adapter " + httpAdapter + " does not implement the correct class");
+        } catch (InstantiationException ie) {
+            throw new NodeException("Error instantiating HTTP adapter " + httpAdapter + ": " + ie);
+        } catch (IllegalAccessException ie) {
+            throw new NodeException("Error instantiating HTTP adapter " + httpAdapter + ": " + ie);
+        }
+    }
+
     private static void printException(Throwable ee)
     {
         if (ee instanceof JavaScriptException) {
@@ -223,6 +273,16 @@ public class Main
             return Utils.readStream(replIn);
         } finally {
             replIn.close();
+        }
+    }
+
+    private static void setDebug()
+    {
+        System.setProperty("org.slf4j.simpleLogger.showThreadName", "false");
+        System.setProperty("org.slf4j.simpleLogger.showShortLogName", "true");
+        String dbg = System.getenv("LOGLEVEL");
+        if (dbg != null) {
+            System.setProperty("org.slf4j.simpleLogger.defaultLogLevel", dbg);
         }
     }
 }

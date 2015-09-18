@@ -379,6 +379,7 @@ if (HttpWrap.hasServerAdapter()) {
 
   function Server(requestListener) {
     if (!(this instanceof Server)) return new Server(requestListener);
+    debug('New HTTP server');
     events.EventEmitter.call(this);
 
     if (requestListener) {
@@ -597,6 +598,24 @@ if (HttpWrap.hasServerAdapter()) {
   }
 
   function listen(self, address, port, addressType, backlog, fd) {
+    if (debugOn) {
+      debug('listen address = ' + address + ' port = ' + port);
+    }
+    var fam;
+    if (addressType === 4) {
+      fam = 'IPv4';
+    } else if (addressType === 6) {
+      fam = 'IPv6';
+    } else {
+      fam = 'IPv4';
+    }
+
+    self.address = {
+      port: port,
+      address: address,
+      family: fam
+    };
+
     self._adapter = HttpWrap.createServerAdapter();
     if (self.sslContext) {
       self._adapter.setSslContext(self.sslContext, self.rejectUnauthorized, self.requestCert);
@@ -652,7 +671,12 @@ if (HttpWrap.hasServerAdapter()) {
     });
   }
 
+  Server.prototype.address = function() {
+    return this.address;
+  };
+
   Server.prototype.listen = function() {
+    debug('server listen');
     // Run through the various arguments to "listen." This code is taken from "net.js".
     var self = this;
 

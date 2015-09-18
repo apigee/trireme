@@ -27,9 +27,12 @@
 var evals = process.binding('evals').NodeScript;
 
 var debug;
+var debugOn;
 if (process.env.NODE_DEBUG && /vm/.test(process.env.NODE_DEBUG)) {
+  debugOn = true;
   debug = function(x) { console.error('VM: %s', x); };
 } else {
+  debugOn = false;
   debug = function() { };
 }
 
@@ -67,9 +70,13 @@ Script.runInContext = function(code, context, filename) {
 
 Script.createContext = function(sandbox) {
   var ctx = evals.createContext();
-  debug('Creating context using sandbox ' + JSON.stringify(sandbox));
+  if (debugOn) {
+    debug('Creating context using sandbox ' + JSON.stringify(sandbox));
+  }
   copyFromSandbox(sandbox, ctx);
-  debug('Context after sandbox ' + JSON.stringify(ctx));
+  if (debugOn) {
+    debug('Context after sandbox ' + JSON.stringify(ctx));
+  }
   return ctx;
 };
 

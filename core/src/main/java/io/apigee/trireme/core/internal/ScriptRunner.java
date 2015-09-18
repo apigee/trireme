@@ -1199,6 +1199,8 @@ public class ScriptRunner
             } else if ("--no-deprecation".equals(arg)) {
                 process.put("throwDeprecation", process, false);
                 process.put("traceDeprecation", process, false);
+            } else if (sa.startsWith("--http-adapter")) {
+                // Processed by the shell
             } else if (sa.startsWith("--node-version") || sa.startsWith("--node_version")) {
                 // Ignore version number -- it is processed by the shell.
             } else if ("--debug".equals(arg) || "--trace".equals(arg)) {

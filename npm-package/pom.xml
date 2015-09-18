@@ -4,39 +4,39 @@
   <parent>
     <groupId>io.apigee.trireme</groupId>
     <artifactId>trireme</artifactId>
-    <version>0.8.8</version>
+    <version>0.8.9-SNAPSHOT</version>
   </parent>
 
   <name>trireme-npm</name>
   <artifactId>trireme-npm</artifactId>
-  <version>0.8.8</version>
+  <version>0.8.9-SNAPSHOT</version>
   <packaging>pom</packaging>
 
   <dependencies>
     <dependency>
       <groupId>io.apigee.trireme</groupId>
       <artifactId>trireme-core</artifactId>
-      <version>0.8.8</version>
+      <version>0.8.9-SNAPSHOT</version>
     </dependency>
     <dependency>
       <groupId>io.apigee.trireme</groupId>
       <artifactId>trireme-crypto</artifactId>
-      <version>0.8.8</version>
+      <version>0.8.9-SNAPSHOT</version>
     </dependency>
     <dependency>
       <groupId>io.apigee.trireme</groupId>
       <artifactId>trireme-util</artifactId>
-      <version>0.8.8</version>
+      <version>0.8.9-SNAPSHOT</version>
     </dependency>
     <dependency>
       <groupId>io.apigee.trireme</groupId>
       <artifactId>trireme-shell</artifactId>
-      <version>0.8.8</version>
+      <version>0.8.9-SNAPSHOT</version>
     </dependency>
     <dependency>
       <groupId>io.apigee.trireme</groupId>
       <artifactId>trireme-node10src</artifactId>
-      <version>0.8.8</version>
+      <version>0.8.9-SNAPSHOT</version>
     </dependency>
 
     <dependency>

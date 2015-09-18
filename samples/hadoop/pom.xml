@@ -4,18 +4,18 @@
   <parent>
     <groupId>io.apigee.trireme</groupId>
     <artifactId>trireme-samples</artifactId>
-    <version>0.8.8</version>
+    <version>0.8.9-SNAPSHOT</version>
   </parent>
 
   <name>trireme-hadoop-sample</name>
   <artifactId>trireme-hadoop-sample</artifactId>
-  <version>0.8.8</version>
+  <version>0.8.9-SNAPSHOT</version>
 
   <dependencies>
     <dependency>
       <groupId>io.apigee.trireme</groupId>
       <artifactId>trireme-core</artifactId>
-      <version>0.8.8</version>
+      <version>0.8.9-SNAPSHOT</version>
     </dependency>
 
     <dependency>

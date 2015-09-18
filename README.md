@@ -65,8 +65,13 @@ See [the releases page](https://github.com/apigee/trireme/releases) to download 
 
 ## What version of Node.js does Trireme Support?
 
-Trireme is currently based on Node.js 0.10. We are also working on ways to support multiple versions of the Node.js
-runtime inside the same JVM.
+Trireme supports two versions of Node.js:
+
+* 0.10.32. This is the default, fully-supported version.
+* 0.12.7. This version is still a work in progress.
+
+Support for Node.js 4.0 depends on more complete ES6 code in Rhino. The Rhino community is making progress
+on this but it will be quite some time before we are ready to support 4.0.
 
 ## Running Trireme
 
@@ -81,6 +86,10 @@ Trireme will execute your script just like Node.
 In addition, the environment variable TRIREME_CLASSPATH may be used to add extra JARs or directories to the
 classpath used to run Trireme. Anything on this path will be appended to the classpath used to
 launch Trireme. This allows you to add JDBC drivers, etc.
+
+For help, use:
+
+    trireme -h
 
 ### Using Java
 
@@ -119,6 +128,20 @@ Here are the basics:
     // Check the exit code
     System.exit(status.getExitCode());
 
+## Selecting the Node version
+
+The all-in-one JAR, and the "trireme" NPM package, include code for both Node.js 0.10 and 0.12.
+To select a version from the command-line, use the "--node-version" option, like this:
+
+    trireme --node-version=0.12 foo.js
+
+When embedding Trireme, select the version using the "setNodeVersion" method in the NodeScript class.
+
+With this scheme, both versions of Node can run inside the same JVM.
+
+The version numbers are "semver-style" although they do not support every single feature of semver.
+The best bet is to use "0.10" and "0.12" to select each.
+
 ## Trireme Extensions
 
 There are a few NPM modules that only work in Trireme. These allow access to
@@ -130,8 +153,11 @@ access to JDBC drivers from inside Node.js code. This makes it possible to use
 databases that have excellent JDBC drivers (such as Oracle) without compiling
 any native code.
 * [trireme-xslt](https://www.npmjs.org/package/trireme-xslt): This module provides
-access to the XSLT processor inside your Java platform, which is faster and
-can support more of the XSLT standard than libxslt.
+access to the XSLT processor inside the Java platform, which is faster and
+can support more of the XSLT standard than any of the native Node.js options.
+* [trireme-support](https://www.npmjs.com/package/trireme-support): Additional Trireme-specific
+support functions. These include the ability to detect if Trireme is being used, and the
+ability to dyamically load additional Node.js modules from a JAR file.
 
 ## Logging
 
@@ -343,6 +369,7 @@ another container is especially helpful.
 Trireme today consists of several modules. A typical application will wish to include the following in
 CLASSPATH:
 
+* trireme-kernel
 * trireme-core
 * trireme-node10src
 * trireme-crypto
@@ -351,17 +378,24 @@ CLASSPATH:
 The last two packages are optional for environments that are constrained by space or strong aversion to third-
 party dependencies.
 
-"trireme-node10src" is the module that contains the code from Node.js that runs the modules. Both it and "trireme-core"
-are required in order to actually run Trireme inside a larger container. If only "trireme-core" is on the
-classpath, then all scripts will fail with the message, "No available Node.js implementation."
+The bare minimum set of required modules is:
+
+* trireme-kernel
+* trireme-core
+* Either trireme-node10src or trireme-node12src
+
+Note that if Maven is used, trireme-node10src, trireme-node12src, trireme-crypto, and trireme-util will not
+be automatically pulled in by trireme-core -- it is the responsibility of the calling application to
+include each one explicitly. This way, Trireme may be used in environments where space is an issue.
 
 This table will help keep them straight:
 
 <table>
 <tr><td><b>module</b></td><td><b>Required?</b></td><td><b>Recommended?</b></td><td><b>Description</b></td></tr>
+<tr><td>trireme-kernel</td><td>X</td><td>X</td><td>Generic runtime support needed by the core</td></tr>
 <tr><td>trireme-core</td><td>X</td><td>X</td><td>The core module containing the guts of Trireme</td></tr>
-<tr><td>trireme-node10src</td><td>X</td><td>X</td><td>JavaScript code that makes Trireme implement Node.js 0.10</td></tr>
-<tr><td>trireme-node12src</td><td>X</td><td>X</td><td>JavaScript code that makes Trireme implement Node.js 0.12</td></tr>
+<tr><td>trireme-node10src</td><td>See Notes</td><td>X</td><td>JavaScript code that makes Trireme implement Node.js 0.10</td></tr>
+<tr><td>trireme-node12src</td><td>See Notes</td><td>X</td><td>JavaScript code that makes Trireme implement Node.js 0.12</td></tr>
 <tr><td>trireme-crypto</td><td/><td>X</td>
   <td>Support code for reading PEM files and some other crypto operations. Uses Bouncy Castle. If not in the classpath,
   certain crypto operations (notably PEM file support for TLS and HTTPS) will not work. Nonetheless, this is a separate
@@ -370,6 +404,8 @@ This table will help keep them straight:
   <td>Native Trireme / Java implementations of a few Node.js modules, notably "iconv". These are
   faster than the usual packages from NPM. If in the classpath, these modules will be used instead
   of searching the module path for a regular module.</td></tr>
+<tr><td>trireme-servlet</td><td></td><td></td><td>A generic servlet that may be packaged with Node code so that it
+  may run in a WAR.</td></tr>
 <tr><td>trireme-net</td><td/><td/><td>An HttpAdaptor implementation that uses Netty. Mainly useful as an example
   to show how to write an HTTP adaptor for embedding into another container.</td></tr>
 <tr><td>trireme-shell</td><td/><td/><td>A command-line shell for Trireme that mimics "node"</td></tr>
@@ -396,8 +432,12 @@ This is the de facto standard logging API for Java.
 
 ### Java SE 6
 
-Trireme runs on Java 6 and up. If Java 7 is available, it will use the new filesystem APIs, which allow a much wider
-range of filesystem features, like links and permissions that work the same way as regular Node.
+Trireme runs on Java 6 and up, although at least Java 7 is recommended. Java 7 supports a much richer
+filesystem abstraction, which the "fs" module depends upon. Certain more complex Node applications, such
+as "NPM," can only run on Trireme when Java 7 or higher is used.
+
+Trireme works fine on Java 8. It uses the standalone version of Rhino, so it is not affected by the fact
+that the default JavaScript engine was changed between Java 7 and Java 8.
 
 ## Design
 

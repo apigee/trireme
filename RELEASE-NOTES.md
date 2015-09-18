@@ -1,3 +1,32 @@
+* 0.8.8 09-18-2015:
+
+In addition to the fixes below, this release makes progress on support for Node.js 0.12. Both versions
+0.10 and 0.12 are included in the "trireme" NPM package and in the default JAR. Users may now select
+either version when starting the script.
+
+Support for 0.12 is still experimental. Most modules work well, however the child_process module in general
+is not complete and that hinders testing for some of the other modules.
+
+[Issue 87](https://github.com/apigee/trireme/issues/87) Fix flow control for HTTP requests and responses that
+use the HTTP adapter. This prevents OOMs when large messages are streamed using HTTP using the Netty
+adapter, the servlet adapter, and on Apigee Edge.
+[Issue 96](https://github.com/apigee/trireme/issues/96) Change the Buffer class to use much more code
+from regular Node.js so that it is is more compatible.
+[Issue 126](https://github.com/apigee/trireme/issues/126) Change the way that the class loader is set up
+in the "trireme-support" module so that a custom class loader may be set up for the JAR files that
+this module loads.
+[Issue 128](https://github.com/apigee/trireme/issues/128) Fix the way that TLS/SSL ciphersuites are translated
+from OpenSSL format to Java SSLEngine cipher suites. The new method is much more compatible with
+OpenSSL and many more applications should work that depend on particular ciphers.
+
+Also, some of the callbacks in the HTTP module were fixed in the HTTP adapter so that they work the same
+way as they do without the adapter, such as the "close" and "finish" callbacks.
+
+Sadly, Node.js 4.0 is out and much of the source code won't compile with the current version of Rhino
+due to dependence on ES6 features. The Rhino project is making progress on ES6 support but it will take
+some time. The Nashorn script engine in Java 8 cannot compile this code either due to a different
+set of ES6 incompatibilities.
+
 * 0.8.7 08-20-2015:
 
 [Issue 124](https://github.com/apigee/trireme/issues/124) Add the "_implicitHeader" to the HTTP adapter,

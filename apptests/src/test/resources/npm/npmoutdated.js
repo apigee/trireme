@@ -16,7 +16,7 @@ var config = { cache: cacheDir };
 
 npm.load(config, function(err, n) {
   if (err) {
-    console.log('Error initializing NPM: %s', er);
+    console.log('Error initializing NPM: %s', err);
     return;
   }
 

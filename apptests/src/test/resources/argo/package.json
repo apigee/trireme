@@ -1,9 +1,0 @@
-{
-  "name": "argo",
-  "description": "Argo test",
-  "version": "0.0.1",
-  "private": true,
-  "dependencies": {
-    "argo": "x"
-  }
-}

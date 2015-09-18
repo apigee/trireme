@@ -1,7 +1,7 @@
 var http = require('http');
 var assert = require('assert');
 
-var TIMEOUT = 5000;
+var TIMEOUT = 1000;
 
 console.log('blackholeresponsetest...');
 
@@ -16,7 +16,7 @@ var svr = http.createServer(function(req, resp) {
 });
 
 svr.listen(33340, function() {
-  http.get('http://localhost:33340/', function(resp) {
+  http.get('http://localhost:33340', function(resp) {
     var received = '';
     resp.setEncoding('utf8');
     assert.equal(resp.statusCode, 500);

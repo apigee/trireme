@@ -91,6 +91,7 @@ if (HttpWrap.hasServerAdapter()) {
     this.connection = conn;
     this.socket = conn;
     this.finished = false;
+    this.closeDelivered = false;
 
     Object.defineProperty(this, '_adapter', {
       value: adapter,
@@ -161,11 +162,26 @@ if (HttpWrap.hasServerAdapter()) {
     this._saveHeaders(headers);
   };
 
+  function responseWriteComplete(self, err, cb) {
+    if (debugOn) {
+      debug('Response write complete: err ' + err);
+    }
+    if (err) {
+      if (!self.ended && !self.closeDelivered) {
+        self.closeDelivered = true;
+        self.emit('close');
+      }
+    } else {
+      cb();
+    }
+  }
+
   ServerResponse.prototype._write = function(data, encoding, cb) {
     if (!this._savedHeaders) {
       this.writeHead(this.statusCode);
     }
 
+    var self = this;
     timers.active(this.connection);
     if (!this.headersSent) {
       // Just send one additional chunk of data
@@ -173,20 +189,20 @@ if (HttpWrap.hasServerAdapter()) {
         debug('Sending http headers status = ' + this.statusCode +
              ' data = ' + (data ? data.length : 0));
       }
+
       // We should always get a buffer with no encoding in this case
       this._adapter.send(this.statusCode, this.sendDate, this._savedHeaders,
                          data, encoding, undefined, false, function(err) {
-          debug('Header write complete');
-          cb(err);
+        responseWriteComplete(self, err, cb);
       });
       this.headersSent = true;
+
     } else {
       if (debugOn) {
         debug('Sending data = ' + (data ? data.length : 0));
       }
       this._adapter.sendChunk(data, encoding, undefined, false, function(err) {
-        debug('Chunk write complete');
-        cb(err);
+        responseWriteComplete(self, err, cb);
       });
     }
   };
@@ -194,6 +210,11 @@ if (HttpWrap.hasServerAdapter()) {
   ServerResponse.prototype._send = function() {
     return this.write(data, encoding);
   };
+
+  function responseEndComplete(self) {
+    debug('Response end completed');
+    self.connection.emit('finish');
+  }
 
   ServerResponse.prototype.end = function(data, encoding) {
     debug('end');
@@ -209,16 +230,17 @@ if (HttpWrap.hasServerAdapter()) {
       // That does not "unref" it in all cases -- must do that so we don't hold server open.
       self.connection.unref();
 
+      self.ended = true;
+      self.finished = true;
+
       if (self.headersSent) {
         debug('Sending end of response');
-        self._adapter.sendChunk(null, null, self._trailers, true);
+        self._adapter.sendChunk(null, null, self._trailers, true, responseEndComplete);
       } else {
         // We will only get here if we are sending an empty response
         self._adapter.send(self.statusCode, self.sendDate, self._savedHeaders,
-                           null, null, self._trailers, true);
+                           null, null, self._trailers, true, responseEndComplete);
       }
-      this.finished = true;
-      self.connection.emit('finish');
     });
   };
 
@@ -495,18 +517,14 @@ if (HttpWrap.hasServerAdapter()) {
 
     response._adapter.onchannelclosed = function() {
       debug('Server channel closed');
-      if (!response.ended) {
-        response.emit('close');
-      }
+      // We decided to emit the close event elsewhere here.
     };
 
     response._adapter.onwritecomplete = function(err) {
       if (debugOn) {
         debug('write complete: ' + err + ' outstanding: ' + response._outstanding);
       }
-      if (err) {
-        response.emit('error', err);
-      }
+      // We decided to emit the write error elsewhere.
     };
 
     request._adapter.domain = domain.create();
@@ -574,9 +592,6 @@ if (HttpWrap.hasServerAdapter()) {
       request._adapter.domain.run(function() {
         request.ended = true;
         request.emit('close');
-        if (response) {
-          response.emit('close');
-        }
       });
     }
   }

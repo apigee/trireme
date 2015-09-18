@@ -167,6 +167,13 @@ public class BasicHttpNettyTest
         runTest("upgradetest.js");
     }
 
+    @Test
+    public void testClientClose()
+        throws InterruptedException, ExecutionException, NodeException
+    {
+        runTest("clientclose.js");
+    }
+
     private void runTest(String name)
         throws InterruptedException, ExecutionException, NodeException
     {

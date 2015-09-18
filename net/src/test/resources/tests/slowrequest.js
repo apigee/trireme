@@ -2,7 +2,7 @@ var http = require('http');
 var assert = require('assert');
 var url = require('url');
 
-var TIMEOUT = 5000;
+var TIMEOUT = 1000;
 
 console.log('slowrequest test...');
 
@@ -56,7 +56,7 @@ svr.listen(33342, function() {
         req.write('Chunk');
         sendChunk(count + 1);
       }
-    }, 1000);
+    }, 100);
   }
 });
 

@@ -13,6 +13,7 @@
   <packaging>pom</packaging>
 
   <modules>
+    <module>apigee-edge-like-runner</module>
     <module>hadoop</module>
     <module>java-hello</module>
     <module>java-stream</module>

@@ -124,4 +124,22 @@ public class PemReadTest
         X509Certificate cert = service.readCertificate(is);
         assertNotNull(cert);
     }
+
+    @Test
+    public void testPkcs8PrivateKey()
+        throws IOException, CryptoException
+    {
+        InputStream is = PemReadTest.class.getResourceAsStream("/pkcs8key.pem");
+        KeyPair kp = service.readKeyPair("RSA", is, null);
+        assertNotNull(kp);
+    }
+
+    @Test
+    public void testPkcs8EncryptedPrivateKey()
+        throws IOException, CryptoException
+    {
+        InputStream is = PemReadTest.class.getResourceAsStream("/pkcs8encryptedkey.pem");
+        KeyPair kp = service.readKeyPair("RSA", is, PASSPHRASE);
+        assertNotNull(kp);
+    }
 }

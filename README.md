@@ -101,6 +101,22 @@ line just like regular Node.js:
 
 (and with no arguments it will launch the "repl" but that implementation is not complete)
 
+### For Apigee Edge Customers
+
+Node.js apps on Apigee Edge run inside Trireme using a few specific settings that make
+them slightly different from the standard Trireme runtime. In particular, an "HTTP
+adaptor" is used, which is not 100% the same as the standard HTTP module. This does
+not affect most applications, but it may affect applications that depend on
+undocumented or internal functions and properties of the default HTTP module.
+(While this is a poor programming practice, it's quite common.)
+
+In order to test applications that will run on Apigee Edge in the most compatible
+environment, the module "samples/apigee-edge-like-runner" will build a self-contained
+JAR that sets up Trireme this way. Use it just like the "Using Java" link above:
+
+    mvn install
+    java -jar samples/apigee-edge-like-runner/target/apigee-edge-like-launcher-X-Y-Z-SNAPSHOT.jar <script name>
+
 ## Embedding Trireme as a servlet
 
 The [war](./samples/war/README.md) sample is a sample that shows how to assemble a Node.js application into

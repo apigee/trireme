@@ -255,7 +255,7 @@ public class AdvancedFilesystem
 
         Path path = Paths.get(f.getPath());
         final ArrayList<String> paths = new ArrayList<String>();
-        Set<FileVisitOption> options = Collections.emptySet();
+        Set<FileVisitOption> options = Collections.singleton(FileVisitOption.FOLLOW_LINKS);
 
         try {
             Files.walkFileTree(path, options, 1,

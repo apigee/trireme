@@ -199,6 +199,13 @@ public class BasicTest
     }
 
     @Test
+    public void testSymlinks()
+        throws InterruptedException, ExecutionException, NodeException
+    {
+        runTest("symlinktest.js");
+    }
+
+    @Test
     public void testScriptTimeout()
         throws InterruptedException, ExecutionException, NodeException
     {

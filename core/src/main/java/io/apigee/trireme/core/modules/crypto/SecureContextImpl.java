@@ -62,6 +62,7 @@ import java.security.cert.X509CRL;
 import java.security.cert.X509Certificate;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.List;
 
 import static io.apigee.trireme.core.ArgUtils.*;
@@ -79,7 +80,8 @@ public class SecureContextImpl
     private KeyManager[] keyManagers;
     private TrustManager[] trustManagers;
     private X509TrustManager trustedCertManager;
-    private X509Certificate[] certChain;
+    private final List<Certificate> caCerts = new ArrayList<Certificate>();
+    private X509Certificate cert;
     private PrivateKey privateKey;
     private KeyStore trustedCertStore;
     private int trustedCertSequence = 0;
@@ -193,8 +195,7 @@ public class SecureContextImpl
             if (log.isDebugEnabled()) {
                 log.debug("Set my certificate to: {}", cert.getSubjectDN());
             }
-            // TODO need to read the whole chain here!...
-            self.certChain = new X509Certificate[] { cert };
+            self.cert = cert;
         } catch (CryptoException ce) {
             throw Utils.makeError(cx, thisObj, ce.toString());
         } catch (IOException ioe) {
@@ -231,6 +232,7 @@ public class SecureContextImpl
             if (log.isDebugEnabled()) {
                 log.debug("Adding trusted CA cert {}");
             }
+            self.caCerts.add(cert);
             self.trustedCertStore.setCertificateEntry("Cert " + self.trustedCertSequence, cert);
             self.trustedCertSequence++;
 
@@ -466,6 +468,16 @@ public class SecureContextImpl
             // A Java key store was not already loaded
             Crypto.ensureCryptoService(cx, scope);
             KeyStore pemKs = Crypto.getCryptoService().createPemKeyStore();
+
+            // Construct cert chain. But we need the client cert first and root last.
+            // Node clients put 'ca' first on the list of "CAs" -- so reverse it!
+            ArrayList<Certificate> certList = new ArrayList<Certificate>(caCerts);
+            certList.add(cert);
+            Collections.reverse(certList);
+            Certificate[] certChain = certList.toArray(new Certificate[certList.size()]);
+            if (log.isDebugEnabled()) {
+                log.debug("Adding key entry with {} entries in the cert chain", certList.size());
+            }
 
             try {
                 pemKs.load(null, null);

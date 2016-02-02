@@ -4,23 +4,23 @@
   <parent>
     <groupId>io.apigee.trireme</groupId>
     <artifactId>trireme-samples</artifactId>
-    <version>0.8.9-SNAPSHOT</version>
+    <version>0.8.9</version>
   </parent>
 
   <name>trireme-hello-sample</name>
   <artifactId>trireme-hello-sample</artifactId>
-  <version>0.8.9-SNAPSHOT</version>
+  <version>0.8.9</version>
 
   <dependencies>
     <dependency>
       <groupId>io.apigee.trireme</groupId>
       <artifactId>trireme-core</artifactId>
-      <version>0.8.9-SNAPSHOT</version>
+      <version>0.8.9</version>
     </dependency>
     <dependency>
       <groupId>io.apigee.trireme</groupId>
       <artifactId>trireme-node10src</artifactId>
-      <version>0.8.9-SNAPSHOT</version>
+      <version>0.8.9</version>
     </dependency>
 
     <dependency>

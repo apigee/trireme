@@ -12,7 +12,7 @@
   <name>trireme</name>
   <description>Trireme -- Embed Node.js programs inside the Java Virtual Machine</description>
   <url>http://apigee.io/</url>
-  <version>0.8.9</version>
+  <version>0.9.0-SNAPSHOT</version>
   
   <packaging>pom</packaging>
 

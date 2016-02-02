@@ -1,3 +1,15 @@
+* 0.8.9 02-01-2016:
+
+This release fixes a few small bugs, especially in TLS. It also upgrades to
+(Rhino 1.7.7.1)[https://github.com/mozilla/rhino/releases/tag/Rhino1_7_7_1_RELEASE],
+which fixes a few other small bugs and vulnerabilities.
+
+[Issue 137](https://github.com/apigee/trireme/issues/137) Properly follow symlinks in fs.readdir().
+[Issue 139](https://github.com/apigee/trireme/issues/139) Support PKCS#8 keys for the crypto "createSign" method.
+[Issue 144](https://github.com/apigee/trireme/issues/144) Properly handle intermediate TLS certs.
+[Issue 145](https://github.com/apigee/trireme/issues/145) Create a launcher that emulates the
+setup of Apigee Edge.
+
 * 0.8.8 09-18-2015:
 
 In addition to the fixes below, this release makes progress on support for Node.js 0.12. Both versions

@@ -15,9 +15,9 @@ process.on('exit', function() {
 });
 
 console.log('Starting to listen and expecting it to work');
-svr.listen(33333, function() {
+svr.listen(43334, function() {
   console.log('Server listening');
-  var req = http.get('http://localhost:33333/', function(resp) {
+  var req = http.get('http://localhost:43334/', function(resp) {
       assert.fail('Got a response and should not have.');
     });
   req.on('error', function() {

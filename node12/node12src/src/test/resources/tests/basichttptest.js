@@ -12,9 +12,9 @@ var svr = http.createServer(function(req, resp) {
 });
 
 console.log('Server starting to listen');
-svr.listen(33333, function() {
+svr.listen(43333, function() {
   console.log('Server listening');
-  http.get('http://localhost:33333/', function(resp) {
+  http.get('http://localhost:43333/', function(resp) {
     console.log('Got a response with status code ' + resp.statusCode);
     if (resp.statusCode != 200) {
       process.exit(1);

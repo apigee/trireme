@@ -128,8 +128,8 @@ Any script that operates as an HTTP server using the "http" module can be embedd
 There is JavaDoc for the "NodeEnvironment" and "NodeScript" classes, and many other features.
 Here are the basics:
 
-    import org.apigee.trireme.core.NodeEnvironment;
-    import org.apigee.trireme.core.NodeScript;
+    import io.apigee.trireme.core.NodeEnvironment;
+    import io.apigee.trireme.core.NodeScript;
 
     // The NodeEnvironment controls the environment for many scripts
     NodeEnvironment env = new NodeEnvironment();

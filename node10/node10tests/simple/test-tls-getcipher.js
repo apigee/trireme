@@ -23,7 +23,7 @@ var common = require('../common');
 var assert = require('assert');
 var tls = require('tls');
 var fs = require('fs');
-var cipher_list = ['RC4-SHA', 'AES256-SHA'];
+var cipher_list = ['AES256-SHA'];
 var cipher_version_pattern = /TLS|SSL/;
 var options = {
   key: fs.readFileSync(common.fixturesDir + '/keys/agent2-key.pem'),

@@ -2,7 +2,7 @@
 
 BUILDROOT=${BUILDROOT:-github/trireme}
 
-(cd $BUILDROOT; mvn -DskipTests=false clean install)
+(cd $BUILDROOT; mvn -fae -DskipTests=false clean install)
 testStatus=$?
 
 if [ -d ./sponge-logs ]

@@ -48,6 +48,7 @@ var Transform = require('_stream_transform');
 
 var binding = process.binding('zlib');
 var util = require('util');
+var Buffer = require('buffer').Buffer;
 var assert = require('assert').ok;
 
 var debug;

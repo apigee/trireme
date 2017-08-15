@@ -24,10 +24,41 @@ var net = require('net');
 var Stream = require('stream');
 var timers = require('timers');
 var url = require('url');
+var Buffer = require('buffer').Buffer;
 var EventEmitter = require('events').EventEmitter;
 var FreeList = require('freelist').FreeList;
 var HTTPParser = process.binding('http_parser').HTTPParser;
 var assert = require('assert').ok;
+
+var lenientHttpHeaders = !!process.REVERT_CVE_2016_2216;
+
+function escapeHeaderValue(value) {
+  if (!lenientHttpHeaders) return value;
+  // Protect against response splitting. The regex test is there to
+  // minimize the performance impact in the common case.
+  return /[\r\n]/.test(value) ? value.replace(/[\r\n]+[ \t]*/g, '') : value;
+}
+
+// Verifies that the given val is a valid HTTP token
+// per the rules defined in RFC 7230
+var token = /^[a-zA-Z0-9_!#$%&'*+.^`|~-]+$/;
+function _checkIsHttpToken(val) {
+  return typeof val === 'string' && token.test(val);
+}
+
+// True if val contains an invalid field-vchar
+//  field-value    = *( field-content / obs-fold )
+//  field-content  = field-vchar [ 1*( SP / HTAB ) field-vchar ]
+//  field-vchar    = VCHAR / obs-text
+function _checkInvalidHeaderChar(val) {
+  val = '' + val;
+  for (var i = 0; i < val.length; i++) {
+    var ch = val.charCodeAt(i);
+    if (ch === 9) continue;
+    if (ch <= 31 || ch > 255 || ch === 127) return true;
+  }
+  return false;
+}
 
 var debug;
 if (process.env.NODE_DEBUG && /http/.test(process.env.NODE_DEBUG)) {
@@ -651,12 +682,16 @@ OutgoingMessage.prototype._storeHeader = function(firstLine, headers) {
 };
 
 function storeHeader(self, state, field, value) {
-  // Protect against response splitting. The if statement is there to
-  // minimize the performance impact in the common case.
-  if (/[\r\n]/.test(value))
-    value = value.replace(/[\r\n]+[ \t]*/g, '');
-
-  state.messageHeader += field + ': ' + value + CRLF;
+  if (!lenientHttpHeaders) {
+    if (!_checkIsHttpToken(field)) {
+      throw new TypeError(
+          'Header name must be a valid HTTP Token ["' + field + '"]');
+    }
+    if (_checkInvalidHeaderChar(value) === true) {
+      throw new TypeError('The header content contains invalid characters');
+    }
+  }
+  state.messageHeader += field + ': ' + escapeHeaderValue(value) + CRLF;
 
   if (connectionExpression.test(field)) {
     state.sentConnectionHeader = true;
@@ -687,6 +722,16 @@ OutgoingMessage.prototype.setHeader = function(name, value) {
 
   if (this._header) {
     throw new Error('Can\'t set headers after they are sent.');
+  }
+
+  if (!lenientHttpHeaders) {
+    if (!_checkIsHttpToken(name)) {
+      throw new TypeError(
+          'Trailer name must be a valid HTTP Token ["' + name + '"]');
+    }
+    if (_checkInvalidHeaderChar(value) === true) {
+      throw new TypeError('The header content contains invalid characters');
+    }
   }
 
   var key = name.toLowerCase();
@@ -901,7 +946,16 @@ OutgoingMessage.prototype.addTrailers = function(headers) {
       value = headers[key];
     }
 
-    this._trailer += field + ': ' + value + CRLF;
+    if (!lenientHttpHeaders) {
+      if (!_checkIsHttpToken(field)) {
+        throw new TypeError(
+            'Trailer name must be a valid HTTP Token ["' + field + '"]');
+      }
+      if (_checkInvalidHeaderChar(value) === true) {
+        throw new TypeError('The header content contains invalid characters');
+      }
+    }
+    this._trailer += field + ': ' + escapeHeaderValue(value) + CRLF;
   }
 };
 
@@ -943,10 +997,6 @@ OutgoingMessage.prototype.end = function(data, encoding) {
 
   // Can't concatenate safely with hex or base64 encodings.
   if (encoding === 'hex' || encoding === 'base64')
-    hot = false;
-
-  // Transfer-encoding: chunked responses to HEAD requests
-  if (this._hasBody && this.chunkedEncoding)
     hot = false;
 
   if (hot) {
@@ -1179,6 +1229,13 @@ ServerResponse.prototype.writeHead = function(statusCode) {
     headers = obj;
   }
 
+  statusCode |= 0;
+  if (statusCode < 100 || statusCode > 999)
+    throw new RangeError('Invalid status code: ' + statusCode);
+
+  if (_checkInvalidHeaderChar(reasonPhrase))
+    throw new Error('Invalid character in statusMessage.');
+
   var statusLine = 'HTTP/1.1 ' + statusCode.toString() + ' ' +
                    reasonPhrase + CRLF;
 
@@ -1286,11 +1343,13 @@ Agent.prototype.createSocket = function(name, host, port, localAddress, req) {
   options.host = host;
   options.localAddress = localAddress;
 
-  options.servername = host;
-  if (req) {
-    var hostHeader = req.getHeader('host');
-    if (hostHeader) {
-      options.servername = hostHeader.replace(/:.*$/, '');
+  if (!options.servername) {
+    options.servername = host;
+    if (req) {
+      var hostHeader = req.getHeader('host');
+      if (hostHeader) {
+        options.servername = hostHeader.replace(/:.*$/, '');
+      }
     }
   }
 

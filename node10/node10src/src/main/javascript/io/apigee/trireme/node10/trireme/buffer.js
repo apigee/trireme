@@ -289,7 +289,7 @@ nativeBuf.prototype.fill = function fill(value, start, end) {
 
 nativeBuf.concat = function(list, length) {
   if (!Array.isArray(list)) {
-    throw new TypeError('Usage: Buffer.concat(list, [length])');
+    throw new TypeError('list argument must be an Array of Buffers.');
   }
 
   if (list.length === 0) {
@@ -313,6 +313,15 @@ nativeBuf.concat = function(list, length) {
     buf.copy(buffer, pos);
     pos += buf.length;
   }
+
+  // Note: `length` is always equal to `buffer.length` at this point
+  if (pos < length) {
+    // Zero-fill the remaining bytes if the specified `length` was more than
+    // the actual total length, i.e. if we have some remaining allocated bytes
+    // there were not initialized.
+    buffer.fill(0, pos, length);
+  }
+
   return buffer;
 };
 

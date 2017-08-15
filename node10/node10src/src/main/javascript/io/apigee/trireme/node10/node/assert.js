@@ -26,6 +26,10 @@
 var util = require('util');
 var pSlice = Array.prototype.slice;
 
+// assert.js in node.js uses the 'buffer' module instead of using the 'Buffer' global.  But due to a bug in how Trireme
+// handle circular internal module references, assert.js in Trireme will continue using the 'Buffer' global to avoid
+// this issue.
+
 // 1. The assert module provides functions that throw
 // AssertionError's when particular conditions are not met. The
 // assert module must conform to the following interface.
@@ -58,8 +62,7 @@ function replacer(key, value) {
     return value.toString();
   }
   if (typeof value === 'function' || value instanceof RegExp) {
-     // NODERUNNER: HACK to make Rhino's function toString() kind of like v8's so we don't need to change the test
-     return value.toString().trim().replace('{\n}', '{}');
+    return value.toString();
   }
   return value;
 }

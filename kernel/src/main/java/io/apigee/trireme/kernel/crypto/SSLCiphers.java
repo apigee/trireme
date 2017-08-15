@@ -23,6 +23,7 @@ package io.apigee.trireme.kernel.crypto;
 
 import io.apigee.trireme.kernel.Charsets;
 
+import java.util.LinkedHashSet;
 import javax.net.ssl.SSLContext;
 import javax.net.ssl.SSLEngine;
 import java.io.BufferedReader;
@@ -143,6 +144,25 @@ public class SSLCiphers
      */
     public String[] filterCipherList(String filter)
     {
+        Map<String, Ciph> ciphers = filterCiphers(filter);
+       return ciphers.keySet().toArray(new String[ciphers.size()]);
+    }
+
+    /**
+     * Filter the cipher list, but return OpenSSL rather than Java names.
+     */
+    public String[] filterSSLCipherList(String filter)
+    {
+        Map<String, Ciph> ciphers = filterCiphers(filter);
+        LinkedHashSet<String> sslNames = new LinkedHashSet<String>(ciphers.size());
+        for (Map.Entry<String, Ciph> entries : ciphers.entrySet()) {
+            sslNames.add(entries.getValue().getSslName());
+        }
+        return sslNames.toArray(new String[sslNames.size()]);
+    }
+
+    private Map<String, Ciph> filterCiphers(String filter)
+    {
         // Make a list of ciphers, from the default list, in order.
         // LinkedHashMap is the key to keeping stuff in order
         LinkedHashMap<String, Ciph> ciphers = new LinkedHashMap<String, Ciph>();
@@ -160,8 +180,7 @@ public class SSLCiphers
                 appendMatches(ciphers, exclusions, exp);
             }
         }
-
-        return ciphers.keySet().toArray(new String[ciphers.size()]);
+        return ciphers;
     }
 
     private boolean excluded(Ciph c, List<String> exclusions)

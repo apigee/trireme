@@ -38,6 +38,7 @@ import io.apigee.trireme.core.modules.crypto.MacImpl;
 import io.apigee.trireme.core.modules.crypto.SecureContextImpl;
 import io.apigee.trireme.core.modules.crypto.SignImpl;
 import io.apigee.trireme.core.modules.crypto.VerifyImpl;
+import io.apigee.trireme.kernel.crypto.SSLCiphers;
 import org.mozilla.javascript.Context;
 import org.mozilla.javascript.Function;
 import org.mozilla.javascript.FunctionObject;
@@ -238,6 +239,20 @@ public class Crypto
         public static Scriptable getHashes(Context cx, Scriptable thisObj, Object[] args, Function func)
         {
             return cx.newArray(thisObj, HashImpl.SUPPORTED_ALGORITHMS.toArray());
+        }
+
+        @JSFunction
+        @SuppressWarnings("unused")
+        public static Scriptable getSSLCiphers(Context cx, Scriptable thisObj, Object[] args, Function func)
+        {
+            String filter = "ALL";
+            if ((args.length > 0) && !Undefined.instance.equals(args[0])) {
+                filter = Context.toString(args[0]);
+            }
+            String[] ciphers = SSLCiphers.get().filterSSLCipherList(filter);
+            Object[] jsCiphers = new Object[ciphers.length];
+            System.arraycopy(ciphers, 0, jsCiphers, 0, ciphers.length);
+            return cx.newArray(thisObj, jsCiphers);
         }
 
         @JSFunction

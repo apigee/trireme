@@ -68,7 +68,7 @@ public class TLSConnection
     private BiCallback<ByteBuffer, Integer> readCallback;
     private Callback<Void> onHandshakeStart;
     private Callback<Void> onHandshakeDone;
-    private Callback<SSLException> onError;
+    private Callback<Throwable> onError;
 
     private SSLEngine engine;
     private X509TrustManager trustManager;
@@ -158,7 +158,7 @@ public class TLSConnection
         this.onHandshakeDone = cb;
     }
 
-    public void setErrorCallback(Callback<SSLException> cb) {
+    public void setErrorCallback(Callback<Throwable> cb) {
         this.onError = cb;
     }
 
@@ -581,7 +581,7 @@ public class TLSConnection
             // Always make this in to an "error" event
             verifyError = ssle;
             if (onError != null) {
-                onError.call(ssle);
+                onError.call(cause);
             }
         } else {
             // Handshaking done, treat this as a legitimate write error
@@ -591,7 +591,7 @@ public class TLSConnection
                     cb.call(ssle.toString());
                 }
             } else if (onError != null) {
-                onError.call(ssle);
+                onError.call(cause);
             }
         }
     }

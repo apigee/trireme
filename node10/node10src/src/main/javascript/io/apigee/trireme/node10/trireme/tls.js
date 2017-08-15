@@ -33,6 +33,9 @@ var stream = require('stream');
 var assert = require('assert').ok;
 var constants = require('constants');
 
+// TRIREME: Rather than the OpenSSL list, use the default ciphers in the current JVM.
+var DEFAULT_CIPHERS = 'DEFAULT';
+
 // Allow {CLIENT_RENEG_LIMIT} client-initiated session renegotiations
 // every {CLIENT_RENEG_WINDOW} seconds. An error event is emitted if more
 // renegotations are seen. The settings are applied to all remote client
@@ -42,8 +45,8 @@ exports.CLIENT_RENEG_WINDOW = 600;
 
 exports.SLAB_BUFFER_SIZE = 10 * 1024 * 1024;
 
-exports.getCiphers = function() {
-  var names = process.binding('crypto').getSSLCiphers();
+exports.getCiphers = function(filter) {
+  var names = process.binding('crypto').getSSLCiphers(filter);
   // Drop all-caps names in favor of their lowercase aliases,
   var ctx = {};
   names.forEach(function(name) {
@@ -971,13 +974,12 @@ function Server(/* [options], listener */) {
     throw new Error('Missing PFX or certificate + private key.');
   }
 
-  // TRIREME: DEFAULT_CIPHERS screws everything up
   var sharedCreds = crypto.createCredentials({
     pfx: self.pfx,
     key: self.key,
     cert: self.cert,
     ca: self.ca,
-    ciphers: self.ciphers,
+    ciphers: self.ciphers || DEFAULT_CIPHERS,
     secureProtocol: self.secureProtocol,
     secureOptions: self.secureOptions,
     crl: self.crl,

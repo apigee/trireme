@@ -249,9 +249,9 @@ public class TLSWrapStream
         if (f == null) {
             tls.setErrorCallback(null);
         } else {
-            tls.setErrorCallback(new Callback<SSLException>() {
+            tls.setErrorCallback(new Callback<Throwable>() {
                 @Override
-                public void call(SSLException ex)
+                public void call(Throwable ex)
                 {
                     if (log.isDebugEnabled()) {
                         log.debug("Received TLS error {}", ex);

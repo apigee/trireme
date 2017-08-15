@@ -50,9 +50,12 @@ assert.throws(function() {
 // Windows doesn't usually have an entry for localhost 127.0.0.1 in
 // C:\Windows\System32\drivers\etc\hosts
 // so we disable this test on Windows.
+// In fact, some CI systems don't have it either, so just disable it.
+/*
 if (process.platform != 'win32') {
   dns.resolve('127.0.0.1', 'PTR', function(error, domains) {
     if (error) throw error;
     assert.ok(Array.isArray(domains));
   });
 }
+*/

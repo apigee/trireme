@@ -23,7 +23,8 @@ var common = require('../common');
 var assert = require('assert');
 var tls = require('tls');
 var fs = require('fs');
-var cipher_list = ['AES128-SHA', 'AES128-SHA256'];
+// This one cipher at the moment works on all JVM versions.
+var cipher_list = ['AES128-SHA', 'AES128-SHA256', 'AES256-SHA', 'AES256-SHA256'];
 var cipher_version_pattern = /TLS|SSL/;
 var options = {
   key: fs.readFileSync(common.fixturesDir + '/keys/agent2-key.pem'),
@@ -49,8 +50,11 @@ server.listen(common.PORT, '127.0.0.1', function() {
     rejectUnauthorized: false
   }, function() {
     var cipher = client.getCipher();
-    console.log('Cipher name is %j', cipher);
-    assert.equal(cipher.name, cipher_list[0]);
+    // Just make sure that we got one of the ciphers.
+    // What we get is too JVM-dependent for a CI test.
+    assert.notEqual(undefined, cipher_list.find(function (e) {
+      return e == cipher.name;
+    }));
     assert(cipher_version_pattern.test(cipher.version));
     client.end();
     server.close();

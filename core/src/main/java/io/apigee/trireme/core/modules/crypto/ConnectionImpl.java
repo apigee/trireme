@@ -306,10 +306,10 @@ public class ConnectionImpl
         if (onError == null) {
             processor.setErrorCallback(null);
         } else {
-            processor.setErrorCallback(new Callback<SSLException>()
+            processor.setErrorCallback(new Callback<Throwable>()
             {
                 @Override
-                public void call(SSLException e)
+                public void call(Throwable e)
                 {
                     Scriptable err =
                         Utils.makeErrorObject(Context.getCurrentContext(), ConnectionImpl.this,

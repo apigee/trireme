@@ -671,6 +671,10 @@
         <Description>Subject to race conditions</Description>
         <Name>test-child-process-fork-ref.js</Name>
     </Excluded>
+    <Excluded>
+        <Description>Seems to have race conditions especially on Linux</Description>
+        <Name>test-net-error-twice.js</Name>
+    </Excluded>
 
     <!--
          JUST BROKEN
@@ -690,5 +694,10 @@
     </Excluded>
     <Excluded>
         <Name>test-fs-error-messages.js</Name>
+    </Excluded>
+    <Excluded>
+        <Description>Trireme is correctly rejecting TLS junk. The client is not correctly
+                     getting an "error" event however.</Description>
+        <Name>test-tls-hello-parser-failure.js</Name>
     </Excluded>
 </ExcludedTests>

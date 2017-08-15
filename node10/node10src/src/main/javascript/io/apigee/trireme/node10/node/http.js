@@ -1387,6 +1387,19 @@ function ClientRequest(options, cb) {
   }
 
   if (options.auth && !this.getHeader('Authorization')) {
+    // Do not allow "new Buffer(num)" to be called to avoid allocating an
+    // unitialized memory Buffer and sending that in the Authorization
+    // header.
+    //
+    // https://github.com/nodejs/node/commit/d6969a717f
+    //
+    // Upstream Node.js uses Buffer.from which is unavailable in v0.10.x but
+    // to be as compatible as possible, the error returned below is the same
+    // as upstream Node.js as of the time of this change.
+    if (typeof options.auth === 'number') {
+      throw new TypeError('"value" argument must not be a number')
+    }
+
     //basic auth
     this.setHeader('Authorization', 'Basic ' +
                    new Buffer(options.auth).toString('base64'));

@@ -19,39 +19,21 @@
 // OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE
 // USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-var common = require('../common');
-var http = require('http'),
-    assert = require('assert');
+/*
+ * This test is a regression test for joyent/node#8900.
+ */
+var assert = require('assert');
 
-if (!common.hasMultiLocalhost()) {
-  console.log('Skipping platform-specific test.');
-  process.exit();
-}
+var N = 5;
+var nbIntervalFired = 0;
+var timer = setInterval(function() {
+  ++nbIntervalFired;
+  if (nbIntervalFired === N)
+    clearInterval(timer);
+}, 1);
 
-var server = http.createServer(function (req, res) {
-  console.log("Connect from: " + req.connection.remoteAddress);
-  assert.equal('127.0.0.2', req.connection.remoteAddress);
+timer.unref();
 
-  req.on('end', function() {
-    res.writeHead(200, { 'Content-Type': 'text/plain' });
-    res.end('You are from: ' + req.connection.remoteAddress);
-  });
-  req.resume();
-});
-
-server.listen(common.PORT, "127.0.0.1", function() {
-  var options = { host: 'localhost',
-    port: common.PORT,
-    path: '/',
-    method: 'GET',
-    localAddress: '127.0.0.2' };
-
-  var req = http.request(options, function(res) {
-    res.on('end', function() {
-      server.close();
-      process.exit();
-    });
-    res.resume();
-  });
-  req.end();
-});
+setTimeout(function onTimeout() {
+  assert.strictEqual(nbIntervalFired, N);
+}, 100);

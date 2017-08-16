@@ -19,39 +19,31 @@
 // OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE
 // USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-var common = require('../common');
-var http = require('http'),
-    assert = require('assert');
+/*
+ * This test is a regression test for joyent/node#8897.
+ *
+ * It tests some private implementation details that should not be
+ * considered public interface.
+ */
+var timers = require('timers');
 
-if (!common.hasMultiLocalhost()) {
-  console.log('Skipping platform-specific test.');
-  process.exit();
-}
+var foo = new function() {
+  this._onTimeout = function() {};
+}();
 
-var server = http.createServer(function (req, res) {
-  console.log("Connect from: " + req.connection.remoteAddress);
-  assert.equal('127.0.0.2', req.connection.remoteAddress);
+var bar = new function() {
+  this._onTimeout = function() {
+    timers.unenroll(foo);
+  };
+}();
 
-  req.on('end', function() {
-    res.writeHead(200, { 'Content-Type': 'text/plain' });
-    res.end('You are from: ' + req.connection.remoteAddress);
-  });
-  req.resume();
-});
+// We use timers with expiration times that are sufficiently apart to make
+// sure that they're not fired at the same time on platforms where the timer
+// resolution is a bit coarse (e.g Windows with a default resolution of ~15ms).
+timers.enroll(bar, 1);
+timers._unrefActive(bar);
 
-server.listen(common.PORT, "127.0.0.1", function() {
-  var options = { host: 'localhost',
-    port: common.PORT,
-    path: '/',
-    method: 'GET',
-    localAddress: '127.0.0.2' };
+timers.enroll(foo, 50);
+timers._unrefActive(foo);
 
-  var req = http.request(options, function(res) {
-    res.on('end', function() {
-      server.close();
-      process.exit();
-    });
-    res.resume();
-  });
-  req.end();
-});
+setTimeout(function() {}, 100);

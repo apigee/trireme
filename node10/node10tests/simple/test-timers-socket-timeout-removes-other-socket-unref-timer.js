@@ -19,22 +19,51 @@
 // OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE
 // USE OR OTHER DEALINGS IN THE SOFTWARE.
 
+/*
+ * This test is a regression test for joyent/node#8897.
+ */
+
 var common = require('../common');
 var assert = require('assert');
 var net = require('net');
 
-var gotError = false;
+var clients = [];
 
-process.on('exit', function() {
-  assert(gotError instanceof Error);
+var server = net.createServer(function onClient(client) {
+  clients.push(client);
+
+  if (clients.length === 2) {
+    /*
+     * Enroll two timers, and make the one supposed to fire first
+     * unenroll the other one supposed to fire later. This mutates
+     * the list of unref timers when traversing it, and exposes the
+     * original issue in joyent/node#8897.
+     */
+    clients[0].setTimeout(1, function onTimeout() {
+      clients[1].setTimeout(0);
+      clients[0].end();
+      clients[1].end();
+    });
+
+    // Use a delay that is higher than the lowest timer resolution accross all
+    // supported platforms, so that the two timers don't fire at the same time.
+    clients[1].setTimeout(50);
+  }
 });
 
-// this should fail with an async EINVAL error, not throw an exception
-net.createServer(assert.fail).listen({fd:0}).on('error', function(e) {
-  switch(e.code) {
-    case 'EINVAL':
-    case 'ENOTSOCK':
-      gotError = e;
-      break
+server.listen(common.PORT, '127.0.0.1', function() {
+  var nbClientsEnded = 0;
+
+  function addEndedClient(client) {
+    ++nbClientsEnded;
+    if (nbClientsEnded === 2) {
+      server.close();
+    }
   }
+
+  var client1 = net.connect({ port: common.PORT })
+  client1.on('end', addEndedClient);
+
+  var client2 = net.connect({ port: common.PORT });
+  client2.on('end', addEndedClient);
 });

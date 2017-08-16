@@ -19,39 +19,41 @@
 // OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE
 // USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-var common = require('../common');
-var http = require('http'),
-    assert = require('assert');
+/*
+ * The goal of this test is to make sure that, after the regression introduced
+ * by 934bfe23a16556d05bfb1844ef4d53e8c9887c3d, the fix preserves the following
+ * behavior of unref timers: if two timers are scheduled to fire at the same
+ * time, if one unenrolls the other one in its _onTimeout callback, the other
+ * one will *not* fire.
+ *
+ * This behavior is a private implementation detail and should not be
+ * considered public interface.
+ */
+var timers = require('timers');
+var assert = require('assert');
 
-if (!common.hasMultiLocalhost()) {
-  console.log('Skipping platform-specific test.');
-  process.exit();
-}
+var nbTimersFired = 0;
 
-var server = http.createServer(function (req, res) {
-  console.log("Connect from: " + req.connection.remoteAddress);
-  assert.equal('127.0.0.2', req.connection.remoteAddress);
+var foo = new function() {
+  this._onTimeout = function() {
+    ++nbTimersFired;
+    timers.unenroll(bar);
+  };
+}();
 
-  req.on('end', function() {
-    res.writeHead(200, { 'Content-Type': 'text/plain' });
-    res.end('You are from: ' + req.connection.remoteAddress);
-  });
-  req.resume();
-});
+var bar = new function() {
+  this._onTimeout = function() {
+    ++nbTimersFired;
+    timers.unenroll(foo);
+  };
+}();
 
-server.listen(common.PORT, "127.0.0.1", function() {
-  var options = { host: 'localhost',
-    port: common.PORT,
-    path: '/',
-    method: 'GET',
-    localAddress: '127.0.0.2' };
+timers.enroll(bar, 1);
+timers._unrefActive(bar);
 
-  var req = http.request(options, function(res) {
-    res.on('end', function() {
-      server.close();
-      process.exit();
-    });
-    res.resume();
-  });
-  req.end();
-});
+timers.enroll(foo, 1);
+timers._unrefActive(foo);
+
+setTimeout(function() {
+  assert.notEqual(nbTimersFired, 2);
+}, 20);

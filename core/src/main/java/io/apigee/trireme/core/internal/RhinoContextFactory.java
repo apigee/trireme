@@ -92,7 +92,7 @@ public class RhinoContextFactory
         case Context.FEATURE_OLD_UNDEF_NULL_THIS:
             // This is a feature that makes Rhino compatible with the latest JavaScript
             // standard, but which breaks the older JavaScript code that Node uses.
-            // In particular, it makes function.prototype.cal(null, ...) behave differently.
+            // In particular, it makes function.prototype.call(null, ...) behave differently.
             return true;
         default:
             return super.hasFeature(cx, i);

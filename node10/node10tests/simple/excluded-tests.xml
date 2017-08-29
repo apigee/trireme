@@ -675,6 +675,10 @@
         <Description>Seems to have race conditions especially on Linux</Description>
         <Name>test-net-error-twice.js</Name>
     </Excluded>
+    <Excluded>
+        <Description>Works great on certain filesystems, but not all of them</Description>
+        <Name>test-fs-write-file-sync.js</Name>
+    </Excluded>
 
     <!--
          JUST BROKEN

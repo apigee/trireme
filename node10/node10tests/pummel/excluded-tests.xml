@@ -102,4 +102,8 @@
         <Name>test-fs-watch-file-slow.js</Name>
         <Description>Flaky.</Description>
     </Excluded>
+    <Excluded>
+        <Name>test-regress-GH-892.js</Name>
+        <Description>Flaky, especially on CI machines.</Description>
+    </Excluded>
 </ExcludedTests>

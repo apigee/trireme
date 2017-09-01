@@ -545,6 +545,15 @@ verStream.end('3');
 verified = verStream.verify(certPem, s3);
 assert.strictEqual(verified, true, 'sign and verify (stream)');
 
+var s4 = crypto.createSign('sha256')
+               .update('Test123')
+               .sign(keyPem, 'buffer');
+var verified = crypto.createVerify('sha256')
+                     .update('Test')
+                     .update('123')
+                     .verify(certPem, s4);
+assert.strictEqual(verified, true, 'sign and verify (buffer)');
+
 function testCipher1(key) {
   // Test encryption and decryption
   var plaintext = 'Keep this a secret? No! Tell everyone about node.js!';

@@ -70,6 +70,9 @@ public class VerifyImpl
 
         self.algorithm = SignatureAlgorithms.get().get(algorithm);
         if (self.algorithm == null) {
+            self.algorithm = SignatureAlgorithms.get().getByJavaSigningName(algorithm);
+        }
+        if (self.algorithm == null) {
             throw Utils.makeError(cx, thisObj,
                                   "Invalid verify algorithm " + algorithm);
         }
@@ -140,7 +143,7 @@ public class VerifyImpl
         }
 
         try {
-            Signature verifier = Signature.getInstance(self.algorithm.getJavaName());
+            Signature verifier = Signature.getInstance(self.algorithm.getSigningName());
             if (pubKey == null) {
                 verifier.initVerify(cert);
             } else {

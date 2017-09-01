@@ -21,13 +21,16 @@
  */
 package io.apigee.trireme.kernel.crypto;
 
-import java.security.Provider;
+import io.apigee.trireme.kernel.Charsets;
+import java.io.BufferedReader;
+import java.io.IOException;
+import java.io.InputStreamReader;
 import java.security.Security;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
-import java.util.regex.Matcher;
+import java.util.Set;
 import java.util.regex.Pattern;
 
 /**
@@ -37,13 +40,11 @@ import java.util.regex.Pattern;
 
 public class SignatureAlgorithms
 {
-    public static final String SIGNATURE = "Signature";
-
     private static final SignatureAlgorithms myself = new SignatureAlgorithms();
 
-    private final Pattern SIGNATURE_NAME = Pattern.compile("([0-9a-zA-Z]+)with([0-9a-zA-Z]+)");
     private final HashMap<String, Algorithm> algs = new HashMap<String, Algorithm>();
-    private final ArrayList<String> algNames;
+    private final HashMap<String, Algorithm> javaSigningAlgs = new HashMap<String, Algorithm>();
+    private final ArrayList<String> algNames = new ArrayList<String>();
 
     public static SignatureAlgorithms get() {
         return myself;
@@ -51,29 +52,54 @@ public class SignatureAlgorithms
 
     private SignatureAlgorithms()
     {
-        for (Provider prov : Security.getProviders()) {
-            for (Provider.Service svc : prov.getServices()) {
-                if (SIGNATURE.equals(svc.getType())) {
-                    Matcher m = SIGNATURE_NAME.matcher(svc.getAlgorithm());
-                    if (m.matches()) {
-                        // Turn name of type "MD5withRSA" to "RSA-MD5"
-                        Algorithm sig = new Algorithm();
-                        String sslName = m.group(2) + '-' + m.group(1);
-                        sig.setJavaName(svc.getAlgorithm());
-                        sig.setName(sslName);
-                        sig.setKeyFormat(m.group(2));
-                        algs.put(sslName, sig);
+        final Pattern WHITESPACE = Pattern.compile("[\\t ]+");
+        final Set<String> supportedAlgorithms = Security.getAlgorithms("Signature");
+
+        // Read the file of the algorithms that we'd like to support
+        try {
+            BufferedReader rdr =
+                new BufferedReader(new InputStreamReader(SignatureAlgorithms.class.getResourceAsStream("/signatures.txt"),
+                    Charsets.UTF8));
+            try {
+                String line;
+                do {
+                    line = rdr.readLine();
+                    if (line != null) {
+                        if (line.startsWith("#")) {
+                            continue;
+                        }
+                        String[] m = WHITESPACE.split(line);
+                        if ((m.length == 3) && supportedAlgorithms.contains(m[1])) {
+                            Algorithm alg = new Algorithm();
+                            alg.setName(m[0].toUpperCase());
+                            alg.setSigningName(m[1].toUpperCase());
+                            alg.setKeyFormat(m[2]);
+                            algNames.add(m[0]);
+                            algs.put(m[0].toUpperCase(), alg);
+                            javaSigningAlgs.put(m[1], alg);
+                        }
                     }
-                }
+                } while (line != null);
+
+            } finally {
+                rdr.close();
             }
+
+        } catch (IOException ioe) {
+            throw new AssertionError("Can't read hashes file", ioe);
+        } catch (NumberFormatException nfe) {
+            throw new AssertionError("Invalid line in hashes file", nfe);
         }
 
-        algNames = new ArrayList<String>(algs.keySet());
         Collections.sort(algNames);
     }
 
     public Algorithm get(String name) {
         return algs.get(name.toUpperCase());
+    }
+
+    public Algorithm getByJavaSigningName(String name) {
+        return javaSigningAlgs.get(name);
     }
 
     public List<String> getAlgorithms() {
@@ -83,7 +109,7 @@ public class SignatureAlgorithms
     public static class Algorithm
     {
         private String name;
-        private String javaName;
+        private String signName;
         private String keyFormat;
 
         public String getName()
@@ -96,14 +122,14 @@ public class SignatureAlgorithms
             this.name = name;
         }
 
-        public String getJavaName()
+        public String getSigningName()
         {
-            return javaName;
+            return signName;
         }
 
-        public void setJavaName(String javaName)
+        public void setSigningName(String signName)
         {
-            this.javaName = javaName;
+            this.signName = signName;
         }
 
         public String getKeyFormat()

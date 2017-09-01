@@ -1,0 +1,42 @@
+# This file maps the algorithm names used by OpenSSL for signature algorithms
+# with those used by Java. The file has the following whitespace-separated format:
+# {OpenSSL Hash Name} {Java Signature algorithm name} {Key Format}
+# The result is somewhat confusing due to the strangeness of Node.js and OpenSSL.
+# For instance, the name "sha256" in Node.js and OpenSSL is an alias for "RSA-SHA256".
+DSA                  NONEWITHDSA         DSA
+DSA-SHA              SHA1WITHDSA         DSA
+DSA-SHA1             SHA1WITHDSA         DSA
+DSA-SHA1-OLD         SHA1WITHDSA         DSA
+DSS1                 SHA1WITHDSA         DSA
+DSA-SHA2224          SHA224WITHDSA       DSA
+DSA-SHA256           SHA256WITHDSA       DSA
+RSA-MD5              MD5WITHRSA          RSA
+RSA-MD5SHA1          MD5ANDSHA1WITHRSA   RSA
+RSA-MD2              MD2WITHRSA          RSA
+RSA-SHA              SHA1WITHRSA         NONE
+RSA-SHA1             SHA1WITHRSA         RSA
+RSA-SHA1-2           SHA1WITHRSA         RSA
+RSA-SHA224           SHA224WITHRSA       RSA
+RSA-SHA256           SHA256WITHRSA       RSA
+RSA-SHA384           SHA384WITHRSA       RSA
+RSA-SHA512           SHA512WITHRSA       RSA
+dsaWithSHA           SHA1WITHDSA         DSA
+dsaWithSHA1          SHA1WITHDSA         DSA
+ecdsa                NONEWITHECDSA       ECDSA
+ecdsa-with-SHA1      SHA1WITHECDSA       ECDSA
+ecdsa-with-SHA224    SHA224WITHECDSA     ECDSA
+ecdsa-with-SHA256    SHA256WITHECDSA     ECDSA
+ecdsa-with-SHA384    SHA384WITHECDSA     ECDSA
+ecdsa-with-SHA512    SHA512WITHECDSA     ECDSA
+md5                  MD5WITHRSA          RSA
+md5WithRSAEncryption MD5WITHRSA          RSA
+sha1                 SHA1WITHRSA         RSA
+sha1WithRSAEncryption SHA1WITHRSA        RSA
+sha224                SHA224WITHRSA      RSA
+sha224WithRSAEncryption  SHA224WITHRSA   RSA
+sha256                   SHA256WITHRSA   RSA
+sha256WithRSAEncryption  SHA256WITHRSA   RSA
+sha384                   SHA384WITHRSA   RSA
+sha384WithRSAEncryption  SHA384WITHRSA   RSA
+sha512                   SHA512WITHRSA   RSA
+sha512WithRSAEncryption  SHA512WITHRSA   RSA

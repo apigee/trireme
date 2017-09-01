@@ -32,6 +32,11 @@ public class SSLCipherTest
         assertEquals(128, c.getKeyLen());
     }
 
+    /*
+     * This test will look at all the ciphers in the JVM and make sure that they have
+     * an entry in "ciphers.txt." It is designed to fail when new algorithms are introduced
+     * to the JVM and we don't have mappings for them.
+     */
     @Test
     public void testAllCiphersSupported()
         throws GeneralSecurityException

@@ -1,0 +1,60 @@
+# This file maps hashing algorithm names recognized by "crypto.createHash" in Node / OpenSSL
+# To "MessageDigest" algorithms in Java.
+# The mapping is confusing because OpenSSL maps names like "RSA-SHA256" to regular
+# digest algorithms like "sha256" even though "RSA-SHA256" is a signature algorithm
+# and not a message digest algorithm.
+# NOTE that the algorithm that OpenSSL calls "SHA-1" is what Java calls "SHA".
+# We verified this through testing.
+DSA                   DSA
+DSA-SHA               DSA
+DSA-SHA1              DSA
+DSA-SHA1-old          DSA
+DSS1                  DSA
+MD2                   MD2
+MD4                   MD4
+MD5                   MD5
+RIPEMD160             RIPEMD160
+RSA-MD4               MD4
+RSA-MD5               MD5
+RSA-RIPEMD160         RIPEMD160
+RSA-SHA               SHA-0
+RSA-SHA1              SHA
+RSA-SHA1-2            SHA
+RSA-SHA224            SHA-224
+RSA-SHA256            SHA-256
+RSA-SHA384            SHA-384
+RSA-SHA512            SHA-512
+SHA                   SHA-0
+SHA1                  SHA
+SHA224                SHA-224
+SHA256                SHA-256
+SHA384                SHA-384
+SHA512                SHA-512
+DSA                   DSA
+DSA-SHA               DSA
+dsaWithSHA1           DSA
+dss1                  DSA
+ecdsa-with-SHA1       ECDSA
+MD4                   MD4
+md4WithRSAEncryption  MD4
+MD5                   MD5
+md5WithRSAEncryption  MD5
+ripemd                RIPEMD160
+RIPEMD160             RIPEMD160
+ripemd160WithRSA      RIPEMD160
+rmd160                RIPEMD160
+SHA                   SHA-0
+SHA1                  SHA
+sha1WithRSAEncryption SHA
+SHA224                   SHA-224
+sha224WithRSAEncryption  SHA-224
+SHA256                   SHA-256
+sha256WithRSAEncryption  SHA-256
+SHA384                   SHA-384
+sha384WithRSAEncryption  SHA-384
+SHA512                   SHA-512
+sha512WithRSAEncryption  SHA-512
+shaWithRSAEncryption     SHA-0
+ssl2-md5                 MD5
+ssl3-md5                 MD5
+ssl3-sha1                SHA

@@ -39,6 +39,7 @@ import io.apigee.trireme.core.modules.crypto.SecureContextImpl;
 import io.apigee.trireme.core.modules.crypto.SignImpl;
 import io.apigee.trireme.core.modules.crypto.VerifyImpl;
 import io.apigee.trireme.kernel.crypto.SSLCiphers;
+import io.apigee.trireme.kernel.crypto.SignatureAlgorithms;
 import org.mozilla.javascript.Context;
 import org.mozilla.javascript.Function;
 import org.mozilla.javascript.FunctionObject;
@@ -238,7 +239,7 @@ public class Crypto
         @SuppressWarnings("unused")
         public static Scriptable getHashes(Context cx, Scriptable thisObj, Object[] args, Function func)
         {
-            return cx.newArray(thisObj, HashImpl.SUPPORTED_ALGORITHMS.toArray());
+            return cx.newArray(thisObj, SignatureAlgorithms.get().getAlgorithms().toArray());
         }
 
         @JSFunction

@@ -24,6 +24,7 @@ package io.apigee.trireme.core.modules.crypto;
 import io.apigee.trireme.core.Utils;
 import io.apigee.trireme.kernel.Charsets;
 import io.apigee.trireme.core.modules.Buffer;
+import io.apigee.trireme.kernel.crypto.HashAlgorithms;
 import org.mozilla.javascript.Context;
 import org.mozilla.javascript.Function;
 import org.mozilla.javascript.Scriptable;
@@ -45,17 +46,6 @@ public class HashImpl
     extends ScriptableObject
 {
     public static final String CLASS_NAME = "Hash";
-
-    public static final HashMap<String, String> MD_ALGORITHMS = new HashMap<String, String>();
-    static {
-        MD_ALGORITHMS.put("md2", "MD2");
-        MD_ALGORITHMS.put("md5", "MD5");
-        MD_ALGORITHMS.put("sha1", "SHA-1");
-        MD_ALGORITHMS.put("sha256", "SHA-256");
-        MD_ALGORITHMS.put("sha384", "SHA-384");
-        MD_ALGORITHMS.put("sha512", "SHA-512");
-    }
-    public static final Set<String> SUPPORTED_ALGORITHMS = MD_ALGORITHMS.keySet();
 
     private MessageDigest messageDigest;
 
@@ -83,15 +73,18 @@ public class HashImpl
     {
         String nodeAlgorithm = stringArg(args, 0);
 
-        String jceAlgorithm = MD_ALGORITHMS.get(nodeAlgorithm);
-        if (jceAlgorithm == null) {
-            jceAlgorithm = nodeAlgorithm;
+        HashAlgorithms.Algorithm alg = HashAlgorithms.get().get(nodeAlgorithm);
+        if (alg == null) {
+            alg = HashAlgorithms.get().getByJavaHashName(nodeAlgorithm);
+        }
+        if (alg == null) {
+            throw Utils.makeError(cx, ctorObj, "Digest method not supported");
         }
 
         try {
-            messageDigest = MessageDigest.getInstance(jceAlgorithm);
+            messageDigest = MessageDigest.getInstance(alg.getHashName());
         } catch (NoSuchAlgorithmException e) {
-            throw Utils.makeError(cx, ctorObj, "Digest method not supported");
+            throw Utils.makeError(cx, ctorObj, "Digest method not supported: " + e);
         }
     }
 

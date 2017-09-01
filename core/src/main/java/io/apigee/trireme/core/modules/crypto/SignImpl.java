@@ -66,6 +66,9 @@ public class SignImpl
 
         self.algorithm = SignatureAlgorithms.get().get(algorithm);
         if (self.algorithm == null) {
+            self.algorithm = SignatureAlgorithms.get().getByJavaSigningName(algorithm);
+        }
+        if (self.algorithm == null) {
             throw Utils.makeError(cx, thisObj,
                                   "Invalid signature algorithm " + algorithm);
         }
@@ -111,7 +114,7 @@ public class SignImpl
 
         byte[] result;
         try {
-            Signature signer = Signature.getInstance(self.algorithm.getJavaName());
+            Signature signer = Signature.getInstance(self.algorithm.getSigningName());
             signer.initSign(pair.getPrivate());
 
             for (ByteBuffer bb : self.buffers) {

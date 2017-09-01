@@ -50,6 +50,7 @@ public class MacImpl
     static {
         MAC_ALGORITHMS.put("md5", "HmacMD5");
         MAC_ALGORITHMS.put("sha1", "HmacSHA1");
+        MAC_ALGORITHMS.put("sha224", "HmacSHA224");
         MAC_ALGORITHMS.put("sha256", "HmacSHA256");
         MAC_ALGORITHMS.put("sha384", "HmacSHA384");
         MAC_ALGORITHMS.put("sha512", "HmacSHA512");

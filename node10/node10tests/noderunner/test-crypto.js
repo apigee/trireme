@@ -141,7 +141,7 @@ var rfc4231 = [
     data: new Buffer('4869205468657265', 'hex'), // 'Hi There'
     hmac: {
       // No SHA224 in Java 6
-      //sha224: '896fb1128abbdf196832107cd49df33f47b4b1169912ba4f53684b22',
+      sha224: '896fb1128abbdf196832107cd49df33f47b4b1169912ba4f53684b22',
       sha256:
           'b0344c61d8db38535ca8afceaf0bf12b881dc200c9833da726e9376c' +
           '2e32cff7',
@@ -160,7 +160,7 @@ var rfc4231 = [
                      '96e673f', 'hex'), // 'what do ya want for nothing?'
     hmac: {
       // No SHA224 in Java 6
-      //sha224: 'a30e01098bc6dbbf45690f3a7e9e6d0f8bbea2a39e6148008fd05e44',
+      sha224: 'a30e01098bc6dbbf45690f3a7e9e6d0f8bbea2a39e6148008fd05e44',
       sha256:
           '5bdcc146bf60754e6a042426089575c75a003f089d2739839dec58b9' +
           '64ec3843',
@@ -179,7 +179,7 @@ var rfc4231 = [
                      'ddddddddddddddddddddddddddddddddddddddddddddddddddd',
                      'hex'),
     hmac: {
-      //sha224: '7fb3cb3588c6c1f6ffa9694d7d6ad2649365b0c1f65d69d1ec8333ea',
+      sha224: '7fb3cb3588c6c1f6ffa9694d7d6ad2649365b0c1f65d69d1ec8333ea',
       sha256:
           '773ea91e36800e46854db8ebd09181a72959098b3ef8c122d9635514' +
           'ced565fe',
@@ -199,7 +199,7 @@ var rfc4231 = [
                      'dcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd',
                      'hex'),
     hmac: {
-      //sha224: '6c11506874013cac6a2abc1bb382627cec6a90d86efc012de7afec5a',
+      sha224: '6c11506874013cac6a2abc1bb382627cec6a90d86efc012de7afec5a',
       sha256:
           '82558a389a443c0ea4cc819899f2083a85f0faa3e578f8077a2e3ff4' +
           '6729665b',
@@ -218,7 +218,7 @@ var rfc4231 = [
     // 'Test With Truncation'
     data: new Buffer('546573742057697468205472756e636174696f6e', 'hex'),
     hmac: {
-      //sha224: '0e2aea68a90c8d37c988bcdb9fca6fa8',
+      sha224: '0e2aea68a90c8d37c988bcdb9fca6fa8',
       sha256: 'a3b6167473100ee06e0c796c2955552b',
       sha384: '3abf34c3503b2a23a46efc619baef897',
       sha512: '415fad6271580a531d4179bc891d87a6'
@@ -237,7 +237,7 @@ var rfc4231 = [
                      'c6f636b2d53697a65204b6579202d2048617368204b657920' +
                      '4669727374', 'hex'),
     hmac: {
-      //sha224: '95e9a0db962095adaebe9b2d6f0dbce2d499f112f2d2b7273fa6870e',
+      sha224: '95e9a0db962095adaebe9b2d6f0dbce2d499f112f2d2b7273fa6870e',
       sha256:
           '60e431591ee0b67f0d8a26aacbf5b77f8e0bc6213728c5140546040f' +
           '0ee37f54',
@@ -268,7 +268,7 @@ var rfc4231 = [
                      'e6720757365642062792074686520484d414320616c676f72' +
                      '6974686d2e', 'hex'),
     hmac: {
-      //sha224: '3a854166ac5d9f023f54d517d0b39dbd946770db9c2b95c9f6f565d1',
+      sha224: '3a854166ac5d9f023f54d517d0b39dbd946770db9c2b95c9f6f565d1',
       sha256:
           '9b09ffa71b942fcb27635fbcd5b0e944bfdc63644f0713938a7f5153' +
           '5c3a35e2',
@@ -794,11 +794,11 @@ assert.strictEqual(rsaVerify.verify(rsaPubPem, rsaSignature, 'hex'), true);
 
   // DSA signatures vary across runs so there is no static string to verify
   // against
-  var sign = crypto.createSign('DSA-SHA1');
+  var sign = crypto.createSign('DSS1');
   sign.update(input);
   var signature = sign.sign(privateKey, 'hex');
 
-  var verify = crypto.createVerify('DSA-SHA1');
+  var verify = crypto.createVerify('DSS1');
   verify.update(input);
 
   assert.strictEqual(verify.verify(publicKey, signature, 'hex'), true);
@@ -900,3 +900,63 @@ assert.throws(function() {
   try { d.final('xxx') } catch (e) {  }
   try { d.final('xxx') } catch (e) {  }
 })();
+
+// Regression test for #5482: string to Cipher#update() should not assert.
+(function() {
+  var c = crypto.createCipher('aes192', '0123456789abcdef');
+  c.update('update');
+  c.final();
+})();
+
+// #5655 regression tests, 'utf-8' and 'utf8' are identical.
+(function() {
+  var c = crypto.createCipher('aes192', '0123456789abcdef');
+  c.update('update', '');  // Defaults to "utf8".
+  c.final('utf-8');  // Should not throw.
+
+  c = crypto.createCipher('aes192', '0123456789abcdef');
+  c.update('update', 'utf8');
+  c.final('utf-8');  // Should not throw.
+
+  c = crypto.createCipher('aes192', '0123456789abcdef');
+  c.update('update', 'utf-8');
+  c.final('utf8');  // Should not throw.
+})();
+
+// Regression tests for #5725: hex input that's not a power of two should
+// throw, not assert in C++ land.
+// TRIREME doesnot seem to throw here either
+/*
+assert.throws(function() {
+  crypto.createCipher('aes192', 'test').update('0', 'hex');
+}, /Bad input string/);
+
+assert.throws(function() {
+  crypto.createDecipher('aes192', 'test').update('0', 'hex');
+}, /Bad input string/);
+
+assert.throws(function() {
+  crypto.createHash('sha1').update('0', 'hex');
+}, /Bad input string/);
+
+assert.throws(function() {
+  crypto.createSign('RSA-SHA1').update('0', 'hex');
+}, /Bad input string/);
+
+assert.throws(function() {
+  crypto.createVerify('RSA-SHA1').update('0', 'hex');
+}, /Bad input string/);
+*/
+
+assert.throws(function() {
+  var private = [
+    '-----BEGIN RSA PRIVATE KEY-----',
+    'MIGrAgEAAiEA+3z+1QNF2/unumadiwEr+C5vfhezsb3hp4jAnCNRpPcCAwEAAQIgQNriSQK4',
+    'EFwczDhMZp2dvbcz7OUUyt36z3S4usFPHSECEQD/41K7SujrstBfoCPzwC1xAhEA+5kt4BJy',
+    'eKN7LggbF3Dk5wIQN6SL+fQ5H/+7NgARsVBp0QIRANxYRukavs4QvuyNhMx+vrkCEQCbf6j/',
+    'Ig6/HueCK/0Jkmp+',
+    '-----END RSA PRIVATE KEY-----',
+    ''
+  ].join('\n');
+  crypto.createSign('RSA-SHA256').update('test').sign(private);
+});

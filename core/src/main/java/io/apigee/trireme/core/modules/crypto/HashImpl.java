@@ -78,13 +78,14 @@ public class HashImpl
             alg = HashAlgorithms.get().getByJavaHashName(nodeAlgorithm);
         }
         if (alg == null) {
-            throw Utils.makeError(cx, ctorObj, "Digest method not supported");
+            throw Utils.makeError(cx, ctorObj, "Digest method not supported: " + nodeAlgorithm);
         }
 
         try {
             messageDigest = MessageDigest.getInstance(alg.getHashName());
         } catch (NoSuchAlgorithmException e) {
-            throw Utils.makeError(cx, ctorObj, "Digest method not supported: " + e);
+            throw Utils.makeError(cx, ctorObj,
+                "Digest method not supported: " + nodeAlgorithm + ": " + e);
         }
     }
 

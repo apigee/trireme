@@ -545,6 +545,9 @@ verStream.end('3');
 verified = verStream.verify(certPem, s3);
 assert.strictEqual(verified, true, 'sign and verify (stream)');
 
+// Verify that "sha256" is a valid alias for "RSA-SHA256"
+// the way that Node.js does it.
+// This is undocumented but real users depend on it.
 var s4 = crypto.createSign('sha256')
                .update('Test123')
                .sign(keyPem, 'buffer');

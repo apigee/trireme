@@ -50,18 +50,14 @@ import org.mozilla.javascript.annotations.JSFunction;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import javax.crypto.SecretKey;
-import javax.crypto.SecretKeyFactory;
-import javax.crypto.spec.PBEKeySpec;
+import javax.crypto.Mac;
+import javax.crypto.spec.SecretKeySpec;
 import java.lang.reflect.InvocationTargetException;
 import java.nio.ByteBuffer;
 import java.nio.charset.Charset;
-import java.security.GeneralSecurityException;
-import java.security.Provider;
-import java.security.SecureRandom;
+import java.security.*;
 import java.util.Arrays;
 import java.util.Random;
-import java.util.ServiceLoader;
 
 import static io.apigee.trireme.core.ArgUtils.*;
 
@@ -260,36 +256,85 @@ public class Crypto
         @SuppressWarnings("unused")
         public static Scriptable PBKDF2(Context cx, Scriptable thisObj, Object[] args, Function func)
         {
-            String pw = stringArg(args, 0);
-            String saltStr = stringArg(args, 1);
+            Buffer.BufferImpl pwBuf = bufferArg(args, 0);
+            Buffer.BufferImpl saltBuf = bufferArg(args, 1);
             int iterations = intArg(args, 2);
             int keyLen = intArg(args, 3);
             Function callback = functionArg(args, 4, false);
-            SecretKey key;
+
+            // Typically we would use PBEKeySpec(char[] password, byte[] salt, int iterationCount, int keyLength) to
+            // generate a PBKDF2 key but we cannot reliably convert the password (byte[]) provided by Node.js into the
+            // required input (char[]) for PBEKeySpec.  That being said, we will do this manually using a more manual
+            // approach suggested here:
+            //
+            //   https://stackoverflow.com/questions/12109877/java-pbekeyspec-with-byte-array-argument-instead-of-ascii#
+            //
+            byte[] keyBytes;
+            byte[] pwInternal = new byte[pwBuf.getArray().length];
+            byte[] saltInternal = new byte[saltBuf.getArray().length];
+
+            // Clone the inputs to avoid touching the originals
+            System.arraycopy(pwBuf.getArray(), 0, pwInternal, 0, pwInternal.length);
+            System.arraycopy(saltBuf.getArray(), 0, saltInternal, 0, saltInternal.length);
 
             try {
-                SecretKeyFactory kf = SecretKeyFactory.getInstance("PBKDF2WithHmacSHA1");
-                char[] passphrase = pw.toCharArray();
-                byte[] salt = saltStr.getBytes(Charsets.UTF8);
-                PBEKeySpec spec = new PBEKeySpec(passphrase, salt, iterations, keyLen * 8);
+                // Create a MAC instance and initialize
+                SecretKeySpec spec = new SecretKeySpec(pwInternal, "HmacSHA1");
+                Mac mac = Mac.getInstance("HmacSHA1");
 
-                try {
-                    key = kf.generateSecret(spec);
-                } finally {
-                    Arrays.fill(passphrase, '\0');
+                mac.init(spec);
+
+                int macLen = mac.getMacLength();
+                int macKeyLen = Math.max(keyLen, macLen);
+                int saltLen = saltInternal.length;
+                byte[] key = new byte[macKeyLen * macLen];
+                int keyByteOffset = 0;
+
+                for (int i = 1; i <= macKeyLen; i++) {
+                    byte keyByte[] = new byte[macLen];
+                    byte keyByteSalt[] = new byte[saltLen + 4];
+
+                    // Copy the salt into the key byte
+                    System.arraycopy(saltInternal, 0, keyByteSalt, 0, saltLen);
+
+                    // Offset the byte
+                    keyByteSalt[saltLen] = (byte) (i / (256 * 256 * 256));
+                    keyByteSalt[saltLen + 1] = (byte) (i / (256 * 256));
+                    keyByteSalt[saltLen + 2] = (byte) (i / (256));
+                    keyByteSalt[saltLen + 3] = (byte) (i);
+
+                    for (int j = 0; j < iterations; j++) {
+                        keyByteSalt = mac.doFinal(keyByteSalt);
+
+                        // XOR the key bytes with its corresponding salt bytes
+                        for (int k = 0; k < keyByteSalt.length; k++) {
+                            keyByte[k] ^= keyByteSalt[k];
+                        }
+                    }
+
+                    // Copy the salted key byte into the key
+                    System.arraycopy(keyByte, 0, key, keyByteOffset, macLen);
+
+                    keyByteOffset += macLen;
                 }
 
+                // Create the key by copying the appropriate bytes from the full MAC key
+                keyBytes = Arrays.copyOf(key, keyLen);
             } catch (GeneralSecurityException gse) {
                 if (callback == null) {
                     throw Utils.makeError(cx, thisObj, gse.toString());
                 } else {
                     callback.call(cx, thisObj, null,
-                                  new Object[] { Utils.makeErrorObject(cx, thisObj, gse.toString()) });
+                            new Object[] { Utils.makeErrorObject(cx, thisObj, gse.toString()) });
                     return null;
                 }
+            } finally {
+                // Just to be safe, empty the internal storage for the password and salt
+                Arrays.fill(pwInternal, (byte)0);
+                Arrays.fill(saltInternal, (byte)0);
             }
 
-            Buffer.BufferImpl keyBuf = Buffer.BufferImpl.newBuffer(cx, thisObj, key.getEncoded());
+            Buffer.BufferImpl keyBuf = Buffer.BufferImpl.newBuffer(cx, thisObj, keyBytes);
             if (callback == null) {
                 return keyBuf;
             }
@@ -301,5 +346,60 @@ public class Crypto
         private void setRuntime(NodeRuntime runtime) {
             this.runtime = runtime;
         }
+    }
+
+    private static byte[] generatePBKDF2Key(byte[] pwBytes, byte[] saltBytes, int iterations, int keyLen) throws GeneralSecurityException {
+        byte[] generatedKey = new byte[keyLen];
+        byte[] masterPasswordInternal = new byte[pwBytes.length];
+        System.arraycopy(pwBytes, 0, masterPasswordInternal, 0, pwBytes.length);
+        byte[] saltInternal = new byte[saltBytes.length];
+        System.arraycopy(saltBytes, 0, saltInternal, 0, saltBytes.length);
+
+        SecretKeySpec keyspec = new SecretKeySpec(masterPasswordInternal, "HmacSHA1");
+        Mac prf = Mac.getInstance("HmacSHA1");
+
+        prf.init(keyspec);
+
+        int hLen = prf.getMacLength();
+        int l = Math.max(keyLen, hLen);
+        byte T[] = new byte[l * hLen];
+        int ti_offset = 0;
+
+        for (int i = 1; i <= l; i++) {
+            F(T, ti_offset, prf, saltInternal, iterations, i);
+            ti_offset += hLen;
+        }
+
+        System.arraycopy(T, 0, generatedKey, 0, keyLen);
+
+        return generatedKey;
+    }
+
+    private static void F(byte[] dest, int offset, Mac prf, byte[] S, int c, int blockIndex) {
+        final int hLen = prf.getMacLength();
+        byte U_r[] = new byte[hLen];
+        // U0 = S || INT (i);
+        byte U_i[] = new byte[S.length + 4];
+        System.arraycopy(S, 0, U_i, 0, S.length);
+        INT(U_i, S.length, blockIndex);
+        for (int i = 0; i < c; i++) {
+            U_i = prf.doFinal(U_i);
+            xor(U_r, U_i);
+        }
+
+        System.arraycopy(U_r, 0, dest, offset, hLen);
+    }
+
+    private static void xor(byte[] dest, byte[] src) {
+        for (int i = 0; i < dest.length; i++) {
+            dest[i] ^= src[i];
+        }
+    }
+
+    private static void INT(byte[] dest, int offset, int i) {
+        dest[offset] = (byte) (i / (256 * 256 * 256));
+        dest[offset + 1] = (byte) (i / (256 * 256));
+        dest[offset + 2] = (byte) (i / (256));
+        dest[offset + 3] = (byte) (i);
     }
 }

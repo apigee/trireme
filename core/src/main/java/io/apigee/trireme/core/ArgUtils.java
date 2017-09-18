@@ -21,6 +21,7 @@
  */
 package io.apigee.trireme.core;
 
+import io.apigee.trireme.core.modules.Buffer;
 import org.mozilla.javascript.Context;
 import org.mozilla.javascript.EvaluatorException;
 import org.mozilla.javascript.Function;
@@ -455,5 +456,20 @@ public class ArgUtils
             return null;
         }
         return (Scriptable)obj;
+    }
+
+    /**
+     * Return the argument at "pos" as a {@link Buffer.BufferImpl}, or throw an exception if the argument list is not
+     * long enough or if the argument at "pos" is not a {@link Buffer.BufferImpl}.
+     */
+    public static Buffer.BufferImpl bufferArg(Object[] args, int pos)
+    {
+        ensureArg(args, pos);
+
+        if (args[pos] instanceof Buffer.BufferImpl) {
+            return (Buffer.BufferImpl)args[pos];
+        } else {
+            throw new EvaluatorException("Not a Buffer");
+        }
     }
 }

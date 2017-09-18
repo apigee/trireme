@@ -260,36 +260,19 @@ public class Crypto
         @SuppressWarnings("unused")
         public static Scriptable PBKDF2(Context cx, Scriptable thisObj, Object[] args, Function func)
         {
+            Crypto.ensureCryptoService(cx, thisObj);
+            CryptoService crypto = Crypto.getCryptoService();
+
             String pw = stringArg(args, 0);
             String saltStr = stringArg(args, 1);
             int iterations = intArg(args, 2);
             int keyLen = intArg(args, 3);
             Function callback = functionArg(args, 4, false);
-            SecretKey key;
 
-            try {
-                SecretKeyFactory kf = SecretKeyFactory.getInstance("PBKDF2WithHmacSHA1");
-                char[] passphrase = pw.toCharArray();
-                byte[] salt = saltStr.getBytes(Charsets.UTF8);
-                PBEKeySpec spec = new PBEKeySpec(passphrase, salt, iterations, keyLen * 8);
+            byte[] key = crypto.generatePBKDF2(pw.getBytes(Charsets.UTF8),
+                saltStr.getBytes(Charsets.UTF8), iterations, keyLen);
 
-                try {
-                    key = kf.generateSecret(spec);
-                } finally {
-                    Arrays.fill(passphrase, '\0');
-                }
-
-            } catch (GeneralSecurityException gse) {
-                if (callback == null) {
-                    throw Utils.makeError(cx, thisObj, gse.toString());
-                } else {
-                    callback.call(cx, thisObj, null,
-                                  new Object[] { Utils.makeErrorObject(cx, thisObj, gse.toString()) });
-                    return null;
-                }
-            }
-
-            Buffer.BufferImpl keyBuf = Buffer.BufferImpl.newBuffer(cx, thisObj, key.getEncoded());
+            Buffer.BufferImpl keyBuf = Buffer.BufferImpl.newBuffer(cx, thisObj, key);
             if (callback == null) {
                 return keyBuf;
             }

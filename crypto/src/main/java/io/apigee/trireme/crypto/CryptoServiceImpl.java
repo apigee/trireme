@@ -24,6 +24,9 @@ package io.apigee.trireme.crypto;
 import io.apigee.trireme.crypto.algorithms.KeyPairProvider;
 import io.apigee.trireme.kernel.crypto.CryptoException;
 import io.apigee.trireme.kernel.crypto.CryptoService;
+import org.bouncycastle.crypto.digests.SHA1Digest;
+import org.bouncycastle.crypto.generators.PKCS5S2ParametersGenerator;
+import org.bouncycastle.crypto.params.KeyParameter;
 import org.bouncycastle.jce.provider.BouncyCastleProvider;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -150,5 +153,18 @@ public class CryptoServiceImpl
         } catch (NoSuchProviderException e) {
             throw new AssertionError(e);
         }
+    }
+
+    /**
+     * Use Bouncy Castle to generate a PBKDF2 key. This is important because the default PBKDF
+     * in the JDK uses only the low-order 8 bits of every character.
+     */
+    @Override
+    public byte[] generatePBKDF2(byte[] password, byte[] salt, int iterations, int keyLen)
+    {
+        PKCS5S2ParametersGenerator gen = new PKCS5S2ParametersGenerator(
+            new SHA1Digest());
+        gen.init(password, salt, iterations);
+        return ((KeyParameter)gen.generateDerivedParameters(keyLen * 8)).getKey();
     }
 }

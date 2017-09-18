@@ -21,8 +21,6 @@
  */
 package io.apigee.trireme.kernel.crypto;
 
-import io.apigee.trireme.kernel.crypto.CryptoException;
-
 import java.io.IOException;
 import java.io.InputStream;
 import java.security.KeyPair;
@@ -53,6 +51,8 @@ public interface CryptoService
         throws IOException, CryptoException;
 
     KeyStore createPemKeyStore();
+
+    byte[] generatePBKDF2(byte[] password, byte[] salt, int iterations, int keyLen);
 
     /**
      * Return a standard security provider -- we may use this to explicitly pick certain algorithms.

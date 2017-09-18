@@ -30,6 +30,7 @@ import java.nio.charset.CharsetDecoder;
 import java.nio.charset.CharsetEncoder;
 import java.nio.charset.CoderResult;
 import java.nio.charset.CodingErrorAction;
+import java.util.Arrays;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -144,7 +145,10 @@ public class StringUtils
             } while (result.isOverflow());
 
             writeBuf.flip();
-            return writeBuf;
+
+            // When supporting Base64, the created buffer can be larger than necessary.  This results in unnecessary and
+            // problematic empty bytes at the end of the byte array.  The approach below takes care of this.
+            return ByteBuffer.wrap(Arrays.copyOf(writeBuf.array(), writeBuf.limit()));
         }
 
         // Use default decoding options, and this is optimized for common charsets as well

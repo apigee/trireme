@@ -25,6 +25,8 @@ import io.apigee.trireme.container.netty.NettyHttpContainer;
 import io.apigee.trireme.core.*;
 import io.apigee.trireme.core.internal.Version;
 import io.apigee.trireme.kernel.streams.BitBucketInputStream;
+import io.apigee.trireme.net.spi.HttpServerContainer;
+import io.apigee.trireme.shell.Main;
 import org.mozilla.javascript.Context;
 import org.mozilla.javascript.JavaScriptException;
 import org.mozilla.javascript.RhinoException;
@@ -34,6 +36,8 @@ import java.io.InputStream;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 /**
  * This is the "main" which runs the script.
@@ -44,10 +48,21 @@ import java.util.concurrent.TimeUnit;
  */
 public class ApigeeEdgeLikeRunner
 {
+    public static final String DEFAULT_ADAPTER = "default";
+    public static final String NETTY_ADAPTER = "netty";
+    public static final String NETTY_ADAPTER_CLASS = "io.apigee.trireme.container.netty.NettyHttpContainer";
+
     private String scriptSource;
     private boolean runRepl;
     private boolean printEval;
     private String[] scriptArgs;
+    private String nodeVersion = NodeEnvironment.DEFAULT_NODE_VERSION;
+    private String httpAdapter = DEFAULT_ADAPTER;
+
+    private static final Pattern NODE_VERSION_PATTERN =
+            Pattern.compile("--node[_-]version=(.+)");
+    private static final Pattern HTTP_ADAPTER_PATTERN =
+            Pattern.compile("--http-adapter=(.+)");
 
     private static void printUsage()
     {
@@ -59,28 +74,37 @@ public class ApigeeEdgeLikeRunner
         System.err.println("  -p, --print          Evaluate script and print result");
         System.err.println("  -i, --interactive    Enter the REPL even if stdin doesn't appear to be a terminal");
         System.err.println();
+        System.err.println("  --node-version=V     Use version V of the Node.js code inside Trireme");
         System.err.println("  --debug              Enable detailed debugging of Trireme internals");
         System.err.println("  --trace              Enable very detailed debugging of Trireme internals");
         System.err.println("  --no-deprecation     Silence deprecation warnings");
         System.err.println("  --throw-deprecation  Throw an exception anytime a deprecated function is used");
         System.err.println("  --trace-deprecation  Show stack traces on deprecations");
         System.err.println("  --expose_gc          Export global \"gc\" function");
+        System.err.println("  --http-adapter=A     Use the specified HTTP adapter: \"default\", \"netty\", or class name");
     }
 
     private static void printVersion()
     {
         NodeEnvironment env = new NodeEnvironment();
-        System.err.println("Trireme " + Version.TRIREME_VERSION +
-                " node v" + env.getDefaultNodeVersion());
+        System.err.println("Trireme " + Version.TRIREME_VERSION);
+        for (String vn : env.getNodeVersions()) {
+            if (vn.equals(env.getDefaultNodeVersion())) {
+                System.out.println("node " + vn + " (default)");
+            } else {
+                System.out.println("node " + vn);
+            }
+        }
     }
 
     public static void main(String[] args)
     {
-        ApigeeEdgeLikeRunner m = new ApigeeEdgeLikeRunner();
-        if (!m.parseArgs(args)) {
+        ApigeeEdgeLikeRunner runner = new ApigeeEdgeLikeRunner();
+
+        if (!runner.parseArgs(args)) {
             System.exit(1);
         } else {
-            int ec = m.run();
+            int ec = runner.run();
             System.exit(ec);
         }
     }
@@ -112,6 +136,24 @@ public class ApigeeEdgeLikeRunner
             i++;
         }
 
+        boolean processingOptions = true;
+
+        for (int ia = i; ia < args.length; ia++) {
+            if (processingOptions) {
+                Matcher nv = NODE_VERSION_PATTERN.matcher(args[ia]);
+                Matcher ha = HTTP_ADAPTER_PATTERN.matcher(args[ia]);
+                if (nv.matches()) {
+                    nodeVersion = nv.group(1);
+                } else if (ha.matches()) {
+                    httpAdapter = ha.group(1);
+                } else if (ha.matches()) {
+
+                } else if (!args[ia].startsWith("--")) {
+                    processingOptions = false;
+                }
+            }
+        }
+
         if (i < args.length) {
             scriptArgs = new String[args.length - i];
             System.arraycopy(args, i, scriptArgs, 0, scriptArgs.length);
@@ -121,6 +163,8 @@ public class ApigeeEdgeLikeRunner
 
     private int run()
     {
+        setDebug();
+
         NodeEnvironment env = new NodeEnvironment();
 
         // BEGIN: Apigee Edge-like specific changes
@@ -133,11 +177,21 @@ public class ApigeeEdgeLikeRunner
         env.setSandbox(sb);
 
         sb.setStdin(new BitBucketInputStream())
-          .setStdout(System.out)
-          .setStderr(System.out)
-          .setHideOSDetails(true)
-          .setAllowJarLoading(false);
+                .setStdout(System.out)
+                .setStderr(System.out)
+                .setHideOSDetails(true)
+                .setAllowJarLoading(false);
         // END: Apigee Edge-like specific changes
+
+        try {
+            HttpServerContainer adapter = loadHttpAdapter();
+            if (adapter != null) {
+                env.setHttpContainer(adapter);
+            }
+        } catch (NodeException ne) {
+            System.err.println(ne.getMessage());
+            return 96;
+        }
 
         if ((scriptArgs == null) || (scriptArgs.length == 0)) {
             runRepl = true;
@@ -158,6 +212,7 @@ public class ApigeeEdgeLikeRunner
 
             ScriptStatus status;
             try {
+                ns.setNodeVersion(nodeVersion);
                 Future<ScriptStatus> future = ns.execute();
                 status = future.get();
             } finally {
@@ -185,6 +240,31 @@ public class ApigeeEdgeLikeRunner
         }
     }
 
+    private HttpServerContainer loadHttpAdapter()
+            throws NodeException
+    {
+        if (DEFAULT_ADAPTER.equals(httpAdapter)) {
+            return null;
+        }
+
+        String className =
+                (NETTY_ADAPTER.equals(httpAdapter) ? NETTY_ADAPTER_CLASS : httpAdapter);
+
+        try {
+            Class<HttpServerContainer> adapterClass = (Class<HttpServerContainer>)Class.forName(className);
+            return adapterClass.newInstance();
+
+        } catch (ClassNotFoundException cnfe) {
+            throw new NodeException("HTTP Adapter " + httpAdapter + " not found in class path");
+        } catch (ClassCastException cce) {
+            throw new NodeException("HTTP adapter " + httpAdapter + " does not implement the correct class");
+        } catch (InstantiationException ie) {
+            throw new NodeException("Error instantiating HTTP adapter " + httpAdapter + ": " + ie);
+        } catch (IllegalAccessException ie) {
+            throw new NodeException("Error instantiating HTTP adapter " + httpAdapter + ": " + ie);
+        }
+    }
+
     private static void printException(Throwable ee)
     {
         if (ee instanceof JavaScriptException) {
@@ -206,8 +286,7 @@ public class ApigeeEdgeLikeRunner
     private static String readReplSource()
             throws NodeException, IOException
     {
-        InputStream replIn = ApigeeEdgeLikeRunner.class.getClassLoader()
-                                                    .getResourceAsStream("trireme-shell/trireme-repl.js");
+        InputStream replIn = Main.class.getClassLoader().getResourceAsStream("trireme-shell/trireme-repl.js");
         if (replIn == null) {
             throw new NodeException("Cannot find REPL source code");
         }
@@ -216,6 +295,16 @@ public class ApigeeEdgeLikeRunner
             return Utils.readStream(replIn);
         } finally {
             replIn.close();
+        }
+    }
+
+    private static void setDebug()
+    {
+        System.setProperty("org.slf4j.simpleLogger.showThreadName", "false");
+        System.setProperty("org.slf4j.simpleLogger.showShortLogName", "true");
+        String dbg = System.getenv("LOGLEVEL");
+        if (dbg != null) {
+            System.setProperty("org.slf4j.simpleLogger.defaultLogLevel", dbg);
         }
     }
 }

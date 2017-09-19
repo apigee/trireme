@@ -25,6 +25,7 @@ import io.apigee.trireme.core.NodeScript;
 import io.apigee.trireme.net.spi.HttpServerAdapter;
 import io.apigee.trireme.net.spi.HttpServerStub;
 import io.apigee.trireme.net.spi.TLSParams;
+import java.net.InetSocketAddress;
 
 public class ServletAdapter
     implements HttpServerAdapter
@@ -56,5 +57,12 @@ public class ServletAdapter
     public void close()
     {
         // TODO
+    }
+
+    @Override
+    public InetSocketAddress localAddress()
+    {
+        // By returning null we are telling the adapter that we can't create a meaningful address.
+        return null;
     }
 }

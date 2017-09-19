@@ -1,6 +1,7 @@
-var http = require('http');
 var assert = require('assert');
+var http = require('http');
 var urlparse = require('url');
+var util = require('util');
 
 var svr = http.createServer(function(req, resp) {
   console.log('Got %s', req.url);
@@ -40,7 +41,10 @@ var svr = http.createServer(function(req, resp) {
   }
 });
 
-svr.listen(33333, function() {
+var baseUrl;
+
+svr.listen(0, function() {
+  baseUrl = util.format('http://localhost:%d/', svr.address().port);
   doTest('GET', 'ok', false, 200, function() {
     doTest('GET', 'throw', false, 500, function() {
       doTest('POST', 'throwOnData', false, 500, function() {
@@ -58,7 +62,7 @@ svr.listen(33333, function() {
 });
 
 function doTest(verb, url, shouldClose, code, next) {
-  opts = urlparse.parse('http://localhost:33333/' + url);
+  opts = urlparse.parse(baseUrl + url);
   opts.method = verb;
   req = http.request(opts, function(resp) {
     var respData = '';

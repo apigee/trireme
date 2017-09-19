@@ -71,6 +71,9 @@ public class NettyServer
     }
 
     public InetSocketAddress getAddress() {
+        if (serverChannel != null) {
+            return (InetSocketAddress)(serverChannel.localAddress());
+        }
         return address;
     }
 

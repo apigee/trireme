@@ -21,6 +21,7 @@
  */
 package io.apigee.trireme.net.spi;
 
+import java.net.InetSocketAddress;
 import javax.net.ssl.SSLContext;
 
 /**
@@ -30,6 +31,16 @@ public interface HttpServerAdapter
 {
     /** Start to listen on the specified host and port. */
     void listen(String host, int port, int backlog, TLSParams tlsParams);
+
+    /**
+     * Get the address that we're listening on. This should be the real address where
+     * a client could send a request, not the initial parameters sent to "listen,"
+     * in case port zero was used to create an anonymous port.
+     * If there is no meaningful way to return a real address, then return null -- the
+     * wrapper will use this to generate a random (and meaningless) port number so that clients will
+     * not break.
+     */
+    InetSocketAddress localAddress();
 
     /** Don't close the socket, but stop accepting new connections */
     void suspend();

@@ -38,11 +38,11 @@ srv.on('upgrade', function(req, socket, head) {
 });
 
 // now that server is running
-srv.listen(33334, function() {
+srv.listen(0, function() {
 
   // make a request
   var options = {
-    port: 33334,
+    port: srv.address().port,
     hostname: 'localhost',
     headers: {
       'Connection': 'Upgrade',

@@ -614,12 +614,6 @@ if (HttpWrap.hasServerAdapter()) {
       fam = 'IPv4';
     }
 
-    self.address = {
-      port: port,
-      address: address,
-      family: fam
-    };
-
     self._adapter = HttpWrap.createServerAdapter();
     if (self.sslContext) {
       self._adapter.setSslContext(self.sslContext, self.rejectUnauthorized, self.requestCert);
@@ -676,7 +670,7 @@ if (HttpWrap.hasServerAdapter()) {
   }
 
   Server.prototype.address = function() {
-    return this.address;
+    return this._adapter.localAddress();
   };
 
   Server.prototype.listen = function() {

@@ -22,9 +22,9 @@ var svr = https.createServer({
 });
 
 console.log('Server starting to listen');
-svr.listen(33333, function() {
-  console.log('Server listening');
-  https.get({host: 'localhost', port: 33333,
+svr.listen(0, function() {
+  console.log('Server listening on %j', svr.address());
+  https.get({host: 'localhost', port: svr.address().port,
              path: '/', rejectUnauthorized: false}, function(resp) {
     var received = '';
     console.log('Got a response with status code ' + resp.statusCode);

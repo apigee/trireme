@@ -38,6 +38,9 @@ import io.apigee.trireme.net.spi.HttpServerContainer;
 import io.apigee.trireme.net.spi.HttpServerStub;
 import io.apigee.trireme.net.spi.TLSParams;
 import io.apigee.trireme.net.spi.UpgradedSocket;
+import java.net.Inet6Address;
+import java.net.InetSocketAddress;
+import java.util.Random;
 import org.mozilla.javascript.Context;
 import org.mozilla.javascript.Function;
 import org.mozilla.javascript.RhinoException;
@@ -217,6 +220,31 @@ public class HTTPWrap
                 adapter = null;
             }
             runner.unPin();
+        }
+
+        @JSFunction
+        @SuppressWarnings("unused")
+        public static Object localAddress(Context cx, Scriptable thisObj, Object[] args, Function func)
+        {
+            ServerContainer self = (ServerContainer)thisObj;
+            Scriptable addr = cx.newObject(thisObj);
+            if (self.adapter != null) {
+                InetSocketAddress sa = self.adapter.localAddress();
+                if (sa == null) {
+                    addr.put("address", addr, "localhost");
+                    addr.put("port", addr, -1);
+                    addr.put("family", addr, "IPv4");
+                } else {
+                    addr.put("address", addr, sa.getHostString());
+                    addr.put("port", addr, sa.getPort());
+                    if (sa.getAddress() instanceof Inet6Address) {
+                        addr.put("family", addr, "IPv6");
+                    } else {
+                        addr.put("family", addr, "IPv4");
+                    }
+                }
+            }
+            return addr;
         }
 
         /**

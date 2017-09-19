@@ -1,5 +1,6 @@
-var http = require('http');
 var assert = require('assert');
+var http = require('http');
+var util = require('util');
 
 var TIMEOUT = 1000;
 
@@ -19,8 +20,9 @@ var svr = http.createServer(function(req, resp) {
   });
 });
 
-svr.listen(33341, function() {
-  http.get('http://localhost:33341', function(resp) {
+svr.listen(0, function() {
+  var url = util.format('http://localhost:%d', svr.address().port);
+  http.get(url, function(resp) {
     var received = '';
     resp.setEncoding('utf8');
     assert.equal(resp.statusCode, 500);

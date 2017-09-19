@@ -1,5 +1,5 @@
-var http = require('http');
 var assert = require('assert');
+var http = require('http');
 var util = require('util');
 
 var socketsMatch = false;
@@ -52,8 +52,10 @@ var svr = http.createServer(function(req, resp) {
   });
 });
 
-svr.listen(33333, function() {
-  http.get('http://localhost:33333/', function(resp) {
+svr.listen(0, function() {
+  console.log('Server listening on %j', svr.address());
+  var url = util.format('http://localhost:%d', svr.address().port);
+  http.get(url, function(resp) {
     var received = '';
     resp.setEncoding('utf8');
     if (resp.statusCode != 200) {
@@ -75,9 +77,7 @@ svr.listen(33333, function() {
       var msg = JSON.parse(received);
       console.log('Received: %j', msg);
 
-      assert.equal(localAddress, msg.remoteAddress);
       assert.equal(localPort, msg.remotePort);
-      assert.equal(remoteAddress, msg.localAddress);
       assert.equal(remotePort, msg.localPort);
       socketsMatch = true;
     });

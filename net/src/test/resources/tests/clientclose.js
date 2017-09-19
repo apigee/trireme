@@ -1,5 +1,6 @@
-var http = require('http');
 var assert = require('assert');
+var http = require('http');
+var util = require('util');
 
 var TIMEOUT = 100;
 var ITERATIONS = 10;
@@ -63,8 +64,8 @@ function getClose(url, cb) {
   });
 }
 
-svr.listen(33344, function() {
-  var url = 'http://localhost:33344';
+svr.listen(0, function() {
+  var url = util.format('http://localhost:%d', svr.address().port);
   getGood(url, function() {
     getClose(url, function() {
       console.log('Done');

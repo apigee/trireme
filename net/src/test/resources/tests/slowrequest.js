@@ -23,10 +23,10 @@ var svr = http.createServer(function(req, resp) {
   });
 });
 
-svr.listen(33342, function() {
+svr.listen(0, function() {
   var req = http.request({
     hostname: 'localhost',
-    port: 33342,
+    port: svr.address().port,
     path: '/',
     method: 'POST'
   }, function(resp) {

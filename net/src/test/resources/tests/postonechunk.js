@@ -20,8 +20,8 @@ var svr = http.createServer(function(req, resp) {
   });
 });
 
-svr.listen(33333, function() {
-  var req = http.request({host: 'localhost', port: 33333,
+svr.listen(0, function() {
+  var req = http.request({host: 'localhost', port: svr.address().port,
                 path: '/', method: 'POST',
                 headers: { 'Content-Type': 'text/plain' }},
     function(resp) {

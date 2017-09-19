@@ -22,8 +22,8 @@ var svr = https.createServer({ keystore: keystore, passphrase: 'secure' },
     });
 });
 
-svr.listen(33333, function() {
-  var req = https.request({host: 'localhost', port: 33333,
+svr.listen(0, function() {
+  var req = https.request({host: 'localhost', port: svr.address().port,
                 path: '/', method: 'POST',
                 headers: { 'Content-Type': 'text/plain' },
                 rejectUnauthorized: false},

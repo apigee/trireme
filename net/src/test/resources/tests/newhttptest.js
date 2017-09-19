@@ -1,5 +1,6 @@
-var http = require('http');
 var assert = require('assert');
+var http = require('http');
+var util = require('util');
 
 var svr = http.createServer(function(req, resp) {
   console.log('Got an HTTP request');
@@ -14,9 +15,10 @@ var svr = http.createServer(function(req, resp) {
 });
 
 console.log('Server starting to listen');
-svr.listen(33333, function() {
+svr.listen(0, function() {
   console.log('Server listening');
-  http.get('http://localhost:33333/', function(resp) {
+  var url = util.format('http://localhost:%d', svr.address().port);
+  http.get(url, function(resp) {
     var received = '';
     console.log('Got a response with status code ' + resp.statusCode);
     resp.setEncoding('utf8');

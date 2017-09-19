@@ -46,6 +46,7 @@ import io.netty.handler.logging.LogLevel;
 import io.netty.handler.logging.LoggingHandler;
 import io.netty.handler.ssl.SslHandler;
 import io.netty.handler.timeout.IdleStateHandler;
+import java.net.InetSocketAddress;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -88,7 +89,7 @@ public class NettyHttpServer
         }
         try {
             server = NettyFactory.get().createServer(port, host, backlog, makePipeline(tlsParams));
-            log.debug("Listening on port {}", port);
+            log.debug("Listening on {}", server.getAddress());
         } catch (ChannelException ce) {
             stub.onError(ce.getMessage());
             stub.onClose(null, null);
@@ -141,6 +142,11 @@ public class NettyHttpServer
 
     boolean isClosing() {
         return closing;
+    }
+
+    @Override
+    public InetSocketAddress localAddress() {
+        return server.getAddress();
     }
 
     @Override

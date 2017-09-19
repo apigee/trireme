@@ -40,7 +40,6 @@ import io.apigee.trireme.net.spi.TLSParams;
 import io.apigee.trireme.net.spi.UpgradedSocket;
 import java.net.Inet6Address;
 import java.net.InetSocketAddress;
-import java.util.Random;
 import org.mozilla.javascript.Context;
 import org.mozilla.javascript.Function;
 import org.mozilla.javascript.RhinoException;

@@ -10,6 +10,7 @@ import org.junit.BeforeClass;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
+import org.mozilla.javascript.JavaScriptException;
 
 import java.io.File;
 import java.util.Arrays;
@@ -17,6 +18,7 @@ import java.util.Collection;
 import java.util.HashMap;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 
 import static org.junit.Assert.*;
 
@@ -174,8 +176,24 @@ public class BasicHttpNettyTest
         runTest("clientclose.js");
     }
 
-    private void runTest(String name)
-        throws InterruptedException, ExecutionException, NodeException
+    @Test
+    public void testNonRequestUncaughtExceptionExits()
+            throws InterruptedException, NodeException, TimeoutException
+    {
+        NodeScript script = createTestScript("nonrequestuncaughtexceptionexits.js");
+
+        try {
+            // Trireme 0.8.9 and prior would throw a TimeoutException here because the test script would never terminate
+            script.execute().get(2, TimeUnit.SECONDS);
+
+            fail("The script should had thrown an uncaught exception");
+        } catch (ExecutionException ee) {
+            assertTrue(ee.getMessage().contains("Uncaught Error"));
+        }
+    }
+
+    private NodeScript createTestScript(String name)
+            throws NodeException
     {
         System.setProperty("TriremeInjectedAttachment", ATTACHMENT_VAL);
         HashMap<String, String> scriptEnv = new HashMap<String, String>();
@@ -191,7 +209,13 @@ public class BasicHttpNettyTest
                                              null);
         script.setNodeVersion(version);
         script.setEnvironment(scriptEnv);
-        ScriptStatus status = script.execute().get();
-        assertEquals(0, status.getExitCode());
+
+        return script;
+    }
+
+    private void runTest(String name)
+        throws InterruptedException, ExecutionException, NodeException
+    {
+        assertEquals(0, createTestScript(name).execute().get().getExitCode());
     }
 }

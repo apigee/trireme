@@ -655,21 +655,6 @@ if (HttpWrap.hasServerAdapter()) {
     };
     self._adapter.onclose = onClose;
 
-    process.on('uncaughtException', function(err) {
-      if ((self._adapter !== null) && !self.exiting) {
-        self.exiting = true;
-        var msg = getErrorMessage(err);
-        var stack = err.stack ? err.stack : undefined;
-        self._adapter.fatalError(msg, stack);
-      }
-    });
-    process.on('exit', function() {
-      if ((self._adapter !== null) && !self.exiting) {
-        self.exiting = true;
-        self._adapter.fatalError('Premature script exit');
-      }
-    });
-
     process.nextTick(function() {
       self.emit('listening');
     });

@@ -880,14 +880,15 @@ assertSorted(crypto.getHashes());
   var c = crypto.createDecipher('aes-128-ecb', '');
   assert.throws(function() { c.final('utf8') }, /invalid public key/);
 })();
+*/
 
 // Base64 padding regression test, see #4837.
 (function() {
   var c = crypto.createCipher('aes-128-cbc', 'secret');
   var s = c.update('test', 'utf8', 'base64') + c.final('base64');
-  assert.equal(s, '375oxUQCIocvxmC5At+rvA==');
+  assert.equal(s, 'P9zQV8qhP+Up+e/+9zJSYQ==');
 })();
-*/
+
 
 // Error path should not leak memory (check with valgrind).
 assert.throws(function() {
@@ -966,3 +967,20 @@ assert.throws(function() {
   ].join('\n');
   crypto.createSign('RSA-SHA256').update('test').sign(private);
 });
+// # 65713882: Make sure crypto.pbkdf2 produces the same output as Node.js for all buffer/string input combinations
+(function() {
+  var expectedKey = 'VoX04CBu5KWnoUS4UnoDYxkc57w='; // Value provided by node.js
+  var pwData = 'fe48f4f84ad2608add1dd46d6fe8e12c';
+  var password = new Buffer(pwData);
+  var saltData = 'Mr2YiTlPd9cIpIKbTGYGWg==';
+  var salt = new Buffer(saltData, 'base64');
+
+  [
+    [pwData, saltData], // String passphrase, string salt
+    [password, saltData], // Buffer passphrase, string salt
+    [pwData, salt], // String passphrase, Buffer salt
+    [password, salt] // Buffer passphrase, Buffer salt
+  ].forEach(function (test) {
+    assert.equal(crypto.pbkdf2Sync(salt, salt, 10000, 20).toString('base64'), expectedKey)
+  });
+})();

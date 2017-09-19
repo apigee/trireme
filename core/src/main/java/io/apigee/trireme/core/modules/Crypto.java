@@ -40,6 +40,7 @@ import io.apigee.trireme.core.modules.crypto.SignImpl;
 import io.apigee.trireme.core.modules.crypto.VerifyImpl;
 import io.apigee.trireme.kernel.crypto.SSLCiphers;
 import io.apigee.trireme.kernel.crypto.SignatureAlgorithms;
+import java.util.Arrays;
 import org.mozilla.javascript.Context;
 import org.mozilla.javascript.Function;
 import org.mozilla.javascript.FunctionObject;
@@ -50,19 +51,12 @@ import org.mozilla.javascript.annotations.JSFunction;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import javax.crypto.SecretKey;
-import javax.crypto.SecretKeyFactory;
-import javax.crypto.spec.PBEKeySpec;
 import java.lang.reflect.InvocationTargetException;
 import java.nio.ByteBuffer;
 import java.nio.charset.Charset;
-import java.security.GeneralSecurityException;
 import java.security.Provider;
 import java.security.SecureRandom;
-import java.util.Arrays;
 import java.util.Random;
-import java.util.ServiceLoader;
-
 import static io.apigee.trireme.core.ArgUtils.*;
 
 /**
@@ -263,21 +257,29 @@ public class Crypto
             Crypto.ensureCryptoService(cx, thisObj);
             CryptoService crypto = Crypto.getCryptoService();
 
-            String pw = stringArg(args, 0);
-            String saltStr = stringArg(args, 1);
+            Buffer.BufferImpl pwBuf = bufferArg(args, 0);
+            Buffer.BufferImpl saltBuf = bufferArg(args, 1);
             int iterations = intArg(args, 2);
             int keyLen = intArg(args, 3);
-            Function callback = functionArg(args, 4, false);
+            Function callback = objArg(cx, thisObj, args, 4, Function.class, false);
 
-            byte[] key = crypto.generatePBKDF2(pw.getBytes(Charsets.UTF8),
-                saltStr.getBytes(Charsets.UTF8), iterations, keyLen);
+            byte[] pw = pwBuf.toArray();
+            byte[] salt = saltBuf.toArray();
 
-            Buffer.BufferImpl keyBuf = Buffer.BufferImpl.newBuffer(cx, thisObj, key);
-            if (callback == null) {
-                return keyBuf;
+            try {
+                byte[] key = crypto.generatePBKDF2(pw, salt, iterations, keyLen);
+
+                Buffer.BufferImpl keyBuf = Buffer.BufferImpl.newBuffer(cx, thisObj, key);
+                if (callback == null) {
+                    return keyBuf;
+                }
+                callback.call(cx, thisObj, null,
+                    new Object[]{Context.getUndefinedValue(), keyBuf});
+
+            } finally {
+                Arrays.fill(pw, (byte)0);
+                Arrays.fill(pw, (byte)0);
             }
-            callback.call(cx, thisObj, null,
-                          new Object[] { Context.getUndefinedValue(), keyBuf });
             return null;
         }
 

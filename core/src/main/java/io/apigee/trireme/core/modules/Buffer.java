@@ -740,12 +740,27 @@ public class Buffer
             return StringUtils.bufferToString(ByteBuffer.wrap(buf, bufOffset, bufLength), cs);
         }
 
+        /**
+         * Return the raw byte array under the buffer. Note that the actual buffer may be
+         * longer than this, so users must either take "getLength" into account, or
+         * call "toArray," which always returns an array of the exact length.
+         */
         public byte[] getArray() {
             return buf;
         }
 
         public int getArrayOffset() {
             return bufOffset;
+        }
+
+        /**
+         * Return a copy of the contents as a byte array with the exact length.
+         */
+        public byte[] toArray()
+        {
+            byte[] ret = new byte[bufLength];
+            System.arraycopy(buf, bufOffset, ret, 0, bufLength);
+            return ret;
         }
 
         @Override

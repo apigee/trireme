@@ -84,6 +84,8 @@ public class PBKDF2Test {
             0x65, 0xa4, 0x29, 0xc1});
   }
 
+  /* This test is part of the IETF RFC but it takes a very long time to run.
+     Uncomment if you want to test absolutely everything.
   @Test
   public void testPBKDF4()
   {
@@ -92,6 +94,7 @@ public class PBKDF2Test {
             0xe9, 0x94, 0x5b, 0x3d, 0x6b, 0xa2, 0x15, 0x8c,
             0x26, 0x34, 0xe9, 0x84});
   }
+  */
 
   @Test
   public void testPBKDF5()

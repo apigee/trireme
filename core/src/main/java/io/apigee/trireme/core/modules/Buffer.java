@@ -771,7 +771,7 @@ public class Buffer
         @Override
         public Object get(int index, Scriptable start)
         {
-            if (index < bufLength) {
+            if (index > -1 && index < bufLength) {
                 return get(index);
             }
             return Undefined.instance;

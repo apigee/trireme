@@ -1054,3 +1054,20 @@ assert.doesNotThrow(function () {
   var fast = new Buffer(1);
   assert(fast.write('', Buffer.poolSize * 10) === 0);
 });
+
+// Issue 143: Make sure accessing a Buffer with a negative index returns undefined
+(function() {
+  var buf1 = new Buffer("1111", "hex");
+  var buf2 = buf1.slice(1);
+
+  assert.strictEqual(buf1[-1], undefined);
+  assert.strictEqual(buf2[-1], undefined);
+
+  // Just making sure we didn't mess up the get by offset
+  assert.throws(function() {
+    buf1.get(-1)
+  }, RangeError);
+  assert.throws(function() {
+    buf2.get(-1)
+  }, RangeError);
+})();

@@ -12,7 +12,7 @@
   <name>trireme</name>
   <description>Trireme -- Embed Node.js programs inside the Java Virtual Machine</description>
   <url>http://apigee.io/</url>
-  <version>0.9.0-SNAPSHOT</version>
+  <version>0.9.0</version>
   
   <packaging>pom</packaging>
 
@@ -27,6 +27,7 @@
     <maven.compiler.source>1.7</maven.compiler.source>
     <maven.compiler.target>1.7</maven.compiler.target>
     <useCoverage>false</useCoverage>
+    <additionalparam>-Xdoclint:none</additionalparam>
   </properties>
 
   <licenses>
@@ -261,11 +262,21 @@
                             <goals>
                                 <goal>jar</goal>
                             </goals>
-                            <configuration>
-                              <additionalparam>-Xdoclint:none</additionalparam>
-                            </configuration>
                         </execution>
                     </executions>
+                </plugin>
+                <plugin>
+                  <groupId>org.apache.maven.plugins</groupId>
+                  <artifactId>maven-site-plugin</artifactId>
+                  <version>3.6</version>
+                  <configuration>
+                    <reportPlugins>
+                      <plugin>
+                        <groupId>org.apache.maven.plugins</groupId>
+                        <artifactId>maven-javadoc-plugin</artifactId>
+                      </plugin>
+                    </reportPlugins>
+                  </configuration>
                 </plugin>
                 <plugin>
                     <groupId>org.apache.maven.plugins</groupId>

@@ -4,16 +4,16 @@
   <parent>
     <groupId>io.apigee.trireme</groupId>
     <artifactId>trireme-samples</artifactId>
-    <version>0.9.0-SNAPSHOT</version>
+    <version>0.9.0</version>
   </parent>
 
   <name>apigee-edge-like-launcher</name>
   <artifactId>apigee-edge-like-launcher</artifactId>
-  <version>0.9.0-SNAPSHOT</version>
+  <version>0.9.0</version>
 
   <properties>
     <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
-    <trireme.version>0.9.0-SNAPSHOT</trireme.version>
+    <trireme.version>0.9.0</trireme.version>
   </properties>
 
   <build>

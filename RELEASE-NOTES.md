@@ -1,3 +1,22 @@
+* 0.9.0 09-28-2017:
+
+[Issue 143](https://github.com/apigee/trireme/issues/143) Properly return undefined when accessing
+a negative Buffer index.
+[Issue 161](https://github.com/apigee/trireme/issues/161) Support a larger number of hashes
+in crypto.createHash and crypto.createVerify, so that Trireme is more compatible with regular
+Node, which uses a cipher list of OpenSSL which is much more lenient.
+
+In addition:
+
+* Upgrade to [Rhino 1.7.7.2](https://github.com/mozilla/rhino/releases/tag/Rhino1_7_7_2_Release).
+See the release notes there for details of what was fixed.
+* Pull code from a newer Node branch so that http.get() with numeric authorization does not
+create an unitialized buffer.
+* Fix the HTTP adapter (used in Apigee Edge) so that uncaught exceptions are properly bubbled up
+to the top level of the script rather than crashing.
+* Fix PBKDF2 support to work with Buffers as well as strings. crypto.pbkdf2 is now compatible
+with "regular" Node.
+
 * 0.8.9 02-01-2016:
 
 This release fixes a few small bugs, especially in TLS. It also upgrades to

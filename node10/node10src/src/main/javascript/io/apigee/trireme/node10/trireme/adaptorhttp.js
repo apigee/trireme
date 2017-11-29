@@ -58,6 +58,16 @@ exports.get = NodeHttp.get;
 exports.Client = NodeHttp.Client;
 exports.createClient = NodeHttp.createClient;
 
+/*
+ * Allow the tool embedding Trireme to configure the default
+ * http.globalAgent.maxSockets.
+ */
+var customMaxSockets = toNumber(process.env.NODE_HTTP_MAX_SOCKETS);
+
+if (customMaxSockets) {
+  exports.globalAgent.maxSockets = customMaxSockets;
+}
+
 if (HttpWrap.hasServerAdapter()) {
   var util = require('util');
   var net = require('net');

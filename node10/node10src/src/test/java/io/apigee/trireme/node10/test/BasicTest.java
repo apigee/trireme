@@ -334,6 +334,27 @@ public class BasicTest
     }
 
     @Test
+    public void testHttpCustomDefaultMaxSockets()
+            throws InterruptedException, ExecutionException, NodeException, IOException
+    {
+        runTest("httpcustomdefaultmaxsockets.js");
+    }
+
+    @Test
+    public void testHttpDefaultMaxSockets()
+            throws InterruptedException, ExecutionException, NodeException, IOException
+    {
+        runTest("httpdefaultmaxsockets.js");
+    }
+
+    @Test
+    public void testHttpInvalidCustomDefaultMaxSockets()
+            throws InterruptedException, ExecutionException, NodeException, IOException
+    {
+        runTest("httpinvalidcustomdefaultmaxsockets.js");
+    }
+
+    @Test
     public void testHttpPolicy()
         throws InterruptedException, ExecutionException, NodeException, IOException
     {

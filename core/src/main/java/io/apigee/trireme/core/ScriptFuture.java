@@ -176,9 +176,21 @@ public class ScriptFuture
         notifyAll();
     }
 
+    public void setScriptStatus(ScriptStatus scriptStatus)
+    {
+    	set(scriptStatus);
+    }
+
     @Override
     public void run()
     {
+		synchronized(runner.getScriptObject()) {
+			// the synchronized block allows halting execution until wakeup is assigned
+			if (runner.wakeup != null) {
+				assert runner.getParentProcess() == null : "script is master and pumped externally";
+				return;
+			}
+		}
         try {
             ScriptStatus status = runner.call();
             set(status);

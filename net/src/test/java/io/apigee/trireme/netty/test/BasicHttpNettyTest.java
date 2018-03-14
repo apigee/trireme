@@ -192,6 +192,18 @@ public class BasicHttpNettyTest
         }
     }
 
+    @Test(expected = TimeoutException.class)
+    public void testHTTPAdaptorHandlesUncaughtExceptions()
+            throws ExecutionException, InterruptedException, NodeException, TimeoutException
+    {
+        NodeScript script = createTestScript("httpadaptorhandlesuncaughtexceptions.js");
+
+        script.addEnvironment("HTTP_ADAPTOR_HANDLES_UNCAUGHT_EXCEPTIONS", "true");
+
+        // Enabling this feature should throw a TimeoutException
+        script.execute().get(2, TimeUnit.SECONDS);
+    }
+
     private NodeScript createTestScript(String name)
             throws NodeException
     {

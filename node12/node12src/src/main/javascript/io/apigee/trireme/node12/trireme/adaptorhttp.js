@@ -583,6 +583,31 @@ if (HttpWrap.hasServerAdapter()) {
     };
     self._adapter.onclose = onClose;
 
+    // Prior to 0.9.0, uncaught exceptions thrown outside of a domain-wrapped request handler were handled by the HTTP
+    // adaptor.  This was not ideal but for some consumers, altering this functionality resulted in breaking backward
+    // compatibility because unmodified code was all the sudden exiting.  While this bug deserves to be fixed, and is by
+    // default, consumers can tell Trireme that its HTTP adaptor will handle uncaught exceptions to provide backward
+    // compatibility.
+    if ((process.env.HTTP_ADAPTOR_HANDLES_UNCAUGHT_EXCEPTIONS || 'false').toLowerCase() === 'true') {
+      process.on('uncaughtException', function(err) {
+        if ((self._adapter !== null) && !self.exiting) {
+          self.exiting = true;
+          var msg = getErrorMessage(err);
+          var stack = err.stack ? err.stack : undefined;
+          self._adapter.fatalError(msg, stack);
+        }
+      });
+    }
+    // Same as above.
+    if ((process.env.HTTP_ADAPTOR_HANDLES_EXIT || 'false').toLowerCase() === 'true') {
+      process.on('exit', function() {
+        if ((self._adapter !== null) && !self.exiting) {
+          self.exiting = true;
+          self._adapter.fatalError('Premature script exit');
+        }
+      });
+    }
+
     process.nextTick(function() {
       self.emit('listening');
     });

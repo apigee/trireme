@@ -266,9 +266,12 @@ TEST(function test_resolveCname(done) {
 TEST(function test_resolveTxt(done) {
   var req = dns.resolveTxt('google.com', function(err, records) {
     if (err) throw err;
-    assert.equal(records.length, 1);
-    assert.equal(records[0].indexOf('v=spf1'), 0);
-    done();
+    assert(records.length > 1);
+    records.forEach(function(record) {
+      if (record.indexOf('v=spf1') == 0) {
+        done();
+      }
+    })
   });
 
   checkWrap(req);

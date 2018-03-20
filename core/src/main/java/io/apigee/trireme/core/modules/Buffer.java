@@ -731,7 +731,20 @@ public class Buffer
 
         public ByteBuffer getBuffer()
         {
-            return ByteBuffer.wrap(buf, bufOffset, bufLength);
+
+            // https://github.com/apigee/trireme/issues/181
+            // For cases where Trireme's Buffer is using a byte buffer with an offset we must copy the in-use portion of
+            // the byte[] to a new byte array and pass that to ByteBuffer.wrap(). ByteBuffer.wrap does not support
+            // setting an offset the offset used below sets the current position not the underlying offset.
+            //
+            // From https://docs.oracle.com/javase/7/docs/api/java/nio/ByteBuffer.html#wrap(byte%5B%5D,%20int,%20int)
+            // "Its backing array will be the given array, and its array offset will be zero."
+            if (bufOffset != 0) {
+                ByteBuffer newBuf = ByteBuffer.wrap(buf, bufOffset, bufLength);
+                return newBuf.slice();
+            } else {
+                return ByteBuffer.wrap(buf, bufOffset, bufLength);
+            }
         }
 
         public String getString(String encoding)

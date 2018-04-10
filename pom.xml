@@ -75,7 +75,7 @@
       <dependency>
         <groupId>org.mozilla</groupId>
         <artifactId>rhino</artifactId>
-        <version>1.7.9</version>
+        <version>1.7.10</version>
       </dependency>
       <dependency>
         <groupId>io.netty</groupId>

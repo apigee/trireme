@@ -1,3 +1,28 @@
+* 0.9.3: 04-10-2018:
+
+Fix a bug in the Buffer implementation that was causing the "zlib"
+library to produce corrupted output.
+
+Upgrade to Rhino 1.7.10 which fixes a number of issues, including an
+issue with the Object.prototype.isPropertyEnumerable() function on
+certain built-in data types like String.
+
+* 0.9.2: 03-16-2018:
+
+Add environment variables so that the HTTP adapter, which is used
+to embed Trireme inside other HTTP engines, can optionally
+wrap each HTTP request with a "domain." Previous releases of
+Trireme always did this, which prevented some errors and introduced
+others.
+
+* 0.9.1: 01-24-2018
+
+Add an environment variable NODE_HTTP_MAX_SOCKETS that sets the 
+value of the http.maxSockets global. This is an important
+configuration parameter because the 0.10 family of Node.js sets
+this parameter by default to 5, which artificially limits the 
+performance of many applications.
+
 * 0.9.0 09-28-2017:
 
 [Issue 143](https://github.com/apigee/trireme/issues/143) Properly return undefined when accessing

@@ -611,7 +611,7 @@ public class AdvancedFilesystem
         } else if (ioe instanceof NoSuchFileException) {
             code = ErrorCodes.ENOENT;
         } else if ((ioe instanceof NotDirectoryException) ||
-                   NOT_DIRECTORY_MSG.matcher(msg).matches()) {
+                   (msg != null && NOT_DIRECTORY_MSG.matcher(msg).matches())) {
             code = ErrorCodes.ENOTDIR;
         } else if (ioe instanceof NotLinkException) {
             code = ErrorCodes.EINVAL;

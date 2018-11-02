@@ -4,12 +4,12 @@
   <parent>
     <groupId>io.apigee.trireme</groupId>
     <artifactId>trireme</artifactId>
-    <version>0.9.4-SNAPSHOT</version>
+    <version>0.9.4</version>
   </parent>
 
   <name>trireme-tests</name>
   <artifactId>trireme-tests</artifactId>
-  <version>0.9.4-SNAPSHOT</version>
+  <version>0.9.4</version>
 
   <properties>
     <skipTests>true</skipTests>
@@ -20,43 +20,43 @@
     <dependency>
       <groupId>io.apigee.trireme</groupId>
       <artifactId>trireme-core</artifactId>
-      <version>0.9.4-SNAPSHOT</version>
+      <version>0.9.4</version>
       <scope>test</scope>
     </dependency>
     <dependency>
       <groupId>io.apigee.trireme</groupId>
       <artifactId>trireme-net</artifactId>
-      <version>0.9.4-SNAPSHOT</version>
+      <version>0.9.4</version>
       <scope>test</scope>
     </dependency>
     <dependency>
       <groupId>io.apigee.trireme</groupId>
       <artifactId>trireme-crypto</artifactId>
-      <version>0.9.4-SNAPSHOT</version>
+      <version>0.9.4</version>
       <scope>test</scope>
     </dependency>
     <dependency>
       <groupId>io.apigee.trireme</groupId>
       <artifactId>trireme-util</artifactId>
-      <version>0.9.4-SNAPSHOT</version>
+      <version>0.9.4</version>
       <scope>test</scope>
     </dependency>
     <dependency>
       <groupId>io.apigee.trireme</groupId>
       <artifactId>trireme-shell</artifactId>
-      <version>0.9.4-SNAPSHOT</version>
+      <version>0.9.4</version>
       <scope>test</scope>
     </dependency>
     <dependency>
       <groupId>io.apigee.trireme</groupId>
       <artifactId>trireme-node10src</artifactId>
-      <version>0.9.4-SNAPSHOT</version>
+      <version>0.9.4</version>
       <scope>test</scope>
     </dependency>
     <dependency>
       <groupId>io.apigee.trireme</groupId>
       <artifactId>trireme-node12src</artifactId>
-      <version>0.9.4-SNAPSHOT</version>
+      <version>0.9.4</version>
       <scope>test</scope>
     </dependency>
 

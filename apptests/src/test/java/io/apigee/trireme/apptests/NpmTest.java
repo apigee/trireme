@@ -7,6 +7,7 @@ import io.apigee.trireme.core.ScriptFuture;
 import io.apigee.trireme.core.ScriptStatus;
 import org.junit.AfterClass;
 import org.junit.BeforeClass;
+import org.junit.Ignore;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
@@ -48,7 +49,10 @@ public class NpmTest
         return Arrays.asList(new Object[][]{{"0.10"}});
     }
 
+    // These tests are ignored because they are incredibly slow.
+    // The core functionality is exercised elsewhere.
     @Test
+    @Ignore
     public void testNpmOutdated()
         throws NodeException, InterruptedException, ExecutionException
     {
@@ -65,6 +69,7 @@ public class NpmTest
     }
 
     @Test
+    @Ignore
     public void testNpmUpdate()
         throws NodeException, InterruptedException, ExecutionException
     {
@@ -81,6 +86,7 @@ public class NpmTest
     }
 
     @Test
+    @Ignore
     public void testNpmUpdateRefresh()
         throws NodeException, InterruptedException, ExecutionException
     {

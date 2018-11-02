@@ -4,36 +4,36 @@
   <parent>
     <groupId>io.apigee.trireme</groupId>
     <artifactId>trireme</artifactId>
-    <version>0.9.4</version>
+    <version>0.9.5-SNAPSHOT</version>
   </parent>
 
   <name>app-tests</name>
   <artifactId>app-tests</artifactId>
-  <version>0.9.4</version>
+  <version>0.9.5-SNAPSHOT</version>
 
   <dependencies>
     <dependency>
       <groupId>io.apigee.trireme</groupId>
       <artifactId>trireme-core</artifactId>
-      <version>0.9.4</version>
+      <version>0.9.5-SNAPSHOT</version>
       <scope>test</scope>
     </dependency>
     <dependency>
       <groupId>io.apigee.trireme</groupId>
       <artifactId>trireme-net</artifactId>
-      <version>0.9.4</version>
+      <version>0.9.5-SNAPSHOT</version>
       <scope>test</scope>
     </dependency>
     <dependency>
       <groupId>io.apigee.trireme</groupId>
       <artifactId>trireme-node10src</artifactId>
-      <version>0.9.4</version>
+      <version>0.9.5-SNAPSHOT</version>
       <scope>test</scope>
     </dependency>
     <dependency>
       <groupId>io.apigee.trireme</groupId>
       <artifactId>trireme-node12src</artifactId>
-      <version>0.9.4</version>
+      <version>0.9.5-SNAPSHOT</version>
       <scope>test</scope>
     </dependency>
 

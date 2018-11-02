@@ -91,11 +91,11 @@ public class DsaKeyPairProvider
             throw new CryptoException("ASN.1 sequence is the wrong length for a DSA key");
         }
 
-        DERInteger p = (DERInteger)seq.getObjectAt(1);
-        DERInteger q = (DERInteger)seq.getObjectAt(2);
-        DERInteger g = (DERInteger)seq.getObjectAt(3);
-        DERInteger y = (DERInteger)seq.getObjectAt(4);
-        DERInteger x = (DERInteger)seq.getObjectAt(5);
+        ASN1Integer p = (ASN1Integer)seq.getObjectAt(1);
+        ASN1Integer q = (ASN1Integer)seq.getObjectAt(2);
+        ASN1Integer g = (ASN1Integer)seq.getObjectAt(3);
+        ASN1Integer y = (ASN1Integer)seq.getObjectAt(4);
+        ASN1Integer x = (ASN1Integer)seq.getObjectAt(5);
 
         try {
             KeyFactory factory = KeyFactory.getInstance("DSA");
@@ -150,15 +150,15 @@ public class DsaKeyPairProvider
                     throw new CryptoException("Invalid DSA public key format: Identifier does not have 3 items");
                 }
 
-                DERInteger p = (DERInteger)identifiers.getObjectAt(0);
-                DERInteger q = (DERInteger)identifiers.getObjectAt(1);
-                DERInteger g = (DERInteger)identifiers.getObjectAt(2);
+                ASN1Integer p = (ASN1Integer)identifiers.getObjectAt(0);
+                ASN1Integer q = (ASN1Integer)identifiers.getObjectAt(1);
+                ASN1Integer g = (ASN1Integer)identifiers.getObjectAt(2);
 
                 ASN1Primitive pkPrim = pk.parsePublicKey();
                 if (!(pkPrim instanceof ASN1Integer)) {
                     throw new CryptoException("Invalid DSA public key format: Public key is not an integer");
                 }
-                DERInteger y = (DERInteger)pkPrim;
+                ASN1Integer y = (ASN1Integer)pkPrim;
 
                 try {
                     KeyFactory factory = KeyFactory.getInstance("DSA");

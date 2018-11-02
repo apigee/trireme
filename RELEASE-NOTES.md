@@ -1,3 +1,12 @@
+* 0.9.4: 11-01-2018:
+
+Upgrade the versions of Bouncy Castle (used by the crypto packages to read
+PEM files) and Netty (used mainly in tests) to versions that do not
+contain known security flaws.
+
+[Issue 186](https://github.com/apigee/trireme/issues/186) Fix a problem with
+reading directories.
+
 * 0.9.3: 04-10-2018:
 
 Fix a bug in the Buffer implementation that was causing the "zlib"

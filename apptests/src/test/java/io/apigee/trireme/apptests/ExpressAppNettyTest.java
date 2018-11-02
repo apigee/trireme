@@ -9,6 +9,7 @@ import org.junit.After;
 import org.junit.AfterClass;
 import org.junit.Before;
 import org.junit.BeforeClass;
+import org.junit.Ignore;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
@@ -35,8 +36,7 @@ public class ExpressAppNettyTest
     @Parameterized.Parameters
     public static Collection<Object[]> getParameters()
     {
-        return Arrays.asList(new Object[][]{{true, "0.10"}, {false, "0.10"},
-                                            /*{true, "0.12"}, */ {false, "0.12"}});
+      return Arrays.asList(new Object[][]{{true, "0.10"}});
     }
 
     public ExpressAppNettyTest(boolean useNetty, String version)
@@ -82,6 +82,8 @@ public class ExpressAppNettyTest
     }
 
     // Just one test because we want to start up and tear down only once
+    // ignored because it is flaky and because we have netty tests elsewhere.
+    @Ignore
     @Test
     public void testAPIs()
         throws IOException

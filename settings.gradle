@@ -1,0 +1,4 @@
+rootProject.name = 'trireme'
+include 'compilerGradle', 'core', 'kernel', 
+  'node10:node10src', 'node12:node12src', 'crypto', 'net',
+  'util', 'shell', 'nodetests'

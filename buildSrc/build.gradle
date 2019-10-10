@@ -1,0 +1,22 @@
+plugins {
+  id 'java'
+  id 'java-gradle-plugin'
+}
+
+gradlePlugin {
+  plugins {
+    rhino {
+      id = 'rhino'
+      implementationClass = 'io.apigee.trireme.gradle.RhinoPlugin'
+    }
+  }
+}
+
+dependencies {
+  compileOnly gradleApi()
+  implementation 'org.mozilla:rhino:1.7.10'
+}
+
+repositories {
+  mavenCentral()
+}

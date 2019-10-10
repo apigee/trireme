@@ -1,0 +1,23 @@
+plugins {
+  id 'java'
+}
+
+dependencies {
+  implementation project(':kernel')
+  implementation project(':core')
+  implementation libraries.slf4j_api
+  implementation libraries.rhino
+
+  testImplementation project(':node10:node10src')
+  testImplementation libraries.junit
+  testImplementation 'org.hsqldb:hsqldb:2.3.2'
+}
+
+task compileNodeScripts(type: io.apigee.trireme.gradle.CompileJavaScript) {
+  inputDir = file('src/main/javascript')
+  outputDir = file('build/classes/java/main')
+  codePrefix = '(function (exports, require, module, __filename, __dirname) { '
+  codeSuffix = '});'
+}
+
+classes.dependsOn compileNodeScripts

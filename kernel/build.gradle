@@ -1,0 +1,7 @@
+apply plugin: 'java'
+
+dependencies {
+  implementation libraries.slf4j_api
+
+  testImplementation libraries.junit
+}

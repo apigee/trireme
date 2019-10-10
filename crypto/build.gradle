@@ -1,0 +1,14 @@
+plugins {
+  id 'java'
+}
+
+dependencies {
+  implementation project(':kernel')
+  implementation project(':core')
+  implementation libraries.slf4j_api
+  implementation libraries.rhino
+  implementation libraries.bcprov
+  implementation libraries.bcpkix  
+
+  testImplementation libraries.junit
+}

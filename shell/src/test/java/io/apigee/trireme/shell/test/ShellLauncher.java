@@ -50,7 +50,12 @@ public class ShellLauncher
         ProcessBuilder pb = new ProcessBuilder(args);
         pb.redirectErrorStream(true);
         Map<String, String> envVars = pb.environment();
-        envVars.put("CLASSPATH", System.getProperty("surefire.test.class.path"));
+        String mavenClassPath = System.getProperty("surefire.test.class.path");
+        if (mavenClassPath != null) {
+            envVars.put("CLASSPATH", mavenClassPath);
+        } else {
+            envVars.put("CLASSPATH", System.getProperty("java.class.path"));
+        }
         Process proc = pb.start();
 
         ByteArrayOutputStream bos = new ByteArrayOutputStream();

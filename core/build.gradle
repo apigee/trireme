@@ -1,0 +1,11 @@
+plugins {
+  id 'java'
+}
+
+dependencies {
+  implementation project(':kernel')
+  implementation libraries.slf4j_api
+  implementation libraries.rhino
+
+  testImplementation libraries.junit
+}

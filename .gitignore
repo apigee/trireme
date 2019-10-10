@@ -1,7 +1,11 @@
 *~
 *.pyc
+build/
+bin/
 target/
+.gradle/
 .idea
+.vscode/
 ./idea_project/
 *.iml
 .classpath

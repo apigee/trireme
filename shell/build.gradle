@@ -1,0 +1,17 @@
+plugins {
+  id 'java'
+}
+
+dependencies {
+  implementation project(':kernel')
+  implementation project(':core')
+  implementation project(':crypto')
+  implementation project(':util')
+  implementation project(':node10:node10src')
+  implementation project(':node10:node10src')
+  implementation libraries.slf4j_api
+  implementation libraries.rhino
+  
+  testImplementation libraries.junit
+  testImplementation libraries.slf4j_simple
+}

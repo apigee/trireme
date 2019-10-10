@@ -1,0 +1,19 @@
+plugins {
+  id 'java'
+}
+
+dependencies {
+  implementation project(':kernel')
+  implementation project(':core')
+  implementation project(':node10:node10src')
+  implementation project(':node12:node12src')
+  implementation libraries.slf4j_api
+  implementation libraries.rhino
+  implementation libraries.netty_codec_http 
+  implementation libraries.netty_buffer
+  implementation libraries.netty_handler
+  implementation libraries.netty_common
+  implementation libraries.netty_transport
+
+  testImplementation libraries.junit
+}

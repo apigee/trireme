@@ -85,7 +85,7 @@ public class TestRunner
         } while ((argv == null) && (line != null));
 
         if (argv == null) {
-            argv = new String[] { fileName.getName() };
+            argv = new String[] { fileName.getAbsolutePath() };
         }
 
         try {

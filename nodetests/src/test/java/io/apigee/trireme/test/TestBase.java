@@ -133,7 +133,12 @@ public abstract class TestBase
         pb.directory(fileName.getParentFile());
         pb.redirectErrorStream(true);
         Map<String, String> envVars = pb.environment();
-        envVars.put("CLASSPATH", System.getProperty("surefire.test.class.path"));
+        String mavenClassPath = System.getProperty("surefire.test.class.path");
+        if (mavenClassPath != null) {
+            envVars.put("CLASSPATH", mavenClassPath);
+        } else {
+            envVars.put("CLASSPATH", System.getProperty("java.class.path"));
+        }
         Process proc = pb.start();
 
         byte[] output = new byte[8192];

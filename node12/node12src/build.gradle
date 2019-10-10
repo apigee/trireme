@@ -1,0 +1,43 @@
+plugins {
+  id 'java'
+  id 'rhino'
+}
+
+dependencies {
+  implementation project(':core')
+  implementation project(':kernel')
+  implementation libraries.rhino
+  implementation libraries.slf4j_api
+
+  testImplementation libraries.junit
+}
+
+task compileNodeScripts(type: io.apigee.trireme.gradle.CompileJavaScript) {
+  inputBaseDir = file('src/main/javascript')
+  inputDir = file('src/main/javascript/io/apigee/trireme/node12/node')
+  outputDir = file('build/classes/java/main')
+  sourceOutputDir = file('build/resources/main')
+  codePrefix = '(function (exports, require, module, __filename, __dirname) { '
+  codeSuffix = '});'
+  macroFile = file('./macros.txt')
+}
+
+task compileTriremeScripts(type: io.apigee.trireme.gradle.CompileJavaScript) {
+  inputBaseDir = file('src/main/javascript')
+  inputDir = file('src/main/javascript/io/apigee/trireme/node12/trireme')
+  outputDir = file('build/classes/java/main')
+  sourceOutputDir = file('build/resources/main')
+  codePrefix = '(function (exports, require, module, __filename, __dirname) { '
+  codeSuffix = '});'
+  macroFile = file('./macros.txt')
+}
+
+task compileMainScripts(type: io.apigee.trireme.gradle.CompileJavaScript) {
+  inputBaseDir = file('src/main/javascript')
+  inputDir = file('src/main/javascript/io/apigee/trireme/node12/main')
+  outputDir = file('build/classes/java/main')
+}
+
+classes.dependsOn compileNodeScripts
+classes.dependsOn compileTriremeScripts
+classes.dependsOn compileMainScripts

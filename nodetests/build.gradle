@@ -1,0 +1,24 @@
+plugins {
+  id 'java'
+  id 'application'
+}
+
+dependencies {
+  testImplementation project(':kernel')
+  testImplementation project(':core')
+  testImplementation project(':crypto')
+  testImplementation project(':net')
+  testImplementation project(':util')
+  testImplementation project(':shell')
+  testImplementation project(':node10:node10src')
+  testImplementation project(':node12:node12src')
+  testImplementation libraries.slf4j_api
+  testImplementation libraries.slf4j_simple
+  testImplementation libraries.rhino
+  testImplementation libraries.junit
+}
+
+task runone(type: JavaExec) {
+  classpath sourceSets.test.runtimeClasspath
+  main = 'io.apigee.trireme.test.TestRunner'
+}

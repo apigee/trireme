@@ -29,6 +29,7 @@ import java.util.Properties;
 
 public class Version {
     private static final String POM_PROPERTIES = "/META-INF/maven/io.apigee.trireme/trireme-core/pom.properties";
+    private static final String SRC_PROPERTIES = "/META-INF/trireme-version.properties";
 
     public static final String TRIREME_VERSION;
     public static final String SSL_VERSION;
@@ -40,6 +41,9 @@ public class Version {
         InputStream is = null;
         try {
             is = Version.class.getResourceAsStream(POM_PROPERTIES);
+            if (is == null) {
+                is = Version.class.getResourceAsStream(SRC_PROPERTIES);
+            }
             if (is != null) {
                 Properties p = new Properties();
                 p.load(is);

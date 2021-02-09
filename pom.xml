@@ -75,32 +75,32 @@
       <dependency>
         <groupId>org.mozilla</groupId>
         <artifactId>rhino</artifactId>
-        <version>1.7.10</version>
+        <version>1.7.13</version>
       </dependency>
       <dependency>
         <groupId>io.netty</groupId>
         <artifactId>netty-codec-http</artifactId>
-        <version>4.1.31.Final</version>
+        <version>4.1.59.Final</version>
       </dependency>
       <dependency>
         <groupId>io.netty</groupId>
         <artifactId>netty-transport</artifactId>
-        <version>4.1.31.Final</version>
+        <version>4.1.59.Final</version>
       </dependency>
       <dependency>
         <groupId>io.netty</groupId>
         <artifactId>netty-handler</artifactId>
-        <version>4.1.31.Final</version>
+        <version>4.1.59.Final</version>
       </dependency>
       <dependency>
         <groupId>io.netty</groupId>
         <artifactId>netty-buffer</artifactId>
-        <version>4.1.31.Final</version>
+        <version>4.1.59.Final</version>
       </dependency>
       <dependency>
         <groupId>io.netty</groupId>
         <artifactId>netty-common</artifactId>
-        <version>4.1.31.Final</version>
+        <version>4.1.59.Final</version>
       </dependency>
       <dependency>
         <groupId>junit</groupId>

@@ -8,6 +8,6 @@
   },
   "private": true,
   "dependencies": {
-    "npm": "2.x"
+    "npm": "6.13.4"
   }
 }

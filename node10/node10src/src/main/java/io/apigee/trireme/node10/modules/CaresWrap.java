@@ -125,10 +125,6 @@ public class CaresWrap
             if ((addrStr == null) || addrStr.isEmpty() || addrStr.equals("0")) {
                 return 0;
             }
-            // Use an internal Sun module for this. This is less bad than using a giant ugly regex that comes from
-            // various places found by Google, and less bad than using "InetAddress" which will resolve
-            // a hostname into an address. various Node libraries require that this method return "0"
-            // when given a hostname, whereas InetAddress doesn't support that behavior.
             if (Reverser.IP4_PATTERN.matcher(addrStr).matches()) {
                 return 4;
             }

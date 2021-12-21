@@ -34,7 +34,6 @@ public class DNSReverseTest
                      Reverser.reverse("4321:0:1:2:3:4:567:89ab"));
     }
 
-    @Ignore("Changes made this break")
     @Test
     public void testReverseInvalid()
     {

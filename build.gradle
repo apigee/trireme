@@ -10,17 +10,17 @@ targetCompatibility = 1.8
 tasks.withType(JavaCompile) { options.encoding = "UTF-8" }
 
 ext.libraries = [
-  bcprov: 'org.bouncycastle:bcprov-jdk15on:1.50',
-  bcpkix: 'org.bouncycastle:bcpkix-jdk15on:1.50',
-  junit: 'junit:junit:4.12',
-  netty_codec_http: 'io.netty:netty-codec-http:4.0.14.Final',
-  netty_transport: 'io.netty:netty-transport:4.0.14.Final',
-  netty_handler: 'io.netty:netty-handler:4.0.14.Final',
-  netty_buffer: 'io.netty:netty-buffer:4.0.14.Final',
-  netty_common: 'io.netty:netty-common:4.0.14.Final',
-  rhino: 'org.mozilla:rhino:1.7.10',
-  slf4j_api: 'org.slf4j:slf4j-api:1.7.2',
-  slf4j_simple: 'org.slf4j:slf4j-simple:1.7.2'
+  bcprov: 'org.bouncycastle:bcprov-jdk15on:1.70',
+  bcpkix: 'org.bouncycastle:bcpkix-jdk15on:1.70',
+  junit: 'junit:junit:4.13.2',
+  netty_codec_http: 'io.netty:netty-codec-http:4.0.72.Final',
+  netty_transport: 'io.netty:netty-transport:4.0.72.Final',
+  netty_handler: 'io.netty:netty-handler:4.0.72.Final',
+  netty_buffer: 'io.netty:netty-buffer:4.0.72.Final',
+  netty_common: 'io.netty:netty-common:4.0.62.Final',
+  rhino: 'org.mozilla:rhino:1.7.13',
+  slf4j_api: 'org.slf4j:slf4j-api:1.7.32',
+  slf4j_simple: 'org.slf4j:slf4j-simple:1.7.32'
 ]
 
 publishing {

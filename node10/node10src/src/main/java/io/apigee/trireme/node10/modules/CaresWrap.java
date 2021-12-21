@@ -30,6 +30,7 @@ import io.apigee.trireme.core.internal.ScriptRunner;
 import io.apigee.trireme.kernel.ErrorCodes;
 import io.apigee.trireme.kernel.OSException;
 import io.apigee.trireme.kernel.dns.DNSResolver;
+import io.apigee.trireme.kernel.dns.Reverser;
 import io.apigee.trireme.kernel.dns.Types;
 import io.apigee.trireme.kernel.dns.Wire;
 import io.apigee.trireme.kernel.handles.IOCompletionHandler;
@@ -41,7 +42,6 @@ import org.mozilla.javascript.Scriptable;
 import org.mozilla.javascript.ScriptableObject;
 import org.mozilla.javascript.Undefined;
 import org.mozilla.javascript.annotations.JSFunction;
-import sun.net.util.IPAddressUtil;
 
 import static io.apigee.trireme.core.ArgUtils.*;
 
@@ -129,10 +129,10 @@ public class CaresWrap
             // various places found by Google, and less bad than using "InetAddress" which will resolve
             // a hostname into an address. various Node libraries require that this method return "0"
             // when given a hostname, whereas InetAddress doesn't support that behavior.
-            if (IPAddressUtil.isIPv4LiteralAddress(addrStr)) {
+            if (Reverser.IP4_PATTERN.matcher(addrStr).matches()) {
                 return 4;
             }
-            if (IPAddressUtil.isIPv6LiteralAddress(addrStr)) {
+            if (Reverser.IP6_PATTERN.matcher(addrStr).matches()) {
                 return 6;
             }
             return 0;

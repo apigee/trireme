@@ -16,12 +16,17 @@ public class Reverser
     public static final String IP6_SUFFIX = "IP6.ARPA";
 
     private static final Pattern DOT = Pattern.compile("\\.");
-    private static final Pattern IP4_PATTERN = Pattern.compile("^([0-9]+\\.)?([0-9]+\\.)?([0-9]+\\.)?[0-9]+$");
+    public static final Pattern IP4_PATTERN = 
+      Pattern.compile("^([0-9]+\\.){0,3}[0-9]+$");
+    public static final Pattern IP6_PATTERN =
+      Pattern.compile("(([0-9a-fA-F]{1,4}:){7,7}[0-9a-fA-F]{1,4}|([0-9a-fA-F]{1,4}:){1,7}:|([0-9a-fA-F]{1,4}:){1,6}:[0-9a-fA-F]{1,4}|([0-9a-fA-F]{1,4}:){1,5}(:[0-9a-fA-F]{1,4}){1,2}|([0-9a-fA-F]{1,4}:){1,4}(:[0-9a-fA-F]{1,4}){1,3}|([0-9a-fA-F]{1,4}:){1,3}(:[0-9a-fA-F]{1,4}){1,4}|([0-9a-fA-F]{1,4}:){1,2}(:[0-9a-fA-F]{1,4}){1,5}|[0-9a-fA-F]{1,4}:((:[0-9a-fA-F]{1,4}){1,6})|:((:[0-9a-fA-F]{1,4}){1,7}|:)|fe80:(:[0-9a-fA-F]{0,4}){0,4}%[0-9a-zA-Z]{1,}|::(ffff(:0{1,4}){0,1}:){0,1}((25[0-5]|(2[0-4]|1{0,1}[0-9]){0,1}[0-9])\\.){3,3}(25[0-5]|(2[0-4]|1{0,1}[0-9]){0,1}[0-9])|([0-9a-fA-F]{1,4}:){1,4}:((25[0-5]|(2[0-4]|1{0,1}[0-9]){0,1}[0-9])\\.){3,3}(25[0-5]|(2[0-4]|1{0,1}[0-9]){0,1}[0-9]))");
 
     public static String reverse(String address)
         throws DNSFormatException
     {
+        System.out.println("Testing " + address);
         if (IP4_PATTERN.matcher(address).matches()) {
+            System.out.println("It is IP4");
             try {
                 return reverse4(address, (Inet4Address)InetAddress.getByName(address));
             } catch (UnknownHostException uhe) {
@@ -30,16 +35,16 @@ public class Reverser
             }
         }
 
-        try {
-            InetAddress addr = InetAddress.getByName(address);
-            if (addr instanceof Inet4Address) {
-                return reverse4(address, (Inet4Address)addr);
+        if (IP6_PATTERN.matcher(address).matches()) {
+            System.out.println("It is IP6");
+            try {
+               return reverse6((Inet6Address)InetAddress.getByName(address));
+            } catch (UnknownHostException uhe) {
+               // We already checked
+               throw new AssertionError("Invalid IP address");
             }
-            return reverse6((Inet6Address)addr);
-        } catch (UnknownHostException uhe) {
-            // We already checked
-            throw new AssertionError("Invalid IP address");
         }
+        throw new DNSFormatException("Invalid IP address: " + address);
     }
 
     private static String reverse4(String str, Inet4Address a)

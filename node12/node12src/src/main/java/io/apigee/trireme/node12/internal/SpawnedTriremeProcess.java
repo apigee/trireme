@@ -101,7 +101,7 @@ public class SpawnedTriremeProcess
             argArray[i] = execArgs.get(i + 1);
         }
         if (log.isDebugEnabled()) {
-            log.debug("Spawning new Trireme script with {}", argArray);
+            log.debug("Spawning new Trireme script with " + argArray);
         }
 
         try {

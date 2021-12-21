@@ -1,7 +1,5 @@
 package io.apigee.trireme.kernel.dns;
 
-import sun.net.util.IPAddressUtil;
-
 import java.net.Inet4Address;
 import java.net.Inet6Address;
 import java.net.InetAddress;
@@ -18,11 +16,12 @@ public class Reverser
     public static final String IP6_SUFFIX = "IP6.ARPA";
 
     private static final Pattern DOT = Pattern.compile("\\.");
+    private static final Pattern IP4_PATTERN = Pattern.compile("^([0-9]+\\.)?([0-9]+\\.)?([0-9]+\\.)?[0-9]+$");
 
     public static String reverse(String address)
         throws DNSFormatException
     {
-        if (IPAddressUtil.isIPv4LiteralAddress(address)) {
+        if (IP4_PATTERN.matcher(address).matches()) {
             try {
                 return reverse4(address, (Inet4Address)InetAddress.getByName(address));
             } catch (UnknownHostException uhe) {
@@ -31,15 +30,16 @@ public class Reverser
             }
         }
 
-        if (IPAddressUtil.isIPv6LiteralAddress(address)) {
-            try {
-                return reverse6((Inet6Address)InetAddress.getByName(address));
-            } catch (UnknownHostException uhe) {
-                // We already checked
-                throw new AssertionError("Invalid IP address");
+        try {
+            InetAddress addr = InetAddress.getByName(address);
+            if (addr instanceof Inet4Address) {
+                return reverse4(address, (Inet4Address)addr);
             }
+            return reverse6((Inet6Address)addr);
+        } catch (UnknownHostException uhe) {
+            // We already checked
+            throw new AssertionError("Invalid IP address");
         }
-        throw new DNSFormatException("Invalid IP address: " + address);
     }
 
     private static String reverse4(String str, Inet4Address a)

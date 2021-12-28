@@ -14,7 +14,7 @@ gradlePlugin {
 
 dependencies {
   compileOnly gradleApi()
-  implementation 'org.mozilla:rhino:1.7.10'
+  implementation 'org.mozilla:rhino:1.7.13'
 }
 
 repositories {

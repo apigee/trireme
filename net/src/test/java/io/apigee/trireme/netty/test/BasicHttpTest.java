@@ -154,7 +154,7 @@ public class BasicHttpTest
     {
         System.out.println("Running " + name + "...");
         NodeScript script = env.createScript(name,
-                                             new File("./target/test-classes/tests/" + name),
+                                             new File("./src/test/resources/tests/" + name),
                                              null);
         script.setNodeVersion(version);
         ScriptStatus status = script.execute().get();

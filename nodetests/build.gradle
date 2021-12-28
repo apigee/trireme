@@ -20,5 +20,5 @@ dependencies {
 
 task runone(type: JavaExec) {
   classpath sourceSets.test.runtimeClasspath
-  main = 'io.apigee.trireme.test.TestRunner'
+  mainClass = 'io.apigee.trireme.test.TestRunner'
 }

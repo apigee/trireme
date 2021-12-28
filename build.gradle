@@ -4,8 +4,8 @@ plugins {
   id 'distribution'
 }
 
-sourceCompatibility = 1.8
-targetCompatibility = 1.8
+sourceCompatibility = 11
+targetCompatibility = 11
 
 tasks.withType(JavaCompile) { options.encoding = "UTF-8" }
 
@@ -52,7 +52,7 @@ allprojects {
   test {
     useJUnit()
     failFast = false
-    maxParallelForks = 16
+    maxParallelForks = 64
   }
   repositories {
     mavenCentral()

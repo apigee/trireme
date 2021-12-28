@@ -16,8 +16,8 @@ public class PathTranslatorTest
         throws IOException
     {
         PathTranslator trans = new PathTranslator();
-        File xl = trans.translate("./target/test-classes/io/apigee/trireme/kernel/test/PathTranslatorTest.class");
-        File realFile = new File("./target/test-classes/io/apigee/trireme/kernel/test/PathTranslatorTest.class");
+        File xl = trans.translate("./src/test/java/io/apigee/trireme/kernel/test/PathTranslatorTest.java");
+        File realFile = new File("./src/test/java/io/apigee/trireme/kernel/test/PathTranslatorTest.java");
         assertTrue(realFile.exists());
         assertEquals(realFile.getCanonicalPath(), xl.getCanonicalPath());
     }
@@ -26,9 +26,9 @@ public class PathTranslatorTest
     public void testBasicPath()
         throws IOException
     {
-        PathTranslator trans = new PathTranslator("./target/test-classes");
-        File xl = trans.translate("/io/apigee/trireme/kernel/test/PathTranslatorTest.class");
-        File realFile = new File("./target/test-classes/io/apigee/trireme/kernel/test/PathTranslatorTest.class");
+        PathTranslator trans = new PathTranslator("./src/test/java");
+        File xl = trans.translate("/io/apigee/trireme/kernel/test/PathTranslatorTest.java");
+        File realFile = new File("./src/test/java/io/apigee/trireme/kernel/test/PathTranslatorTest.java");
         assertTrue(realFile.exists());
         assertEquals(realFile.getCanonicalPath(), xl.getCanonicalPath());
     }
@@ -37,9 +37,9 @@ public class PathTranslatorTest
     public void testDot()
         throws IOException
     {
-        PathTranslator trans = new PathTranslator("./target/test-classes");
+        PathTranslator trans = new PathTranslator("./src/test/java");
         File xl = trans.translate(".");
-        File realFile = new File("./target/test-classes");
+        File realFile = new File("./src/test/java");
         assertTrue(realFile.exists());
         assertEquals(realFile.getCanonicalPath(), xl.getCanonicalPath());
     }
@@ -58,9 +58,9 @@ public class PathTranslatorTest
     public void testSlash()
         throws IOException
     {
-        PathTranslator trans = new PathTranslator("./target/test-classes");
+        PathTranslator trans = new PathTranslator("./src/test/java");
         File xl = trans.translate("/");
-        File realFile = new File("./target/test-classes");
+        File realFile = new File("./src/test/java");
         
         String canonXL = trimPath(xl.getCanonicalPath());
         String canonTrans = trimPath(realFile.getCanonicalPath());
@@ -73,7 +73,7 @@ public class PathTranslatorTest
     public void testDotDot()
         throws IOException
     {
-        PathTranslator trans = new PathTranslator("./target/test-classes");
+        PathTranslator trans = new PathTranslator("./src/test/java");
         File xl = trans.translate("..");
         assertNull(xl);
     }
@@ -82,9 +82,9 @@ public class PathTranslatorTest
     public void testNotRealPath()
         throws IOException
     {
-        PathTranslator trans = new PathTranslator("./target/test-classes");
+        PathTranslator trans = new PathTranslator("./src/test/java");
         File xl = trans.translate("/io/apigee/trireme/kernel/test/PathTranslatorTest.foobar");
-        File realFile = new File("./target/test-classes/io/apigee/trireme/kernel/test/PathTranslatorTest.foobar");
+        File realFile = new File("./src/test/java/io/apigee/trireme/kernel/test/PathTranslatorTest.foobar");
         assertFalse(realFile.exists());
         assertEquals(realFile.getCanonicalPath(), xl.getCanonicalPath());
     }
@@ -93,9 +93,9 @@ public class PathTranslatorTest
     public void testComplexPath()
         throws IOException
     {
-        PathTranslator trans = new PathTranslator("./target/test-classes");
-        File xl = trans.translate("/io/apigee/trireme/../../apigee/trireme/kernel/../kernel/test/PathTranslatorTest.class");
-        File realFile = new File("./target/test-classes/io/apigee/trireme/kernel/test/PathTranslatorTest.class");
+        PathTranslator trans = new PathTranslator("./src/test/java");
+        File xl = trans.translate("/io/apigee/trireme/../../apigee/trireme/kernel/../kernel/test/PathTranslatorTest.java");
+        File realFile = new File("./src/test/java/io/apigee/trireme/kernel/test/PathTranslatorTest.java");
         assertTrue(realFile.exists());
         assertEquals(realFile.getCanonicalPath(), xl.getCanonicalPath());
     }
@@ -104,9 +104,9 @@ public class PathTranslatorTest
     public void testCraftyRoot()
         throws IOException
     {
-        PathTranslator trans = new PathTranslator("./target/test-classes");
+        PathTranslator trans = new PathTranslator("./src/test/java");
         File xl = trans.translate("/io/apigee/trireme/kernel/../../../..");
-        File realFile = new File("./target/test-classes");
+        File realFile = new File("./src/test/java");
         assertTrue(realFile.exists());
         assertEquals(realFile.getCanonicalPath(), xl.getCanonicalPath());
     }
@@ -115,7 +115,7 @@ public class PathTranslatorTest
     public void testCraftyEscape()
         throws IOException
     {
-        PathTranslator trans = new PathTranslator("./target/test-classes");
+        PathTranslator trans = new PathTranslator("./src/test/java");
         File xl = trans.translate("/io/apigee/trireme/kernel/../../../../..");
         assertNull(xl);
     }
@@ -124,7 +124,7 @@ public class PathTranslatorTest
     public void testCraftyEscape2()
         throws IOException
     {
-        PathTranslator trans = new PathTranslator("./target/test-classes");
+        PathTranslator trans = new PathTranslator("./src/test/java");
         File xl = trans.translate("/io/apigee/../../org/../..");
         assertNull(xl);
     }
@@ -137,9 +137,9 @@ public class PathTranslatorTest
             System.out.println("Mount is currently not supported on Windows");
             return;
         }
-        File realFile = new File("./target/test-classes/global/foo.txt");
-        PathTranslator trans = new PathTranslator("./target/test-classes");
-        trans.mount("/opt", new File("./target/test-classes/global"));
+        File realFile = new File("./src/test/resources/global/foo.txt");
+        PathTranslator trans = new PathTranslator("./src/test/resources");
+        trans.mount("/opt", new File("./src/test/resources/global"));
         File globalFile = trans.translate("/opt/foo.txt");
         assertTrue(globalFile.exists());
         assertEquals(trimPath(realFile.getCanonicalPath()), 
@@ -154,9 +154,9 @@ public class PathTranslatorTest
             System.out.println("Mount is currently not supported on Windows");
             return;
         }
-        File realFile = new File("./target/test-classes/global/foo.txt");
+        File realFile = new File("./src/test/resources/global/foo.txt");
         PathTranslator trans = new PathTranslator();
-        trans.mount("/opt", new File("./target/test-classes/global"));
+        trans.mount("/opt", new File("./src/test/resources/global"));
         File globalFile = trans.translate("/opt/foo.txt");
         assertTrue(globalFile.exists());
         assertEquals(realFile.getCanonicalPath(), globalFile.getCanonicalPath());
@@ -171,16 +171,16 @@ public class PathTranslatorTest
             return;
         }
         PathTranslator trans = new PathTranslator();
-        trans.mount("/opt", new File("./target/test-classes/global"));
-        trans.mount("/usr/local/lib", new File("./target"));
+        trans.mount("/opt", new File("./src/test/resources/global"));
+        trans.mount("/usr/local/lib", new File("./src/test/resources"));
 
-        File realFile = new File("./target/test-classes/global/foo.txt");
+        File realFile = new File("./src/test/resources/global/foo.txt");
         File globalFile = trans.translate("/opt/foo.txt");
         assertTrue(globalFile.exists());
         assertEquals(realFile.getCanonicalPath(), globalFile.getCanonicalPath());
 
-        realFile = new File("./target/test-classes/logback.xml");
-        globalFile = trans.translate("/usr/local/lib/test-classes/logback.xml");
+        realFile = new File("./src/test/resources/logback.xml");
+        globalFile = trans.translate("/usr/local/lib/logback.xml");
         assertTrue(globalFile.exists());
         assertEquals(realFile.getCanonicalPath(), globalFile.getCanonicalPath());
     }

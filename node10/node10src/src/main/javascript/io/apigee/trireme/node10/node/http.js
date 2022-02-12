@@ -94,12 +94,7 @@ function parserOnHeadersComplete(info) {
     n = Math.min(n, parser.maxHeaderPairs);
   }
 
-  for (var i = 0; i < n; i += 2) {
-    var k = headers[i];
-    var v = headers[i + 1];
-    parser.incoming._addHeaderLine(k, v);
-  }
-
+  parser.incoming._addHeaderLines(headers, n);
 
   if (info.method) {
     // server only
@@ -298,7 +293,9 @@ function IncomingMessage(socket) {
   this.httpVersion = null;
   this.complete = false;
   this.headers = {};
+  this.rawHeaders = [];
   this.trailers = {};
+  this.rawTrailers = [];
 
   this.readable = true;
 
@@ -357,6 +354,26 @@ IncomingMessage.prototype.destroy = function(error) {
     this.socket.destroy(error);
 };
 
+IncomingMessage.prototype._addHeaderLines = function(headers, n) {
+  if (headers && headers.length) {
+    var raw, dest;
+    if (this.complete) {
+      raw = this.rawTrailers;
+      dest = this.trailers;
+    } else {
+      raw = this.rawHeaders;
+      dest = this.headers;
+    }
+
+    for (var i = 0; i < n; i += 2) {
+      var k = headers[i];
+      var v = headers[i + 1];
+      raw.push(k);
+      raw.push(v);
+      this._addHeaderLine(k, v, dest);
+    }
+  }
+};
 
 // Add the given (field, value) pair to the message
 //

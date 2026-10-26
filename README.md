@@ -238,7 +238,7 @@ has many of the new JavaScript language features that Node users are used to, bu
 have all the features that are supported when the "--harmony" flag is set.
 
 For specifics, see the [Rhino compatibility table](http://mozilla.github.io/rhino/compat/engines.html).
-Trireme is currently using RHino 1.7.7.
+Trireme's Maven-managed Rhino dependency is currently version 1.7.13 (see the root `pom.xml`).
 
 Most of the time the differences between V8 and Rhino do not affect Node.js code, but occasionally
 there is a problem. We would love some help from the Rhino community to start to address these differences.
